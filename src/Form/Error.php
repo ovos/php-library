@@ -1,0 +1,122 @@
+<?php
+declare(strict_types=1);
+
+namespace Ovos\Form;
+
+use Ovos\Form;
+use Ovos\Form\Element;
+use Ovos\Form\Filter;
+use Ovos\Form\Validator;
+
+/**
+ * Element
+ *
+ * @package Ovos
+ * @author Marcin Gil <mg@ovos.at>
+ */
+class Error
+{
+	/**
+	 * @var Element
+	 */
+	protected $_element;
+
+	/**
+	 * @var string
+	 */
+	protected $_code;
+	
+	/**
+	 * @var string
+	 */
+	protected $_message;
+	
+	/**
+	 * @param string $code
+	 * @param string $message
+	 */
+	public function __construct(string $code, string $message = null)
+	{
+		$this->setCode($code);
+		$this->setMessage($message);
+	}
+
+	/**
+	 * @param Element $element
+	 *
+	 * @return $this
+	 */
+	public function setElement(Element $element): self
+	{
+		$this->_element = $element;
+
+		return $this;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function hasElement(): bool
+	{
+		return $this->_element !== null;
+	}
+
+	/**
+	 * @return Element
+	 */
+	public function getElement(): Element
+	{
+		return $this->_element;
+	}
+
+	/**
+	 * @param null|string $message
+	 * 
+	 * @return $this
+	 */
+	public function setMessage(?string $message): self
+	{
+		$this->_message = $message;
+		
+		return $this;
+	}
+
+	/**
+	 * @return null|string
+	 */
+	public function getMessage(): ?string
+	{
+		return $this->_message;
+	}
+	
+	/**
+	 * @param string $code
+	 * 
+	 * @return $this
+	 */
+	public function setCode(string $code): self
+	{
+		$this->_code = $code;
+		
+		return $this;
+	}
+
+	/**
+	 * @return string
+	 */
+	public function getCode(): string
+	{
+		return $this->_code;
+	}
+
+	/**
+	 * @return null|array
+	 */
+	public function __debugInfo()
+	{
+		return [
+			'message' => $this->getMessage(),
+			'code' => $this->getCode(),
+		];
+	}
+}
