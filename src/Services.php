@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Service\Auth;
+use Ovos\Service\Disabled;
+use Ovos\Service\Memory;
 use Ovos\Service\Benchmark;
 use Ovos\Service\Events;
 use Ovos\Service\Logger;
@@ -11,16 +12,14 @@ use Ovos\Service\Session;
 use Ovos\Service\Cookies;
 use Ovos\Service\Cache;
 use Ovos\Service\Database;
-use Sonorys\Service\Mvno;
-use QueryTec\Service\Identify;
 
 /**
  * Services
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
- *
- * @property Auth $auth
+ * 
+ * @property Memory $memory
  * @property Benchmark $benchmark
  * @property Events $events
  * @property Logger $logger
@@ -28,8 +27,6 @@ use QueryTec\Service\Identify;
  * @property Cookies $cookies
  * @property Cache $cache
  * @property Database $database
- * @property Mvno $mvno
- * @property Identify $identify
  */
 class Services
 {
@@ -38,7 +35,28 @@ class Services
 	/**
 	 * @var Service[]
 	 */
-	protected $_items = [];
+	protected static $_items = []; // static in case of changing instance with newInstance (after loading the config)
+
+	/**
+	 * @param string $symbol
+	 *
+	 * @return Service|null
+	 */
+	public function get(string $symbol): ?Service
+	{
+		if(isset(self::$_items[$symbol]))
+		{
+			$service = self::$_items[$symbol];
+			if($service->isEnabled() === false)
+			{
+				return new Disabled;
+			}
+
+			return $service;
+		}
+
+		return new Disabled;
+	}
 
 	/**
 	 * @param string $symbol
@@ -47,18 +65,7 @@ class Services
 	 */
 	public function __get(string $symbol): ?Service
 	{
-		if(isset($this->_items[$symbol]))
-		{
-			$service = $this->_items[$symbol];
-			if($service->isEnabled() === false)
-			{
-				return null;
-			}
-
-			return $service;
-		}
-
-		return null;
+		return $this->get($symbol);
 	}
 
 	/**
@@ -74,7 +81,7 @@ class Services
 			$symbol = $service->getSymbol();
 		}
 
-		$this->_items[$symbol] = $service;
+		self::$_items[$symbol] = $service;
 
 		return $this;
 	}
@@ -86,7 +93,7 @@ class Services
 	 */
 	public function isRegistered(string $symbol): bool
 	{
-		return isset($this->_items[$symbol]);
+		return isset(self::$_items[$symbol]);
 	}
 
 	/**
@@ -94,6 +101,6 @@ class Services
 	 */
 	public function toArray(): array
 	{
-		return $this->_items;
+		return self::$_items;
 	}
 }

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Controller\Traits;
 
+use Ovos\Terminal;
+
 /**
  * Trait Cli
  *
@@ -17,6 +19,11 @@ trait Cli
 	 * @var int
 	 */
 	protected $_pid;
+
+	/**
+	 * @var bool
+	 */
+	protected $_coloredOutput = false;
 
 	/**
 	 * @return int
@@ -36,24 +43,37 @@ trait Cli
 	 */
 	public function readLine(): ?string
 	{
-		$line = stream_get_line(STDIN, 1024, PHP_EOL);
-
-		if($line === '')
-		{
-			return null;
-		}
-
-		return $line;
+		return Terminal::readLine();
 	}
 
 	/**
-	 * Returns real memory usage in MB
+	 * Returns memory usage in MB
 	 *
 	 * @return float
 	 */
-	protected function _getRealMemoryUsageMB(): float
+	public function getMemoryUsageMB(): float
 	{
 		return round(memory_get_usage(false) / (1024 * 1024), 2);
+	}
+
+	/**
+	 * @param bool $coloredOutput
+	 * 
+	 * @return $this
+	 */
+	public function setColoredOutput(bool $coloredOutput): self
+	{
+		$this->_coloredOutput = $coloredOutput;
+		
+		return $this;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function isColoredOutput(): bool
+	{
+		return $this->_coloredOutput;
 	}
 
 	/**
@@ -63,14 +83,17 @@ trait Cli
 	 *
 	 * @return void
 	 */
-	protected function _log(...$message)
+	public function log(...$message): void
 	{
 		if(\count($message))
 		{
 			$message = sprintf(...$message);
 		}
 
-		echo '[' . $this->getPid() . '] ' . date('Y-m-d H:i:s') . ': ' . $message . PHP_EOL;
+		Terminal::output('<darkgray>[' . $this->getPid() . '] '
+			. '<purple>' . date('Y-m-d H:i:s') . ': '
+			. '<reset>' . $message . '<reset>' . PHP_EOL, $this->_coloredOutput);
+			
 		ob_flush();
 	}
 }

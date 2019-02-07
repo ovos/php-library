@@ -12,7 +12,7 @@ use Throwable;
 use function Ovos\app;
 
 /**
- * Events
+ * Logger
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
@@ -69,12 +69,12 @@ class Logger extends Service
 			$event[0] = new Exception($message);
 		}
 
-		$output = self::getEvent($event[0]);
+		$output = static::getEvent($event[0]);
 
 		// prepend
-		$prepend = self::getPrepend();
+		$prepend = static::getPrepend();
 		// append
-		$append = self::getAppend();
+		$append = static::getAppend();
 
 		$output = $prepend . $output . $append;
 		$this->output($output);

@@ -71,6 +71,14 @@ abstract class Plugin
 	}
 
 	/**
+	 * @return Request
+	 */
+	public function getRequest(): Request
+	{
+		return $this->_request;
+	}
+
+	/**
 	 * @param Controller $controller
 	 *
 	 * @return $this

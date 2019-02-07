@@ -130,10 +130,7 @@ class Events extends Service implements Countable, Iterator
 	 */
 	public function log(...$event): void
 	{
-		if(services()->logger)
-		{
-			services()->logger->log(...$event);
-		}
+		services()->logger->log(...$event);
 	}
 
 	/**

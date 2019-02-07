@@ -7,6 +7,8 @@ use Ovos\Arrays;
 use Ovos\Cache\Filesystem;
 use Ovos\ArrayObject;
 use Ovos\Exception;
+use Ovos\Service\Memory;
+use Ovos\Services;
 use function Ovos\services;
 
 /**
@@ -18,9 +20,21 @@ use function Ovos\services;
 class Loader
 {
 	/**
+	 * @var Memory
+	 */
+	protected $_memoryService;
+
+	/**
 	 * @var string
 	 */
 	public const CACHE_DIR = 'configs' . DIRECTORY_SEPARATOR;
+
+	/**
+	 */
+	public function __construct()
+	{
+		$this->_memoryService = Services::getInstance()->get(Memory::SYMBOL);
+	}
 
 	/**
 	 * @param string $file
@@ -37,10 +51,13 @@ class Loader
 		$mTime = filemtime($file);
 		$cacheId = ($cacheId ?? basename($file)) . '_'
 			. str_replace('-', '_', $rootSection);
-
+		
+		/*
 		$filesystem = new Filesystem;
 		$pool = $filesystem->getCachePool();
 		$pool->setFolder(self::CACHE_DIR);
+		*/
+		$pool = $this->_memoryService->getPool();
 
 		if($pool->hasItem($cacheId))
 		{

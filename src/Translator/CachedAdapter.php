@@ -30,7 +30,7 @@ class CachedAdapter extends Translator
 		$path = substr($filename, \strlen(TRANSLATIONS_DIR));
 		$cacheId = Strings::slugify($path);
 
-		if(services()->cache && $pool = services()->cache->getPool())
+		if($pool = services()->cache->getPool())
 		{
 			if($pool->hasItem($cacheId))
 			{
@@ -46,7 +46,7 @@ class CachedAdapter extends Translator
 
 		parent::__construct($filename);
 
-		if(services()->cache && $pool = services()->cache->getPool())
+		if($pool = services()->cache->getPool())
 		{
 			$cache = new ArrayObject;
 			$cache->mtime = $mTime;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Translator\Translation;
+use MessageFormatter;
 
 /**
  * Translator
@@ -99,7 +100,8 @@ class Translator
 			return $translation;
 		}
 		
-		return sprintf($translation, ...$params);
+		$formatter = new MessageFormatter($this->_locale->getSymbol(), $translation);
+		return $formatter->format($params);
 	}
 
 	/**
