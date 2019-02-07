@@ -21,11 +21,23 @@ trait Singleton
 	 */
 	public static function getInstance(): self
 	{
-		if(self::$_instance === null)
+		if(static::$_instance === null)
 		{
-			self::$_instance = new self;
+			static::$_instance = new static;
 		}
 
-		return self::$_instance;
+		return static::$_instance;
+	}
+
+	/**
+	 * Clears old instance and creates a new one
+	 * 
+	 * @return self
+	 */
+	public static function newInstance(): self
+	{
+		static::$_instance = null;
+		
+		return self::getInstance();
 	}
 }

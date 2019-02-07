@@ -41,7 +41,6 @@ class NotEmpty extends Validator
 			$error = new Error(self::ERROR_EMPTY, sprintf($this->getMessage(self::ERROR_EMPTY),
 				$this->getElement()->getName()
 			));
-			$error->setElement($this->getElement());
 			$this->addError($error);
 		}
 	

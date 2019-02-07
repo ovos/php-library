@@ -18,7 +18,7 @@ class EmailAddress extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_INVALID = 'invalid';
+	public const ERROR_INVALID = 'email_invalid';
 	/**#@-*/
 
 	/**
@@ -47,7 +47,6 @@ class EmailAddress extends Validator
 			$error = new Error(self::ERROR_INVALID, sprintf($this->getMessage(self::ERROR_INVALID),
 				Strings::escapeForHtml($value)
 			));
-			$error->setElement($this->getElement());
 			$this->addError($error);
 		}
 	

@@ -250,6 +250,7 @@ class Element
 	 */
 	public function addError(Error $error): self
 	{
+		$error->setElement($this);
 		$this->_errors[] = $error;
 
 		return $this;
@@ -262,7 +263,10 @@ class Element
 	 */
 	public function addErrors(array $errors): self
 	{
-		$this->_errors = array_merge($this->_errors, $errors);
+		foreach($errors as $error)
+		{
+			$this->addError($error);
+		}
 		
 		return $this;
 	}

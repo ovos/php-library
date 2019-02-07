@@ -19,12 +19,12 @@ class FileUploaded extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_INPUT_INVALID = 'input_invalid';
-	public const ERROR_NO_FILE = 'no_file';
-	public const ERROR_SIZE_EXCEEDED = 'size_exceeded';
-	public const ERROR_UNKNOWN = 'unknown';
-	public const ERROR_EMPTY = 'empty';
-	public const ERROR_FORBIDDEN_TYPE = 'forbidden_type';
+	public const ERROR_INPUT_INVALID = 'upload_input_invalid';
+	public const ERROR_NO_FILE = 'upload_no_file';
+	public const ERROR_SIZE_EXCEEDED = 'upload_size_exceeded';
+	public const ERROR_UNKNOWN = 'upload_unknown';
+	public const ERROR_EMPTY = 'upload_empty';
+	public const ERROR_FORBIDDEN_TYPE = 'upload_forbidden_type';
 	/**#@-*/
 	
 	/**
@@ -109,7 +109,6 @@ class FileUploaded extends Validator
 	 */
 	public function error(Error $error): bool
 	{
-		$error->setElement($this->getElement());
 		$this->addError($error);	
 		
 		return false;

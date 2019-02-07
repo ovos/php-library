@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Password\Hash;
+
 /**
  * Password
  *
@@ -20,16 +22,45 @@ class Password
 	public const SET_SPECIAL = 8;
 	public const SET_SPECIAL_FTP = 16;
 	/**#@-*/
-
+	
+	/** @var Hash */
+	public static $hashInstance;
+	
 	/**
 	 * @param string $password
 	 * @param int $algorithm
+	 * @param array $options
 	 *
 	 * @return bool|string
 	 */
-	public static function hash(string $password, int $algorithm = PASSWORD_BCRYPT)
+	public static function hash(string $password, int $algorithm = null, $options = null)
 	{
-		return password_hash($password, $algorithm);
+		return self::getHashInstance()->hash($password, $algorithm, $options);
+	}
+	
+	/**
+	 * @param string $password
+	 * @param int $algorithm
+	 * @param array $options
+	 *
+	 * @return bool|string
+	 */
+	public static function needsRehash(string $password, int $algorithm = null, $options = null)
+	{
+		return self::getHashInstance()->needsRehash($password, $algorithm, $options);
+	}
+	
+	/**
+	 * @return Hash
+	 */
+	public static function getHashInstance(): Hash
+	{
+		if(self::$hashInstance === null)
+		{
+			self::$hashInstance = new Hash;
+		}
+		
+		return self::$hashInstance;
 	}
 
 	/**

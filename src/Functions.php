@@ -18,7 +18,7 @@ class Functions
 	 *
 	 * @return void
 	 */
-	public static function println(string $line,
+	public static function println(string $line = '',
 		bool $bold = false,
 		bool $indent = false
 	): void
@@ -45,7 +45,7 @@ class Functions
 		}
 
 		$line.= PHP_EOL;
-
-		print($isCli ? $line : nl2br($line));
+		
+		Terminal::output($isCli ? $line : nl2br($line), $isCli);
 	}
 }

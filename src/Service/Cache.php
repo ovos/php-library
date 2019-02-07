@@ -5,7 +5,10 @@ namespace Ovos\Service;
 
 use Ovos\ArrayObject;
 use Ovos\Service;
+use Cache\Adapter\Common\AbstractCachePool;
+use Cache\Prefixed\PrefixedCachePool;
 use Cache\Adapter\Redis\RedisCachePool;
+use Cache\Adapter\Apcu\ApcuCachePool;
 use Cache\Adapter\Filesystem\FilesystemCachePool;
 use function Ovos\services;
 
@@ -30,12 +33,17 @@ class Cache extends Service
 	/**
 	 * @var RedisCachePool
 	 */
-	protected $_pool;
+	protected $_persistentPool;
+
+	/**
+	 * @var ApcuCachePool
+	 */
+	protected $_perishablePool;
 
 	/**
 	 * @var array
 	 */
-	protected $_dependsOn = ['events'];
+	protected $_dependsOn = [Events::SYMBOL];
 
 	/**
 	 */
@@ -46,7 +54,7 @@ class Cache extends Service
 		$this->_config = $this->_app->getConfig()->cache;
 		$this->setEnabled($this->_config->enabled);
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -56,21 +64,47 @@ class Cache extends Service
 	}
 
 	/**
-	 * @return RedisCachePool|null
+	 * @param bool $persistent
+	 * 
+	 * @return RedisCachePool|PrefixedCachePool
 	 */
-	public function getPool(): ?RedisCachePool
+	public function getPool($persistent = true)
 	{
-		if($this->_pool === null)
+		return $persistent ?
+			$this->getPersistentPool()
+			: $this->getPerishablePool();
+	}
+
+	/**
+	 * @return RedisCachePool
+	 */
+	public function getPersistentPool(): RedisCachePool
+	{
+		if($this->_persistentPool === null)
 		{
 			$client = new \Ovos\Cache\Redis;
-			if($client->connect($this->_config) === false)
+			if($client->connect($this->_config->persistent) === false)
 			{
 				return null;
 			}
 
-			$this->_pool = $client->getCachePool();
+			$this->_persistentPool = $client->getCachePool();
 		}
 
-		return $this->_pool;
+		return $this->_persistentPool;
+	}
+	
+	/**
+	 * @return PrefixedCachePool
+	 */
+	public function getPerishablePool(): PrefixedCachePool
+	{
+		if($this->_perishablePool === null)
+		{
+			$this->_perishablePool = new PrefixedCachePool(
+				new ApcuCachePool, $this->_config->perishable->prefix);
+		}
+
+		return $this->_perishablePool;
 	}
 }

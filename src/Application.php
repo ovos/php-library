@@ -5,6 +5,7 @@ namespace Ovos;
 
 use Ovos\ArrayObject;
 use Ovos\Config\Loader;
+use Ovos\Service\Memory;
 use Ovos\View\Layout;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
@@ -100,7 +101,8 @@ class Application
 
 		self::$instance = $this;
 
-		$this->_initEnvironment()
+		$this->_init()
+			->_initEnvironment()
 			->_initShutdownHandler()
 			->_initConstants()
 			->_initServices();
@@ -136,10 +138,7 @@ class Application
 		}
 		catch(RuntimeException $exception)
 		{
-			if(services()->events)
-			{
-				services()->events->add($exception);
-			}
+			services()->events->add($exception);
 		}
 	}
 
@@ -199,6 +198,17 @@ class Application
 	{
 		$this->_response = $response;
 
+		return $this;
+	}
+
+	/**
+	 * @return $this
+	 */
+	protected function _init(): self
+	{
+		// register memory service manually for config loading
+		Services::getInstance()->register(new Memory);
+		
 		return $this;
 	}
 
@@ -272,8 +282,8 @@ class Application
 	/**
 	 * Returns the config object (with optional array access)
 	 *
-	 * @param string $configFile
-	 * @param string $rootSection
+	 * @param null|string $configFile
+	 * @param null|string $rootSection
 	 *
 	 * @return ArrayObject
 	 */
@@ -346,7 +356,7 @@ class Application
 				throw new RuntimeException('Service class does not exist "%s".', $serviceClass);
 			}
 
-			$this->getServices()->register(new $serviceClass);
+			Services::getInstance()->register(new $serviceClass);
 		}
 
 		return $this;
@@ -361,21 +371,18 @@ class Application
 	{
 		if($error = error_get_last())
 		{
-			if(services()->events)
-			{
-				services()->events->handleError(
-					$error['type'],
-					$error['message'],
-					$error['file'],
-					$error['line']);
-			}
+			services()->events->handleError(
+				$error['type'],
+				$error['message'],
+				$error['file'],
+				$error['line']);
 		}
 
 		// get the response to be sent
 		$response = $this->getResponse();
 
 		// handle erroneous response
-		if(services()->events && services()->events->count())
+		if(services()->events->count())
 		{
 			/// JSON
 			if(\get_class($this->getResponse()) === Response\Json::class)
@@ -426,7 +433,12 @@ class Application
 	 */
 	public function getServices(): Services
 	{
-		return Services::getInstance();
+		/**
+		 * @var Services $servicesClass
+		 */
+		$servicesClass = $this->getConfig()->system->services->container;
+		
+		return $servicesClass::newInstance();
 	}
 
 	/**
@@ -585,5 +597,5 @@ function locale(): Locale
  */
 function services(): Services
 {
-	return Services::getInstance();
+	return app()->getServices();
 }

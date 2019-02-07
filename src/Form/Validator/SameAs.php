@@ -69,7 +69,6 @@ class SameAs extends Validator
 				$element->getLabel(),
 				$this->getElement()->getLabel()
 			));
-			$error->setElement($this->getElement());
 			$this->addError($error);
 		}
 	

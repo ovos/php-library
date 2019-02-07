@@ -193,7 +193,7 @@ class Router
 	 */
 	protected function _getControllers($dir): array
 	{
-		if(services()->cache && $pool = services()->cache->getPool())
+		if($pool = services()->cache->getPerishablePool())
 		{
 			if($pool->hasItem(self::CACHE_ID_CONTROLLERS))
 			{
@@ -210,7 +210,7 @@ class Router
 			return Strings::snakeCase($basename);
 		});
 
-		if(services()->cache && $pool = services()->cache->getPool())
+		if($pool = services()->cache->getPerishablePool())
 		{
 			$item = $pool->getItem(self::CACHE_ID_CONTROLLERS)->set($controllers);
 			$pool->save($item);
