@@ -1,6 +1,6 @@
 {
 	"name": "ovos/library",
-	"description": "",
+	"description": "ovos library",
 	"type": "library",
 	"authors": [
 		{
@@ -30,7 +30,8 @@
     "cache/namespaced-cache": "^1.0",
     "marcing/motranslator": "dev-master"
   },
-  "minimum-stability": "stable",
+  "minimum-stability": "dev",
+  "prefer-stable": true,
 	"autoload": {
 		"psr-4": {
 			"Ovos\\": "src"
