@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Terminal\Formatter;
+use function Ovos\app;
 
 /**
  * Terminal
@@ -13,24 +14,6 @@ use Ovos\Terminal\Formatter;
  */
 class Terminal
 {
-	/**
-	 * @return bool
-	 */
-	public static function isTerminal(): bool
-	{
-		if(function_exists('posix_isatty') && posix_isatty(STDOUT))
-		{
-			return true;
-		}
-		
-		if(getenv('TERM'))
-		{
-			return true;
-		}
-		
-		return false;
-	}
-
 	/**
 	 * @return string|null
 	 */
@@ -50,15 +33,14 @@ class Terminal
 	 * Parsers color markers inside of CLI messages
 	 * 
 	 * @param string $message
-	 * @param bool $isCli
 	 * 
 	 * @return void
 	 */
-	public static function output(string $message, $isCli = true): void
+	public static function output(string $message): void
 	{
-		$isTerminal = self::isTerminal();
+		$isCli = PHP_SAPI === 'cli';
 		
-		if($isCli === false || $isTerminal === false)
+		if($isCli === false)
 		{
 			$message = self::stripMarkup($message);
 		}
@@ -66,7 +48,7 @@ class Terminal
 		{
 			foreach(Formatter::$colors as $color => $replace)
 			{
-				$message = str_replace("<$color>", $isTerminal ? $replace : '', $message);
+				$message = str_replace("<$color>", $replace, $message);
 			}
 		}
 		
