@@ -46,6 +46,6 @@ class Functions
 
 		$line.= PHP_EOL;
 		
-		Terminal::output($isCli ? $line : nl2br($line), $isCli);
+		Terminal::output($isCli ? $line : nl2br($line));
 	}
 }

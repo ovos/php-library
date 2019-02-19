@@ -25,7 +25,7 @@ class Hash
 	 */
 	public function __construct()
 	{
-		if(PHP_VERSION_ID >= 70200)
+		if(defined('PASSWORD_ARGON2I')) // php 7.2 and compiled with argon2 support
 		{
 			$this->_algorithm = PASSWORD_ARGON2I;
 			$this->_options = [
@@ -34,7 +34,7 @@ class Hash
 				'threads' => PASSWORD_ARGON2_DEFAULT_THREADS * 1,
 			];
 			
-			if(PHP_VERSION_ID >= 70300)
+			if(defined('PASSWORD_ARGON2ID')) // php 7.3 and compiled with argon2 support
 			{
 				$this->_algorithm = PASSWORD_ARGON2ID;
 			}
