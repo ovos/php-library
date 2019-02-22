@@ -50,6 +50,10 @@ class Session extends Service
 		parent::__construct();
 
 		$this->_config = $this->_app->getConfig()->system->session;
+		if($this->_config === null)
+		{
+			throw new Exception('Configuration missing for session service.');
+		}
 		
 		if($this->_config->ini)
 		{
@@ -77,7 +81,7 @@ class Session extends Service
 			session_set_cookie_params
 			(
 				$cookie['lifetime'],
-				SYSTEM_DIR,
+				SYSTEM_PATH,
 				$cookie['domain'],
 				$this->_request->isSecure(),
 				true

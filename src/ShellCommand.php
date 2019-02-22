@@ -108,9 +108,9 @@ class ShellCommand
 	/**
 	 * Returns command output
 	 *
-	 * @return string
+	 * @return array
 	 */
-	public function getOutput(): string
+	public function getOutput(): array
 	{
 		return $this->_output;
 	}
