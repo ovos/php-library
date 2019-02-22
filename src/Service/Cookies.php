@@ -148,7 +148,7 @@ class Cookies extends Service
 			return false;
 		}
 
-		setcookie($this->getName($name), '', -1, SYSTEM_DIR);
+		setcookie($this->getName($name), '', -1, SYSTEM_PATH);
 		unset($_COOKIE[$name]);
 
 		return true;

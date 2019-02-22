@@ -29,9 +29,10 @@ class Locales
 	 *
 	 * @return ArrayObject
 	 */
-	public static function getConfigs(): ArrayObject
+	public static function getConfig(): ArrayObject
 	{
-		return app()->getConfig()->system->locales;
+		$locales = app()->getConfig()->system->locales;
+		return $locales ? $locales : new ArrayObject;
 	}
 
 	/**
@@ -41,7 +42,7 @@ class Locales
 	 */
 	public static function exists(string $symbol): bool
 	{
-		return self::getConfigs()->offsetExists($symbol);
+		return self::getConfig()->offsetExists($symbol);
 	}
 
 	/**
@@ -58,7 +59,7 @@ class Locales
 
 		$locale->setSymbol($symbol);
 
-		$configs = self::getConfigs();
+		$configs = self::getConfig();
 		if($configs->offsetExists($symbol))
 		{
 			$config = $configs->offsetGet($symbol);
@@ -97,7 +98,8 @@ class Locales
 	{
 		if(self::$_all === null)
 		{
-			foreach(self::getConfigs() as $symbol => $config)
+			self::$_all = [];
+			foreach(self::getConfig() as $symbol => $config)
 			{
 				self::$_all[$symbol] = self::get($symbol);
 			}

@@ -52,7 +52,7 @@ abstract class Service
 		{
 			if(Services::getInstance()->isRegistered($symbol) === false)
 			{
-				// just scream that we need it
+				// just scream that we need itD
 				throw new RuntimeException('"%s" service depends on "%s" service.',
 					$this->getSymbol(), $symbol);
 			}
