@@ -50,7 +50,7 @@ class ShellCommand
 		}
 
 		// remove newlines and convert single quotes to double to prevent errors
-		$command = str_replace(array("\n", "\r", "'"), array('', '', '"'), $command);
+		$command = str_replace(["\n", "\r", "'"], ['', '', '"'], $command);
 		// replace multiple spaces with single space
 		$command = preg_replace('~(\s){2,}~', ' ', $command);
 
@@ -83,12 +83,12 @@ class ShellCommand
 	public function execute(...$args): bool
 	{
 		$command = $this->getCommand();
-
+		
 		if(\count($args))
 		{
-			$command = sprintf(...$args);
+			$command = sprintf($command, ...$args);
 		}
-
+		
 		// execute the command
 		$this->_exitStatus = 0; // 0: success, 1: error
 		exec($command, $this->_output, $this->_exitStatus);

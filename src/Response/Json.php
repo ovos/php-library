@@ -243,7 +243,7 @@ class Json extends Response
 	 */
 	public function clearErrors(): self
 	{
-		unset($this->_response->errors,$this->_response->error);
+		unset($this->_response->errors, $this->_response->error);
 
 		return $this;
 	}
