@@ -97,9 +97,9 @@ class CacheItem extends BaseCacheItem
 	}
 	
 	/**
-	 * @param mixed $value
+	 * @param null|mixed $value
 	 * 
-	 * @return null|string mixed
+	 * @return null|string
 	 */
 	public function compress($value): ?string
 	{
@@ -113,13 +113,15 @@ class CacheItem extends BaseCacheItem
 			return $value;
 		}
 		
+		$value = is_object($value) ?
+			serialize($value)
+			: (string)$value;
+		
 		if($this->_config->compression->threshold !== null
 			&& strlen($value) < $this->_config->compression->threshold)
 		{
 			return $value;
 		}
-		
-		$value = (string)$value;
 		
 		// use zstd if available, gzip otherwise
 		if(function_exists('zstd_compress'))
@@ -137,9 +139,9 @@ class CacheItem extends BaseCacheItem
 	/**
 	 * @param null|string $value
 	 * 
-	 * @return null|string mixed
+	 * @return null|mixed
 	 */
-	public function decompress(?string $value): ?string
+	public function decompress(?string $value)
 	{
 		if($value === null)
 		{
@@ -172,7 +174,7 @@ class CacheItem extends BaseCacheItem
 				$value = gzuncompress($compressed);
 		}
 	
-		return $value;
+		return unserialize($value, ['allowed_classes' => true]);
 	}
 }
 
