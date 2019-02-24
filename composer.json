@@ -23,6 +23,7 @@
     "ext-curl": "*",
     "ext-openssl": "*",
     "ext-zend-opcache": "*",
+    "ext-zlib": "*",
     "pear/console_table": "^1.3",
     "cocur/slugify": "^2.5",
     "cache/redis-adapter": "^1.0",

@@ -22,7 +22,7 @@ class ShellCommand
 	protected $_executedCommand;
 
 	/**
-	 * @var string
+	 * @var array
 	 */
 	protected $_output;
 
