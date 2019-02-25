@@ -434,15 +434,15 @@ class Application
 	 */
 	public function getServices(): Services
 	{
-		/**
-		 * @var Services $servicesClass
-		 */
 		$servicesClass = $this->getConfig()->system->services->container;
 		if($servicesClass !== null)
 		{
 			$servicesClass = strpos($servicesClass, '\\') === 0
 				? $servicesClass : 'Ovos\\' . $servicesClass;		
 		
+			/**
+			 * @var Services $servicesClass
+			 */
 			return $servicesClass::newInstance();
 		}
 		
