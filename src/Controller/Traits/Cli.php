@@ -92,7 +92,7 @@ trait Cli
 
 		Terminal::output('<darkgray>[' . $this->getPid() . '] '
 			. '<purple>' . date('Y-m-d H:i:s') . ': '
-			. '<reset>' . $message . '<reset>' . PHP_EOL, $this->_coloredOutput);
+			. '<reset>' . $message . '<reset>' . PHP_EOL);
 			
 		ob_flush();
 	}
