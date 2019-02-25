@@ -73,6 +73,8 @@ class Cli extends Controller
 	 */
 	public function preDispatch(): void
 	{
+		parent::preDispatch();
+	
 		if($this->getRequest()->isCli() === true)
 		{
 			return;
