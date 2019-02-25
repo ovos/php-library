@@ -33,14 +33,17 @@ class Terminal
 	 * Parsers color markers inside of CLI messages
 	 * 
 	 * @param string $message
+	 * @param bool $markup
 	 * 
 	 * @return void
 	 */
-	public static function output(string $message): void
+	public static function output(string $message, $markup = false): void
 	{
 		$isCli = PHP_SAPI === 'cli';
 		
-		$message = $isCli ? self::handleMarkup($message) : self::stripMarkup($message);
+		$message = $isCli && $markup ?
+			self::handleMarkup($message)
+			: self::stripMarkup($message);
 		
 		$isCli ? fwrite(STDOUT, $message) : print($message);
 	}
