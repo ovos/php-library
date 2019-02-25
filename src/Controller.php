@@ -14,12 +14,6 @@ use ReflectionMethod;
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
- * 
- * @method Plugins\Auth auth
- * @method Plugins\Layout layout
- * @method Models\User user
- * @method Plugins\Vendor vendor
- * @method Plugins\Form form
  */
 class Controller
 {
