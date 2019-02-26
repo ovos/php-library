@@ -7,9 +7,9 @@ use Ovos\ArrayObject;
 use Ovos\Service;
 use Cache\Adapter\Common\AbstractCachePool;
 use Cache\Prefixed\PrefixedCachePool;
-use Cache\Adapter\Redis\RedisCachePool;
 use Cache\Adapter\Apcu\ApcuCachePool;
 use Cache\Adapter\Filesystem\FilesystemCachePool;
+use Ovos\Cache\Adapter\Redis\RedisCachePool;
 use function Ovos\services;
 
 /**
@@ -82,8 +82,8 @@ class Cache extends Service
 	{
 		if($this->_persistentPool === null)
 		{
-			$client = new \Ovos\Cache\Redis;
-			if($client->connect($this->_config->persistent) === false)
+			$client = new \Ovos\Cache\Redis($this->_config->persistent);
+			if($client->connect() === false)
 			{
 				return null;
 			}

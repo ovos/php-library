@@ -88,7 +88,7 @@ class Command
 		{
 			$command = str_replace(array_keys($this->_params), array_values($this->_params), $command);
 		}
-
+		
 		return $command;
 	}
 

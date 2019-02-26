@@ -84,7 +84,7 @@ class Url
 	 */
 	public static function getUrlFromComponents(array $components, bool $relative = false): ?string
 	{
-		$url = $relative ? '' : SYSTEM_DIR;
+		$url = $relative ? '' : ROUTE_PATH;
 
 		if(\count($components) === 0)
 		{
@@ -111,8 +111,8 @@ class Url
 			{
 				$uri = $_SERVER['REQUEST_URI'];
 				$source = parse_url($uri, PHP_URL_PATH);
-				$source = substr($source, \strlen(SYSTEM_DIR));
-				if($source !== '' && $source !== false) // empty or SYSTEM_DIR longer than source
+				$source = substr($source, \strlen(ROUTE_PATH));
+				if($source !== '' && $source !== false) // empty or ROUTE_PATH longer than source
 				{
 					$components = self::getUrlComponents($source);
 				}

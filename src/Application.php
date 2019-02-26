@@ -325,7 +325,8 @@ class Application
 	{
 		$systemConfig = $this->getConfig()->system;
 		\define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $systemConfig->domain));
-		\define('SYSTEM_DIR', $systemConfig->dir);
+		\define('SYSTEM_PATH', $systemConfig->path);
+		\define('ROUTE_PATH', $systemConfig->route_path ? $systemConfig->route_path : SYSTEM_PATH);
 		\define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
 		\define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
 
@@ -417,7 +418,7 @@ class Application
 				$output = ob_get_contents();
 				ob_end_clean();
 
-				$errorController = new \Controllers\Events;
+				$errorController = new \Controllers\System\Events;
 				$errorController->dispatch('index', [$output]);
 
 				$response = $this->getResponse();
@@ -433,12 +434,19 @@ class Application
 	 */
 	public function getServices(): Services
 	{
-		/**
-		 * @var Services $servicesClass
-		 */
 		$servicesClass = $this->getConfig()->system->services->container;
+		if($servicesClass !== null)
+		{
+			$servicesClass = strpos($servicesClass, '\\') === 0
+				? $servicesClass : 'Ovos\\' . $servicesClass;		
 		
-		return $servicesClass::newInstance();
+			/**
+			 * @var Services $servicesClass
+			 */
+			return $servicesClass::newInstance();
+		}
+		
+		return Services::newInstance();
 	}
 
 	/**
