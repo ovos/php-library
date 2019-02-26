@@ -16,6 +16,7 @@ class CacheItem extends BaseCacheItem
 	 * Compress prefix
 	 */
 	public const COMPRESS_PREFIX = ":\x1f\x8b";
+	public const SERIALIZE_PREFIX = "\x01\xe4";
 
 	/**
 	 * @var ArrayObject
@@ -114,7 +115,7 @@ class CacheItem extends BaseCacheItem
 		}
 		
 		$value = is_object($value) ?
-			serialize($value)
+			self::SERIALIZE_PREFIX . serialize($value)
 			: (string)$value;
 		
 		if($this->_config->compression->threshold !== null
@@ -164,14 +165,22 @@ class CacheItem extends BaseCacheItem
 		switch($method)
 		{
 			case 'zs':
-				if(function_exists('zstd_uncompress'))
+				if(!function_exists('zstd_uncompress'))
 				{
-					$value = zstd_uncompress($compressed);
+					return $value;
 				}
+				
+				$value = zstd_uncompress($compressed);
 				
 				break;
 			default:
 				$value = gzuncompress($compressed);
+		}
+		
+		$prefix = substr($value, 0, 2);
+		if($prefix !== self::SERIALIZE_PREFIX)
+		{
+			return $value; // not serialized
 		}
 	
 		return unserialize($value, ['allowed_classes' => true]);

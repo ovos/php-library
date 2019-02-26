@@ -47,15 +47,50 @@ class RedisCachePool extends BaseRedisCachePool
 	{
 		return $this->_config;
 	}
-
+	
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function fetchObjectFromCache($key)
+	{
+		$key = $this->getHierarchyKey($this->getHierarchyKey($key));
+	
+		$object = $this->cache->hMGet($key, ['data', 'tags', 'expires']);
+		if($object['data'] === false) // redis way of saying that key does not exist
+		{
+			return [false, null, [], null];
+		}
+		
+		return [
+			true,
+			$object['data'],
+			unserialize($object['tags'], ['allowed_classes' => true]),
+			$object['expires'],
+		];
+	}
+	
 	/**
 	 * {@inheritdoc}
 	 */
 	protected function storeItemInCache(PhpCacheItem $item, $ttl): bool
 	{
+		$key = $this->getHierarchyKey($item->getKey());
+		
 		/** @var $item CacheItem */
 		$item->setRaw(true);
-		$result = parent::storeItemInCache($item, $ttl);
+		
+		// save
+		$result = $this->cache->hMSet($key, [
+			'data' => $item->get(),
+			'tags' => serialize($item->getTags()),
+			'expires' => $item->getExpirationTimestamp()
+		]);
+		// set expire if needed
+		if($ttl !== null && $ttl > 0)
+		{
+			return $this->cache->expire($key, $ttl);
+		}
+		
 		$item->setRaw(false);
 		
 		return $result;
