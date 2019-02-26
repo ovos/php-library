@@ -2,9 +2,11 @@
 declare(strict_types=1);
 
 namespace Ovos\Controller;
+
 use Ovos\Application;
 use Ovos\Controller;
 use Ovos\Exception;
+use function Ovos\services;
 
 /**
  * Cli
@@ -17,7 +19,7 @@ class Cli extends Controller
 	/**
 	 * @var bool
 	 */
-	protected $_allowHttpAccess = true;
+	protected $_allowHttpAccess = false;
 
 	/**
 	 * Allows to access specified CLI methods via HTTP
@@ -71,11 +73,23 @@ class Cli extends Controller
 	 */
 	public function preDispatch(): void
 	{
-		if($this->getRequest()->isCli() === false
-			&& ($this->isAllowedHttpAccess()
-				&& \in_array($this->getRequest()->getAction(), $this->_httpActions, true) === false))
+		parent::preDispatch();
+	
+		if($this->getRequest()->isCli() === true)
 		{
-			throw new Exception('Forbidden.');
+			return;
 		}
+		
+		if($this->isAllowedHttpAccess())
+		{
+			return;
+		}
+	
+		if(\in_array($this->getRequest()->getAction(), $this->_httpActions, true) === true)
+		{
+			return;
+		}
+		
+		throw new Exception('Forbidden.');
 	}
 }

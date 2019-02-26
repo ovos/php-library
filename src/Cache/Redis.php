@@ -5,7 +5,7 @@ namespace Ovos\Cache;
 
 use Ovos\ArrayObject;
 use Redis as BaseRedis;
-use Cache\Adapter\Redis\RedisCachePool;
+use Ovos\Cache\Adapter\Redis\RedisCachePool;
 use function Ovos\services;
 
 /**
@@ -16,6 +16,11 @@ use function Ovos\services;
  */
 class Redis
 {
+	/**
+	 * @var ArrayObject
+	 */
+	protected $_config;
+
 	/**
 	 * Redis object
 	 *
@@ -30,32 +35,58 @@ class Redis
 
 	/**
 	 * @param ArrayObject $config
-	 *
+	 */
+	public function __construct($config)
+	{
+		$this->setConfig($config);
+	}
+
+	/**
+	 * @param ArrayObject $config
+	 * 
+	 * @return $this
+	 */
+	public function setConfig(ArrayObject $config): self
+	{
+		$this->_config = $config;
+		
+		return $this;
+	}
+
+	/**
+	 * @return ArrayObject
+	 */
+	public function getConfig(): ArrayObject
+	{
+		return $this->_config;
+	}
+
+	/**
 	 * @return bool
 	 */
-	public function connect(ArrayObject $config): bool
+	public function connect(): bool
 	{
-		$timeout = (int)($config->timeout ?? 1); // in seconds
-		$readTimeout = (int)($config->read_timeout ?? $timeout);
-		$port = (int)($config->port ?? 6379);
+		$timeout = (int)($this->_config->timeout ?? 1); // in seconds
+		$readTimeout = (int)($this->_config->read_timeout ?? $timeout);
+		$port = (int)($this->_config->port ?? 6379);
 
 		$connectionOptions = [
 			BaseRedis::OPT_READ_TIMEOUT => $readTimeout,
 			BaseRedis::OPT_SERIALIZER => BaseRedis::SERIALIZER_NONE,
 		];
 
-		$this->_client = new BaseRedis();
+		$this->_client = new BaseRedis;
 		// connect
 		// suspend connection errors with @ since it triggers a warning when it cannot connect...
-		$connectionStatus = @$this->_client->connect($config->host, $config->port, $config->timeout);
+		$connectionStatus = @$this->_client->connect($this->_config->host, $this->_config->port, $this->_config->timeout);
 
 		if($connectionStatus === false)
 		{
 			$this->_client = null;
-			services()->events->log('Could not connect to cache server "%s"', $config->host);
+			services()->events->log('Could not connect to cache server "%s"', $this->_config->host);
 		}
 
-		$this->_client->select($config->database);
+		$this->_client->select($this->_config->database);
 
 		return $connectionStatus;
 	}
@@ -75,7 +106,7 @@ class Redis
 	{
 		if($this->_pool === null)
 		{
-			$this->_pool = new RedisCachePool($this->_client);
+			$this->_pool = new RedisCachePool($this->_client, $this->_config);
 		}
 
 		return $this->_pool;

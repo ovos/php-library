@@ -33,13 +33,25 @@ class Html extends Response
 	}
 
 	/**
-	 * @param string $response
+	 * @param null|string $response
 	 *
 	 * @return $this
 	 */
 	public function set(?string $response): self
 	{
 		$this->_response = $response;
+
+		return $this;
+	}
+	
+	/**
+	 * @param string $response
+	 *
+	 * @return $this
+	 */
+	public function append(string $response): self
+	{
+		$this->_response.= $response;
 
 		return $this;
 	}

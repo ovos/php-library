@@ -25,6 +25,6 @@ class Layout extends View
 
 		parent::__construct($viewScriptFile);
 
-		$this->host = SYSTEM_HOST . SYSTEM_DIR;
+		$this->host = SYSTEM_HOST . SYSTEM_PATH;
 	}
 }

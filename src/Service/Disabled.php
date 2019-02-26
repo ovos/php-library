@@ -18,6 +18,11 @@ class Disabled extends Service
 	 * @var string
 	 */
 	public const SYMBOL = 'disabled';
+
+	/**
+	 * @var bool
+	 */
+	protected $_enabled = false;
 	
 	/**
 	 * @return string

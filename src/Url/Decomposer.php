@@ -106,7 +106,7 @@ class Decomposer
 				}
 			}
 
-			$url = SYSTEM_DIR . $url;
+			$url = ROUTE_PATH . $url;
 		}
 
 		return $url;

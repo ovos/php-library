@@ -38,8 +38,9 @@ class Messages extends Helper
 	public function __construct()
 	{
 		parent::__construct();
-
-		if($this->_session = services()->session)
+		
+		$this->_session = services()->session;
+		if($this->_session->isEnabled())
 		{
 			$this->_items = &$this->_session->{self::SESSION_NAMESPACE};
 			if($this->_items === null)
