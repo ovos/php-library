@@ -64,7 +64,9 @@ class RedisCachePool extends BaseRedisCachePool
 		return [
 			true,
 			$object['data'],
-			unserialize($object['tags'], ['allowed_classes' => true]),
+			$object['tags'] !== null ?
+				unserialize($object['tags'], ['allowed_classes' => true])
+				: null,
 			$object['expires'],
 		];
 	}
