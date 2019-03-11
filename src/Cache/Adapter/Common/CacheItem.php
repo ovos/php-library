@@ -182,6 +182,7 @@ class CacheItem extends BaseCacheItem
 		{
 			return $value; // not serialized
 		}
+		$value = substr($value, 2);
 	
 		return unserialize($value, ['allowed_classes' => true]);
 	}
