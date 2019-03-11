@@ -87,13 +87,14 @@ class RedisCachePool extends BaseRedisCachePool
 			'tags' => serialize($item->getTags()),
 			'expires' => $item->getExpirationTimestamp()
 		]);
+		
+		$item->setRaw(false);
+		
 		// set expire if needed
 		if($ttl !== null && $ttl > 0)
 		{
 			return $this->cache->expire($key, $ttl);
 		}
-		
-		$item->setRaw(false);
 		
 		return $result;
 	}
