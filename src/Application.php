@@ -97,8 +97,7 @@ class Application
 		{
 			$this->_interface = self::INT_CLI;
 		}
-		ob_start($this->isInterfaceHttp() ? 'ob_gzhandler' : null); // gzip only for HTTP
-
+		
 		self::$instance = $this;
 
 		$this->_init()
@@ -415,9 +414,7 @@ class Application
 			{
 				/** @var Response\Html $response; */
 				$response->send();
-				$output = ob_get_contents();
-				ob_end_clean();
-
+				
 				$errorController = new \Controllers\System\Events;
 				$errorController->dispatch('index', [$output]);
 
