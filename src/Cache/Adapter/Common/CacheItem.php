@@ -155,26 +155,24 @@ class CacheItem extends BaseCacheItem
 		}
 		
 		$prefix = substr($value, 2, 3);
-		if($prefix !== self::COMPRESS_PREFIX)
+		if($prefix === self::COMPRESS_PREFIX) // compressed
 		{
-			return $value; // not compressed
-		}
-		
-		$method = substr($value, 0, 2);
-		$compressed = substr($value, 5);
-		switch($method)
-		{
-			case 'zs':
-				if(!function_exists('zstd_uncompress'))
-				{
-					return $value;
-				}
-				
-				$value = zstd_uncompress($compressed);
-				
-				break;
-			default:
-				$value = gzuncompress($compressed);
+			$method = substr($value, 0, 2);
+			$compressed = substr($value, 5);
+			switch($method)
+			{
+				case 'zs':
+					if(!function_exists('zstd_uncompress'))
+					{
+						return $value;
+					}
+					
+					$value = zstd_uncompress($compressed);
+					
+					break;
+				default:
+					$value = gzuncompress($compressed);
+			}
 		}
 		
 		$prefix = substr($value, 0, 2);
