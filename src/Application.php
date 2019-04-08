@@ -412,13 +412,11 @@ class Application
 			// HTML or JSON with HTTP debug
 			if(\get_class($this->getResponse()) === Response\Html::class || $this->getRequest()->isHttpDebug())
 			{
-				/** @var Response\Html $response; */
-				$response->send();
+				/** @var Response\Html $response */
+				$output = (string)$response->send();
 				
 				$errorController = new \Controllers\System\Events;
 				$errorController->dispatch('index', [$output]);
-
-				$response = $this->getResponse();
 			}
 		}
 
