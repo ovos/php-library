@@ -12,7 +12,6 @@ use Ovos\Service\Session;
 use Ovos\Service\Cookies;
 use Ovos\Service\Cache;
 use Ovos\Service\Database;
-use function Ovos\config;
 
 /**
  * Services
@@ -95,14 +94,6 @@ class Services
 	public function isRegistered(string $symbol): bool
 	{
 		return isset(self::$_items[$symbol]);
-	}
-
-	/**
-	 * @return ArrayObject
-	 */
-	public function getConfig()
-	{
-		return config()->system->services;
 	}
 
 	/**

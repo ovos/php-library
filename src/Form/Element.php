@@ -115,7 +115,6 @@ class Element
 	 */
 	public function setValue($value): self
 	{
-		$this->_value = null; // clear cache of getValue()
 		$this->getForm()->setValue($this->_id, $value);
 
 		return $this;

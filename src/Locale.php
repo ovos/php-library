@@ -166,16 +166,4 @@ class Locale
 		
 		return $countries;
 	}
-	
-	/**
-	 * @return array
-	 */
-	public function __debugInfo()
-	{
-		return [
-			'symbol' => $this->_symbol,
-			'name' => $this->_name,
-			'default' => $this->_default,
-		];
-	}
 }
