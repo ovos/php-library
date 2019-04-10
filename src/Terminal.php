@@ -45,7 +45,15 @@ class Terminal
 			self::handleMarkup($message)
 			: self::stripMarkup($message);
 		
-		$isCli ? fwrite(STDOUT, $message) : print($message);
+		if($isCli)
+		{
+			fwrite(STDOUT, $message);
+		}
+		else
+		{
+			 print($message);
+			 ob_flush();
+		}
 	}
 	
 	/**
