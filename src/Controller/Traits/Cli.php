@@ -39,19 +39,11 @@ trait Cli
 	}
 
 	/**
-	 * @param mixed $default
-	 * 
 	 * @return string|null
 	 */
-	public function readLine($default = null): ?string
+	public function readLine(): ?string
 	{
-		$line = Terminal::readLine();
-		if($line === null)
-		{
-			return $default;
-		}
-		
-		return $line;
+		return Terminal::readLine();
 	}
 
 	/**

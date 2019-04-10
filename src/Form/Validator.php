@@ -61,8 +61,6 @@ abstract class Validator
 	 */
 	public function addError(Error $error): self
 	{
-		$error->setValidator($this);
-		
 		$this->_errors[] = $error;
 		
 		return $this;

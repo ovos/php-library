@@ -339,8 +339,7 @@ class Application
 	 */
 	protected function _initServices(): self
 	{
-		$services = $this->getServices()
-			->getConfig()
+		$services = $this->getConfig()->system->services
 			->get($this->getInterface());
 		if($services === null)
 		{
@@ -409,7 +408,7 @@ class Application
 
 				$response->success = false;
 			}
-			
+
 			// HTML or JSON with HTTP debug
 			if(\get_class($this->getResponse()) === Response\Html::class || $this->getRequest()->isHttpDebug())
 			{
@@ -417,7 +416,7 @@ class Application
 				$output = (string)$response->send();
 				
 				$errorController = new \Controllers\System\Events;
-				$response = $errorController->dispatch('index', [$output]);
+				$errorController->dispatch('index', [$output]);
 			}
 		}
 

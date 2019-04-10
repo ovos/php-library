@@ -229,7 +229,7 @@ class Form implements Iterator
 	/**
 	 * @param string $id
 	 *
-	 * @return Element
+	 * @return mixed
 	 */
 	public function __get($id)
 	{
@@ -245,7 +245,7 @@ class Form implements Iterator
 	/**
 	 * @param string $id
 	 *
-	 * @return Element
+	 * @return mixed
 	 */
 	public function getElement(string $id)
 	{
