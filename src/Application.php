@@ -339,7 +339,8 @@ class Application
 	 */
 	protected function _initServices(): self
 	{
-		$services = $this->getConfig()->system->services
+		$services = $this->getServices()
+			->getConfig()
 			->get($this->getInterface());
 		if($services === null)
 		{
