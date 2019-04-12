@@ -409,7 +409,7 @@ class Application
 
 				$response->success = false;
 			}
-
+			
 			// HTML or JSON with HTTP debug
 			if(\get_class($this->getResponse()) === Response\Html::class || $this->getRequest()->isHttpDebug())
 			{
@@ -417,7 +417,7 @@ class Application
 				$output = (string)$response->send();
 				
 				$errorController = new \Controllers\System\Events;
-				$errorController->dispatch('index', [$output]);
+				$response = $errorController->dispatch('index', [$output]);
 			}
 		}
 
