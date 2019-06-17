@@ -4,9 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Form;
 
 use Ovos\Form;
-use Ovos\Form\Element;
-use Ovos\Form\Filter;
-use Ovos\Form\Validator;
 
 /**
  * Element
@@ -30,6 +27,11 @@ class Error
 	 * @var string
 	 */
 	protected $_message;
+
+	/**
+	 * @var Validator
+	 */
+	protected $_validator;
 	
 	/**
 	 * @param string $code
@@ -68,6 +70,26 @@ class Error
 	{
 		return $this->_element;
 	}
+	
+	/**
+	 * @param Validator $validator
+	 * 
+	 * @return $this
+	 */
+	public function setValidator(Validator $validator): self
+	{
+		$this->_validator = $validator;
+		
+		return $this;
+	}
+
+	/**
+	 * @return Validator
+	 */
+	public function getValidator(): Validator
+	{
+		return $this->_validator;
+	}	
 
 	/**
 	 * @param null|string $message
