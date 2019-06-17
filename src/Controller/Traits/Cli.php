@@ -39,11 +39,19 @@ trait Cli
 	}
 
 	/**
+	 * @param mixed $default
+	 * 
 	 * @return string|null
 	 */
-	public function readLine(): ?string
+	public function readLine($default = null): ?string
 	{
-		return Terminal::readLine();
+		$line = Terminal::readLine();
+		if($line === null)
+		{
+			return $default;
+		}
+		
+		return $line;
 	}
 
 	/**
@@ -93,7 +101,5 @@ trait Cli
 		Terminal::output('<darkgray>[' . $this->getPid() . '] '
 			. '<purple>' . date('Y-m-d H:i:s') . ': '
 			. '<reset>' . $message . '<reset>' . PHP_EOL, $this->_coloredOutput);
-			
-		ob_flush();
 	}
 }

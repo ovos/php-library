@@ -61,16 +61,12 @@ class Database extends Service
 			$database = new PDO($dsn, $config->username, $config->password, [
 				PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_OBJ,
 				PDO::ATTR_EMULATE_PREPARES => false,
+				PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 			]);
 
 			if($this->_app->getConfig()->system->profilers->enabled)
 			{
 				$database->setAttribute(PDO::ATTR_STATEMENT_CLASS, ['Ovos\Pdo\Profiler\PdoStatement']);
-			}
-
-			if($this->_app->getConfig()->system->debug)
-			{
-				$database->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 			}
 		}
 
