@@ -35,6 +35,20 @@ class Logger extends Service
 	 * @var string
 	 */
 	protected $_file = 'events';
+
+	/**
+	 * @var array
+	 */
+	protected static $_patterns = [
+		'~^password.*~',
+	];
+	
+	/**
+	 * @var array
+	 */
+	protected static $_replacements = [
+		'[removed]',
+	];
 	
 	/**
 	 * @return string
@@ -117,12 +131,12 @@ class Logger extends Service
 		if(!empty($_GET))
 		{
 			$append.= 'GET: ' . PHP_EOL
-				. json_encode($_POST, JSON_PRETTY_PRINT) . PHP_EOL;
+				. json_encode(self::replace($_GET), JSON_PRETTY_PRINT) . PHP_EOL;
 		}		
 		if(!empty($_POST))
 		{
 			$append.= 'POST: ' . PHP_EOL
-				. json_encode($_POST, JSON_PRETTY_PRINT) . PHP_EOL;
+				. json_encode(self::replace($_POST), JSON_PRETTY_PRINT) . PHP_EOL;
 		}
 		if(!empty($_FILES))
 		{
@@ -131,6 +145,21 @@ class Logger extends Service
 		}
 
 		return $append . PHP_EOL;
+	}
+
+	/**
+	 * @param array $data
+	 * 
+	 * @return array
+	 */
+	public static function replace(&$data)
+	{
+		foreach($data as &$entry)
+		{
+			$entry = preg_replace(self::$_patterns, self::$_replacements, $entry);
+		}
+		
+		return $data;
 	}
 
 	/**
