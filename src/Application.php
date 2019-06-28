@@ -377,9 +377,9 @@ class Application
 	}
 
 	/**
-	 * @return null|ArrayObject
+	 * @return ArrayObject
 	 */
-	public function getBootstrap(): ?ArrayObject
+	public function getBootstrap(): \ArrayObject
 	{
 		return $this->_bootstrap;
 	}

@@ -2,8 +2,6 @@
 
 namespace Ovos;
 
-use function count;
-
 /**
  * Exception
  *
@@ -19,18 +17,13 @@ class Exception extends \Exception
 	 */
 	public function __construct(...$message)
 	{
-		$count = count($message);
-		if($count > 1)
+		if(\count($message) > 1)
 		{
 			parent::__construct(sprintf(...$message));
 		}
-		else if($count === 1)
-		{
-			parent::__construct($message[0]);
-		}
 		else
 		{
-			parent::__construct();
+			parent::__construct($message[0]);
 		}
 	}
 }
