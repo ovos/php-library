@@ -224,18 +224,41 @@ class Controller
 	 */
 	public function registerSystemPlugins(): void
 	{
-		if($this->_app->getConfig()->system->plugins === null)
+		$systemConfig = $this->_app->getConfig()->system;
+	
+		if($systemConfig->plugins === null)
 		{
 			return;
 		}
 
-		$plugins = $this->_app->getConfig()->system->plugins
+		$systemPlugins = $systemConfig->plugins
 			->get($this->_app->getInterface());
-		if($plugins === null)
+		if($systemPlugins === null)
 		{
 			return;
 		}
 
+		$this->_loadPluginsFromConfig($systemPlugins);
+		
+		$bootstrapPlugins = $this->_app->getBootstrap()->plugins
+			->get($this->_app->getInterface());
+		if($bootstrapPlugins === null)
+		{
+			return;
+		}
+		
+		$this->_loadPluginsFromConfig($bootstrapPlugins);
+	}
+
+	/**
+	 * @param ArrayObject $plugins
+	 * 
+	 * @return $this
+	 * 
+	 * @throws RuntimeException
+	 */
+	protected function _loadPluginsFromConfig(ArrayObject $plugins): self
+	{
 		foreach($plugins as $plugin)
 		{
 			$pluginClass = strpos($plugin, '\\') === 0
@@ -248,6 +271,8 @@ class Controller
 
 			$this->addPlugin(new $pluginClass);
 		}
+		
+		return $this;
 	}
 
 	/**
