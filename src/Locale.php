@@ -15,24 +15,39 @@ use Collator;
 class Locale
 {
 	/**
-	 * Default system locale
+	 * Default system locale (url name)
 	 */
 	public const DEFAULT = 'en';
 
 	/**
 	 * @var string
 	 */
-	protected $_symbol;
+	protected $_urlName;
 
 	/**
-	 * @var bool
+	 * @var string
 	 */
-	protected $_default = false;
+	protected $_symbol;
+	
+	/**
+	 * @var string
+	 */
+	protected $_language;
+	
+	/**
+	 * @var string
+	 */
+	protected $_country;
 
 	/**
 	 * @var string
 	 */
 	protected $_name;
+	
+	/**
+	 * @var bool
+	 */
+	protected $_default = false;
 
 	/**
 	 * @var Translator
@@ -40,15 +55,23 @@ class Locale
 	protected $_translator;
 
 	/**
-	 * @param string $symbol
-	 * @param bool $default
-	 * @param string $name
+	 * @return string
 	 */
-	public function __construct(string $symbol = null, bool $default = false, string $name = null)
+	public function getUrlName(): string
 	{
-		$this->setSymbol($symbol);
-		$this->setDefault($default);
-		$this->setName($name);
+		return $this->_urlName;
+	}
+
+	/**
+	 * @param string $urlName
+	 *
+	 * @return $this
+	 */
+	public function setUrlName(?string $urlName): self
+	{
+		$this->_urlName = $urlName;
+
+		return $this;
 	}
 
 	/**
@@ -72,25 +95,45 @@ class Locale
 	}
 
 	/**
-	 * @param bool $default
-	 *
+	 * @return string
+	 */
+	public function getLanguage(): string
+	{
+		return $this->_language;
+	}
+
+	/**
+	 * @param string $language
+	 * 
 	 * @return $this
 	 */
-	public function setDefault(bool $default): self
+	public function setLanguage(?string $language): self
 	{
-		$this->_default = $default;
-
+		$this->_language = $language;
+		
 		return $this;
 	}
 
 	/**
-	 * @return bool
+	 * @return string
 	 */
-	public function isDefault(): bool
+	public function getCountry(): string
 	{
-		return $this->_default;
+		return $this->_country;
 	}
 
+	/**
+	 * @param string $country
+	 *
+	 * @return $this
+	 */
+	public function setCountry(?string $country): self
+	{
+		$this->_country = $country;
+		
+		return $this;
+	}
+	
 	/**
 	 * @return string
 	 */
@@ -109,6 +152,26 @@ class Locale
 		$this->_name = $name;
 
 		return $this;
+	}
+	
+	/**
+	 * @param bool $default
+	 *
+	 * @return $this
+	 */
+	public function setDefault(bool $default): self
+	{
+		$this->_default = $default;
+
+		return $this;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function isDefault(): bool
+	{
+		return $this->_default;
 	}
 
 	/**
@@ -173,7 +236,10 @@ class Locale
 	public function __debugInfo()
 	{
 		return [
+			'url_name' => $this->_urlName,
 			'symbol' => $this->_symbol,
+			'language' => $this->_language,
+			'country' => $this->_country,
 			'name' => $this->_name,
 			'default' => $this->_default,
 		];

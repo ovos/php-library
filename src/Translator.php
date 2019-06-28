@@ -51,7 +51,7 @@ class Translator
 	 */
 	public function addTranslationPath(string $path): self
 	{
-		$this->_translations[] = new Translation($path . $this->_locale->getSymbol() . '.mo');
+		$this->_translations[] = new Translation($path . $this->_locale->getLanguage() . '.mo');
 
 		return $this;
 	}
@@ -100,7 +100,7 @@ class Translator
 			return $translation;
 		}
 		
-		$formatter = new MessageFormatter($this->_locale->getSymbol(), $translation);
+		$formatter = new MessageFormatter($this->_locale->getLanguage(), $translation);
 		return $formatter->format($params);
 	}
 
