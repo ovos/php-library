@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Model\Mysql\Template;
 
-use Ovos\ArrayObject;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
 use Ovos\Pdo\Expression;
@@ -63,27 +62,14 @@ class Encrypted extends Template
 	}
 	
 	/**
-	 * @return null|ArrayObject
-	 */
-	public function getEncryptionConfig(): ?ArrayObject
-	{
-		return $this->_config->database->encryption;
-	}	
-	
-	/**
 	 * @param Mysql $model
-	 * @param string $string
+	 * @param string $value
 	 * 
 	 * @return null|string
 	 */
-	public function encrypt(Mysql $model, $string): ?string
+	public function encrypt(Mysql $model, $value): ?string
 	{
-		if($string === null)
-		{
-			return null;
-		}
-	
-		if(($config = $this->getEncryptionConfig()) === null)
+		if($value === null)
 		{
 			return null;
 		}
@@ -95,43 +81,38 @@ class Encrypted extends Template
 		
 		if($model->cipher_iv === null)
 		{
-			$length = openssl_cipher_iv_length($config->method);
+			$length = openssl_cipher_iv_length($this->_config->database->encryption->method);
 			$model->cipher_iv = random_bytes($length);
 		}
 	
-		$string = openssl_encrypt($string, 
-			$config->method,
-			$config->key . $model->cipher_key, 
+		$value = openssl_encrypt($value, 
+			$this->_config->database->encryption->method,
+			$this->_config->database->encryption->key . $model->cipher_key, 
 			OPENSSL_RAW_DATA,
 			$model->cipher_iv);
 			
-		return $string ?: null;	
+		return $value ?: null;	
 	}
 	
 	/**
 	 * @param Mysql $model
-	 * @param string $string
+	 * @param string $value
 	 * 
 	 * @return null|string
 	 */
-	public function decrypt(Mysql $model, $string): ?string
+	public function decrypt(Mysql $model, $value): ?string
 	{
-		if($string === null)
+		if($value === null)
 		{
 			return null;
-		}
-		
-		if(($config = $this->getEncryptionConfig()) === null)
-		{
-			return null;
-		}
-		
-		$string = openssl_decrypt($string, 
-			$config->method,
-			$config->key . $model->cipher_key, 
+		}	
+	
+		$value = openssl_decrypt($value, 
+			$this->_config->database->encryption->method,
+			$this->_config->database->encryption->key . $model->cipher_key, 
 			OPENSSL_RAW_DATA,
 			$model->cipher_iv);
 			
-		return $string ?: null;	
+		return $value ?: null;	
 	}
 }

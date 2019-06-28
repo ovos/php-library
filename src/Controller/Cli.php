@@ -7,7 +7,6 @@ use Ovos\Application;
 use Ovos\Controller;
 use Ovos\Exception;
 use function Ovos\services;
-use Plugins\Auth;
 
 /**
  * Cli
@@ -60,19 +59,7 @@ class Cli extends Controller
 
 		return $this;
 	}
-	
-	/**
-	 * @param array $actions
-	 *
-	 * @return $this
-	 */
-	public function addHttpActions(array $actions): self
-	{
-		$this->_httpActions = array_merge($this->_httpActions, $actions);
 
-		return $this;
-	}
-	
 	/**
 	 * @return array
 	 */

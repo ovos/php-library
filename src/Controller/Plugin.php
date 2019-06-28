@@ -65,7 +65,7 @@ abstract class Plugin
 			{
 				// just scream that we need it
 				throw new RuntimeException('"%s" plugin depends on "%s" plugin.',
-					self::getSymbol(), $symbol);
+					$this->getSymbol(), $symbol);
 			}
 		}
 	}
@@ -101,7 +101,7 @@ abstract class Plugin
 	/**
 	 * @return string
 	 */
-	abstract public static function getSymbol(): string;
+	abstract public function getSymbol(): string;
 
 	/**
 	 * @return void
