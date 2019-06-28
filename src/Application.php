@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\ArrayObject;
 use Ovos\Config\Loader;
 use Ovos\Service\Memory;
 use Ovos\View\Layout;
@@ -19,7 +18,7 @@ use Ovos\Exception\RuntimeException;
 class Application
 {
 	/**
-	 * @var Application
+	 * @var null|Application
 	 */
 	public static $instance;
 
@@ -51,7 +50,7 @@ class Application
 	protected $_interface = self::INT_HTTP;
 
 	/**
-	 * @var ArrayObject
+	 * @var null|ArrayObject
 	 */
 	protected $_config;
 
@@ -61,23 +60,28 @@ class Application
 	protected $_configs = [];
 
 	/**
+	 * @var null|ArrayObject
+	 */
+	protected $_bootstrap;	
+
+	/**
 	 * Request
 	 *
-	 * @var Request
+	 * @var null|Request
 	 */
 	protected $_request;
 
 	/**
 	 * Response
 	 *
-	 * @var Response
+	 * @var null|Response
 	 */
 	protected $_response;
 
 	/**
 	 * Router
 	 *
-	 * @var Router
+	 * @var null|Router
 	 */
 	protected $_router;
 
@@ -103,6 +107,7 @@ class Application
 		$this->_init()
 			->_initEnvironment()
 			->_initShutdownHandler()
+			->_initBootstrap()
 			->_initConstants()
 			->_initServices();
 	}
@@ -316,6 +321,70 @@ class Application
 	}
 
 	/**
+	 * Initializes the bootstrap
+	 *
+	 * @return $this
+	 */
+	protected function _initBootstrap(): self
+	{
+		$systemConfig = $this->getConfig()->system;
+		$bootstraps = $systemConfig->bootstraps;
+		if($bootstraps === null)
+		{
+			return $this;
+		}
+		
+		$this->setBoostrap(current($bootstraps));
+		
+		if(count($bootstraps) === 1)
+		{
+			return $this;
+		}
+		
+		if(!isset($_SERVER['REQUEST_URI']))
+		{
+			return $this;
+		}
+		
+		// check from second bootstrap
+		while($bootstrap = current($bootstraps))
+		{
+			if(strpos($_SERVER['REQUEST_URI'], $systemConfig->path . $bootstrap->path) === 0)
+			{
+				$this->setBoostrap($bootstrap);
+			}
+			
+			next($bootstraps);
+		}
+		
+		return $this;
+	}
+
+	/**
+	 * @param ArrayObject $bootstrap
+	 * @return Application
+	 */
+	public function setBoostrap(ArrayObject $bootstrap): self
+	{
+		$this->_bootstrap = $bootstrap;
+		if($controller = $this->_bootstrap->controller->get($this->getInterface()))
+		{
+			$this->getRequest()->setController($controller);
+			$this->getRequest()->setControllerClass(Strings::studlyCase($controller));
+		}
+		
+		return $this;
+	}
+
+	/**
+	 * @return ArrayObject
+	 */
+	public function getBootstrap(): \ArrayObject
+	{
+		return $this->_bootstrap;
+	}
+
+	/**
 	 * Initializes constants
 	 *
 	 * @return $this
@@ -323,9 +392,33 @@ class Application
 	protected function _initConstants(): self
 	{
 		$systemConfig = $this->getConfig()->system;
+		$bootstrap = $this->getBootstrap();
+		
+		$systemPath = $systemConfig->path;
+		$routePath = $systemPath;
+		
+		if($systemConfig->route_path)
+		{
+			$routePath = $systemPath . $systemConfig->route_path;
+		}
+		
+		if($bootstrap)
+		{
+			if($bootstrap->path)
+			{
+				$systemPath = $systemConfig->path . $bootstrap->path;
+				$routePath = $systemPath;
+			}
+			
+			if($bootstrap->route_path)
+			{
+				$routePath = $systemPath . $bootstrap->route_path;
+			}
+		}
+		
 		\define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $systemConfig->domain));
-		\define('SYSTEM_PATH', $systemConfig->path);
-		\define('ROUTE_PATH', $systemConfig->route_path ? $systemConfig->route_path : SYSTEM_PATH);
+		\define('SYSTEM_PATH', $systemPath);
+		\define('ROUTE_PATH', $routePath);
 		\define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
 		\define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
 
