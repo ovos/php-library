@@ -8,6 +8,8 @@ use Ovos\Exception\RuntimeException;
 use Models;
 use Plugins;
 use ReflectionMethod;
+use function key;
+use function current;
 
 /**
  * Controller
@@ -231,23 +233,38 @@ class Controller
 			return;
 		}
 
-		$systemPlugins = $systemConfig->plugins
+		// handle default plugins
+		$defaultPlugins = $systemConfig->plugins->default
 			->get($this->_app->getInterface());
-		if($systemPlugins === null)
+		if($defaultPlugins === null)
 		{
 			return;
 		}
 
-		$this->_loadPluginsFromConfig($systemPlugins);
+		$this->_loadPluginsFromConfig($defaultPlugins);
 		
-		$bootstrapPlugins = $this->_app->getBootstrap()->plugins
-			->get($this->_app->getInterface());
-		if($bootstrapPlugins === null)
+		// handle controller specific plugins		
+		$controllerPlugins = $systemConfig->plugins->controllers;
+		if($controllerPlugins === null)
 		{
 			return;
 		}
 		
-		$this->_loadPluginsFromConfig($bootstrapPlugins);
+		foreach($controllerPlugins as $controller => $plugins)
+		{
+			if(strpos($this->_request->getController(), $controller) !== 0)
+			{
+				continue;	
+			}
+			
+			$plugins = $plugins->get($this->_app->getInterface());
+			if($plugins === null)
+			{
+				continue;
+			}
+			
+			$this->_loadPluginsFromConfig($plugins);
+		}
 	}
 
 	/**
@@ -261,15 +278,31 @@ class Controller
 	{
 		foreach($plugins as $plugin)
 		{
+			$action = null;
+			// plugin config as action: plugin
+			if($plugin instanceof ArrayObject)
+			{
+				$action = key($plugin);
+				$plugin = current($plugin);
+			}
+		
+			/** @var Plugin $pluginClass */
 			$pluginClass = strpos($plugin, '\\') === 0
 				? $plugin : 'Plugins\\' . $plugin;
-
+			
 			if(!class_exists($pluginClass))
 			{
 				throw new RuntimeException('Plugin class does not exist "%s".', $pluginClass);
 			}
-
-			$this->addPlugin(new $pluginClass);
+			
+			if($action === null || $action === Plugin::ACTION_ADD)
+			{
+				$this->addPlugin(new $pluginClass);
+			}
+			else if($action === Plugin::ACTION_REMOVE)
+			{
+				$this->removePlugin($pluginClass::getSymbol());
+			}
 		}
 		
 		return $this;
@@ -340,6 +373,18 @@ class Controller
 	public function __call(string $symbol, array $arguments)
 	{
 		return $this->getPlugin($symbol, $arguments);
+	}
+	
+	/**
+	 * @param string $symbol
+	 *
+	 * @return $this
+	 */
+	public function removePlugin(string $symbol): self
+	{
+		unset($this->_plugins[$symbol]);
+
+		return $this;
 	}
 	
 	/**
