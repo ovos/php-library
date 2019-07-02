@@ -67,7 +67,7 @@ class Locale
 	 *
 	 * @return $this
 	 */
-	public function setUrlName(?string $urlName): self
+	public function setUrlName(string $urlName): self
 	{
 		$this->_urlName = $urlName;
 
@@ -87,7 +87,7 @@ class Locale
 	 *
 	 * @return $this
 	 */
-	public function setSymbol(?string $symbol): self
+	public function setSymbol(string $symbol): self
 	{
 		$this->_symbol = $symbol;
 
@@ -107,7 +107,7 @@ class Locale
 	 * 
 	 * @return $this
 	 */
-	public function setLanguage(?string $language): self
+	public function setLanguage(string $language): self
 	{
 		$this->_language = $language;
 		
@@ -127,7 +127,7 @@ class Locale
 	 *
 	 * @return $this
 	 */
-	public function setCountry(?string $country): self
+	public function setCountry(string $country): self
 	{
 		$this->_country = $country;
 		
@@ -147,7 +147,7 @@ class Locale
 	 *
 	 * @return $this
 	 */
-	public function setName(?string $name): self
+	public function setName(string $name): self
 	{
 		$this->_name = $name;
 
