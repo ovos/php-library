@@ -22,7 +22,7 @@ abstract class Plugin
 	 * Actions
 	 */
 	public const ACTION_ADD = 'add';
-	public const ACTION_REMOVE = 'remove';
+	public const ACTION_SKIP = 'skip';
 	/**#@-*/
 
 	/**
