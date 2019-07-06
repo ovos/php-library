@@ -227,65 +227,106 @@ class Controller
 	public function registerSystemPlugins(): void
 	{
 		$systemConfig = $this->_app->getConfig()->system;
-	
 		if($systemConfig->plugins === null)
 		{
 			return;
 		}
-
-		// handle default plugins
-		$defaultPlugins = $systemConfig->plugins->default
+		
+		// fetch default plugins
+		$plugins = $systemConfig->plugins->default
 			->get($this->_app->getInterface());
-		if($defaultPlugins === null)
+		if($plugins === null)
 		{
 			return;
 		}
-
-		$this->_loadPluginsFromConfig($defaultPlugins);
 		
-		// handle controller specific plugins		
+		// handle (add/skip) controller specific plugins
 		$controllerPlugins = $systemConfig->plugins->controllers;
-		if($controllerPlugins === null)
+		if($controllerPlugins === null || $controllerPlugins->count() === 0)
 		{
+			$this->_loadPluginsFromConfig($plugins);
+			
 			return;
 		}
+		$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
 		
-		foreach($controllerPlugins as $controller => $plugins)
+		$this->_loadPluginsFromConfig($plugins);
+	}
+	
+	/**
+	 * @param ArrayObject $plugins
+	 * @param ArrayObject $controllerPlugins
+	 * 
+	 * @return ArrayObject
+	 */
+	public function getControllerPlugins($plugins, $controllerPlugins)
+	{
+		// without \Controllers\ namespace
+		$currentControllerClass = substr(static::class,
+			strpos(static::class, '\\') + 1);
+			
+		foreach($controllerPlugins as $controllers => $controllerPlugins)
 		{
-			if(strpos($this->_request->getController(), $controller) !== 0)
+			// explode lists of controllers (e.g. Controller1, Controller2)
+			$controllers = explode(',', $controllers);
+			foreach($controllers as $controller)
 			{
-				continue;	
+				// removing a possible leading space
+				$controller = ltrim($controller);
+				
+				// if controller matches (begins with the same name)
+				if(strpos($currentControllerClass, $controller) === 0)
+				{
+					$controllerPlugins = $controllerPlugins->get($this->_app->getInterface());
+					
+					foreach($controllerPlugins as $controllerPlugin)
+					{
+						$action = null;
+						// plugin config as action: plugin
+						if($controllerPlugin instanceof ArrayObject)
+						{
+							$action = key($controllerPlugin);
+							$controllerPlugin = current($controllerPlugin);
+						}
+						
+						if($action === null || $action === Plugin::ACTION_ADD)
+						{
+							$plugins->append($controllerPlugin);
+						}
+						else if($action === Plugin::ACTION_SKIP)
+						{
+							foreach($plugins as $key => $plugin)
+							{
+								if($controllerPlugin === $plugin)
+								{
+									unset($plugins[$key]);
+								}
+							}
+						}
+					}
+				}
 			}
-			
-			$plugins = $plugins->get($this->_app->getInterface());
-			if($plugins === null)
-			{
-				continue;
-			}
-			
-			$this->_loadPluginsFromConfig($plugins);
 		}
+		
+		return $plugins;
 	}
 
 	/**
-	 * @param ArrayObject $plugins
+	 * @param null|ArrayObject $plugins
 	 * 
 	 * @return $this
 	 * 
 	 * @throws RuntimeException
 	 */
-	protected function _loadPluginsFromConfig(ArrayObject $plugins): self
+	protected function _loadPluginsFromConfig(?ArrayObject $plugins): self
 	{
+		if($plugins === null)
+		{
+			return $this;
+		}
+	
 		foreach($plugins as $plugin)
 		{
-			$action = null;
-			// plugin config as action: plugin
-			if($plugin instanceof ArrayObject)
-			{
-				$action = key($plugin);
-				$plugin = current($plugin);
-			}
-		
 			/** @var Plugin $pluginClass */
 			$pluginClass = strpos($plugin, '\\') === 0
 				? $plugin : 'Plugins\\' . $plugin;
@@ -295,14 +336,7 @@ class Controller
 				throw new RuntimeException('Plugin class does not exist "%s".', $pluginClass);
 			}
 			
-			if($action === null || $action === Plugin::ACTION_ADD)
-			{
-				$this->addPlugin(new $pluginClass);
-			}
-			else if($action === Plugin::ACTION_REMOVE)
-			{
-				$this->removePlugin($pluginClass::getSymbol());
-			}
+			$this->addPlugin(new $pluginClass);
 		}
 		
 		return $this;
