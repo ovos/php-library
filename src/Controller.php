@@ -241,31 +241,33 @@ class Controller
 		}
 		
 		// handle (add/skip) controller specific plugins
-		$controllerPlugins = $systemConfig->plugins->controllers;
-		if($controllerPlugins === null || $controllerPlugins->count() === 0)
+		$controllersPlugins = $systemConfig->plugins->controllers;
+		if($controllersPlugins !== null)
 		{
-			$this->_loadPluginsFromConfig($plugins);
-			
-			return;
+			$plugins = $this->getControllersPlugins($plugins, $controllersPlugins);
 		}
-		$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
 		
 		$this->_loadPluginsFromConfig($plugins);
 	}
 	
 	/**
 	 * @param ArrayObject $plugins
-	 * @param ArrayObject $controllerPlugins
+	 * @param ArrayObject $controllersPlugins
 	 * 
 	 * @return ArrayObject
 	 */
-	public function getControllerPlugins($plugins, $controllerPlugins)
+	public function getControllersPlugins($plugins, $controllersPlugins)
 	{
+		if($controllersPlugins->count() === 0)
+		{
+			return $plugins;
+		}
+	
 		// without \Controllers\ namespace
 		$currentControllerClass = substr(static::class,
 			strpos(static::class, '\\') + 1);
 			
-		foreach($controllerPlugins as $controllers => $controllerPlugins)
+		foreach($controllersPlugins as $controllers => $controllersPlugins)
 		{
 			// explode lists of controllers (e.g. Controller1, Controller2)
 			$controllers = explode(',', $controllers);
@@ -277,32 +279,10 @@ class Controller
 				// if controller matches (begins with the same name)
 				if(strpos($currentControllerClass, $controller) === 0)
 				{
-					$controllerPlugins = $controllerPlugins->get($this->_app->getInterface());
-					
-					foreach($controllerPlugins as $controllerPlugin)
+					$controllerPlugins = $controllersPlugins->get($this->_app->getInterface());
+					if($controllerPlugins !== null)
 					{
-						$action = null;
-						// plugin config as action: plugin
-						if($controllerPlugin instanceof ArrayObject)
-						{
-							$action = key($controllerPlugin);
-							$controllerPlugin = current($controllerPlugin);
-						}
-						
-						if($action === null || $action === Plugin::ACTION_ADD)
-						{
-							$plugins->append($controllerPlugin);
-						}
-						else if($action === Plugin::ACTION_SKIP)
-						{
-							foreach($plugins as $key => $plugin)
-							{
-								if($controllerPlugin === $plugin)
-								{
-									unset($plugins[$key]);
-								}
-							}
-						}
+						$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
 					}
 				}
 			}
@@ -310,7 +290,50 @@ class Controller
 		
 		return $plugins;
 	}
-
+	
+	/**
+	 * @param ArrayObject $plugins
+	 * @param ArrayObject $controllerPlugins
+	 * 
+	 * @return ArrayObject
+	 */
+	public function getControllerPlugins($plugins, $controllerPlugins)
+	{
+		if($controllerPlugins->count() === 0)
+		{
+			return $plugins;
+		}
+	
+		foreach($controllerPlugins as $controllerPlugin)
+		{
+			$action = null;
+			// plugin config as action: plugin
+			if($controllerPlugin instanceof ArrayObject)
+			{
+				$action = key($controllerPlugin);
+				$controllerPlugin = current($controllerPlugin);
+			}
+			
+			if($action === null || $action === Plugin::ACTION_ADD)
+			{
+				$plugins->append($controllerPlugin);
+			}
+			else if($action === Plugin::ACTION_SKIP)
+			{
+				foreach($plugins as $key => $plugin)
+				{
+					if($controllerPlugin === $plugin)
+					{
+						unset($plugins[$key]);
+					}
+				}
+			}
+		}
+		
+		return $plugins;
+	}
+	
+	
 	/**
 	 * @param null|ArrayObject $plugins
 	 * 
