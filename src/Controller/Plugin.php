@@ -18,13 +18,6 @@ use function Ovos\app;
  */
 abstract class Plugin
 {
-	/**#@+
-	 * Actions
-	 */
-	public const ACTION_ADD = 'add';
-	public const ACTION_SKIP = 'skip';
-	/**#@-*/
-
 	/**
 	 * @var Application
 	 */
