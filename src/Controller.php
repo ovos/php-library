@@ -240,11 +240,11 @@ class Controller
 			return;
 		}
 		
-		// handle (add/skip) controller specific plugins
-		$controllersPlugins = $systemConfig->plugins->controllers;
-		if($controllersPlugins !== null)
+		// handle adding & skipping of controller specific plugins
+		$groups = $systemConfig->plugins->groups;
+		if($groups !== null)
 		{
-			$plugins = $this->getControllersPlugins($plugins, $controllersPlugins);
+			$plugins = $this->getGroupsPlugins($plugins, $groups);
 		}
 		
 		$this->_loadPluginsFromConfig($plugins);
@@ -252,40 +252,58 @@ class Controller
 	
 	/**
 	 * @param ArrayObject $plugins
-	 * @param ArrayObject $controllersPlugins
+	 * @param ArrayObject $groups
 	 * 
 	 * @return ArrayObject
 	 */
-	public function getControllersPlugins($plugins, $controllersPlugins)
+	public function getGroupsPlugins($plugins, $groups)
 	{
-		if($controllersPlugins->count() === 0)
+		if($groups->count() === 0)
 		{
 			return $plugins;
 		}
-	
-		// without \Controllers\ namespace
-		$currentControllerClass = substr(static::class,
-			strpos(static::class, '\\') + 1);
 			
-		foreach($controllersPlugins as $controllers => $controllersPlugins)
+		// without \Controllers\ namespace
+		$currentController = substr(static::class,
+			strpos(static::class, '\\') + 1);
+		
+		foreach($groups as $group)
 		{
-			// explode lists of controllers (e.g. Controller1, Controller2)
-			$controllers = explode(',', $controllers);
-			foreach($controllers as $controller)
+			$plugins = $this->getGroupPlugins($plugins, $group, $currentController);
+		}
+		
+		return $plugins;
+	}
+	
+	/**
+	 * @param ArrayObject $plugins
+	 * @param ArrayObject $groups
+	 * @param string $currentController
+	 * 
+	 * @return ArrayObject
+	 */
+	public function getGroupPlugins($plugins, $group, $currentController)
+	{
+		if($group->controllers === null
+			|| $group->controllers->count() === 0)
+		{
+			return $plugins;
+		}
+			
+		foreach($group->controllers as $controller)
+		{
+			// if controller matches (begins with the same name)
+			if(strpos($currentController, $controller) === 0)
 			{
-				// removing a possible leading space
-				$controller = ltrim($controller);
-				
-				// if controller matches (begins with the same name)
-				if(strpos($currentControllerClass, $controller) === 0)
+				$controllerPlugins = $group->get($this->_app->getInterface());
+				if($controllerPlugins !== null)
 				{
-					$controllerPlugins = $controllersPlugins->get($this->_app->getInterface());
-					if($controllerPlugins !== null)
-					{
-						$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
-					}
+					$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
 				}
+				
+				break; // no need to check further
 			}
+		
 		}
 		
 		return $plugins;
@@ -299,34 +317,29 @@ class Controller
 	 */
 	public function getControllerPlugins($plugins, $controllerPlugins)
 	{
-		if($controllerPlugins->count() === 0)
+		// skip
+		if($controllerPlugins->skip !== null)
 		{
-			return $plugins;
-		}
-	
-		foreach($controllerPlugins as $controllerPlugin)
-		{
-			$action = null;
-			// plugin config as action: plugin
-			if($controllerPlugin instanceof ArrayObject)
+			foreach($controllerPlugins->skip as $skip)
 			{
-				$action = key($controllerPlugin);
-				$controllerPlugin = current($controllerPlugin);
-			}
-			
-			if($action === null || $action === Plugin::ACTION_ADD)
-			{
-				$plugins->append($controllerPlugin);
-			}
-			else if($action === Plugin::ACTION_SKIP)
-			{
-				foreach($plugins as $key => $plugin)
+				foreach($plugins as $offset => $plugin)
 				{
-					if($controllerPlugin === $plugin)
+					if($skip === $plugin)
 					{
-						unset($plugins[$key]);
+						$plugins->offsetUnset($offset);
+						
+						break; // no need to check further
 					}
 				}
+			}
+		}
+	
+		// add
+		if($controllerPlugins->add !== null)
+		{
+			foreach($controllerPlugins->add as $add)
+			{
+				$plugins->append($add);
 			}
 		}
 		
@@ -358,7 +371,7 @@ class Controller
 			{
 				throw new RuntimeException('Plugin class does not exist "%s".', $pluginClass);
 			}
-			
+
 			$this->addPlugin(new $pluginClass);
 		}
 		
