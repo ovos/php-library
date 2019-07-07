@@ -318,7 +318,8 @@ class Controller
 	public function getControllerPlugins($plugins, $controllerPlugins)
 	{
 		// skip
-		if($controllerPlugins->skip !== null)
+		if($controllerPlugins->skip !== null
+			&& count($controllerPlugins->skip))
 		{
 			foreach($controllerPlugins->skip as $skip)
 			{
@@ -335,7 +336,8 @@ class Controller
 		}
 	
 		// add
-		if($controllerPlugins->add !== null)
+		if($controllerPlugins->add !== null
+			&& count($controllerPlugins->add))
 		{
 			foreach($controllerPlugins->add as $add)
 			{
