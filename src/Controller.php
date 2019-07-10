@@ -8,6 +8,8 @@ use Ovos\Exception\RuntimeException;
 use Models;
 use Plugins;
 use ReflectionMethod;
+use function key;
+use function current;
 
 /**
  * Controller
@@ -224,23 +226,149 @@ class Controller
 	 */
 	public function registerSystemPlugins(): void
 	{
-		if($this->_app->getConfig()->system->plugins === null)
+		$systemConfig = $this->_app->getConfig()->system;
+		if($systemConfig->plugins === null)
 		{
 			return;
 		}
-
-		$plugins = $this->_app->getConfig()->system->plugins
+		
+		// fetch default plugins
+		$plugins = $systemConfig->plugins->default
 			->get($this->_app->getInterface());
 		if($plugins === null)
 		{
 			return;
 		}
-
+		
+		// handle adding & skipping of controller specific plugins
+		$groups = $systemConfig->plugins->groups;
+		if($groups !== null)
+		{
+			$plugins = $this->getGroupsPlugins($plugins, $groups);
+		}
+		
+		$this->_loadPluginsFromConfig($plugins);
+	}
+	
+	/**
+	 * @param ArrayObject $plugins
+	 * @param ArrayObject $groups
+	 * 
+	 * @return ArrayObject
+	 */
+	public function getGroupsPlugins($plugins, $groups)
+	{
+		if($groups->count() === 0)
+		{
+			return $plugins;
+		}
+			
+		// without \Controllers\ namespace
+		$currentController = substr(static::class,
+			strpos(static::class, '\\') + 1);
+		
+		foreach($groups as $group)
+		{
+			$plugins = $this->getGroupPlugins($plugins, $group, $currentController);
+		}
+		
+		return $plugins;
+	}
+	
+	/**
+	 * @param ArrayObject $plugins
+	 * @param ArrayObject $groups
+	 * @param string $currentController
+	 * 
+	 * @return ArrayObject
+	 */
+	public function getGroupPlugins($plugins, $group, $currentController)
+	{
+		if($group->controllers === null
+			|| $group->controllers->count() === 0)
+		{
+			return $plugins;
+		}
+			
+		foreach($group->controllers as $controller)
+		{
+			// if controller matches (begins with the same name)
+			if(strpos($currentController, $controller) === 0)
+			{
+				$controllerPlugins = $group->get($this->_app->getInterface());
+				if($controllerPlugins !== null)
+				{
+					$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
+				}
+				
+				break; // no need to check further
+			}
+		
+		}
+		
+		return $plugins;
+	}
+	
+	/**
+	 * @param ArrayObject $plugins
+	 * @param ArrayObject $controllerPlugins
+	 * 
+	 * @return ArrayObject
+	 */
+	public function getControllerPlugins($plugins, $controllerPlugins)
+	{
+		// skip
+		if($controllerPlugins->skip !== null
+			&& count($controllerPlugins->skip))
+		{
+			foreach($controllerPlugins->skip as $skip)
+			{
+				foreach($plugins as $offset => $plugin)
+				{
+					if($skip === $plugin)
+					{
+						$plugins->offsetUnset($offset);
+						
+						break; // no need to check further
+					}
+				}
+			}
+		}
+	
+		// add
+		if($controllerPlugins->add !== null
+			&& count($controllerPlugins->add))
+		{
+			foreach($controllerPlugins->add as $add)
+			{
+				$plugins->append($add);
+			}
+		}
+		
+		return $plugins;
+	}
+	
+	
+	/**
+	 * @param null|ArrayObject $plugins
+	 * 
+	 * @return $this
+	 * 
+	 * @throws RuntimeException
+	 */
+	protected function _loadPluginsFromConfig(?ArrayObject $plugins): self
+	{
+		if($plugins === null)
+		{
+			return $this;
+		}
+	
 		foreach($plugins as $plugin)
 		{
+			/** @var Plugin $pluginClass */
 			$pluginClass = strpos($plugin, '\\') === 0
 				? $plugin : 'Plugins\\' . $plugin;
-
+			
 			if(!class_exists($pluginClass))
 			{
 				throw new RuntimeException('Plugin class does not exist "%s".', $pluginClass);
@@ -248,6 +376,8 @@ class Controller
 
 			$this->addPlugin(new $pluginClass);
 		}
+		
+		return $this;
 	}
 
 	/**
@@ -315,6 +445,18 @@ class Controller
 	public function __call(string $symbol, array $arguments)
 	{
 		return $this->getPlugin($symbol, $arguments);
+	}
+	
+	/**
+	 * @param string $symbol
+	 *
+	 * @return $this
+	 */
+	public function removePlugin(string $symbol): self
+	{
+		unset($this->_plugins[$symbol]);
+
+		return $this;
 	}
 	
 	/**

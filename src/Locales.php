@@ -36,61 +36,72 @@ class Locales
 	}
 
 	/**
-	 * @param string $symbol
+	 * @param string $urlName
 	 *
 	 * @return bool
 	 */
-	public static function exists(string $symbol): bool
+	public static function exists(string $urlName): bool
 	{
-		return self::getConfig()->offsetExists($symbol);
+		return self::getConfig()->offsetExists($urlName);
 	}
 
 	/**
-	 * @param string $symbol
+	 * @param string $urlName
 	 *
 	 * @return Locale
 	 */
-	public static function create(string $symbol): Locale
+	public static function create(string $urlName): Locale
 	{
-		$localeClassNs = 'Locales\\' . $symbol;
+		$configs = self::getConfig();
+		if(($config = $configs->offsetGet($urlName)) === null
+			|| $config->symbol === null)
+		{
+			return new Locale;
+		}
+	
+		$localeClassNs = 'Locales\\' . $config->symbol;
 		$locale = class_exists($localeClassNs) ?
 			new $localeClassNs
 			: new Locale;
-
-		$locale->setSymbol($symbol);
-
-		$configs = self::getConfig();
-		if($configs->offsetExists($symbol))
+		
+		$locale->setUrlName($urlName);
+		$locale->setSymbol($config->symbol);
+		
+		if($config->language)
 		{
-			$config = $configs->offsetGet($symbol);
-			if($config->default)
-			{
-				$locale->setDefault($config->default);
-			}
-			if($config->name)
-			{
-				$locale->setName($config->name);
-			}
+			$locale->setLanguage($config->language);
+		}
+		if($config->country)
+		{
+			$locale->setCountry($config->country);
+		}
+		if($config->name)
+		{
+			$locale->setName($config->name);
+		}
+		if($config->default)
+		{
+			$locale->setDefault($config->default);
 		}
 
 		return $locale;
 	}
 
 	/**
-	 * @param string $symbol
+	 * @param string $urlName
 	 *
 	 * @return Locale
 	 */
-	public static function get(string $symbol): Locale
+	public static function get(string $urlName): Locale
 	{
-		if(!isset(self::$_instances[$symbol]))
+		if(!isset(self::$_instances[$urlName]))
 		{
-			self::$_instances[$symbol] = self::create($symbol);
+			self::$_instances[$urlName] = self::create($urlName);
 		}
 
-		return self::$_instances[$symbol];
+		return self::$_instances[$urlName];
 	}
-
+	
 	/**
 	 * @return Locale[]
 	 */
@@ -99,9 +110,9 @@ class Locales
 		if(self::$_all === null)
 		{
 			self::$_all = [];
-			foreach(self::getConfig() as $symbol => $config)
+			foreach(self::getConfig() as $urlName => $config)
 			{
-				self::$_all[$symbol] = self::get($symbol);
+				self::$_all[$urlName] = self::get($urlName);
 			}
 		}
 

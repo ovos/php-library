@@ -140,8 +140,8 @@ class Url
 			&& \count($components)
 			&& Locales::exists($components[0]))
 		{
-			$localeSymbol = array_shift($components);
-			$this->setLocale(Locales::get($localeSymbol));
+			$localeUrlName = array_shift($components);
+			$this->setLocale(Locales::get($localeUrlName));
 		}
 
 		$this->_components = $components;
@@ -307,7 +307,7 @@ class Url
 
 		if($locale->isDefault() === false)
 		{
-			array_unshift($components, $locale->getSymbol());
+			array_unshift($components, $locale->getUrlName());
 		}
 
 		return self::getUrlFromComponents($components,
