@@ -167,9 +167,9 @@ class Logger extends Service
 	 * 
 	 * @return array
 	 */
-	public function remove(&$data)
+	public function remove($data)
 	{
-		foreach($data as $key => &$value)
+		foreach($data as $key => $value)
 		{
 			if(is_array($value))
 			{
