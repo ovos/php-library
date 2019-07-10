@@ -195,9 +195,9 @@ class Locale
 	public function getCountries($top = []): array
 	{
 		$countries = [];
-	
+		
 		// fetch all world regions
-		$regions = new ResourceBundle($this->getSymbol(), 'ICUDATA-region');
+		$regions = new ResourceBundle($this->getLanguage(), 'ICUDATA-region');
 		foreach($regions->get('Countries') as $symbol => $region)
 		{
 			if(is_numeric($symbol)) // continents
