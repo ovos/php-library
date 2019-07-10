@@ -60,7 +60,7 @@ class Logger extends Service
 	 */
 	public function addRemove(array $remove): self
 	{
-		$this->_remove = array_merge($this->_remove, $actions);
+		$this->_remove = array_merge($this->_remove, $remove);
 
 		return $this;
 	}
