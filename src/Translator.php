@@ -39,7 +39,7 @@ class Translator
 	 */
 	public function addTranslation($translation): self
 	{
-		$this->_translations[] = $translation;
+		$this->_translations[$translation->getPath()] = $translation;
 
 		return $this;
 	}
@@ -51,9 +51,9 @@ class Translator
 	 */
 	public function addTranslationPath(string $path): self
 	{
-		$this->_translations[] = new Translation($path . $this->_locale->getLanguage() . '.mo');
-
-		return $this;
+		return $this->addTranslation(
+			new Translation($path . $this->_locale->getLanguage() . '.mo')
+		);
 	}
 
 	/**
