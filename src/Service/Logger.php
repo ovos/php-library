@@ -4,12 +4,14 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\Client;
+use Ovos\Encryptor;
 use Ovos\Error;
 use Ovos\Exception;
 use Ovos\Logger as LoggerTrait;
 use Ovos\Service;
 use Throwable;
 use function Ovos\app;
+use function Ovos\config;
 
 /**
  * Logger
@@ -39,15 +41,8 @@ class Logger extends Service
 	/**
 	 * @var array
 	 */
-	protected static $_patterns = [
+	protected $_remove = [
 		'~^password.*~',
-	];
-	
-	/**
-	 * @var array
-	 */
-	protected static $_replacements = [
-		'[removed]',
 	];
 	
 	/**
@@ -57,7 +52,27 @@ class Logger extends Service
 	{
 		return self::SYMBOL;
 	}
+	
+	/**
+	 * @param array $remove
+	 *
+	 * @return $this
+	 */
+	public function addRemove(array $remove): self
+	{
+		$this->_remove = array_merge($this->_remove, $remove);
 
+		return $this;
+	}
+
+	/**
+	 * @return array
+	 */
+	public function getRemove(): array
+	{
+		return $this->_remove;
+	}
+	
 	/**
 	 * Logs events (errors or exceptions)
 	 *
@@ -83,12 +98,12 @@ class Logger extends Service
 			$event[0] = new Exception($message);
 		}
 
-		$output = static::getEvent($event[0]);
+		$output = $this->getEvent($event[0]);
 
 		// prepend
-		$prepend = static::getPrepend();
+		$prepend = $this->getPrepend();
 		// append
-		$append = static::getAppend();
+		$append = $this->getAppend();
 
 		$output = $prepend . $output . $append;
 		$this->output($output);
@@ -97,7 +112,7 @@ class Logger extends Service
 	/**
 	 * @return string
 	 */
-	public static function getPrepend(): string
+	public function getPrepend(): string
 	{
 		// prepend
 		$prepend = date('c ');
@@ -124,19 +139,19 @@ class Logger extends Service
 	/**
 	 * @return string
 	 */
-	public static function getAppend(): string
+	public function getAppend(): string
 	{
 		// append
 		$append = PHP_EOL;
 		if(!empty($_GET))
 		{
 			$append.= 'GET: ' . PHP_EOL
-				. json_encode(self::replace($_GET), JSON_PRETTY_PRINT) . PHP_EOL;
+				. json_encode($_GET, JSON_PRETTY_PRINT) . PHP_EOL;
 		}		
 		if(!empty($_POST))
 		{
 			$append.= 'POST: ' . PHP_EOL
-				. json_encode(self::replace($_POST), JSON_PRETTY_PRINT) . PHP_EOL;
+				. json_encode($this->remove($_POST), JSON_PRETTY_PRINT) . PHP_EOL;
 		}
 		if(!empty($_FILES))
 		{
@@ -152,11 +167,26 @@ class Logger extends Service
 	 * 
 	 * @return array
 	 */
-	public static function replace(&$data)
+	public function remove($data)
 	{
-		foreach($data as &$entry)
+		foreach($data as $key => $value)
 		{
-			$entry = preg_replace(self::$_patterns, self::$_replacements, $entry);
+			if(is_array($value))
+			{
+				$value = $this->remove($value);
+				
+				continue;
+			}
+		
+			foreach($this->_remove as $pattern)
+			{
+				if(preg_match($pattern, $key, $matches))
+				{
+					$value = '[removed][length:' . mb_strlen($value) . ']';
+					
+					break;
+				}
+			}
 		}
 		
 		return $data;
@@ -167,7 +197,7 @@ class Logger extends Service
 	 *
 	 * @return string
 	 */
-	public static function getEvent(object $event): string
+	public function getEvent(object $event): string
 	{
 		$output = '';
 		if($event instanceof Throwable && method_exists($event, 'getPrevious'))
