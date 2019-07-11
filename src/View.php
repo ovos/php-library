@@ -163,14 +163,23 @@ class View
 	 */
 	public static function getHelperClass(string $name): string
 	{
+		$systemConfig = app()->getConfig()->system;
+		$name = ucfirst($name);
+	
 		/** @var ArrayObject $viewHelpers */
-		if(($viewHelpers = app()->getConfig()->system->view_helpers)
-			&& $viewHelpers->offsetExists($name))
+		if(($namespaces = $systemConfig->get('view_helpers.namespaces')))
 		{
-			return $viewHelpers->offsetGet($name);
+			foreach($namespaces as $namespace)
+			{
+				// checks in classmap on production / tries to load the file on development
+				if(class_exists($namespace . $name))
+				{
+					return $namespace . $name;
+				}
+			}
 		}
 
-		return 'Ovos\View\Helper\\'. ucfirst($name);
+		return 'Ovos\View\Helper\\'. $name;
 	}
 
 	/**
