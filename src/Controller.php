@@ -74,7 +74,7 @@ class Controller
 	 *
 	 * @return null|Response
 	 */
-	public function dispatch($action, $params): ?Response
+	public function dispatch($action, $params = []): ?Response
 	{
 		$this->setDispatchedAction($action);
 
@@ -85,24 +85,27 @@ class Controller
 		}
 		
 		// detect type of action argument, cast string to type if needed
-		$method = new ReflectionMethod($this, $action);
-		$parameters = $method->getParameters();
-		foreach($parameters as $key => $parameter)
+		if(count($params))
 		{
-			if(isset($params[$key]) && ($type = $parameter->getType()))
+			$method = new ReflectionMethod($this, $action);
+			$parameters = $method->getParameters();
+			foreach($parameters as $key => $parameter)
 			{
-				$typeName = $type->getName();
-				if($typeName === 'int')
+				if(isset($params[$key]) && ($type = $parameter->getType()))
 				{
-					$params[$key] = (int)$params[$key];
-				}
-				else if($typeName === 'bool')
-				{
-					$params[$key] = (bool)$params[$key];
+					$typeName = $type->getName();
+					if($typeName === 'int')
+					{
+						$params[$key] = (int)$params[$key];
+					}
+					else if($typeName === 'bool')
+					{
+						$params[$key] = (bool)$params[$key];
+					}
 				}
 			}
 		}
-		
+
 		$response = $this->$action(...$params);
 		if($response)
 		{

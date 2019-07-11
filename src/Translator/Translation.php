@@ -30,7 +30,27 @@ class Translation
 	 */
 	public function __construct(string $path)
 	{
+		$this->setPath($path);
+	}
+	
+	/**
+	 * @param string $path
+	 * 
+	 * @return $this
+	 */
+	public function setPath(string $path): self
+	{
 		$this->_path = $path;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return string
+	 */
+	public function getPath(): string
+	{
+		return $this->_path;
 	}
 
 	/**
