@@ -62,8 +62,7 @@ class Controller
 		$this->_app = Application::$instance ?: new Application;
 		$this->_request = $this->_app->getRequest();
 		$this->_request->setControllerInstance($this);
-
-		$this->addTranslationPath();
+		
 		$this->registerSystemPlugins();
 		$this->registerPlugins();
 	}
@@ -163,7 +162,6 @@ class Controller
 	 */
 	public function addTranslationPath($path = null): self
 	{
-		$path = TRANSLATIONS_DIR . $path;
 		$this->_request->getLocale()->getTranslator()->addTranslationPath($path);
 
 		return $this;

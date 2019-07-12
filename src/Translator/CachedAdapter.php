@@ -27,7 +27,7 @@ class CachedAdapter extends Translator
 		}
 
 		$mTime = filemtime($filename);
-		$path = substr($filename, \strlen(TRANSLATIONS_DIR));
+		$path = substr($filename, \strlen(BASE_DIR));
 		$cacheId = Strings::slugify($path);
 
 		if($pool = services()->cache->getPool())
