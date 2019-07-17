@@ -83,6 +83,17 @@ abstract class Mysql extends Store
 	}
 
 	/**
+	 * @return bool
+	 */
+	public function optimize()
+	{
+		return $this->source()->query('
+			OPTIMIZE
+			TABLE ' . self::getTable() . '
+		')->closeCursor();
+	}
+
+	/**
 	 * @param Model $object
 	 *
 	 * @return false|PDOStatement
