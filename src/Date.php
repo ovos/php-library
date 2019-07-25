@@ -34,26 +34,27 @@ class Date
 	 */
 	public static function getMonthStart(string $month): DateTime
 	{
-		$start = new DateTime;
-		$start
+		$date = new DateTime;
+		$date
 			->modify('first day of ' . $month . ' month')
 			->setTime(0, 0, 0, 0);
 			
-		return $start;
+		return $date;
 	}
 
 	/**
-	 * @param DateTime $start
+	 * @param string $month (this, current, previous, next, 0, 1, 2, -1, -2, ...)
 	 * 
 	 * @return DateTime
 	 */
-	public static function getMonthEnd(DateTime $start): DateTime
+	public static function getMonthEnd(string $month): DateTime
 	{
-		$end = clone $start;
-		$end->modify('last day of this month')
+		$date = new DateTime;
+		$date
+			->modify('last day of ' . $month . ' month')
 			->setTime(23, 59, 59, 999999);
 			
-		return $end;	
+		return $date;	
 	}
 
 	/**

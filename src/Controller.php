@@ -62,8 +62,7 @@ class Controller
 		$this->_app = Application::$instance ?: new Application;
 		$this->_request = $this->_app->getRequest();
 		$this->_request->setControllerInstance($this);
-
-		$this->addTranslationPath();
+		
 		$this->registerSystemPlugins();
 		$this->registerPlugins();
 	}
@@ -74,7 +73,7 @@ class Controller
 	 *
 	 * @return null|Response
 	 */
-	public function dispatch($action, $params): ?Response
+	public function dispatch($action, $params = []): ?Response
 	{
 		$this->setDispatchedAction($action);
 
@@ -85,24 +84,27 @@ class Controller
 		}
 		
 		// detect type of action argument, cast string to type if needed
-		$method = new ReflectionMethod($this, $action);
-		$parameters = $method->getParameters();
-		foreach($parameters as $key => $parameter)
+		if(count($params))
 		{
-			if(isset($params[$key]) && ($type = $parameter->getType()))
+			$method = new ReflectionMethod($this, $action);
+			$parameters = $method->getParameters();
+			foreach($parameters as $key => $parameter)
 			{
-				$typeName = $type->getName();
-				if($typeName === 'int')
+				if(isset($params[$key]) && ($type = $parameter->getType()))
 				{
-					$params[$key] = (int)$params[$key];
-				}
-				else if($typeName === 'bool')
-				{
-					$params[$key] = (bool)$params[$key];
+					$typeName = $type->getName();
+					if($typeName === 'int')
+					{
+						$params[$key] = (int)$params[$key];
+					}
+					else if($typeName === 'bool')
+					{
+						$params[$key] = (bool)$params[$key];
+					}
 				}
 			}
 		}
-		
+
 		$response = $this->$action(...$params);
 		if($response)
 		{
@@ -160,7 +162,6 @@ class Controller
 	 */
 	public function addTranslationPath($path = null): self
 	{
-		$path = TRANSLATIONS_DIR . $path;
 		$this->_request->getLocale()->getTranslator()->addTranslationPath($path);
 
 		return $this;

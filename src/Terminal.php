@@ -52,7 +52,6 @@ class Terminal
 		else
 		{
 			 print($message);
-			 ob_flush();
 		}
 	}
 	
