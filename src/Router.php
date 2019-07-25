@@ -19,6 +19,16 @@ use function Ovos\services;
 class Router
 {
 	/**
+	 * @var Application
+	 */
+	protected $_app;
+
+	/**
+	 * @var ArrayObject
+	 */
+	protected $_config;
+	
+	/**
 	 * @var string
 	 */
 	public const CACHE_ID_CONTROLLERS = 'controllers';
@@ -45,6 +55,9 @@ class Router
 	 */
 	public function __construct(Request $request)
 	{
+		$this->_app = app();
+		$this->_config = $this->_app->getConfig();
+		
 		$this->_request = $request;
 		$this->_url = $request->getUrl();
 	}
@@ -122,12 +135,19 @@ class Router
 	{
 		// set controller
 		$controllerClass = $controller = null;
-		$controllers = $this->_getControllers(BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'controllers');
 		
+		$modules = $this->_config->system->modules;
+		if($modules === null)
+		{
+			return $params;
+		}
+		
+		$controllers = $this->_getControllers($modules);
+
 		// after checking for locale, check for controller (with optional namespace path), and action
 		foreach($params as $key => $param)
 		{
-			// set controller
+			// determine the correct controller
 			foreach($controllers as $name => $children)
 			{
 				if(\is_string($name)
@@ -187,32 +207,48 @@ class Router
 	}
 
 	/**
+	 * @param ArrayObject $modules
 	 * @param string $dir
 	 *
 	 * @return array
 	 */
-	protected function _getControllers($dir): array
+	protected function _getControllers($modules): array
 	{
+		$cacheId = self::CACHE_ID_CONTROLLERS;
+		
 		if($pool = services()->cache->getPerishablePool())
 		{
-			if($pool->hasItem(self::CACHE_ID_CONTROLLERS))
+			if($pool->hasItem($cacheId))
 			{
-				return $pool->getItem(self::CACHE_ID_CONTROLLERS)->get();
+				return $pool->getItem($cacheId)->get();
+			}
+		}
+		
+		$controllers = [];
+		
+		foreach($modules as $moduleName => $module)
+		{
+			$moduleDir = BASE_DIR . $module->path;
+			if($module->controllers)
+			{
+				$dir = $moduleDir . DIRECTORY_SEPARATOR . 'controllers';
+			
+				$moduleControllers = Dir::getFiles($dir, function($file)
+				{
+					/**
+					* @var SplFileObject $file
+					*/
+					$basename = $file->getBasename('.php');
+					return Strings::snakeCase($basename);
+				});
+			
+				$controllers = Arrays::deepMerge($controllers, $moduleControllers);
 			}
 		}
 
-		$controllers = Dir::getFiles($dir, function($file)
-		{
-			/**
-			* @var SplFileObject $file
-			*/
-			$basename = $file->getBasename('.php');
-			return Strings::snakeCase($basename);
-		});
-
 		if($pool = services()->cache->getPerishablePool())
 		{
-			$item = $pool->getItem(self::CACHE_ID_CONTROLLERS)->set($controllers);
+			$item = $pool->getItem($cacheId)->set($controllers);
 			$pool->save($item);
 		}
 

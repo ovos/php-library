@@ -109,6 +109,7 @@ class Application
 			->_initShutdownHandler()
 			->_initBootstrap()
 			->_initConstants()
+			->_initModules()
 			->_initServices();
 	}
 
@@ -419,9 +420,55 @@ class Application
 		\define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $systemConfig->domain));
 		\define('SYSTEM_PATH', $systemPath);
 		\define('ROUTE_PATH', $routePath);
-		\define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
+		//\define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
 		\define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
 
+		return $this;
+	}
+
+	/**
+	 * Initializes modules
+	 *
+	 * @return $this
+	 */
+	protected function _initModules(): self
+	{
+		$modules = $this->getConfig()->system->modules;
+		if($modules === null)
+		{
+			return $this;
+		}
+		
+		foreach($modules as $module)
+		{
+			$module->path = Dir::preProcess($module->path);
+			
+			if($module->translations)
+			{
+				$this->getRequest()
+					->getLocale()
+					->getTranslator()
+					->addTranslationPath(BASE_DIR
+						. $module->path . DIRECTORY_SEPARATOR 
+						. 'translations' . DIRECTORY_SEPARATOR);
+			}
+			
+			if($module->views)
+			{
+				set_include_path
+				(
+					implode
+					(
+						PATH_SEPARATOR,
+						[
+							BASE_DIR . $module->path . DIRECTORY_SEPARATOR . 'views',
+							get_include_path()
+						]
+					)
+				);
+			}
+		}
+		
 		return $this;
 	}
 

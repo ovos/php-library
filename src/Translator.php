@@ -39,7 +39,7 @@ class Translator
 	 */
 	public function addTranslation($translation): self
 	{
-		$this->_translations[] = $translation;
+		$this->_translations[$translation->getPath()] = $translation;
 
 		return $this;
 	}
@@ -51,15 +51,15 @@ class Translator
 	 */
 	public function addTranslationPath(string $path): self
 	{
-		$this->_translations[] = new Translation($path . $this->_locale->getLanguage() . '.mo');
-
-		return $this;
+		return $this->addTranslation(
+			new Translation($path . $this->_locale->getLanguage() . '.mo')
+		);
 	}
 
 	/**
 	 * @return Translation[]
 	 */
-	public function getPaths(): array
+	public function getTranslations(): array
 	{
 		return $this->_translations;
 	}
@@ -73,7 +73,7 @@ class Translator
 	public function translate(string $phrase, ...$params): string
 	{
 		$translation = $phrase;
-
+		
 		foreach($this->_translations as $translationAdapter)
 		{
 			$result = $translationAdapter->translate($phrase);
@@ -84,24 +84,7 @@ class Translator
 			}
 		}
 
-		return $this->getTranslation($translation, ...$params);
-	}
-
-	/**
-	 * @param string $translation
-	 * @param mixed $params
-	 *
-	 * @return string
-	 */
-	protected function getTranslation(string $translation, ...$params): string
-	{
-		if(empty($params))
-		{
-			return $translation;
-		}
-		
-		$formatter = new MessageFormatter($this->_locale->getLanguage(), $translation);
-		return $formatter->format($params);
+		return $this->_getTranslation($translation, ...$params);
 	}
 
 	/**
@@ -131,6 +114,23 @@ class Translator
 			}
 		}
 
-		return $this->getTranslation($translation, ...$params);
+		return $this->_getTranslation($translation, ...$params);
+	}
+
+	/**
+	 * @param string $translation
+	 * @param mixed $params
+	 *
+	 * @return string
+	 */
+	protected function _getTranslation(string $translation, ...$params): string
+	{
+		if(empty($params))
+		{
+			return $translation;
+		}
+		
+		$formatter = new MessageFormatter($this->_locale->getLanguage(), $translation);
+		return $formatter->format($params);
 	}
 }
