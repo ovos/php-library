@@ -9,6 +9,9 @@ use RecursiveIteratorIterator;
 use RecursiveDirectoryIterator;
 use SplFileObject;
 use function Ovos\services;
+use function is_string;
+use function in_array;
+use function array_slice;
 
 /**
  * Router
@@ -143,17 +146,17 @@ class Router
 		}
 		
 		$controllers = $this->_getControllers($modules);
-
+		
 		// after checking for locale, check for controller (with optional namespace path), and action
 		foreach($params as $key => $param)
 		{
 			// determine the correct controller
 			foreach($controllers as $name => $children)
 			{
-				if(\is_string($name)
+				if(is_string($name)
 					&& isset($params[$key + 1])
 					&& strcmp($name, $param) === 0
-					&& \in_array($params[$key + 1], $children, true))
+					&& in_array($params[$key + 1], $children, true))
 				{
 					$controllers = $children;
 					$controllerClass.= Strings::studlyCase($param) . '\\';
@@ -162,7 +165,7 @@ class Router
 					continue 2;
 				}
 
-				if(\is_string($children)
+				if(is_string($children)
 					&& strcmp($children, $param) === 0)
 				{
 					break;
@@ -175,7 +178,7 @@ class Router
 			$request->setControllerClass($controllerClass);
 
 			// cut out the controller and namespaces
-			$params = \array_slice($params, $key + 1);
+			$params = array_slice($params, $key + 1);
 
 			break;
 		}
@@ -241,8 +244,10 @@ class Router
 					$basename = $file->getBasename('.php');
 					return Strings::snakeCase($basename);
 				});
-			
+				
 				$controllers = Arrays::deepMerge($controllers, $moduleControllers);
+				// directories first
+				krsort($controllers, SORT_NATURAL);
 			}
 		}
 
