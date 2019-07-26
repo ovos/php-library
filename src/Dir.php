@@ -278,7 +278,8 @@ class Dir
 
 			$files[$basename] = self::getFiles($file->getPathname(), $callback);
 		}
-
+		ksort($files);
+		
 		return $files;
 	}
 }
