@@ -24,6 +24,13 @@ class Response
 	 * @var int
 	 */
 	protected $_httpCode = 200;
+	
+	/**
+	 * Sent
+	 *
+	 * @var bool
+	 */
+	protected $_sent = false;
 
 	/**
 	 * Headers
@@ -33,11 +40,11 @@ class Response
 	protected $_headers = [];
 
 	/**
-	 * Sent
+	 * Headers sent
 	 *
 	 * @var bool
 	 */
-	protected $_sent = false;
+	protected $_headersSent = false;
 
 	/**
 	 * Construct
@@ -109,6 +116,11 @@ class Response
 	 */
 	public function sendHeaders(): self
 	{
+		if($this->headersSent())
+		{
+			return $this;
+		}
+	
 		if($this->_app->getRequest()->isCli() === false)
 		{
 			foreach($this->_headers as $name => $header)
@@ -118,6 +130,8 @@ class Response
 
 			http_response_code($this->_httpCode);
 		}
+		
+		$this->setHeadersSent(true);
 
 		return $this;
 	}
@@ -152,13 +166,33 @@ class Response
 
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
 	public function isSent(): bool
 	{
 		return $this->_sent;
+	}
+	
+	/**
+	 * @param bool $headersSent
+	 *
+	 * @return $this
+	 */
+	public function setHeadersSent(bool $headersSent): self
+	{
+		$this->_headersSent = $headersSent;
+
+		return $this;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function headersSent(): bool
+	{
+		return $this->_headersSent;
 	}
 
 	/**
