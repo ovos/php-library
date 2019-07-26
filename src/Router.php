@@ -246,7 +246,8 @@ class Router
 				});
 				
 				$controllers = Arrays::deepMerge($controllers, $moduleControllers);
-				ksort($controllers);
+				// directories first
+				krsort($controllers, SORT_NATURAL);
 			}
 		}
 
