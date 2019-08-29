@@ -43,6 +43,7 @@ class Logger extends Service
 	 */
 	protected $_remove = [
 		'~^password.*~',
+		'~Authorization~',
 	];
 	
 	/**
@@ -177,10 +178,12 @@ class Logger extends Service
 				
 				continue;
 			}
+			
+			$value = (string)$value;
 		
 			foreach($this->_remove as $pattern)
 			{
-				if(preg_match($pattern, $key, $matches))
+				if(preg_match($pattern, $value, $matches))
 				{
 					$value = '[removed][length:' . mb_strlen($value) . ']';
 					
