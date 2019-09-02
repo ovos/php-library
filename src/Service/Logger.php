@@ -43,6 +43,7 @@ class Logger extends Service
 	 */
 	protected $_remove = [
 		'~^password.*~',
+		'~Authorization~',
 	];
 	
 	/**
@@ -173,16 +174,21 @@ class Logger extends Service
 		{
 			if(is_array($value))
 			{
-				$value = $this->remove($value);
+				$data[$key] = $this->remove($value);
 				
 				continue;
 			}
-		
+			
 			foreach($this->_remove as $pattern)
 			{
+				if(is_numeric($key))
+				{
+					continue;
+				}
+				
 				if(preg_match($pattern, $key, $matches))
 				{
-					$value = '[removed][length:' . mb_strlen($value) . ']';
+					$data[$key] = '[removed][length:' . mb_strlen($value) . ']';
 					
 					break;
 				}

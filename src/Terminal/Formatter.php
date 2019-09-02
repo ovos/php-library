@@ -91,4 +91,14 @@ class Formatter
 		
 		return self::$colors[$color];
 	}
+	
+	/**
+	 * @param string $header
+	 * 
+	 * @return string
+	 */
+	public static function getHeader($header)
+	{
+		return str_pad(' ' . $header . ' ', 50, '-', STR_PAD_BOTH) . PHP_EOL;
+	}		
 }
