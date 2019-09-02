@@ -174,18 +174,21 @@ class Logger extends Service
 		{
 			if(is_array($value))
 			{
-				$value = $this->remove($value);
+				$data[$key] = $this->remove($value);
 				
 				continue;
 			}
 			
-			$value = (string)$value;
-		
 			foreach($this->_remove as $pattern)
 			{
-				if(preg_match($pattern, $value, $matches))
+				if(is_numeric($key))
 				{
-					$value = '[removed][length:' . mb_strlen($value) . ']';
+					continue;
+				}
+				
+				if(preg_match($pattern, $key, $matches))
+				{
+					$data[$key] = '[removed][length:' . mb_strlen($value) . ']';
 					
 					break;
 				}
