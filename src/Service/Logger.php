@@ -79,14 +79,14 @@ class Logger extends Service
 	 *
 	 * @param mixed[] ...$event
 	 *
-	 * @return void
+	 * @return $this
 	 */
-	public function log(...$event): void
+	public function log(...$event): self
 	{
 		$count = \count($event);
 		if($count === 0)
 		{
-			return;
+			return $this;
 		}
 
 		$message = $event[0];
@@ -108,6 +108,8 @@ class Logger extends Service
 
 		$output = $prepend . $output . $append;
 		$this->output($output);
+		
+		return $this;
 	}
 
 	/**

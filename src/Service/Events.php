@@ -126,11 +126,13 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @param mixed[] ...$event
 	 *
-	 * @return void
+	 * @return $this
 	 */
-	public function log(...$event): void
+	public function log(...$event): self
 	{
 		services()->logger->log(...$event);
+		
+		return $this;
 	}
 
 	/**
@@ -138,12 +140,14 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @param mixed $event
 	 *
-	 * @return void
+	 * @return $this
 	 */
-	public function add($event): void
+	public function add($event): self
 	{
 		// save the event to display it later
 		$this->_events[] = $event;
+		
+		return $this;
 	}
 
 	/**
