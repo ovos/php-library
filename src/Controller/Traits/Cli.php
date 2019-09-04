@@ -89,9 +89,9 @@ trait Cli
 	 *
 	 * @param string ...$message,... params for sprintf
 	 *
-	 * @return void
+	 * @return $this
 	 */
-	public function log(...$message): void
+	public function log(...$message): self
 	{
 		if(\count($message))
 		{
@@ -101,5 +101,7 @@ trait Cli
 		Terminal::output('<darkgray>[' . $this->getPid() . '] '
 			. '<purple>' . date('Y-m-d H:i:s') . ': '
 			. '<reset>' . $message . '<reset>' . PHP_EOL, $this->_coloredOutput);
+			
+		return $this;
 	}
 }
