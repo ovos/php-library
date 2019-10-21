@@ -181,13 +181,13 @@ class Logger extends Service
 				continue;
 			}
 			
+			if(is_numeric($key))
+			{
+				continue;
+			}
+			
 			foreach($this->_remove as $pattern)
 			{
-				if(is_numeric($key))
-				{
-					continue;
-				}
-				
 				if(preg_match($pattern, $key, $matches))
 				{
 					$data[$key] = '[removed][length:' . mb_strlen($value) . ']';
