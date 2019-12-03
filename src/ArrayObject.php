@@ -5,6 +5,7 @@ namespace Ovos;
 
 use ArrayObject as BaseArrayObject;
 use IteratorAggregate;
+use count;
 
 /**
  * ArrayObject
@@ -42,7 +43,7 @@ class ArrayObject extends BaseArrayObject
 	}
 
 	/**
-	 * Returns config value specified by dot separated path
+	 * Returns a nested value specified by dot separated path
 	 *
 	 * @param string $path
 	 * @param self $config
@@ -65,7 +66,7 @@ class ArrayObject extends BaseArrayObject
 		{
 			$config = $config->offsetGet($currentPath);
 
-			if(\count($pathElements))
+			if(count($pathElements))
 			{
 				$path = implode('.', $pathElements);
 				return $this->get($path, $config);

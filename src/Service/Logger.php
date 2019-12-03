@@ -79,14 +79,14 @@ class Logger extends Service
 	 *
 	 * @param mixed[] ...$event
 	 *
-	 * @return void
+	 * @return $this
 	 */
-	public function log(...$event): void
+	public function log(...$event): self
 	{
 		$count = \count($event);
 		if($count === 0)
 		{
-			return;
+			return $this;
 		}
 
 		$message = $event[0];
@@ -108,6 +108,8 @@ class Logger extends Service
 
 		$output = $prepend . $output . $append;
 		$this->output($output);
+		
+		return $this;
 	}
 
 	/**
@@ -179,13 +181,13 @@ class Logger extends Service
 				continue;
 			}
 			
+			if(is_numeric($key))
+			{
+				continue;
+			}
+			
 			foreach($this->_remove as $pattern)
 			{
-				if(is_numeric($key))
-				{
-					continue;
-				}
-				
 				if(preg_match($pattern, $key, $matches))
 				{
 					$data[$key] = '[removed][length:' . mb_strlen($value) . ']';
