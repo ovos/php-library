@@ -10,7 +10,7 @@
 	],
   "require" : {
     "php": ">=7.2.0",
-    "ext-redis": "^4.1.0",
+    "ext-redis": "*",
     "ext-json": "*",
     "ext-yaml": "*",
     "ext-mbstring": "*",
