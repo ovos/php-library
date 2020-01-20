@@ -330,12 +330,14 @@ class Application
 	{
 		$systemConfig = $this->getConfig()->system;
 		$bootstraps = $systemConfig->bootstraps;
+		
 		if($bootstraps === null)
 		{
 			return $this;
 		}
 		
-		$this->setBoostrap(current($bootstraps));
+		$iterator = $bootstraps->getIterator();
+		$this->setBoostrap($iterator->current());
 		
 		if(count($bootstraps) === 1)
 		{
@@ -348,14 +350,14 @@ class Application
 		}
 		
 		// check from second bootstrap
-		while($bootstrap = current($bootstraps))
+		while($bootstrap = $iterator->current())
 		{
 			if(strpos($_SERVER['REQUEST_URI'], $systemConfig->path . $bootstrap->path) === 0)
 			{
 				$this->setBoostrap($bootstrap);
 			}
 			
-			next($bootstraps);
+			$iterator->next();
 		}
 		
 		return $this;

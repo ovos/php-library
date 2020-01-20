@@ -28,14 +28,13 @@ class Dispatcher
 			throw new NotFoundException('Invalid controller name.');
 		}
 		$controllerClassNs = 'Controllers\\' . $controllerClass;
-
 		if(!class_exists($controllerClassNs))
 		{
 			throw new NotFoundException('Controller class does not exist "%s".', $controllerClassNs);
 		}
 
 		/** @var Controller $controller */
-		$controller = new $controllerClassNs();
+		$controller = new $controllerClassNs;
 		if(!is_subclass_of($controller, 'Ovos\Controller'))
 		{
 			throw new NotFoundException('A controller has to extend a "Ovos\Controller" class.');
