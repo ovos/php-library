@@ -30,11 +30,11 @@ class Functions
 		{
 			if($isCli)
 			{
-				$line = "\t". $line;
+				$line = "\t" . $line;
 			}
 			else
 			{
-				$line = '&emsp;'. $line;
+				$line = '&emsp;' . $line;
 			}
 		}
 

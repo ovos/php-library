@@ -12,7 +12,7 @@ namespace Ovos\Password;
 class Hash
 {
 	/**
-	 * @var int
+	 * @var int|string (int: PHP <= 7.3, string: PHP >= 7.4)
 	 */
 	protected $_algorithm;
 
@@ -49,11 +49,11 @@ class Hash
 	}
 
 	/**
-	 * @param int $algorithm
+	 * @param int|string $algorithm
 	 * 
 	 * @return $this
 	 */
-	public function setAlgorithm(int $algorithm): self
+	public function setAlgorithm($algorithm): self
 	{
 		$this->_algorithm = $algorithm;
 		
@@ -61,9 +61,9 @@ class Hash
 	}
 
 	/**
-	 * @return int
+	 * @return int|string
 	 */
-	public function getAlgorithm(): int
+	public function getAlgorithm()
 	{
 		return $this->_algorithm;
 	}
@@ -90,12 +90,12 @@ class Hash
 	
 	/**
 	 * @param string $password
-	 * @param int $algorithm
+	 * @param int|string $algorithm
 	 * @param array $options
 	 *
 	 * @return bool|string
 	 */
-	public function hash(string $password, int $algorithm = null, $options = null)
+	public function hash(string $password, $algorithm = null, $options = null)
 	{
 		if($algorithm !== null)
 		{
@@ -111,12 +111,12 @@ class Hash
 	
 	/**
 	 * @param string $password
-	 * @param int $algorithm
+	 * @param int|string $algorithm
 	 * @param array $options
 	 *
 	 * @return bool
 	 */
-	public function needsRehash($password, int $algorithm = null, $options = null): bool
+	public function needsRehash($password, $algorithm = null, $options = null): bool
 	{
 		if($algorithm !== null)
 		{
