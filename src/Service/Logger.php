@@ -157,7 +157,7 @@ class Logger extends Service
 	public function getAppend(): string
 	{
 		// append
-		$append = PHP_EOL;
+		$append = '';
 		if(!empty($_GET))
 		{
 			$append.= 'GET: ' . PHP_EOL
@@ -240,6 +240,7 @@ class Logger extends Service
 			$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
 			$output.= $name . ': ' . $event->getMessage() . PHP_EOL . $event->getTraceAsString();
 		}
+		$output.= PHP_EOL;
 
 		return $output;
 	}
