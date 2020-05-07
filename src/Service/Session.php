@@ -5,6 +5,7 @@ namespace Ovos\Service;
 
 use Ovos\ArrayObject;
 use Ovos\Exception;
+use Ovos\Redis\Connection;
 use Ovos\Service;
 
 /**
@@ -49,7 +50,7 @@ class Session extends Service
 	{
 		parent::__construct();
 
-		$this->_config = $this->_app->getConfig()->system->session;
+		$this->_config = $this->_app->getConfig()->session;
 		if($this->_config === null)
 		{
 			throw new Exception('Configuration missing for session service.');
@@ -127,6 +128,21 @@ class Session extends Service
 	public function regenerateId(bool $deleteOldSession = true): void
 	{
 		session_regenerate_id($deleteOldSession);
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function flush(): bool
+	{
+		$connection = new Connection($this->_config->connection);
+		$connectionStatus = $connection->connect();
+		if($connectionStatus === false)
+		{
+			return false;
+		}
+		
+		return $connection->getClient()->flushDB(); // always true
 	}
 
 	/**
