@@ -88,19 +88,31 @@ class Logger extends Service
 		{
 			return $this;
 		}
-
-		$message = $event[0];
-		if(\is_string($message)) // support string messages
+		
+		$extras = [];
+		// $message, sprintf arguments
+		if(\is_string($event[0])) // support string messages
 		{
+			$message = $event[0];
 			if($count > 1)
 			{
 				$message = sprintf(...$event);
 			}
 			$event[0] = new Exception($message);
 		}
+		// $event, array $extras
+		else if($count > 1)
+		{
+			$extras = $event[1];
+		}
 
 		$output = $this->getEvent($event[0]);
-
+		
+		// extras
+		foreach($extras as $extra => $value)
+		{
+			$output.= $extra . ': ' . $value . PHP_EOL;
+		}
 		// prepend
 		$prepend = $this->getPrepend();
 		// append
@@ -145,7 +157,7 @@ class Logger extends Service
 	public function getAppend(): string
 	{
 		// append
-		$append = PHP_EOL;
+		$append = '';
 		if(!empty($_GET))
 		{
 			$append.= 'GET: ' . PHP_EOL
@@ -228,6 +240,7 @@ class Logger extends Service
 			$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
 			$output.= $name . ': ' . $event->getMessage() . PHP_EOL . $event->getTraceAsString();
 		}
+		$output.= PHP_EOL;
 
 		return $output;
 	}

@@ -66,7 +66,7 @@ class Cache extends Service
 	/**
 	 * @param bool $persistent
 	 * 
-	 * @return RedisCachePool|PrefixedCachePool
+	 * @return ?RedisCachePool|PrefixedCachePool
 	 */
 	public function getPool($persistent = true)
 	{
@@ -76,9 +76,9 @@ class Cache extends Service
 	}
 
 	/**
-	 * @return RedisCachePool
+	 * @return ?RedisCachePool
 	 */
-	public function getPersistentPool(): RedisCachePool
+	public function getPersistentPool(): ?RedisCachePool
 	{
 		if($this->_persistentPool === null)
 		{

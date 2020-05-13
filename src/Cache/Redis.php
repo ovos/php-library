@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Cache;
 
 use Ovos\ArrayObject;
+use Ovos\Redis\Connection;
 use Redis as BaseRedis;
 use Ovos\Cache\Adapter\Redis\RedisCachePool;
 use function Ovos\services;
@@ -22,11 +23,11 @@ class Redis
 	protected $_config;
 
 	/**
-	 * Redis object
+	 * Redis connection
 	 *
-	 * @var BaseRedis|null
+	 * @var Connection|null
 	 */
-	protected $_client = null;
+	protected $_connection;
 
 	/**
 	 * @var RedisCachePool
@@ -66,29 +67,8 @@ class Redis
 	 */
 	public function connect(): bool
 	{
-		$timeout = (int)($this->_config->timeout ?? 1); // in seconds
-		$readTimeout = (int)($this->_config->read_timeout ?? $timeout);
-		$port = (int)($this->_config->port ?? 6379);
-
-		$connectionOptions = [
-			BaseRedis::OPT_READ_TIMEOUT => $readTimeout,
-			BaseRedis::OPT_SERIALIZER => BaseRedis::SERIALIZER_NONE,
-		];
-
-		$this->_client = new BaseRedis;
-		// connect
-		// suspend connection errors with @ since it triggers a warning when it cannot connect...
-		$connectionStatus = @$this->_client->connect($this->_config->host, $this->_config->port, $this->_config->timeout);
-
-		if($connectionStatus === false)
-		{
-			$this->_client = null;
-			services()->events->log('Could not connect to cache server "%s"', $this->_config->host);
-		}
-
-		$this->_client->select($this->_config->database);
-
-		return $connectionStatus;
+		$this->_connection = new Connection($this->_config);
+		return $this->_connection->connect();
 	}
 
 	/**
@@ -96,7 +76,7 @@ class Redis
 	 */
 	public function getClient(): ?BaseRedis
 	{
-		return $this->_client;
+		return $this->_connection->getClient();
 	}
 
 	/**
@@ -106,7 +86,7 @@ class Redis
 	{
 		if($this->_pool === null)
 		{
-			$this->_pool = new RedisCachePool($this->_client, $this->_config);
+			$this->_pool = new RedisCachePool($this->getClient(), $this->_config);
 		}
 
 		return $this->_pool;
