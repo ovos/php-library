@@ -54,7 +54,7 @@ class View
 	/**
 	 * @param string $viewScriptFile
 	 */
-	public function __construct(string $viewScriptFile = null)
+	public function __construct(string $viewScriptFile = null, array $variables = [])
 	{
 		$this->_viewScriptFile = $viewScriptFile;
 
@@ -68,6 +68,9 @@ class View
 		$this->action = $this->_app->getRequest()->getAction();
 		$this->locale = $this->_app->getRequest()->getLocale();
 		$this->client = Client::class;
+
+		// assign additional variables
+		$this->setMultiple($variables);
 	}
 
 	/**
@@ -225,15 +228,23 @@ class View
 		}
 
 		// assign additional variables
-		foreach($variables as $name => $value)
-		{
-			$this->__set($name, $value);
-		}
+		$this->setMultiple($variables);
 
 		ob_start();
 		include $viewScriptFile;
 
 		return ob_get_clean();
+	}
+	
+	/**
+	 * @param array $variables
+	 */
+	public function setMultiple($variables)
+	{
+		foreach($variables as $name => $value)
+		{
+			$this->__set($name, $value);
+		}
 	}
 
 	/**
