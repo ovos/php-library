@@ -43,7 +43,7 @@ class Cookies extends Service
 	{
 		parent::__construct();
 
-		$this->_config = $this->_app->getConfig()->system->cookies;
+		$this->_config = $this->_app->getConfig()->cookies;
 		$this->_prefix = $this->_config->prefix;
 		$this->stripPrefixes();
 	}
