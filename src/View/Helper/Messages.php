@@ -9,6 +9,7 @@ use Ovos\View;
 use Ovos\View\Helper;
 use Ovos\View\Helper\Messages\Message;
 use function Ovos\services;
+use function count;
 
 /**
  * Messages
@@ -27,6 +28,13 @@ class Messages extends Helper
 	 * @var Session
 	 */
 	protected $_session;
+	
+	/**
+	 * Internal namespace
+	 * 
+	 * @var null|string
+	 */
+	protected $_namespace;
 
 	/**
 	 * @var Message[]
@@ -43,11 +51,62 @@ class Messages extends Helper
 		if($this->_session->isEnabled())
 		{
 			$this->_items = &$this->_session->{self::SESSION_NAMESPACE};
-			if($this->_items === null)
-			{
-				$this->_items = [];
-			}
 		}
+	}
+	
+	/**
+	 * @param string $namespace
+	 * 
+	 * @return self
+	 */
+	public function messages(string $namespace = null)
+	{
+		$this->setNamespace($namespace);
+		
+		return $this;
+	}
+
+	/**
+	 * @param null|string $namespace
+	 *
+	 * @return $this
+	 */
+	public function setNamespace(?string $namespace): self
+	{
+		$this->_namespace = $namespace;
+
+		return $this;
+	}
+
+	/**
+	 * @return null|string
+	 */
+	public function getNamespace(): ?string
+	{
+		return $this->_namespace;
+	}
+
+	/**
+	 * @return Message[]
+	 */
+	public function &getItems()
+	{
+		if($this->_items === null)
+		{
+			$this->_items = [];
+		}
+		
+		if($this->_namespace === null)
+		{
+			return $this->_items;
+		}
+		
+		if(!isset($this->_items[$this->_namespace]))
+		{
+			$this->_items[$this->_namespace] = [];
+		}
+		
+		return $this->_items[$this->_namespace];
 	}
 
 	/**
@@ -60,7 +119,7 @@ class Messages extends Helper
 	public function addMessage(string $type = null, string $description = null, string $title = null): Message
 	{
 		$message = new Message($this, $type, $description, $title);
-		$this->_items[] = $message;
+		$this->getItems()[] = $message;
 
 		return $message;
 	}
@@ -114,7 +173,7 @@ class Messages extends Helper
 	 */
 	public function hasSuccess(): bool
 	{
-		foreach($this->_items as $item)
+		foreach($this->getItems() as $item)
 		{
 			if($item->isSuccess())
 			{
@@ -130,7 +189,7 @@ class Messages extends Helper
 	 */
 	public function hasError(): bool
 	{
-		foreach($this->_items as $item)
+		foreach($this->getItems() as $item)
 		{
 			if($item->isError())
 			{
@@ -146,8 +205,7 @@ class Messages extends Helper
 	 */
 	public function __toString(): string
 	{
-		if($this->_items === null
-			|| \count($this->_items) === 0)
+		if(count($this->getItems()) === 0)
 		{
 			return '';
 		}
@@ -157,11 +215,13 @@ class Messages extends Helper
 	}
 
 	/**
+	 * Returns messages and empties the list
+	 * 
 	 * @return Message[]
 	 */
 	public function toArray(): array
 	{
-		$items = $this->_items; // copy
+		$items = $this->getItems(); // copy
 		$this->_items = null;
 
 		return $items;
