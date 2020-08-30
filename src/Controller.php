@@ -104,15 +104,20 @@ class Controller
 				}
 			}
 		}
-
+		
 		$response = $this->$action(...$params);
 		if($response)
 		{
+			if(($response instanceof Response) === false)
+			{
+				$response = new Response\Html($response->__toString());
+			}
+		
 			$this->_app->setResponse($response); // for postDispatch
 		}
 		$this->postDispatch();
 
-		return $this->_app->getResponse();
+		return $response;
 	}
 
 	/**

@@ -47,12 +47,6 @@ class Dispatcher
 			throw new NotFoundException('No method matching action name on controller "%s".', $controllerClass);
 		}
 		
-		$result = $controller->dispatch($action, $request->getParams());
-		if($result !== null && !($result instanceof Response))
-		{
-			return new Response\Html($result);
-		}
-
-		return null;
+		return $controller->dispatch($action, $request->getParams());
 	}
 }
