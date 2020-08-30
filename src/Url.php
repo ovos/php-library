@@ -41,8 +41,9 @@ class Url
 		if($componentsCount)
 		{
 			$urlComponents = [[]];
-			foreach($components as $component)
+			foreach($components as &$component)
 			{
+				$component = (string)$component; // for ints
 				$urlComponents[] = self::getUrlComponents($component);
 			}
 			// https://github.com/kalessil/phpinspectionsea/blob/master/docs/performance.md#slow-array-function-used-in-loop
