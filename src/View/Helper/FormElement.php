@@ -43,7 +43,7 @@ class FormElement extends Helper
 	/**
 	 * @var null|string
 	 */
-	protected $_inputClass;
+	protected $_fieldClass;
 
 	/**
 	 * @var array
@@ -181,13 +181,13 @@ class FormElement extends Helper
 	}
 
 	/**
-	 * @param null|string $inputClass
+	 * @param null|string $fieldClass
 	 * 
 	 * @return $this
 	 */
-	public function setInputClass(?string $inputClass): self
+	public function setFieldClass(?string $fieldClass): self
 	{
-		$this->_inputClass = $inputClass;
+		$this->_fieldClass = $fieldClass;
 		
 		return $this;
 	}
@@ -195,9 +195,9 @@ class FormElement extends Helper
 	/**
 	 * @return null|string
 	 */
-	public function getInputClass(): ?string
+	public function getFieldClass(): ?string
 	{
-		return $this->_inputClass;
+		return $this->_fieldClass;
 	}
 
 	/**

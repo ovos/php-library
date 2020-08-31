@@ -29,6 +29,25 @@ class Options extends Element
 
 	/**
 	 * @param array $options
+	 * @param string $columnKey
+	 * @param string $indexKey
+	 * 
+	 * @return $this
+	 */
+	public function fromObjects(array $options, $columnKey, $indexKey = null): self
+	{
+		$options = array_column($options, $columnKey, $indexKey);
+		foreach($options as $key => $option)
+		{
+			$option = new Option($key, $option);
+			$this->addOption($option);
+		}
+		
+		return $this;
+	}
+
+	/**
+	 * @param array $options
 	 * 
 	 * @return $this
 	 */
