@@ -156,7 +156,8 @@ class Router
 				if(is_string($name)
 					&& isset($params[$key + 1])
 					&& strcmp($name, $param) === 0
-					&& in_array($params[$key + 1], $children, true))
+					&& (in_array($params[$key + 1], $children, true)
+						|| array_key_exists($params[$key + 1], $children)))
 				{
 					$controllers = $children;
 					$controllerClass.= Strings::studlyCase($param) . '\\';
