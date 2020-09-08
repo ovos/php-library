@@ -293,14 +293,14 @@ class Request
 
 	/**
 	 * @param string $name
-	 * @param string $default
+	 * @param mixed $default (string, array, int)
 	 * @see http://php.net/filter_var
 	 * @param int $filter
 	 * @param int $options
 	 *
 	 * @return array|string|null
 	 */
-	public function getPost(string $name = null, string $default = null,
+	public function getPost(string $name = null, $default = null,
 		int $filter = null, int $options = FILTER_NULL_ON_FAILURE) // filter_var arguments
 	{
 		if($name === null)
