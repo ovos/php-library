@@ -620,7 +620,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		$result = $query->execute();
 		if($this->_autoIncrementKey)
 		{
-			$this->{$this->_autoIncrementKey} = $this->source()->lastInsertId();
+			$this->{$this->_autoIncrementKey} = (int)$this->source()->lastInsertId();
 		}
 		
 		// reset modified values
