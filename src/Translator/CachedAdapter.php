@@ -37,7 +37,7 @@ class CachedAdapter extends Translator
 				$cache = $pool->getItem($cacheId)->get();
 				if($cache->mtime === $mTime)
 				{
-					$this->setCachedTranslations($cache->translations);
+					$this->setTranslations($cache->translations);
 
 					return;
 				}
@@ -50,7 +50,7 @@ class CachedAdapter extends Translator
 		{
 			$cache = new ArrayObject;
 			$cache->mtime = $mTime;
-			$cache->translations = $this->getCachedTranslations();
+			$cache->translations = $this->getTranslations();
 			$item = $pool->getItem($cacheId)->set($cache);
 			$pool->save($item);
 		}
