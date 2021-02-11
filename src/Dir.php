@@ -94,6 +94,9 @@ class Dir
 			$iterator = new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS);
 			foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
 			{
+				/**
+				 * @var SplFileInfo $file
+				 */
 				if($match !== null && !preg_match($match, $file->getFilename()))
 				{
 					continue;
@@ -186,6 +189,9 @@ class Dir
 			$iterator = new RecursiveDirectoryIterator($dirFrom, FilesystemIterator::SKIP_DOTS);
 			foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
 			{
+				/**
+				 * @var SplFileInfo $file
+				 */
 				if($file->isFile())
 				{
 					$source = $file->getPathname();
