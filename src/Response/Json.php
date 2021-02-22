@@ -64,28 +64,20 @@ class Json extends Response
 	 *
 	 * @param string $name
 	 * @param mixed $value
-
-	 * @return $this
 	 */
-	public function __set(string $name, $value): self
+	public function __set(string $name, mixed $value): void
 	{
 		$this->_response->$name = $value;
-
-		return $this;
 	}
 
 	/**
 	 * Unsets data
 	 *
 	 * @param string $name
-	 *
-	 * @return $this
 	 */
-	public function __unset(string $name): self
+	public function __unset(string $name): void
 	{
 		unset($this->_response->$name);
-
-		return $this;
 	}
 
 	/**
@@ -95,7 +87,7 @@ class Json extends Response
 	 *
 	 * @return mixed
 	 */
-	public function &__get(string $name)
+	public function &__get(string $name): mixed
 	{
 		if($this->__isset($name) === false)
 		{

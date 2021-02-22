@@ -22,7 +22,7 @@ class Disabled extends Service
 	/**
 	 * @var bool
 	 */
-	protected $_enabled = false;
+	protected bool $_enabled = false;
 	
 	/**
 	 * @return string
@@ -36,7 +36,7 @@ class Disabled extends Service
 	 * @param string $name
 	 * @param array $arguments
 	 */
-	public function __call(string $name, array $arguments)
+	public function __call(string $name, array $arguments): void
 	{
 		// do nothing
 	}
@@ -45,7 +45,7 @@ class Disabled extends Service
 	 * @param string $name
 	 * @param array $arguments
 	 */
-	public static function __callStatic(string $name, array $arguments)
+	public static function __callStatic(string $name, array $arguments): void
 	{
 		// do nothing
 	}
@@ -53,7 +53,7 @@ class Disabled extends Service
 	/**
 	 * @param string $name
 	 */
-	public function __get($name)
+	public function __get($name): void
 	{
 		// do nothing	
 	}
@@ -62,7 +62,7 @@ class Disabled extends Service
 	 * @param string $name
 	 * @param mixed $value
 	 */
-	public function __set($name, $value)
+	public function __set($name, $value): void
 	{
 		// do nothing
 	}
@@ -70,8 +70,9 @@ class Disabled extends Service
 	/**
 	 * @param string $name
 	 */
-	public function __isset($name)
+	public function __isset($name): bool
 	{
 		// do nothing
+		return false;
 	}
 }

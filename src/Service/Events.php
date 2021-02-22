@@ -169,7 +169,7 @@ class Events extends Service implements Countable, Iterator
 	/**
 	 * @return mixed
 	 */
-	public function current()
+	public function current(): mixed
 	{
 		return current($this->_events);
 	}

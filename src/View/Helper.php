@@ -18,7 +18,7 @@ class Helper
 	/**
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 */

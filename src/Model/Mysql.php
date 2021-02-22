@@ -356,7 +356,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function __get(string $property)
+	public function __get(string $property): mixed
 	{
 		$value = $this->__getRaw($property);
 		if($value === null)
@@ -392,7 +392,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function __getRaw(string $property)
+	public function __getRaw(string $property): mixed
 	{
 		if($this->__isset($property) === false)
 		{
@@ -415,10 +415,8 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $property
 	 * @param mixed $value
-	 *
-	 * @return $this
 	 */
-	public function __set(string $property, $value): self
+	public function __set(string $property, $value): void
 	{
 		// run setter
 		if(isset($this->_setters[$property]))
@@ -441,17 +439,13 @@ abstract class Mysql extends Model implements Iterator, Countable
 		}
 
 		$this->__setRaw($property, $value);
-
-		return $this;
 	}
 
 	/**
 	 * @param string $property
 	 * @param mixed $value
-	 *
-	 * @return $this
 	 */
-	public function __setRaw(string $property, $value): self
+	public function __setRaw(string $property, $value): void
 	{
 		$this->setProperty($property, $value);
 
@@ -460,16 +454,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			$this->_updateObject->$property = $value;
 		}
-
-		return $this;
 	}
 
 	/**
 	 * @param string $property
-	 *
-	 * @return $this
 	 */
-	public function __unset(string $property)
+	public function __unset(string $property): void
 	{
 		unset($this->_properties[$property]);
 
@@ -478,8 +468,6 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			unset($this->_updateObject->$property);
 		}
-
-		return $this;
 	}
 
 	/**
@@ -571,7 +559,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @return mixed
 	 */
-	public function current()
+	public function current(): mixed
 	{
 		return current($this->_properties);
 	}

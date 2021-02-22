@@ -17,12 +17,12 @@ class Translator
 	/**
 	 * @var Locale
 	 */
-	protected $_locale;
+	protected Locale $_locale;
 
 	/**
 	 * @var Translation[]
 	 */
-	protected $_translations = [];
+	protected array $_translations = [];
 
 	/**
 	 * @param Locale $locale

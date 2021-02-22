@@ -20,41 +20,41 @@ class Form implements Iterator
 	/**
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 * @var string
 	 */
-	protected $_id;
+	protected string $_id;
 
 	/**
 	 * Parent form
 	 *
 	 * @var Form
 	 */
-	protected $_form;
+	protected Form $_form;
 
 	/**
 	 * @var Url
 	 */
-	protected $_action;
+	protected Url $_action;
 
 	/**
 	 * Element and Form objects, ordered
 	 *
 	 * @var Element[]|Form[]
 	 */
-	protected $_elements = [];
+	protected array $_elements = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_values = [];
+	protected array $_values = [];
 	
 	/**
 	 * @var string[]
 	 */
-	protected $_defaults = [];
+	protected array $_defaults = [];
 
 	/**
 	 * @param string $id
@@ -256,7 +256,7 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param Element $element
 	 */
-	public function __set(string $id, Element $element)
+	public function __set(string $id, Element $element): void
 	{
 		$element->setForm($this);
 		$element->setId($id);
@@ -352,7 +352,7 @@ class Form implements Iterator
 	/**
 	 * @return mixed
 	 */
-	public function current()
+	public function current(): mixed
 	{
 		return current($this->_elements);
 	}
@@ -368,7 +368,7 @@ class Form implements Iterator
 	/**
 	 * @return int|mixed|null|string
 	 */
-	public function key()
+	public function key(): mixed
 	{
 		return key($this->_elements);
 	}

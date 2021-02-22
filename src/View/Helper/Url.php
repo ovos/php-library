@@ -17,7 +17,7 @@ class Url extends Helper
 	/**
 	 * @param string[] $urlComponents
 	 *
-	 * @return string|BaseUrl
+	 * @return Url
 	 */
 	public function url(...$urlComponents)
 	{

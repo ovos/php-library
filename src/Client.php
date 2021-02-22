@@ -14,9 +14,9 @@ class Client
 	/**
 	 * IP Address
 	 *
-	 * @var string
+	 * @var null|string
 	 */
-	protected static $_ip;
+	protected static null|string $_ip = null;
 
 	/**
 	 * Returns visitors's IP address

@@ -78,7 +78,7 @@ class View
 	 *
 	 * @return mixed
 	 */
-	public function __get(string $name)
+	public function __get(string $name): mixed
 	{
 		if($this->__isset($name) === false)
 		{
@@ -102,21 +102,17 @@ class View
 	 * @param string $name
 	 * @param mixed $value
 	 */
-	public function __set(string $name, $value)
+	public function __set(string $name, $value): void
 	{
 		$this->_vars[$name] = $value;
 	}
 
 	/**
 	 * @param string $name
-	 *
-	 * @return $this
 	 */
-	public function __unset(string $name): self
+	public function __unset(string $name): void
 	{
 		unset($this->_vars[$name]);
-
-		return $this;
 	}
 
 	/**
@@ -125,7 +121,7 @@ class View
 	 *
 	 * @return mixed
 	 */
-	public function __call(string $name, array $arguments)
+	public function __call(string $name, array $arguments): mixed
 	{
 		return self::__callStatic($name, $arguments);
 	}
@@ -136,7 +132,7 @@ class View
 	 *
 	 * @return mixed
 	 */
-	public static function __callStatic(string $name, array $arguments)
+	public static function __callStatic(string $name, array $arguments): mixed
 	{
 		if(!isset(self::$_helpers[$name]))
 		{
@@ -192,14 +188,19 @@ class View
 	 *
 	 * @return null|mixed The escaped value.
 	 */
-	public function escape($value)
+	public function escape(mixed $value): mixed
 	{
 		if($value === null)
 		{
 			return $value;
 		}
 		
-		if(is_numeric($value))
+		if(!is_string($value))
+		{
+			return $value;
+		}
+		
+		if(is_numeric($value)) // a numeric string
 		{
 			return $value;
 		}

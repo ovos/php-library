@@ -5,6 +5,7 @@ namespace Ovos\Service;
 
 use Ovos\ArrayObject;
 use Ovos\Service;
+use function count;
 
 /**
  * Cookies
@@ -93,7 +94,11 @@ class Cookies extends Service
 	 */
 	public function set(...$options): bool
 	{
-		if(\count($options))
+		if(isset($options['name']))
+		{
+			$options['name'] = $this->getName($options['name']);
+		}
+		else if(count($options))
 		{
 			$options[0] = $this->getName($options[0]);
 		}
@@ -110,7 +115,14 @@ class Cookies extends Service
 	 */
 	public function setIfMissing(...$options): bool
 	{
-		if(\count($options))
+		if(isset($options['name']))
+		{
+			if($this->get($options['name']))
+			{
+				return true;
+			}
+		}
+		else if(count($options))
 		{
 			if($this->get($options[0]))
 			{
