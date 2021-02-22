@@ -13,17 +13,17 @@ class Locales
 	/**
 	 * @var Locale
 	 */
-	protected static $_default;
+	protected static Locale $_default;
 
 	/**
 	 * @var array
 	 */
-	protected static $_instances;
+	protected static array $_instances;
 
 	/**
 	 * @var array
 	 */
-	protected static $_all;
+	protected static null|array $_all = null;
 
 	/**
 	 *

@@ -28,7 +28,7 @@ class Benchmark extends Service
 	/**
 	 * @var Measurement[]
 	 */
-	protected $_measurements = [];
+	protected array $_measurements = [];
 
 	/**
 	 * @return string

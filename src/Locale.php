@@ -22,37 +22,37 @@ class Locale
 	/**
 	 * @var string
 	 */
-	protected $_urlName;
+	protected string $_urlName;
 
 	/**
 	 * @var string
 	 */
-	protected $_symbol;
+	protected string $_symbol;
 	
 	/**
 	 * @var string
 	 */
-	protected $_language;
+	protected string $_language;
 	
 	/**
 	 * @var string
 	 */
-	protected $_country;
+	protected string $_country;
 
 	/**
 	 * @var string
 	 */
-	protected $_name;
+	protected string $_name;
 	
 	/**
 	 * @var bool
 	 */
-	protected $_default = false;
+	protected bool $_default = false;
 
 	/**
-	 * @var Translator
+	 * @var null|Translator
 	 */
-	protected $_translator;
+	protected null|Translator $_translator = null;
 
 	/**
 	 * @return string

@@ -28,22 +28,22 @@ class Cache extends Service
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 
 	/**
 	 * @var RedisCachePool
 	 */
-	protected $_persistentPool;
+	protected null|RedisCachePool $_persistentPool = null;
 
 	/**
-	 * @var ApcuCachePool
+	 * @var PrefixedCachePool
 	 */
-	protected $_perishablePool;
+	protected null|PrefixedCachePool $_perishablePool = null;
 
 	/**
 	 * @var array
 	 */
-	protected $_dependsOn = [Events::SYMBOL];
+	protected array $_dependsOn = [Events::SYMBOL];
 
 	/**
 	 */

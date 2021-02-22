@@ -4,6 +4,10 @@ declare(strict_types=1);
 namespace Ovos;
 
 use ArrayObject;
+use function func_num_args;
+use function func_get_args;
+use function is_array;
+use function call_user_func_array;
 
 /**
  * Arrays
@@ -22,11 +26,11 @@ class Arrays
 	 */
 	public static function deepToArrayObject(array $array,
 		string $className = 'ArrayObject',
-		int $flags = ArrayObject::ARRAY_AS_PROPS)
+		int $flags = ArrayObject::ARRAY_AS_PROPS): mixed
 	{
 		foreach($array as $key => $value)
 		{
-			if(\is_array($value))
+			if(is_array($value))
 			{
 				$array[$key] = self::deepToArrayObject($value, $className, $flags);
 			}
@@ -58,7 +62,7 @@ class Arrays
 	 */
 	public static function deepMerge()
 	{
-		switch(\func_num_args())
+		switch(func_num_args())
 		{
 			case 0:
 				return false;
@@ -67,17 +71,17 @@ class Arrays
 				return func_get_arg(0);
 
 			case 2:
-				$args = \func_get_args();
+				$args = func_get_args();
 				$args[2] = [];
 
-				if(\is_array($args[0]) && \is_array($args[1]))
+				if(is_array($args[0]) && is_array($args[1]))
 				{
 					foreach(array_unique(array_merge(array_keys($args[0]), array_keys($args[1]))) as $key)
 					{
 						$isKey0 = array_key_exists($key, $args[0]);
 						$isKey1 = array_key_exists($key, $args[1]);
 
-						if($isKey0 && $isKey1 && \is_array($args[0][$key]) && \is_array($args[1][$key]))
+						if($isKey0 && $isKey1 && is_array($args[0][$key]) && is_array($args[1][$key]))
 						{
 							$args[2][$key] = self::deepMerge($args[0][$key], $args[1][$key]);
 						}
@@ -102,11 +106,11 @@ class Arrays
 
 			default:
 				$selfCallable = [__CLASS__, __METHOD__];
-				$args = \func_get_args();
+				$args = func_get_args();
 				$args[1] = $selfCallable($args[0], $args[1]);
 				array_shift($args);
 
-				return \call_user_func_array($selfCallable, $args);
+				return call_user_func_array($selfCallable, $args);
 
 			break;
 		}

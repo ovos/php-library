@@ -73,7 +73,7 @@ class Option
 	/**
 	 * @return mixed
 	 */
-	public function getValue()
+	public function getValue(): mixed
 	{
 		return $this->_value;
 	}
@@ -93,7 +93,7 @@ class Option
 	/**
 	 * @return null|mixed
 	 */
-	public function getLabel()
+	public function getLabel(): mixed
 	{
 		if($this->_label !== null)
 		{

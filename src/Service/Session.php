@@ -150,7 +150,7 @@ class Session extends Service
 	 *
 	 * @return mixed
 	 */
-	public function &__get(string $name)
+	public function &__get(string $name): mixed
 	{
 		if($this->__isset($name) === false)
 		{
@@ -173,25 +173,17 @@ class Session extends Service
 	/**
 	 * @param string $name
 	 * @param mixed $value
-	 *
-	 * @return $this
 	 */
-	public function __set(string $name, $value): self
+	public function __set(string $name, $value): void
 	{
 		$this->_session[$name] = $value;
-
-		return $this;
 	}
 
 	/**
 	 * @param string $name
-	 *
-	 * @return $this
 	 */
-	public function __unset(string $name): self
+	public function __unset(string $name): void
 	{
 		unset($this->_session[$name]);
-
-		return $this;
 	}
 }

@@ -16,5 +16,5 @@ abstract class Filter
 	 *
 	 * @return mixed
 	 */
-	abstract public function filter($value);
+	abstract public function filter($value): mixed;
 }

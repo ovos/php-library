@@ -31,12 +31,12 @@ class Logger extends Service
 	/**
 	 * @var string
 	 */
-	protected $_dir = 'events';
+	protected string $_dir = 'events';
 	
 	/**
 	 * @var string
 	 */
-	protected $_file = 'events';
+	protected string $_file = 'events';
 
 	/**
 	 * @var array

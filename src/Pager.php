@@ -14,22 +14,22 @@ class Pager
 	/**
 	 * @var int
 	 */
-	protected $_page;
+	protected int $_page;
 
 	/**
 	 * @var int
 	 */
-	protected $_count;
+	protected int $_count;
 
 	/**
 	 * @var int
 	 */
-	protected $_perPage;
+	protected int $_perPage;
 
 	/**
 	 * @var int
 	 */
-	protected $_pages;
+	protected int $_pages;
 
 	/**
 	 * @param int $page
