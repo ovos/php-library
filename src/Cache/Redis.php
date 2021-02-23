@@ -27,12 +27,12 @@ class Redis
 	 *
 	 * @var null|Connection
 	 */
-	protected null|Connection $_connection;
+	protected null|Connection $_connection = null;
 
 	/**
 	 * @var RedisCachePool
 	 */
-	protected RedisCachePool $_pool;
+	protected null|RedisCachePool $_pool = null;
 
 	/**
 	 * @param ArrayObject $config

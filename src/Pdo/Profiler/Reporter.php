@@ -49,8 +49,8 @@ class Reporter
 			[
 				'sql' => $this->_parseSql($query['sql'], $query['parameters']),
 				'parameters' => $query['parameters'],
-				'time' => Measurements::formatTime($query['start'][0], $query['end'][0]),
-				'memory' => Measurements::formatMemory($query['start'][1], $query['end'][1]),
+				'time' => $query['measurement']->getTotalTime(),
+				'memory' => $query['measurement']->getTotalMemory(),
 			];
 		}
 
