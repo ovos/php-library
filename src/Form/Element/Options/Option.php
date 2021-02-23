@@ -16,17 +16,17 @@ class Option
 	/**
 	 * @var Options
 	 */
-	protected $_options;
+	protected Options $_options;
 
 	/**
 	 * @var null|mixed
 	 */
-	protected $_value;
+	protected mixed $_value = null;
 
 	/**
 	 * @var null|mixed
 	 */
-	protected $_label;
+	protected mixed $_label = null;
 	
 	/**
 	 * @param mixed $value

@@ -18,14 +18,14 @@ class Connection
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 
 	/**
 	 * Redis object
 	 *
-	 * @var BaseRedis|null
+	 * @var null|BaseRedis
 	 */
-	protected $_client = null;
+	protected null|BaseRedis $_client = null;
 
 	/**
 	 * @param ArrayObject $config

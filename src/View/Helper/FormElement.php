@@ -18,47 +18,47 @@ class FormElement extends Helper
 	/**
 	 * @var null|Element
 	 */
-	protected $_element;
+	protected null|Element $_element;
 
 	/**
 	 * @var null|string
 	 */
-	protected $_type;
+	protected null|string $_type;
 
 	/**
 	 * @var null|string
 	 */
-	protected $_description;
+	protected null|string $_description;
 
 	/**
 	 * @var null|string
 	 */
-	protected $_placeholder;
+	protected null|string $_placeholder;
 
 	/**
 	 * @var null|string
 	 */
-	protected $_elementClass;
+	protected null|string $_elementClass;
 
 	/**
 	 * @var null|string
 	 */
-	protected $_fieldClass;
+	protected null|string $_fieldClass;
 
 	/**
 	 * @var array
 	 */
-	protected $_attributes = [];
+	protected array $_attributes = [];
 
 	/**
 	 * @var null|string
 	 */
-	protected $_optionWrap;
+	protected null|string $_optionWrap;
 
 	/**
 	 * @var array
 	 */
-	protected $_options = [];
+	protected array $_options = [];
 
 	/**
 	 * @param Element $element

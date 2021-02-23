@@ -23,12 +23,12 @@ class Cookies extends Service
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 
 	/**
 	 * @var string
 	 */
-	protected $_prefix;
+	protected string $_prefix;
 
 	/**
 	 * @return string

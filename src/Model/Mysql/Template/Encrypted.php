@@ -19,7 +19,7 @@ class Encrypted extends Template
 	/**
 	 * @var array
 	 */
-	protected $_properties = [];
+	protected array $_properties = [];
 
 	/**
 	 * @param array $properties

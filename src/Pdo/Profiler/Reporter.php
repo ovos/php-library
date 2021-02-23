@@ -19,7 +19,7 @@ class Reporter
 	 *
 	 * @var array
 	 */
-	protected $_queries = [];
+	protected array $_queries = [];
 
 	/**
 	 * Stores collector data into internal array

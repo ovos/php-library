@@ -18,14 +18,14 @@ class Elements extends Helper
 	 *
 	 * @var array
 	 */
-	protected $_elements = [];
+	protected array $_elements = [];
 
 	/**
 	 * Classes
 	 *
 	 * @var array
 	 */
-	protected $_classes = [];
+	protected array $_classes = [];
 
 	/**
 	 * @return $this

@@ -25,22 +25,22 @@ class Message
 	/**
 	 * @var Messages
 	 */
-	protected $_messages;
+	protected Messages $_messages;
 
 	/**
 	 * @var string
 	 */
-	protected $_title;
+	protected string $_title;
 
 	/**
 	 * @var string
 	 */
-	protected $_description;
+	protected string $_description;
 
 	/**
 	 * @var string
 	 */
-	protected $_type;
+	protected string $_type;
 
 	/**
 	 * @param Messages $messages

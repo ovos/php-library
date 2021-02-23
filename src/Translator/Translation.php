@@ -18,12 +18,12 @@ class Translation
 	/**
 	 * @var string
 	 */
-	protected $_path;
+	protected string $_path;
 
 	/**
-	 * @var CachedAdapter
+	 * @var null|CachedAdapter
 	 */
-	protected $_adapter;
+	protected null|CachedAdapter $_adapter = null;
 
 	/**
 	 * @param string $path

@@ -14,17 +14,17 @@ abstract class Validator
 	/**
 	 * @var Element
 	 */
-	protected $_element;
+	protected Element $_element;
 
 	/**
 	 * @var Error[]
 	 */
-	protected $_errors = [];
+	protected array $_errors = [];
 
 	/**
 	 * @var string[]
 	 */
-	protected $_messages = [];
+	protected array $_messages = [];
 
 	/**
 	 * @param Element $element

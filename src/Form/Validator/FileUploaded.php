@@ -30,7 +30,7 @@ class FileUploaded extends Validator
 	/**
 	 * @var string[]
 	 */
-	protected $_messages =
+	protected array $_messages =
 	[
 		self::ERROR_INPUT_INVALID => 'Invalid input parameters.',
 		self::ERROR_NO_FILE => 'No file sent.',

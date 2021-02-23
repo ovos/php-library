@@ -30,7 +30,7 @@ class Layout extends Plugin
 	/**
 	 * @var View
 	 */
-	protected $_layout;
+	protected View $_layout;
 
 	/**
 	 * @param string $layout

@@ -51,7 +51,7 @@ class Trim extends Filter
 	 *
 	 * @return mixed
 	 */
-	public function filter($value): mixed
+	public function filter(mixed $value): mixed
 	{
 		return trim($value, $this->getCharacterMask());
 	}

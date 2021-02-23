@@ -31,7 +31,7 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @var array
 	 */
-	protected $_events = [];
+	protected array $_events = [];
 
 	/**
 	 * @return string

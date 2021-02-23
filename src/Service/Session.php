@@ -24,17 +24,17 @@ class Session extends Service
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 
 	/**
 	 * @var bool
 	 */
-	protected $_initialized = false;
+	protected bool $_initialized = false;
 
 	/**
 	 * @var array
 	 */
-	protected $_session = [];
+	protected array $_session = [];
 
 	/**
 	 * @return string

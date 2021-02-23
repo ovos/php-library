@@ -12,32 +12,27 @@ namespace Ovos\Password;
 class Hash
 {
 	/**
-	 * @var int|string (int: PHP <= 7.3, string: PHP >= 7.4)
+	 * @var string
 	 */
-	protected $_algorithm;
+	protected string $_algorithm;
 
 	/**
 	 * @var array
 	 */
-	protected $_options;
+	protected array $_options;
 
 	/**
 	 */
 	public function __construct()
 	{
-		if(defined('PASSWORD_ARGON2I')) // php 7.2 and compiled with argon2 support
+		if(defined('PASSWORD_ARGON2ID'))
 		{
-			$this->_algorithm = PASSWORD_ARGON2I;
+			$this->_algorithm = PASSWORD_ARGON2ID;
 			$this->_options = [
 				'memory_cost' => PASSWORD_ARGON2_DEFAULT_MEMORY_COST * 2,
 				'time_cost' => PASSWORD_ARGON2_DEFAULT_TIME_COST * 10,
 				'threads' => PASSWORD_ARGON2_DEFAULT_THREADS * 1,
 			];
-			
-			if(defined('PASSWORD_ARGON2ID')) // php 7.3 and compiled with argon2 support
-			{
-				$this->_algorithm = PASSWORD_ARGON2ID;
-			}
 		}
 		else
 		{
@@ -49,7 +44,7 @@ class Hash
 	}
 
 	/**
-	 * @param int|string $algorithm
+	 * @param string $algorithm
 	 * 
 	 * @return $this
 	 */
@@ -61,7 +56,7 @@ class Hash
 	}
 
 	/**
-	 * @return int|string
+	 * @return string
 	 */
 	public function getAlgorithm()
 	{
@@ -90,12 +85,13 @@ class Hash
 	
 	/**
 	 * @param string $password
-	 * @param int|string $algorithm
+	 * @param string $algorithm
 	 * @param array $options
 	 *
 	 * @return bool|string
 	 */
-	public function hash(string $password, $algorithm = null, $options = null)
+	public function hash(string $password, string $algorithm = null,
+		array $options = null)
 	{
 		if($algorithm !== null)
 		{
@@ -111,12 +107,13 @@ class Hash
 	
 	/**
 	 * @param string $password
-	 * @param int|string $algorithm
+	 * @param string $algorithm
 	 * @param array $options
 	 *
 	 * @return bool
 	 */
-	public function needsRehash($password, $algorithm = null, $options = null): bool
+	public function needsRehash(string $password, string $algorithm = null,
+		array $options = null): bool
 	{
 		if($algorithm !== null)
 		{

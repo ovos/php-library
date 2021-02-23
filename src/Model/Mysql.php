@@ -32,58 +32,58 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @var string
 	 */
-	protected $_sourceName = 'database';
+	protected string $_sourceName = 'database';
 
 	/**
 	 * A connection between PHP and a database server
 	 *
 	 * @var PDO
 	 */
-	protected $_source;
+	protected null|PDO $_source = null;
 
 	/**
 	 * List of primary keys
 	 *
 	 * @var array
 	 */
-	protected $_primaryKeys = ['id'];
+	protected array $_primaryKeys = ['id'];
 
 	/**
 	 * Autoincrement primary key
 	 *
 	 * @var null|string
 	 */
-	protected $_autoIncrementKey = 'id';
+	protected null|string $_autoIncrementKey = 'id';
 
 	/**
 	 * @var array
 	 */
-	protected $_templates = [];
+	protected array $_templates = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_setters = [];
+	protected array $_setters = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_getters = [];
+	protected array $_getters = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_properties = [];
+	protected array $_properties = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_modified = [];
+	protected array $_modified = [];
 
 	/**
 	 * @var self
 	 */
-	protected $_updateObject;
+	protected self $_updateObject;
 
 	/**
 	 */
@@ -194,9 +194,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $name
 	 *
-	 * @return array
+	 * @return mixed
 	 */
-	public function getProperty($name): array
+	public function getProperty($name): mixed
 	{
 		if(!isset($this->_properties[$name]))
 		{
