@@ -17,14 +17,14 @@ class Redirect extends Response
 	/**
 	 * @var Url
 	 */
-	protected $_url;
+	protected Url $_url;
 
 	/**
 	 * HTTP code
 	 *
 	 * @var int
 	 */
-	protected $_httpCode = 302;
+	protected int $_httpCode = 302;
 
 	/**
 	 * @param Url|string[] $urlComponents

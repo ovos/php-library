@@ -17,7 +17,7 @@ class Options extends Element
 	/**
 	 * @var Option[]
 	 */
-	protected $_options = [];
+	protected array $_options = [];
 
 	/**
 	 * @param array $options
@@ -34,7 +34,8 @@ class Options extends Element
 	 * 
 	 * @return $this
 	 */
-	public function fromObjects(array $options, $columnKey, $indexKey = null): self
+	public function fromObjects(array $options, string $columnKey,
+		string $indexKey = null): self
 	{
 		$options = array_column($options, $columnKey, $indexKey);
 		foreach($options as $key => $option)
@@ -71,7 +72,7 @@ class Options extends Element
 	 * 
 	 * @return $this
 	 */
-	public function addOption($option): self
+	public function addOption(int|string $option): self
 	{
 		$optionObj = $option instanceof Option ? 
 			$option : new Option($option);
@@ -88,7 +89,7 @@ class Options extends Element
 	 * 
 	 * @return $this
 	 */
-	public function addOptions(array $options, $keyIsValue = false): self
+	public function addOptions(array $options, bool $keyIsValue = false): self
 	{
 		foreach($options as $key => $option)
 		{

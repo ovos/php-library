@@ -16,17 +16,17 @@ class Option
 	/**
 	 * @var Options
 	 */
-	protected $_options;
+	protected Options $_options;
 
 	/**
 	 * @var null|mixed
 	 */
-	protected $_value;
+	protected mixed $_value = null;
 
 	/**
 	 * @var null|mixed
 	 */
-	protected $_label;
+	protected mixed $_label = null;
 	
 	/**
 	 * @param mixed $value
@@ -73,7 +73,7 @@ class Option
 	/**
 	 * @return mixed
 	 */
-	public function getValue()
+	public function getValue(): mixed
 	{
 		return $this->_value;
 	}
@@ -93,7 +93,7 @@ class Option
 	/**
 	 * @return null|mixed
 	 */
-	public function getLabel()
+	public function getLabel(): mixed
 	{
 		if($this->_label !== null)
 		{

@@ -24,17 +24,17 @@ abstract class Widget
 	 *
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 * @var Request
 	 */
-	protected $_request;
+	protected Request $_request;
 
 	/**
 	 * @var string
 	 */
-	protected $_script;
+	protected string $_script;
 
 	/**
 	 */

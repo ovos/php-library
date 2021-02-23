@@ -78,7 +78,7 @@ class Replace extends Filter
 	 *
 	 * @return mixed
 	 */
-	public function filter($value)
+	public function filter(mixed $value): mixed
 	{
 		return preg_replace($this->_pattern, $this->_replacement, $value);
 	}

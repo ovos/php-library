@@ -14,32 +14,32 @@ class Error
 	/**
 	 * @var int
 	 */
-	protected $_errorCode;
+	protected int $_errorCode;
 
 	/**
 	 * @var string
 	 */
-	protected $_errorMessage;
+	protected string $_errorMessage;
 
 	/**
 	 * @var string
 	 */
-	protected $_errorFile;
+	protected string $_errorFile;
 
 	/**
 	 * @var int
 	 */
-	protected $_errorLine;
+	protected int $_errorLine;
 
 	/**
 	 * @var string
 	 */
-	protected $_errorName;
+	protected string $_errorName;
 
 	/**
 	 * @var string
 	 */
-	protected $_errorTrace;
+	protected string $_errorTrace;
 
 	/**
 	 * @param int $errorCode

@@ -17,7 +17,7 @@ class Placeholders extends Helper
 	/**
 	 * @var Placeholder[]
 	 */
-	protected $_items = [];
+	protected array $_items = [];
 
 	/**
 	 * @param string $placeholder

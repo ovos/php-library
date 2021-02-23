@@ -8,6 +8,7 @@ use Ovos\Service\Memory;
 use Ovos\View\Layout;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
+use function define;
 
 /**
  * Application
@@ -20,7 +21,7 @@ class Application
 	/**
 	 * @var null|Application
 	 */
-	public static $instance;
+	public static null|Application $instance;
 
 	/**#@+
 	 * Environment constants
@@ -40,19 +41,19 @@ class Application
 	 *
 	 * @var string
 	 */
-	protected $_environment;
+	protected string $_environment;
 
 	/**
 	 * The interface of current application
 	 *
-	 * @var int
+	 * @var string
 	 */
-	protected $_interface = self::INT_HTTP;
+	protected string $_interface = self::INT_HTTP;
 
 	/**
 	 * @var null|ArrayObject
 	 */
-	protected $_config;
+	protected null|ArrayObject $_config = null;
 
 	/**
 	 * @var ArrayObject[]
@@ -62,36 +63,36 @@ class Application
 	/**
 	 * @var null|ArrayObject
 	 */
-	protected $_bootstrap;	
+	protected null|ArrayObject $_bootstrap = null;	
 
 	/**
 	 * Request
 	 *
 	 * @var null|Request
 	 */
-	protected $_request;
+	protected null|Request $_request = null;
 
 	/**
 	 * Response
 	 *
 	 * @var null|Response
 	 */
-	protected $_response;
+	protected null|Response $_response = null;
 
 	/**
 	 * Router
 	 *
 	 * @var null|Router
 	 */
-	protected $_router;
+	protected null|Router $_router = null;
 
 	/**
 	 * Construct
 	 *
-	 * @param int $interface (optional)
+	 * @param string $interface (optional)
 	 * @see self::INT_*
 	 */
-	public function __construct($interface = null)
+	public function __construct(string $interface = null)
 	{
 		if($interface !== null)
 		{
@@ -419,11 +420,11 @@ class Application
 			}
 		}
 		
-		\define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $systemConfig->domain));
-		\define('SYSTEM_PATH', $systemPath);
-		\define('ROUTE_PATH', $routePath);
-		//\define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
-		\define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
+		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $systemConfig->domain));
+		define('SYSTEM_PATH', $systemPath);
+		define('ROUTE_PATH', $routePath);
+		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
+		define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
 
 		return $this;
 	}

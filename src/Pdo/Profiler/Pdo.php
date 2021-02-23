@@ -1,7 +1,9 @@
 <?php
 
 namespace Ovos\Pdo\Profiler;
+
 use Ovos\Pdo\Profiler\Exception\ProfilerException;
+use Ovos\Measurement;
 use PDOStatement;
 use PDOException;
 
@@ -31,27 +33,29 @@ class Pdo extends \PDO
 		$args = func_get_args();
 
 		// Execute query and measure time & memory usage
-		$start = [microtime(true), memory_get_usage(false)];
+		$measurement = new Measurement;
+		$measurement->start();
+		
 		try
 		{
 			$data = call_user_func_array('parent::query', $args);
 		}
-		catch(PDOException $e)
+		catch(PDOException $exception)
 		{
 			// log the query for debugging
-			$end = [microtime(true), memory_get_usage(false)];
+			$measurement->stop();
 			// pass query to collector
 			Collector::getInstance()
-				->setQuery($queryString, array(), $start, $end);
+				->setQuery($queryString, [], $measurement);
 
-			throw $e;
+			throw $exception;
 		}
 
-		$end = [microtime(true), memory_get_usage(false)];
+		$measurement->stop();
 
 		// Pass query  to collector
 		Collector::getInstance()
-			->setQuery($queryString, array(), $start, $end);
+			->setQuery($queryString, [], $measurement);
 
 		return $data;
 	}
@@ -72,27 +76,30 @@ class Pdo extends \PDO
 	public function exec($queryString): int
 	{
 		// Execute query and measure time & memory usage
-		$start = [microtime(true), memory_get_usage(false)];
+		$measurement = new Measurement;
+		$measurement->start();
+		
 		try
 		{
 			$affectedRows = parent::exec($queryString);
 		}
-		catch(PDOException $e)
+		catch(PDOException $exception)
 		{
 			// log the query for debugging
-			$end = [microtime(true), memory_get_usage(false)];
+			$measurement->stop();
+			
 			// pass query to collector
 			Collector::getInstance()
-				->setQuery($queryString, array(), $start, $end);
+				->setQuery($queryString, [], $measurement);
 
-			throw $e;
+			throw $exception;
 		}
 
-		$end = [microtime(true), memory_get_usage(false)];
+		$measurement->stop();
 
 		// Pass query  to collector
 		Collector::getInstance()
-			->setQuery($queryString, array(), $start, $end);
+			->setQuery($queryString, [], $measurement);
 
 		return $affectedRows;
 	}

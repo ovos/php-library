@@ -37,12 +37,12 @@ class Database extends Service
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 
 	/**
 	 * @var PDO[]
 	 */
-	protected $_clients;
+	protected array $_clients;
 
 	/**
 	 * Returns database client

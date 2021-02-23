@@ -14,27 +14,27 @@ class ShellCommand
 	/**
 	 * @var string
 	 */
-	protected $_command;
+	protected string $_command;
 
 	/**
 	 * @var string
 	 */
-	protected $_executedCommand;
+	protected string $_executedCommand;
 
 	/**
 	 * @var array
 	 */
-	protected $_output;
+	protected array $_output;
 
 	/**
 	 * @var int
 	 */
-	protected $_exitStatus;
+	protected int $_exitStatus;
 
 	/**
 	 * @param string|Command $command
 	 */
-	public function __construct($command)
+	public function __construct(string|Command $command)
 	{
 		$this->setCommand($command);
 	}
@@ -42,7 +42,7 @@ class ShellCommand
 	/**
 	 * @param string|Command $command
 	 */
-	public function setCommand($command): void
+	public function setCommand(string|Command $command): void
 	{
 		if($command instanceof Command)
 		{

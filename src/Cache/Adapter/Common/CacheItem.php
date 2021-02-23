@@ -21,12 +21,12 @@ class CacheItem extends BaseCacheItem
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 
 	/**
 	 * @var bool
 	 */
-	protected $_raw = false;
+	protected bool $_raw = false;
 
 	/**
 	 * @param ArrayObject $config

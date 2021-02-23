@@ -16,22 +16,22 @@ class Title extends Helper
 	/**
 	 * @var string
 	 */
-	protected $_defaultTitle;
+	protected string $_defaultTitle;
 
 	/**
 	 * @var string
 	 */
-	protected $_title;
+	protected null|string $_title = null;
 
 	/**
 	 * @var string
 	 */
-	protected $_separator = ' &raquo; ';
+	protected string $_separator = ' &raquo; ';
 
 	/**
 	 * @var array
 	 */
-	protected $_items = [];
+	protected array $_items = [];
 
 	/**
 	 * @param string $defaultTitle

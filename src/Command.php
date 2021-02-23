@@ -15,17 +15,17 @@ class Command
 	 *
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 * @var string
 	 */
-	protected $_name;
+	protected string $_name;
 
 	/**
 	 * @var array
 	 */
-	protected $_params;
+	protected array $_params;
 
 	/**
 	 * @param string $name

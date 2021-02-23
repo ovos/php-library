@@ -18,12 +18,12 @@ trait Cli
 	 *
 	 * @var int
 	 */
-	protected $_pid;
+	protected int $_pid;
 
 	/**
 	 * @var bool
 	 */
-	protected $_coloredOutput = false;
+	protected bool $_coloredOutput = false;
 
 	/**
 	 * @return int
@@ -41,9 +41,9 @@ trait Cli
 	/**
 	 * @param mixed $default
 	 * 
-	 * @return string|null
+	 * @return null|string
 	 */
-	public function readLine($default = null): ?string
+	public function readLine(mixed $default = null): ?string
 	{
 		$line = Terminal::readLine();
 		if($line === null)

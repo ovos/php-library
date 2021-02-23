@@ -16,12 +16,12 @@ class Measurement
 	/**
 	 * @var stdClass
 	 */
-	protected $_time;
+	protected stdClass $_time;
 
 	/**
 	 * @var stdClass
 	 */
-	protected $_memory;
+	protected stdClass $_memory;
 
 	/**
 	 */

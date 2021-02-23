@@ -20,12 +20,12 @@ class Placeholder
 	/**#@-*/
 
 	/**
-	 * @var null|mixed
+	 * @var null|string|bool|int
 	 */
-	protected $_value;
+	protected null|string|bool|int $_value = null;
 
 	/**
-	 * @param null|mixed $value
+	 * @param null|string|bool|int $value
 	 * @param string $placement
 	 *
 	 * @return $this
@@ -49,11 +49,11 @@ class Placeholder
 	}
 
 	/**
-	 * @param null|mixed $value
+	 * @param null|string|bool|int $value
 	 *
 	 * @return $this
 	 */
-	public function prepend($value): self
+	public function prepend(null|string|bool|int $value): self
 	{
 		$this->set($value, self::PLACEMENT_PREPEND);
 
@@ -61,11 +61,11 @@ class Placeholder
 	}
 
 	/**
-	 * @param null|mixed $value
+	 * @param  null|string|bool|int $value
 	 *
 	 * @return $this
 	 */
-	public function append($value): self
+	public function append( null|string|bool|int $value): self
 	{
 		$this->set($value, self::PLACEMENT_APPEND);
 
@@ -88,7 +88,7 @@ class Placeholder
 	}
 
 	/**
-	 * @return null|mixed
+	 * @return null|string|bool|int
 	 */
 	public function getValue()
 	{

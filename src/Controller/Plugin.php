@@ -21,27 +21,27 @@ abstract class Plugin
 	/**
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 * @var Request
 	 */
-	protected $_request;
+	protected Request $_request;
 
 	/**
 	 * @var Controller
 	 */
-	protected $_controller;
+	protected Controller $_controller;
 
 	/**
 	 * @var bool
 	 */
-	protected $_enabled = true;
+	protected bool $_enabled = true;
 
 	/**
 	 * @var array
 	 */
-	protected $_dependsOn = [];
+	protected array $_dependsOn = [];
 
 	/**
 	 */
@@ -65,7 +65,7 @@ abstract class Plugin
 			{
 				// just scream that we need it
 				throw new RuntimeException('"%s" plugin depends on "%s" plugin.',
-					self::getSymbol(), $symbol);
+					static::getSymbol(), $symbol);
 			}
 		}
 	}

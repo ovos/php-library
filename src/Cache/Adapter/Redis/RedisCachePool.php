@@ -16,7 +16,7 @@ class RedisCachePool extends BaseRedisCachePool
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 
 	/**
 	 * @param Redis $cache

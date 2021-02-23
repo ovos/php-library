@@ -23,7 +23,7 @@ class File extends Element
 	/**
 	 * @param array $types
 	 */
-	public function __construct($types = [])
+	public function __construct(array $types = [])
 	{
 		$this->setTypes($types);
 		$this->addValidator(new FileUploaded);
@@ -51,10 +51,8 @@ class File extends Element
 
 	/**
 	 * @param string $key
-	 *
-	 * @return mixed
 	 */
-	public function __get(string $key)
+	public function __get(string $key): mixed
 	{
 		if(!isset($_FILES[$this->_id][$key]))
 		{
@@ -67,14 +65,10 @@ class File extends Element
 	/**
 	 * @param string $key
 	 * @param mixed $value
-	 * 
-	 * @return $this
 	 */
-	public function __set(string $key, $value): self
+	public function __set(string $key, mixed $value): void
 	{
 		$_FILES[$this->_id][$key] = $value;
-		
-		return $this;
 	}
 	
 	/**

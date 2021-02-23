@@ -12,6 +12,7 @@ use Ovos\Service\Session;
 use Ovos\Service\Cookies;
 use Ovos\Service\Cache;
 use Ovos\Service\Database;
+use Ovos\Service\Auth;
 use function Ovos\config;
 
 /**
@@ -28,6 +29,7 @@ use function Ovos\config;
  * @property Cookies $cookies
  * @property Cache $cache
  * @property Database $database
+ * @property Auth $auth
  */
 class Services
 {
@@ -62,7 +64,7 @@ class Services
 	/**
 	 * @param string $symbol
 	 *
-	 * @return Service|null
+	 * @return null|Service
 	 */
 	public function __get(string $symbol): ?Service
 	{
