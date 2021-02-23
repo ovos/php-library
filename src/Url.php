@@ -18,17 +18,17 @@ class Url
 	/**
 	 * @var Locale
 	 */
-	protected $_locale;
+	protected null|Locale $_locale = null;
 
 	/**
 	 * @var array
 	 */
-	protected $_components = [];
+	protected array $_components = [];
 
 	/**
 	 * @var bool
 	 */
-	protected $_relative = false;
+	protected bool $_relative = false;
 
 	/**
 	 * Construct

@@ -21,9 +21,9 @@ class Memory extends Service
 	public const SYMBOL = 'memory';
 
 	/**
-	 * @var ApcuCachePool
+	 * @var PrefixedCachePool
 	 */
-	protected $_pool;
+	protected null|PrefixedCachePool $_pool = null;
 	
 	/**
 	 * @return string

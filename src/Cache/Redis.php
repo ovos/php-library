@@ -20,19 +20,19 @@ class Redis
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 
 	/**
 	 * Redis connection
 	 *
-	 * @var Connection|null
+	 * @var null|Connection
 	 */
-	protected $_connection;
+	protected null|Connection $_connection = null;
 
 	/**
 	 * @var RedisCachePool
 	 */
-	protected $_pool;
+	protected null|RedisCachePool $_pool = null;
 
 	/**
 	 * @param ArrayObject $config

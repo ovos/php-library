@@ -24,7 +24,7 @@ class EmailAddress extends Validator
 	/**
 	 * @var string[]
 	 */
-	protected $_messages =
+	protected array $_messages =
 	[
 		self::ERROR_INVALID => '"%s" is not a valid e-mail address.',
 	];

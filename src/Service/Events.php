@@ -31,7 +31,7 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @var array
 	 */
-	protected $_events = [];
+	protected array $_events = [];
 
 	/**
 	 * @return string
@@ -169,7 +169,7 @@ class Events extends Service implements Countable, Iterator
 	/**
 	 * @return mixed
 	 */
-	public function current()
+	public function current(): mixed
 	{
 		return current($this->_events);
 	}

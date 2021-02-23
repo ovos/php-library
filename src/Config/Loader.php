@@ -22,7 +22,7 @@ class Loader
 	/**
 	 * @var Memory
 	 */
-	protected $_memoryService;
+	protected Memory $_memoryService;
 
 	/**
 	 * @var string

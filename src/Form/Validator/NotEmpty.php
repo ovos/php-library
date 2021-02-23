@@ -23,7 +23,7 @@ class NotEmpty extends Validator
 	/**
 	 * @var string[]
 	 */
-	protected $_messages =
+	protected array $_messages =
 	[
 		self::ERROR_EMPTY => '"%s" cannot be empty.',
 	];

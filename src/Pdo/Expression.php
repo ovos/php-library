@@ -14,7 +14,7 @@ class Expression
 	/**
 	 * @var string
 	 */
-	protected $_value;
+	protected string $_value;
 
 	/**
 	 * @param string $value
@@ -25,9 +25,9 @@ class Expression
 	}
 
 	/**
-	 * @return mixed
+	 * @return string
 	 */
-	public function __toString()
+	public function __toString(): string
 	{
 		return $this->_value;
 	}

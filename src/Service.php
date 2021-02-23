@@ -16,22 +16,22 @@ abstract class Service
 	/**
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 * @var Request
 	 */
-	protected $_request;
+	protected Request $_request;
 
 	/**
 	 * @var bool
 	 */
-	protected $_enabled = true;
+	protected bool $_enabled = true;
 
 	/**
 	 * @var array
 	 */
-	protected $_dependsOn = [];
+	protected array $_dependsOn = [];
 
 	/**
 	 */

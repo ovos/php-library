@@ -14,54 +14,54 @@ class Request
 	/**
 	 * @var Url
 	 */
-	protected $_url;
+	protected null|Url $_url = null;
 
 	/**
 	 * The locale
 	 *
 	 * @var Locale
 	 */
-	protected $_locale = null;
+	protected null|Locale $_locale = null;
 
 	/**
 	 * The controller
 
 	 * @var string
 	 */
-	protected $_controller = 'index';
+	protected string $_controller = 'index';
 
 	/**
 	 * The controller class
 
 	 * @var string
 	 */
-	protected $_controllerClass = 'Index';
+	protected string $_controllerClass = 'Index';
 
 	/**
 	 * @var Controller
 	 */
-	protected $_controllerInstance = null;
+	protected null|Controller $_controllerInstance = null;
 
 	/**
 	 * The action
 
 	 * @var string
 	 */
-	protected $_action = 'index';
+	protected string $_action = 'index';
 
 	/**
 	 * The action method
 
 	 * @var string
 	 */
-	protected $_actionMethod = 'index';
+	protected string $_actionMethod = 'index';
 
 	/**
 	 * Params
 	 *
 	 * @var array
 	 */
-	protected $_params = [];
+	protected array $_params = [];
 
 	/**
 	 * Construct

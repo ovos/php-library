@@ -18,7 +18,7 @@ class LeftTrim extends Trim
 	 *
 	 * @return mixed
 	 */
-	public function filter($value)
+	public function filter(mixed $value): mixed
 	{
 		return ltrim($value, $this->getCharacterMask());
 	}

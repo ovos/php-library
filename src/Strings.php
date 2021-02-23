@@ -25,6 +25,8 @@ class Strings
 	}
 
 	/**
+	 * @deprecated @see https://wiki.php.net/rfc/str_contains
+	 * 
 	 * @param string $haystack
 	 * @param string $needle
 	 *
@@ -130,7 +132,7 @@ class Strings
 	 *
 	 * @return string
 	 */
-	public static function escapeForHtml($string): string
+	public static function escapeForHtml(string $string): string
 	{
 		return htmlspecialchars($string, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 	}

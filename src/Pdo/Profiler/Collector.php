@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Pdo\Profiler;
 
+use Ovos\Measurement;
+
 /**
  * Collector
  *
@@ -16,7 +18,7 @@ class Collector
 	 *
 	 * @var null|self
 	 */
-	protected static $instance;
+	protected static null|self $instance = null;
 
 	/**
 	 * Contains collected data
@@ -43,19 +45,17 @@ class Collector
 	 *
 	 * @param string $sql SQL statement
 	 * @param array $parameters Statement values
-	 * @param array $start Execution start time and memory usage
-	 * @param array $end Execution end time and memory usage
+	 * @param Measurement $measurement time and memory usage
 	 *
 	 * @return self
 	 */
-	public function setQuery(string $sql, array $parameters, array $start, array $end)
+	public function setQuery(string $sql, array $parameters, Measurement $measurement)
 	{
 		$this->_queries[] = array
 		(
 			'sql' => $sql,
 			'parameters' => $parameters,
-			'start' => $start,
-			'end' => $end
+			'measurement' => $measurement,
 		);
 
 		return $this;

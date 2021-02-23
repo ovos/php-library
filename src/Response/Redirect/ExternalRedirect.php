@@ -18,7 +18,7 @@ class ExternalRedirect extends Redirect
 	/**
 	 * @var string
 	 */
-	protected $_externalUrl;
+	protected string $_externalUrl;
 
 	/**
 	 * @param string $externalUrl

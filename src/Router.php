@@ -24,12 +24,12 @@ class Router
 	/**
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 * @var ArrayObject
 	 */
-	protected $_config;
+	protected ArrayObject $_config;
 	
 	/**
 	 * @var string
@@ -37,21 +37,14 @@ class Router
 	public const CACHE_ID_CONTROLLERS = 'controllers';
 
 	/**
-	 * The mode of the routing
-	 *
-	 * @var int
-	 */
-	protected $_mode;
-
-	/**
 	 * @var Request
 	 */
-	protected $_request;
+	protected Request $_request;
 
 	/**
 	 * @var Url
 	 */
-	protected $_url;
+	protected Url $_url;
 
 	/**
 	 * @param Request $request

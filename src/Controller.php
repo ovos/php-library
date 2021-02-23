@@ -24,36 +24,36 @@ class Controller
 	/**
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 * @var Request
 	 */
-	protected $_request;
+	protected Request $_request;
 
 	/**
 	 * @var string
 	 */
-	protected $_dispatchedAction;
+	protected string $_dispatchedAction;
 
 	/**
 	 * @var bool
 	 */
-	protected $_dispatched = false;
+	protected bool $_dispatched = false;
 
 	/**
 	 * Params
 	 *
 	 * @var array
 	 */
-	protected $_params = [];
+	protected array $_params = [];
 
 	/**
 	 * Plugins
 	 *
 	 * @var array
 	 */
-	protected $_plugins = [];
+	protected array $_plugins = [];
 
 	/**
 	 */
@@ -416,7 +416,7 @@ class Controller
 	 *
 	 * @return mixed|null
 	 */
-	public function getPlugin(string $symbol = null, array $arguments = [])
+	public function getPlugin(string $symbol = null, array $arguments = []): mixed
 	{
 		if($this->hasPlugin($symbol) === false)
 		{
@@ -448,7 +448,7 @@ class Controller
 	 *
 	 * @return mixed|null
 	 */
-	public function __call(string $symbol, array $arguments)
+	public function __call(string $symbol, array $arguments): mixed
 	{
 		return $this->getPlugin($symbol, $arguments);
 	}

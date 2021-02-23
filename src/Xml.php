@@ -17,16 +17,16 @@ class Xml
 	/**
 	 * @param mixed $xml
 	 *
-	 * @return string|null
+	 * @return null|string|SimpleXMLElement
 	 */
-	public static function format($xml): ?string
+	public static function format(null|string|SimpleXMLElement $xml): ?string
 	{
 		if($xml === null)
 		{
 			return null;
 		}
 
-		if(!($xml instanceof SimpleXMLElement))
+		if(($xml instanceof SimpleXMLElement) === false)
 		{
 			$xml = simplexml_load_string($xml);
 		}

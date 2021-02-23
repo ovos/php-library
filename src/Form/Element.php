@@ -16,37 +16,37 @@ class Element
 	/**
 	 * @var string
 	 */
-	protected $_id;
+	protected string $_id;
 
 	/**
 	 * @var Form
 	 */
-	protected $_form;
+	protected Form $_form;
 
 	/**
 	 * @var null|string|int|float|array
 	 */
-	protected $_value;
+	protected null|string|int|float|array $_value;
 
 	/**
 	 * @var null|string
 	 */
-	protected $_label;
+	protected null|string $_label;
 
 	/**
 	 * @var Validator[]
 	 */
-	protected $_validators = [];
+	protected array $_validators = [];
 
 	/**
 	 * @var Filter[]
 	 */
-	protected $_filters = [];
+	protected array $_filters = [];
 
 	/**
 	 * @var Error[]
 	 */
-	protected $_errors = [];
+	protected array $_errors = [];
 
 	/**
 	 * @param string $id
@@ -124,7 +124,7 @@ class Element
 	/*
 	 * @return null|string|int|float|array
 	 */
-	public function getValue()
+	public function getValue(): null|string|int|float|array
 	{
 		if($this->_value === null)
 		{
@@ -190,7 +190,7 @@ class Element
 	 * 
 	 * @return int|string
 	 */
-	public function filterValue($value)
+	public function filterValue(mixed $value)
 	{
 		foreach($this->_filters as $filter)
 		{

@@ -42,8 +42,8 @@ class Terminal
 		$isCli = PHP_SAPI === 'cli';
 		
 		$message = $isCli && $markup ?
-			self::handleMarkup($message)
-			: self::stripMarkup($message);
+			Formatter::handleMarkup($message)
+			: Formatter::stripMarkup($message);
 		
 		if($isCli)
 		{
@@ -53,35 +53,5 @@ class Terminal
 		{
 			 print($message);
 		}
-	}
-	
-	/**
-	 * @param string $message
-	 * 
-	 * @return string
-	 */
-	public static function handleMarkup(string $message): string
-	{
-		foreach(Formatter::$colors as $color => $replace)
-		{
-			$message = str_replace("<$color>", $replace, $message);
-		}
-		
-		return $message;
-	}
-	
-	/**
-	 * @param string $message
-	 * 
-	 * @return string
-	 */
-	public static function stripMarkup(string $message): string
-	{
-		foreach(Formatter::$colors as $color => $replace)
-		{
-			$message = str_replace("<$color>", '', $message);
-		}
-		
-		return $message;
 	}
 }

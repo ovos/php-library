@@ -14,12 +14,12 @@ class Encryptor
 	/**
 	 * @var null|string
 	 */
-	protected $_method;
+	protected null|string $_method;
 
 	/**
 	 * @var string
 	 */
-	protected $_key;
+	protected string $_key;
 
 	/**
 	 * @param string $key
@@ -144,7 +144,7 @@ class Encryptor
 	 * 
 	 * @return array
 	 */
-	public function encryptArray($patterns, &$data)
+	public function encryptArray(array $patterns, array &$data): array
 	{
 		$encryptor = new Encryptor($config->getKey(), $config->getMethod());
 	

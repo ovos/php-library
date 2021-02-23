@@ -16,35 +16,35 @@ class Response
 	 *
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 * HTTP code
 	 *
 	 * @var int
 	 */
-	protected $_httpCode = 200;
+	protected int $_httpCode = 200;
 	
 	/**
 	 * Sent
 	 *
 	 * @var bool
 	 */
-	protected $_sent = false;
+	protected bool $_sent = false;
 
 	/**
 	 * Headers
 	 *
 	 * @var array
 	 */
-	protected $_headers = [];
+	protected array $_headers = [];
 
 	/**
 	 * Headers sent
 	 *
 	 * @var bool
 	 */
-	protected $_headersSent = false;
+	protected bool $_headersSent = false;
 
 	/**
 	 * Construct
@@ -137,9 +137,9 @@ class Response
 	}
 
 	/**
-	 * @return $this
+	 * @return null|$this
 	 */
-	public function send(): self
+	public function send(): ?self
 	{
 		if($this->isSent())
 		{

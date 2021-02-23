@@ -48,11 +48,11 @@ class ArrayObject extends BaseArrayObject
 	 * @param string $path
 	 * @param self $config
 	 *
-	 * @return self|mixed|null
+	 * @return mixed (self|mixed|null)
 	 *
 	 * @throws Exception
 	 */
-	public function get(string $path, self $config = null)
+	public function get(string $path, self $config = null): mixed
 	{
 		$pathElements = explode('.', $path);
 		$currentPath = array_shift($pathElements);

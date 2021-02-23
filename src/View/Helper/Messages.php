@@ -27,19 +27,19 @@ class Messages extends Helper
 	/**
 	 * @var Session
 	 */
-	protected $_session;
+	protected Session $_session;
 	
 	/**
 	 * Internal namespace
 	 * 
 	 * @var null|string
 	 */
-	protected $_namespace;
+	protected null|string $_namespace;
 
 	/**
 	 * @var Message[]
 	 */
-	protected $_items = [];
+	protected null|array $_items = [];
 
 	/**
 	 */

@@ -32,58 +32,58 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @var string
 	 */
-	protected $_sourceName = 'database';
+	protected string $_sourceName = 'database';
 
 	/**
 	 * A connection between PHP and a database server
 	 *
 	 * @var PDO
 	 */
-	protected $_source;
+	protected null|PDO $_source = null;
 
 	/**
 	 * List of primary keys
 	 *
 	 * @var array
 	 */
-	protected $_primaryKeys = ['id'];
+	protected array $_primaryKeys = ['id'];
 
 	/**
 	 * Autoincrement primary key
 	 *
 	 * @var null|string
 	 */
-	protected $_autoIncrementKey = 'id';
+	protected null|string $_autoIncrementKey = 'id';
 
 	/**
 	 * @var array
 	 */
-	protected $_templates = [];
+	protected array $_templates = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_setters = [];
+	protected array $_setters = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_getters = [];
+	protected array $_getters = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_properties = [];
+	protected array $_properties = [];
 
 	/**
 	 * @var array
 	 */
-	protected $_modified = [];
+	protected array $_modified = [];
 
 	/**
 	 * @var self
 	 */
-	protected $_updateObject;
+	protected self $_updateObject;
 
 	/**
 	 */
@@ -194,9 +194,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $name
 	 *
-	 * @return array
+	 * @return mixed
 	 */
-	public function getProperty($name): array
+	public function getProperty($name): mixed
 	{
 		if(!isset($this->_properties[$name]))
 		{
@@ -356,7 +356,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function __get(string $property)
+	public function __get(string $property): mixed
 	{
 		$value = $this->__getRaw($property);
 		if($value === null)
@@ -392,7 +392,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function __getRaw(string $property)
+	public function __getRaw(string $property): mixed
 	{
 		if($this->__isset($property) === false)
 		{
@@ -415,10 +415,8 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $property
 	 * @param mixed $value
-	 *
-	 * @return $this
 	 */
-	public function __set(string $property, $value): self
+	public function __set(string $property, $value): void
 	{
 		// run setter
 		if(isset($this->_setters[$property]))
@@ -441,17 +439,13 @@ abstract class Mysql extends Model implements Iterator, Countable
 		}
 
 		$this->__setRaw($property, $value);
-
-		return $this;
 	}
 
 	/**
 	 * @param string $property
 	 * @param mixed $value
-	 *
-	 * @return $this
 	 */
-	public function __setRaw(string $property, $value): self
+	public function __setRaw(string $property, $value): void
 	{
 		$this->setProperty($property, $value);
 
@@ -460,16 +454,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			$this->_updateObject->$property = $value;
 		}
-
-		return $this;
 	}
 
 	/**
 	 * @param string $property
-	 *
-	 * @return $this
 	 */
-	public function __unset(string $property)
+	public function __unset(string $property): void
 	{
 		unset($this->_properties[$property]);
 
@@ -478,8 +468,6 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			unset($this->_updateObject->$property);
 		}
-
-		return $this;
 	}
 
 	/**
@@ -571,7 +559,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @return mixed
 	 */
-	public function current()
+	public function current(): mixed
 	{
 		return current($this->_properties);
 	}
