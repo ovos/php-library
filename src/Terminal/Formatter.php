@@ -52,31 +52,7 @@ class Formatter
 		self::COLOR_YELLOW => "\33[1;33m",
 		self::COLOR_WHITE => "\33[1;37m",
 	];
-
-	/**
-	 * @var string[]
-	 */	
-	public static $options =
-	[
-		self::COLOR_RESET => "\33[0m",
-		self::COLOR_BLACK => "\33[0;30m",
-		self::COLOR_GRAY => "\33[0;37m",
-		self::COLOR_DARKGRAY => "\33[1;30m",
-		self::COLOR_BLUE => "\33[1;34m",
-		self::COLOR_DARKBLUE => "\33[0;34m",
-		self::COLOR_GREEN => "\33[1;32m",
-		self::COLOR_DARKGREEN => "\33[0;32m",
-		self::COLOR_CYAN => "\33[1;36m",
-		self::COLOR_DARKCYAN => "\33[0;36m",
-		self::COLOR_RED => "\33[1;31m",
-		self::COLOR_DARKRED => "\33[0;31m",
-		self::COLOR_PURPLE => "\33[1;35m",
-		self::COLOR_DARKPURPLE => "\33[0;35m",
-		self::COLOR_BROWN => "\33[0;33m",
-		self::COLOR_YELLOW => "\33[1;33m",
-		self::COLOR_WHITE => "\33[1;37m",
-	];
-
+	
 	/**
 	 * @param string $color
 	 * 
@@ -90,6 +66,51 @@ class Formatter
 		}
 		
 		return self::$colors[$color];
+	}
+	
+	/**
+	 * @param string $message
+	 * 
+	 * @return string
+	 */
+	public static function handleMarkup(string $message): string
+	{
+		foreach(self::$colors as $color => $replace)
+		{
+			$message = str_replace("<$color>", $replace, $message);
+		}
+		
+		return $message;
+	}
+	
+	/**
+	 * @param string $message
+	 * 
+	 * @return string
+	 */
+	public static function stripMarkup(string $message): string
+	{
+		foreach(self::$colors as $color => $replace)
+		{
+			$message = str_replace("<$color>", '', $message);
+		}
+		
+		return $message;
+	}
+	
+	/**
+	 * @param string $message
+	 * 
+	 * @return string
+	 */
+	public static function stripTerminalMarkup(string $message): string
+	{
+		foreach(self::$colors as $color => $replace)
+		{
+			$message = str_replace($replace, '', $message);
+		}
+		
+		return $message;
 	}
 	
 	/**

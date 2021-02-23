@@ -1,7 +1,9 @@
 <?php
 
 namespace Ovos\Pdo\Profiler;
+
 use Ovos\Pdo\Profiler\Exception\ProfilerException;
+use Ovos\Measurement;
 use PDOException;
 
 /**
@@ -85,27 +87,29 @@ class PdoStatement extends \PDOStatement
 		}
 
 		// Execute query and measure time & memory usage
-		$start = [microtime(true), memory_get_usage(false)];
+		$measurement = new Measurement;
+		$measurement->start();
+		
 		try
 		{
 			$data = parent::execute($inputParameters);
 		}
-		catch(PDOException $e)
+		catch(PDOException $exception)
 		{
 			// log the query for debugging
-			$end = [microtime(true), memory_get_usage(false)];
+			$measurement->stop();
 			// pass query and parameters to collector
 			Collector::getInstance()
-				->setQuery($this->queryString, $this->_parameters, $start, $end);
+				->setQuery($this->queryString, $this->_parameters, $measurement);
 
-			throw $e;
+			throw $exception;
 		}
 
-		$end = [microtime(true), memory_get_usage(false)];
+		$measurement->stop();
 
 		// Pass query and parameters to collector
 		Collector::getInstance()
-			->setQuery($this->queryString, $this->_parameters, $start, $end);
+			->setQuery($this->queryString, $this->_parameters, $measurement);
 
 		// Reset values
 		$this->_parameters = [];
