@@ -17,7 +17,7 @@ class PdoStatement extends \PDOStatement
 	 *
 	 * @var array
 	 */
-	protected $_parameters = [];
+	protected array $_parameters = [];
 
 	/**
 	 * Catches parameter value, passes arguments to PDO

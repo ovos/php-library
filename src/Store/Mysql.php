@@ -29,14 +29,14 @@ abstract class Mysql extends Store
 	/**
 	 * @var string
 	 */
-	protected $_sourceName = 'database';
+	protected string $_sourceName = 'database';
 
 	/**
 	 * A connection between PHP and a database server
 	 *
-	 * @var PDO
+	 * @var null|PDO
 	 */
-	protected $_source;
+	protected null|PDO $_source = null;
 
 	/**
 	 * @return PDO

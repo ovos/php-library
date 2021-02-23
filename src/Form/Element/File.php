@@ -23,7 +23,7 @@ class File extends Element
 	/**
 	 * @param array $types
 	 */
-	public function __construct($types = [])
+	public function __construct(array $types = [])
 	{
 		$this->setTypes($types);
 		$this->addValidator(new FileUploaded);

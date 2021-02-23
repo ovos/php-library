@@ -14,9 +14,9 @@ use Ovos\Response;
 class Html extends Response
 {
 	/**
-	 * @var string
+	 * @var null|string
 	 */
-	protected $_response;
+	protected null|string $_response = null;
 
 	/**
 	 * Construct

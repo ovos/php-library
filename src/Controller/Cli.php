@@ -20,14 +20,14 @@ class Cli extends Controller
 	/**
 	 * @var bool
 	 */
-	protected $_allowHttpAccess = false;
+	protected bool $_allowHttpAccess = false;
 
 	/**
 	 * Allows to access specified CLI methods via HTTP
 	 *
 	 * @var array
 	 */
-	protected $_httpActions = [];
+	protected array $_httpActions = [];
 
 	/**
 	 * @param bool $allowHttpAccess

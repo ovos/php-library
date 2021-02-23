@@ -16,7 +16,7 @@ class Error
 	/**
 	 * @var Element
 	 */
-	protected $_element;
+	protected Element $_element;
 
 	/**
 	 * @var string

@@ -14,7 +14,7 @@ class Expression
 	/**
 	 * @var string
 	 */
-	protected $_value;
+	protected string $_value;
 
 	/**
 	 * @param string $value

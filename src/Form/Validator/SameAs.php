@@ -23,7 +23,7 @@ class SameAs extends Validator
 	/**
 	 * @var string[]
 	 */
-	protected $_messages =
+	protected array $_messages =
 	[
 		self::ERROR_DIFFERENT => '"%s" should be the same as "%s".',
 	];	
@@ -31,12 +31,12 @@ class SameAs extends Validator
 	/**
 	 * @var string
 	 */
-	protected $_id;
+	protected string $_id;
 
 	/**
 	 * @param string $id
 	 */
-	public function __construct($id)
+	public function __construct(string $id)
 	{
 		$this->setId($id);
 	}
@@ -58,7 +58,7 @@ class SameAs extends Validator
 	 *
 	 * @return bool
 	 */
-	public function isValid($value): bool
+	public function isValid(mixed $value): bool
 	{
 		$element = $this->getElement()->getForm()->getElement($this->_id);
 		$valid = $element->getValue() === $value;

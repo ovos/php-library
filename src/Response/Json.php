@@ -24,14 +24,14 @@ class Json extends Response
 	 *
 	 * @var stdClass
 	 */
-	protected $_response;
+	protected stdClass $_response;
 
 	/**
 	 * Options of json_encode
 	 *
 	 * @var int
 	 */
-	protected $_options = 0;
+	protected int $_options = 0;
 
 	/**
 	 */
