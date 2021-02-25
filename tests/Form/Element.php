@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Tests\Form;
 
 use Ovos\Test;
+use Ovos\Form\Element as BaseElement;
 
 /**
  * Element

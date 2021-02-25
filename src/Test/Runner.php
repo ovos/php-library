@@ -66,7 +66,7 @@ class Runner
 		
 		/** @var Test $test */
 		$test = $this->class->newInstance();
-		if(!is_subclass_of($test, 'Ovos\Test'))
+		if(is_subclass_of($test, 'Ovos\Test') === false)
 		{
 			throw new NotFoundException('A class has to extend a "Ovos\Test" class.');
 		}
