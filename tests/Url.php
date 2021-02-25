@@ -4,19 +4,21 @@ declare(strict_types=1);
 namespace Tests;
 
 use Ovos\Test;
-use Ovos\Form as BaseForm;
+use Ovos\Url as BaseUrl;
 
 /**
- * Form
+ * Url
  *
  * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
-class Form extends Test
+class Url extends Test
 {
 	public function firstTest()
 	{
-		$form = new BaseForm;
+		$url = new BaseUrl('test', 'param');
+		$urlWithHost = $url->getWithHost();
+		
 		return true;
 	}
 	

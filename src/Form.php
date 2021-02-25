@@ -25,7 +25,7 @@ class Form implements Iterator
 	/**
 	 * @var string
 	 */
-	protected string $_id;
+	protected null|string $_id = null;
 
 	/**
 	 * Parent form
