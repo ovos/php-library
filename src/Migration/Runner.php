@@ -19,31 +19,33 @@ use ReflectionMethod;
 class Runner
 {
 	/**
-	 * @var int
-	 */
-	public int $id;
-	
-	/**
 	 * @var ReflectionClass
 	 */
 	public ReflectionClass $class;
+	
+	/**
+	 * @var int
+	 */
+	public int $id;
 
 	/**
-	 * @param int $id
 	 * @param ReflectionClass $class
+	 * @param int $id
 	 */
-	public function __construct(int $id, ReflectionClass $class)
+	public function __construct(ReflectionClass $class, int $id)
 	{
-		$this->id = $id;
 		$this->class = $class;
+		$this->id = $id;
 	}
 
 	/**
+	 * @param string $direction
+	 * 
 	 * @return void
 	 *
 	 * @throws NotFoundException
 	 */
-	public function run(): void
+	public function run(string $direction): void
 	{
 		$this->measurement = new Measurement;
 		$this->measurement->start();
@@ -55,7 +57,7 @@ class Runner
 			throw new NotFoundException('A class has to extend a "Ovos\Migration" class.');
 		}
 		
-		$migration->up();
+		$migration->{$direction}();
 		
 		$this->measurement->stop();
 	}
