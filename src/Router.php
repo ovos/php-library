@@ -229,22 +229,25 @@ class Router
 			if($module->controllers)
 			{
 				$dir = $moduleDir . DIRECTORY_SEPARATOR . 'controllers';
-			
-				$moduleControllers = Dir::getFiles($dir, function($file)
+				
+				$moduleControllers = Dir::getFilesTree($dir, function($file)
 				{
 					/**
-					* @var SplFileObject $file
+					* @var SplFileInfo $file
 					*/
 					$basename = $file->getBasename('.php');
 					return Strings::snakeCase($basename);
 				});
 				
 				$controllers = Arrays::deepMerge($controllers, $moduleControllers);
-				// directories first
+				// directories (keys of array) first, ksort puts the directories last
+				// order is z-a
 				krsort($controllers, SORT_NATURAL);
 			}
 		}
-
+		
+		//var_dump($controllers);
+		return $controllers;
 		if($pool = services()->cache->getPerishablePool())
 		{
 			$item = $pool->getItem($cacheId)->set($controllers);

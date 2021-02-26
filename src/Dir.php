@@ -21,31 +21,31 @@ class Dir
 	/**
 	 * Creates a directory structure
 	 *
-	 * @param string $dir
+	 * @param string $path
 	 * @param integer (octal) $mode
 	 * @param bool $preProcess
 	 *
 	 * @return bool
 	 */
-	public static function create(string $dir, int $mode = 0777, bool $preProcess = true): bool
+	public static function create(string $path, int $mode = 0777, bool $preProcess = true): bool
 	{
 		if($preProcess)
 		{
-			$dir = self::preProcess($dir);
+			$path = self::preProcess($path);
 		}
 
-		if(is_dir($dir) || empty($dir))
+		if(is_dir($path) || empty($path))
 		{
 			return true;
 		}
 
-		$nextDir = substr($dir, 0, strrpos($dir, DIRECTORY_SEPARATOR));
+		$nextDir = substr($path, 0, strrpos($path, DIRECTORY_SEPARATOR));
 		if(self::create($nextDir, $mode))
 		{
-			if(!file_exists($dir))
+			if(!file_exists($path))
 			{
 				$umask = umask(0);
-				$result = mkdir($dir, $mode);
+				$result = mkdir($path, $mode);
 				umask($umask);
 				return $result;
 			}
@@ -57,41 +57,41 @@ class Dir
 	}
 
 	/**
-	 * Pre-processes a directory name or path name (second param)
+	 * Pre-processes a path or relative path (second param)
 	 * Removes directory separator from the end and replaces all separators with consistent ones
 	 * Set $relative to true to remove directory separator also from the start of the string
 	 *
-	 * @param string $dir
+	 * @param string $path
 	 * @param bool $relative
 	 *
 	 * @return string
 	 */
-	public static function preProcess(string $dir, bool $relative = false): string
+	public static function preProcess(string $path, bool $relative = false): string
 	{
-		$dir = str_replace(['/', '\\'], [DIRECTORY_SEPARATOR, DIRECTORY_SEPARATOR], $dir);
-		$dir = rtrim($dir, DIRECTORY_SEPARATOR);
+		$path = str_replace(['/', '\\'], [DIRECTORY_SEPARATOR, DIRECTORY_SEPARATOR], $path);
+		$path = rtrim($path, DIRECTORY_SEPARATOR);
 		if($relative)
 		{
-			$dir = ltrim($dir, DIRECTORY_SEPARATOR);
+			$path = ltrim($path, DIRECTORY_SEPARATOR);
 		}
 
-		return $dir;
+		return $path;
 	}
 
 	/**
 	 * Remove the directory with all it's contents
 	 *
-	 * @param string $dir
-	 * @param bool $removeDir
+	 * @param string $path
+	 * @param bool $remove
 	 * @param string $match (regular expression)
 	 *
 	 * @return void
 	 */
-	public static function remove(string $dir, bool $removeDir = true, string $match = null): void
+	public static function remove(string $path, bool $remove = true, string $match = null): void
 	{
-		if(is_dir($dir))
+		if(is_dir($path))
 		{
-			$iterator = new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS);
+			$iterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
 			foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
 			{
 				/**
@@ -117,21 +117,21 @@ class Dir
 				}
 			}
 
-			if($removeDir) rmdir($dir);
+			if($remove) rmdir($path);
 		}
 	}
 
 	/**
 	 * Empty the directory or remove recursively files and directories matching regular expression
 	 *
-	 * @param string $dir
+	 * @param string $path
 	 * @param string $match (regular expression)
 	 *
 	 * @return void
 	 */
-	public static function clear(string $dir, string $match = null): void
+	public static function clear(string $path, string $match = null): void
 	{
-		self::remove($dir, false, $match);
+		self::remove($path, false, $match);
 	}
 
 	/**
@@ -142,7 +142,7 @@ class Dir
 	 *
 	 * @return void
 	 */
-	public static function removeEmptyPath(string $pathToKeep, string $path): void
+	public static function removeEmpty(string $pathToKeep, string $path): void
 	{
 		$pathToKeep = self::preProcess($pathToKeep);
 		$path = self::preProcess($path, true);
@@ -166,7 +166,7 @@ class Dir
 			if(strpos($path, DIRECTORY_SEPARATOR) !== false)
 			{
 				$pathUp = substr($path, 0, strrpos($path, DIRECTORY_SEPARATOR));
-				self::removeEmptyPath($pathToKeep, $pathUp);
+				self::removeEmpty($pathToKeep, $pathUp);
 			}
 		}
 	}
@@ -175,18 +175,18 @@ class Dir
 	 * Moves contents of one directory to another recursively without removing target directory's contents
 	 *
 	 * @param string $dirFrom
-	 * @param string $dirTo
+	 * @param string $pathTo
 	 *
 	 * @return void
 	 */
-	public static function moveFiles(string $dirFrom, string $dirTo): void
+	public static function moveFiles(string $pathFrom, string $pathTo): void
 	{
-		$dirFrom = self::preProcess($dirFrom);
-		$dirTo = self::preProcess($dirTo);
+		$pathFrom = self::preProcess($pathFrom);
+		$pathTo = self::preProcess($pathTo);
 
-		if(is_dir($dirFrom) && is_dir($dirTo))
+		if(is_dir($dirFrom) && is_dir($pathTo))
 		{
-			$iterator = new RecursiveDirectoryIterator($dirFrom, FilesystemIterator::SKIP_DOTS);
+			$iterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
 			foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
 			{
 				/**
@@ -197,13 +197,13 @@ class Dir
 					$source = $file->getPathname();
 					$targetPath = $file->getPath();
 					
-					if(strpos($targetPath, $dirFrom) === 0)
+					if(strpos($targetPath, $pathFrom) === 0)
 					{
-						$targetPath = substr($targetPath, \strlen($dirFrom));
+						$targetPath = substr($targetPath, \strlen($pathFrom));
 					}
 
-					self::create($dirTo . $targetPath . DIRECTORY_SEPARATOR);
-					rename($source, $dirTo . $targetPath . DIRECTORY_SEPARATOR . $file->getFilename());
+					self::create($pathTo . $targetPath . DIRECTORY_SEPARATOR);
+					rename($source, $pathTo . $targetPath . DIRECTORY_SEPARATOR . $file->getFilename());
 				}
 				else
 				{
@@ -216,29 +216,29 @@ class Dir
 	/**
 	 * Check if the directory is empty
 	 *
-	 * @param string $dir
+	 * @param string $path
 	 *
 	 * @return bool|null
 	 */
-	public static function isEmpty(string $dir): ?bool
+	public static function isEmpty(string $path): ?bool
 	{
-		if(!is_readable($dir))
+		if(!is_readable($path))
 		{
 			return null;
 		}
-		return (\count(scandir($dir, SCANDIR_SORT_NONE)) === 2); // if only array('..', '.');
+		return (\count(scandir($path, SCANDIR_SORT_NONE)) === 2); // if only array('..', '.');
 	}
 
 	/**
-	 * @param string $dir
+	 * @param string $path
 	 *
 	 * @return array
 	 */
-	public static function getTree(string $dir): array
+	public static function getTree(string $path): array
 	{
 		$dirs = [];
 
-		foreach(new FilesystemIterator($dir, FilesystemIterator::SKIP_DOTS) as $file)
+		foreach(new FilesystemIterator($path, FilesystemIterator::SKIP_DOTS) as $file)
 		{
 			/**
 			 * @var SplFileInfo $file
@@ -250,22 +250,29 @@ class Dir
 
 			$dirs[$file->getFilename()] = self::getTree($file->getPathname());
 		}
+		ksort($dirs, SORT_NATURAL);
 
 		return $dirs;
 	}
 
 	/**
-	 * @param string $dir
+	 * @param string $path
 	 * @param callable $callback Callback function for basename processing
 	 *
 	 * @return array
 	 */
-	public static function getFiles(string $dir, callable $callback = null): array
+	public static function getFilesTree(string $path, callable $callback = null): array
 	{
 		$files = [];
 
-		foreach(new FilesystemIterator($dir, FilesystemIterator::SKIP_DOTS) as $file)
+		foreach(new FilesystemIterator($path, FilesystemIterator::SKIP_DOTS) as $file)
 		{
+			// hidden files, eg. ".gitkeep"
+			if($file->getBasename()[0] === '.')
+			{
+				continue;
+			}
+
 			$basename = $callback ? $callback($file) : $file->getBasename();
 			if($basename === null)
 			{
@@ -281,11 +288,51 @@ class Dir
 
 				continue;
 			}
-
-			$files[$basename] = self::getFiles($file->getPathname(), $callback);
+			
+			// dir
+			$files[$basename] = self::getFilesTree($file->getPathname(), $callback);
 		}
 		// directories first
 		krsort($files, SORT_NATURAL);
+		
+		return $files;
+	}
+
+	/**
+	 * @param array $path
+	 * @param callable $callback Callback function for basename processing
+	 *
+	 * @return array
+	 */
+	public static function getFiles(string $path, callable $callback = null): array
+	{
+		$files = [];
+
+		$iterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
+		foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+		{
+			/**
+			* @var SplFileInfo $file
+			*/
+			if($file->isDir())
+			{
+				continue;
+			}
+			
+			// hidden files, eg. ".gitkeep"
+			if($file->getBasename()[0] === '.')
+			{
+				continue;
+			}
+			
+			$basename = $callback ? $callback($file) : $file->getBasename();
+			if($basename === null)
+			{
+				continue;
+			}
+			
+			$files[$basename] = $file;
+		}
 		
 		return $files;
 	}
