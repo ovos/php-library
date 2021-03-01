@@ -22,13 +22,15 @@ class Pdo extends \PDO
 	 * @throws PDOException on query failure
 	 * @see PDO::query
 	 *
-	 * @param string $queryString
+	 * @param string $query
+	 * @param ?int $fetchMode
+	 * @param mixed ...$fetchModeArgs
 	 *
 	 * @return PDOStatement|false
 	 *
 	 * @throws ProfilerException
 	 */
-	public function query($queryString)
+	public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs)
 	{
 		$args = func_get_args();
 
@@ -38,7 +40,7 @@ class Pdo extends \PDO
 		
 		try
 		{
-			$data = call_user_func_array('parent::query', $args);
+			$data = parent::query(...$args);
 		}
 		catch(PDOException $exception)
 		{
@@ -46,7 +48,7 @@ class Pdo extends \PDO
 			$measurement->stop();
 			// pass query to collector
 			Collector::getInstance()
-				->setQuery($queryString, [], $measurement);
+				->setQuery($query, [], $measurement);
 
 			throw $exception;
 		}
@@ -55,7 +57,7 @@ class Pdo extends \PDO
 
 		// Pass query  to collector
 		Collector::getInstance()
-			->setQuery($queryString, [], $measurement);
+			->setQuery($query, [], $measurement);
 
 		return $data;
 	}
@@ -67,13 +69,13 @@ class Pdo extends \PDO
 	 * @throws PDOException on query failure
 	 * @see PDO::query
 	 *
-	 * @param string $queryString
+	 * @param string $query
 	 *
 	 * @return int
 	 *
 	 * @throws ProfilerException
 	 */
-	public function exec($queryString): int
+	public function exec(string $query): int
 	{
 		// Execute query and measure time & memory usage
 		$measurement = new Measurement;
@@ -81,7 +83,7 @@ class Pdo extends \PDO
 		
 		try
 		{
-			$affectedRows = parent::exec($queryString);
+			$affectedRows = parent::exec($query);
 		}
 		catch(PDOException $exception)
 		{
@@ -90,7 +92,7 @@ class Pdo extends \PDO
 			
 			// pass query to collector
 			Collector::getInstance()
-				->setQuery($queryString, [], $measurement);
+				->setQuery($query, [], $measurement);
 
 			throw $exception;
 		}
@@ -99,7 +101,7 @@ class Pdo extends \PDO
 
 		// Pass query  to collector
 		Collector::getInstance()
-			->setQuery($queryString, [], $measurement);
+			->setQuery($query, [], $measurement);
 
 		return $affectedRows;
 	}

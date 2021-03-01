@@ -21,7 +21,7 @@ class Application
 	/**
 	 * @var null|Application
 	 */
-	public static null|Application $instance;
+	public static null|Application $instance = null;
 
 	/**#@+
 	 * Environment constants
@@ -529,7 +529,7 @@ class Application
 		if(services()->events->count())
 		{
 			/// JSON
-			if(\get_class($this->getResponse()) === Response\Json::class)
+			if($this->getResponse() instanceof Response\Json)
 			{
 				if($this->getConfig()->system->debug)
 				{
@@ -554,7 +554,7 @@ class Application
 			}
 			
 			// HTML or JSON with HTTP debug
-			if(\get_class($this->getResponse()) === Response\Html::class || $this->getRequest()->isHttpDebug())
+			if($this->getResponse() instanceof Response\Html || $this->getRequest()->isHttpDebug())
 			{
 				/** @var Response\Html $response */
 				$output = (string)$response->send();
@@ -604,14 +604,14 @@ class Application
 
 		if($response instanceof Response)
 		{
-			if(get_class($response) === Response\Json::class)
+			if($response instanceof Response\Json)
 			{
 				/**
 				 * @var Response\Json $response
 				 */
 				$this->_sendJsonResponse($response);
 			}
-			else if(get_class($response) === Response\Html::class)
+			else if($response instanceof Response\Html)
 			{
 				/*** @var Response\Html $response */
 				$this->_sendHtmlResponse($response);
