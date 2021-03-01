@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
-use Cache\Prefixed\PrefixedCachePool;
 use Ovos\Service;
+use Cache\Prefixed\PrefixedCachePool;
 use Cache\Adapter\Apcu\ApcuCachePool;
 
 /**
