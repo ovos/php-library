@@ -27,7 +27,7 @@ class Loader
 	/**
 	 * @var string
 	 */
-	public const CACHE_DIR = 'configs' . DIRECTORY_SEPARATOR;
+	//public const CACHE_DIR = 'configs' . DIRECTORY_SEPARATOR;
 
 	/**
 	 */
@@ -57,8 +57,8 @@ class Loader
 		$pool = $filesystem->getCachePool();
 		$pool->setFolder(self::CACHE_DIR);
 		*/
+		
 		$pool = $this->_memoryService->getPool();
-
 		if($pool->hasItem($cacheId))
 		{
 			$item = $pool->getItem($cacheId);

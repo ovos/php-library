@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Dir;
+use Ovos\Exception\NotFoundException;
+use Ovos\Exception\NotFoundException\FileNotFoundException;
 use ReflectionClass;
 use RecursiveIteratorIterator;
 use RecursiveDirectoryIterator;
@@ -21,6 +23,7 @@ use function array_slice;
  */
 class Router
 {
+
 	/**
 	 * @var Application
 	 */
@@ -45,6 +48,21 @@ class Router
 	 * @var Url
 	 */
 	protected Url $_url;
+
+	/**
+	 * @var string
+	 */
+	protected string $_extensionMatchPattern = '~^.+(\.\w+)$~i';
+	
+	/**
+	 * Don't treat these extensions as any other static file
+	 * 
+	 * @var array
+	 */
+	protected array $_nonStaticExtensions = [
+		'.xml',
+		'.html',
+	];
 
 	/**
 	 * @param Request $request
@@ -89,8 +107,45 @@ class Router
 	public function route(Request $request): void
 	{
 		$params = $this->_url->getComponents();
-		
+		$this->_routeFiles($params);
 		$this->_setRequest($request, $params);
+	}
+
+	/**
+	 * Handle routing of files
+	 * 
+	 * @param array $params
+	 *
+	 * @throws FileNotFoundException
+	 */
+	protected function _routeFiles(array $params): void
+	{
+		if($this->_request->isCli())
+		{
+			return;
+		}
+		
+		if(($count = count($params)) === 0)
+		{
+			return;
+		}
+		
+		if(preg_match(
+			$this->_extensionMatchPattern,
+			$params[$count - 1], 
+			$matches
+		) === 0)
+		{
+			return;
+		}
+		
+		if(in_array($matches[1], $this->_nonStaticExtensions))
+		{
+			return;
+		}
+		
+		$this->_url->setComponents([]);
+		throw new FileNotFoundException('File not found.');
 	}
 
 	/**
@@ -229,22 +284,25 @@ class Router
 			if($module->controllers)
 			{
 				$dir = $moduleDir . DIRECTORY_SEPARATOR . 'controllers';
-			
-				$moduleControllers = Dir::getFiles($dir, function($file)
+				
+				$moduleControllers = Dir::getFilesTree($dir, function($file)
 				{
 					/**
-					* @var SplFileObject $file
+					* @var SplFileInfo $file
 					*/
 					$basename = $file->getBasename('.php');
 					return Strings::snakeCase($basename);
 				});
 				
 				$controllers = Arrays::deepMerge($controllers, $moduleControllers);
-				// directories first
+				// directories (keys of array) first, ksort puts the directories last
+				// order is z-a
 				krsort($controllers, SORT_NATURAL);
 			}
 		}
-
+		
+		//var_dump($controllers);
+		return $controllers;
 		if($pool = services()->cache->getPerishablePool())
 		{
 			$item = $pool->getItem($cacheId)->set($controllers);

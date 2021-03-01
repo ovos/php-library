@@ -358,13 +358,23 @@ class Request
 	}
 
 	/**
-	 * Is the application run from command line
+	 * Is the application run from CLI (command line interface)
 	 *
 	 * @return bool
 	 */
 	public function isCli(): bool
 	{
 		return PHP_SAPI === 'cli';
+	}
+	
+	/**
+	 * Is the application run from HTTP
+	 *
+	 * @return bool
+	 */
+	public function isHttp(): bool
+	{
+		return $this->isCli() === false;
 	}
 
 	/**
