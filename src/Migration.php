@@ -54,18 +54,11 @@ abstract class Migration
 	{
 		if($this->_source === null)
 		{
-			$this->_initSource();
+			// get database connection
+			$this->_source = services()->database->get($this->_sourceName);
 		}
 
 		return $this->_source;
-	}
-
-	/**
-	 */
-	public function _initSource()
-	{
-		// get database connection
-		$this->_source = services()->database->get($this->_sourceName);
 	}
 
 	/**
