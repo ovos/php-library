@@ -100,9 +100,9 @@ abstract class Mysql extends Store
 	/**
 	 * @param QueryBuilder $query
 	 *
-	 * @return PDOStatement|false
+	 * @return false|PDOStatement
 	 */
-	public function prepareQuery(QueryBuilder $query): PDOStatement|false
+	public function prepareQuery(QueryBuilder $query): false|PDOStatement
 	{
 		return $this->getSource()->prepare($query->getSQL());
 	}
@@ -110,9 +110,9 @@ abstract class Mysql extends Store
 	/**
 	 * @param QueryBuilder $query
 	 *
-	 * @return int|false
+	 * @return false|int
 	 */
-	public function executeQuery(QueryBuilder $query): int|false
+	public function executeQuery(QueryBuilder $query): false|int
 	{
 		return $this->getSource()->exec($query->getSQL());
 	}
@@ -120,9 +120,9 @@ abstract class Mysql extends Store
 	/**
 	 * @param QueryBuilder $query
 	 *
-	 * @return PDOStatement|false
+	 * @return false|PDOStatement
 	 */
-	public function runQuery(QueryBuilder $query): PDOStatement|false
+	public function runQuery(QueryBuilder $query): false|PDOStatement
 	{
 		return $this->getSource()->query($query->getSQL());
 	}
@@ -147,81 +147,116 @@ abstract class Mysql extends Store
 	 */
 	public function insertQuery(Model $object)
 	{
-		$names = $values = [];
-		foreach($object as $name => $value)
-		{
-			$names[] = $name;
-			if($value instanceof Expression)
-			{
-				$values[] = $value->__toString();
-			}
-			else
-			{
-				$values[] = ':' . $name;
-			}
-		}
+		$values = $this->getQueryValues($object);
 
 		$sql = 'INSERT INTO ' . self::getTable() . ' (%s) VALUES (%s);';
-		$sql = sprintf($sql, implode(', ', $names), implode(', ', $values));
+		$sql = sprintf($sql, implode(', ', array_keys($values)), implode(', ', $values));
 
-		return $this->source()->prepare($sql);
+		$statement = $this->source()->prepare($sql);
+		$this->bindValues($statement, $object);
+		
+		return $statement;
 	}
-
 
 	/**
 	 * @param Model $object
 	 * @param array $conditions
-	 * @param string|null $table
 	 *
 	 * @return false|PDOStatement
 	 *
 	 * @throws Exception
 	 */
-	public function updateQuery(Model $object, array $conditions = [], ?string $table = null)
+	/*
+	public function insertUpdateQuery(Model $object, array $conditions = [])
+	{
+		$where = $this->getQueryValues($conditions);
+		$values = $this->getQueryValues($object);
+		
+		$sql = 'INSERT INTO ' . self::getTable() . ' (%s) VALUES (%s)'
+			. ' ON DUPLICATE KEY UPDATE %s;';
+		$sql = sprintf($sql,
+			implode(', ', array_keys($where + $values)),
+			implode(', ', $values),
+			implode(', ', array_map(
+				fn($value) => sprintf('%s=VALUES(%s)', $value, $value)
+			, array_keys($values))),
+		);
+
+		$statement = $this->source()->prepare($sql);
+		$this->bindValues($statement, $conditions);
+		$this->bindValues($statement, $object);
+		
+		return $statement;
+	}
+	*/
+
+	/**
+	 * @param Model $object
+	 * @param array $conditions
+	 *
+	 * @return false|PDOStatement
+	 *
+	 * @throws Exception
+	 */
+	public function updateQuery(Model $object, array $conditions = [])
 	{
 		if(empty($conditions))
 		{
 			throw new Exception('At least one update condition is required.');
 		}
 
-		$sets = [];
-		foreach($object as $name => $value)
+		$where = $this->getQueryValues($conditions, true);
+		$sets = $this->getQueryValues($object, true);
+
+		$sql = 'UPDATE ' . self::getTable() . ' SET %s'
+			. ' WHERE ' . implode(' AND ', $where);
+		$sql = sprintf($sql, implode(', ', $sets));
+
+		$statement = $this->source()->prepare($sql);
+		$this->bindValues($statement, $conditions);
+		$this->bindValues($statement, $object);
+		
+		return $statement;
+	}
+
+	/**
+	 * @param Model|array $fields
+	 * @param false $sets
+	 *
+	 * @return array
+	 */
+	public function getQueryValues(Model|array $fields, $sets = false): array
+	{
+		$values = [];
+	
+		foreach($fields as $field => $value)
 		{
 			if($value instanceof Expression)
 			{
-				$sets[] = $name . ' = ' . $value->__toString();
+				$values[$field] = $value->__toString();
+
 			}
 			else
 			{
-				$sets[] = $name . ' = :' . $name;
+				$values[$field] = ':' . $field;
+			}
+			
+			if($sets)
+			{
+				$values[$field] = $field . ' = ' . $values[$field];
 			}
 		}
-
-		$where = [];
-		foreach($conditions as $field => $value)
-		{
-			$where[] = $field . ' = :' . $field;
-		}
-
-		$sql = 'UPDATE ' . self::getTable() . ' SET %s WHERE ' . implode(' AND ', $where);
-		$sql = sprintf($sql, implode(', ', $sets));
-
-		$query = $this->source()->prepare($sql);
-		foreach($conditions as $field => $value)
-		{
-			$query->bindParam(':' . $field, $value, PDO::PARAM_STR);
-		}
-
-		return $query;
+		
+		return $values;
 	}
 
 	/**
 	 * @param PDOStatement $query
-	 * @param Model $object
+	 * @param Model|array $fields
 	 */
-	public function bindValues(PDOStatement $query, Model $object): void
+	public function bindValues(PDOStatement $query, Model|array $fields): void
 	{
-		foreach($object as $name => $value)
+		foreach($fields as $field => $value)
 		{
 			if($value instanceof Expression)
 			{
@@ -230,11 +265,11 @@ abstract class Mysql extends Store
 
 			if(is_numeric($value))
 			{
-				$query->bindValue(':' . $name, $value, PDO::PARAM_INT);
+				$query->bindValue(':' . $field, $value, PDO::PARAM_INT);
 			}
 			else
 			{
-				$query->bindValue(':' . $name, $value, PDO::PARAM_STR);
+				$query->bindValue(':' . $field, $value, PDO::PARAM_STR);
 			}
 		}
 	}

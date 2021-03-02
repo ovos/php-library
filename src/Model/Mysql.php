@@ -16,6 +16,7 @@ use PDOStatement;
 use ReflectionClass;
 use ReflectionObject;
 use ReflectionProperty;
+use in_array;
 use function Ovos\services;
 
 /**
@@ -83,7 +84,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @var self
 	 */
-	protected self $_updateObject;
+	protected null|self $_updateObject = null;
 
 	/**
 	 */
@@ -482,7 +483,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		$destination = new static; // late static binding
 		foreach($source as $property => $value)
 		{
-			if(\in_array($property, $skip, true) === true)
+			if(in_array($property, $skip, true) === true)
 			{
 				continue;
 			}
@@ -514,7 +515,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 		foreach($this as $property => $value)
 		{
-			if(\in_array($property, $skip, true) === true)
+			if(in_array($property, $skip, true) === true)
 			{
 				continue;
 			}
@@ -603,7 +604,6 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 		$this->triggerEvents('preInsert', 'preSave');
 		$query = $store->insertQuery($this);
-		$store->bindValues($query, $this);
 
 		$result = $query->execute();
 		if($this->_autoIncrementKey)
@@ -675,7 +675,6 @@ abstract class Mysql extends Model implements Iterator, Countable
 		$this->setUpdateObject($updateObject);
 		$this->triggerEvents('preUpdate', 'preSave');
 		$query = $store->updateQuery($updateObject, $conditions);
-		$store->bindValues($query, $updateObject);
 		$result = $query->execute();
 
 		// update current object on success
@@ -814,7 +813,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 		foreach($this as $property => $value)
 		{
-			if($filter === null || \in_array($property, $filter, true) === true)
+			if($filter === null || in_array($property, $filter, true) === true)
 			{
 				$values->{$property} = $this->__get($property);
 			}
