@@ -9,6 +9,9 @@ use Ovos\Store;
 use Ovos\Pdo\Expression;
 use PDO;
 use PDOStatement;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Query\QueryBuilder;
 use function Ovos\services;
 
 /**
@@ -45,18 +48,11 @@ abstract class Mysql extends Store
 	{
 		if($this->_source === null)
 		{
-			$this->_initSource();
+			// get database connection
+			$this->_source = services()->database->get($this->_sourceName);
 		}
 
 		return $this->_source;
-	}
-
-	/**
-	 */
-	public function _initSource(): void
-	{
-		// get database connection
-		$this->_source = services()->database->get($this->_sourceName);
 	}
 
 	/**
@@ -80,6 +76,25 @@ abstract class Mysql extends Store
 		}
 
 		return static::TABLE;
+	}
+
+	/**
+	 * @return QueryBuilder
+	 * @throws \Doctrine\DBAL\Exception
+	 */
+	public function query(): QueryBuilder
+	{
+		static $connection = null;
+		
+		if($connection === null)
+		{
+			$connection = DriverManager::getConnection([
+				'driver' => 'pdo_mysql',
+				'pdo' => $this->getSource(),
+			]);
+		}
+		
+		return $connection->createQueryBuilder();
 	}
 
 	/**
