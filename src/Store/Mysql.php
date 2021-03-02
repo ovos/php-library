@@ -98,6 +98,36 @@ abstract class Mysql extends Store
 	}
 
 	/**
+	 * @param QueryBuilder $query
+	 *
+	 * @return PDOStatement|false
+	 */
+	public function prepareQuery(QueryBuilder $query): PDOStatement|false
+	{
+		return $this->getSource()->prepare($query->getSQL());
+	}
+	
+	/**
+	 * @param QueryBuilder $query
+	 *
+	 * @return int|false
+	 */
+	public function executeQuery(QueryBuilder $query): int|false
+	{
+		return $this->getSource()->exec($query->getSQL());
+	}
+	
+	/**
+	 * @param QueryBuilder $query
+	 *
+	 * @return PDOStatement|false
+	 */
+	public function runQuery(QueryBuilder $query): PDOStatement|false
+	{
+		return $this->getSource()->query($query->getSQL());
+	}
+
+	/**
 	 * @return bool
 	 */
 	public function optimize()
