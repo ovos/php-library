@@ -159,6 +159,7 @@ abstract class Mysql extends Store
 	}
 
 	/**
+	 * @deprecated
 	 * @param Model $object
 	 * @param array $conditions
 	 *
@@ -192,29 +193,22 @@ abstract class Mysql extends Store
 
 	/**
 	 * @param Model $object
-	 * @param array $conditions
 	 *
 	 * @return false|PDOStatement
 	 *
 	 * @throws Exception
 	 */
-	public function updateQuery(Model $object, array $conditions = [])
+	public function updateQuery(Model $model, Model $updateObject)
 	{
-		if(empty($conditions))
-		{
-			throw new Exception('At least one update condition is required.');
-		}
-
-		$where = $this->getQueryValues($conditions, true);
-		$sets = $this->getQueryValues($object, true);
+		$sets = $this->getQueryValues($updateObject, true);
 
 		$sql = 'UPDATE ' . self::getTable() . ' SET %s'
-			. ' WHERE ' . implode(' AND ', $where);
+			. ' WHERE ' . $model->getPrimaryKeysConditions();
 		$sql = sprintf($sql, implode(', ', $sets));
 
 		$statement = $this->source()->prepare($sql);
-		$this->bindValues($statement, $conditions);
-		$this->bindValues($statement, $object);
+		$model->bindPrimaryKeys($statement);
+		$this->bindValues($statement, $updateObject);
 		
 		return $statement;
 	}
@@ -297,5 +291,17 @@ abstract class Mysql extends Store
 	public function insert($model): bool
 	{
 		return $model->insert();
+	}
+	
+	/**
+	 * @param PDOStatement $statement
+	 * @param string $class
+	 *
+	 * @return array
+	 */
+	public function fetchGrouped(PDOStatement $statement, string $class): array
+	{
+		$result = $statement->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP , $class); // group by first column
+		return array_map(fn($row) => reset($row), $result);
 	}
 }
