@@ -18,7 +18,7 @@ trait Cli
 	 *
 	 * @var int
 	 */
-	protected int $_pid;
+	protected null|int $_pid = null;
 
 	/**
 	 * @var bool

@@ -228,7 +228,6 @@ abstract class Mysql extends Store
 			if($value instanceof Expression)
 			{
 				$values[$field] = $value->__toString();
-
 			}
 			else
 			{
