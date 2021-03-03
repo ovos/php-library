@@ -50,7 +50,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	protected array $_primaryKeys = ['id'];
 
 	/**
-	 * Autoincrement primary key
+	 * Autoincrement key
 	 *
 	 * @var null|string
 	 */
@@ -80,6 +80,13 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @var array
 	 */
 	protected array $_modified = [];
+	
+	/**
+	 * A record exists if it was fetched with PK, otherwise it's considered new
+	 * 
+	 * @var bool
+	 */
+	protected bool $_exists = false;
 
 	/**
 	 * @var self
@@ -87,10 +94,18 @@ abstract class Mysql extends Model implements Iterator, Countable
 	protected null|self $_updateObject = null;
 
 	/**
+	 * @param array|null $properties
 	 */
-	public function __construct()
+	public function __construct(?array $properties = null)
 	{
 		parent::__construct();
+		
+		$this->_exists = $this->_primaryKeysLoaded();
+		
+		if($properties !== null)
+		{
+			$this->fromArray($properties);
+		}
 		
 		// reset modified values (after initializing the object by PDO)
 		$this->resetModified();
@@ -613,6 +628,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		
 		// reset modified values
 		$this->resetModified();
+		$this->_exists = true;
 
 		return $result;
 	}
@@ -658,23 +674,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function update(self $updateObject): bool
 	{
-		$conditions = [];
-		foreach($this->_primaryKeys as $primaryKey)
-		{
-			if(empty($this->{$primaryKey}))
-			{
-				throw new Exception('Primary key "%s" cannot be empty.', $primaryKey);
-			}
-
-			$conditions[$primaryKey] = $this->{$primaryKey};
-		}
-
 		$storeClass = static::getStoreClass();
 		/** @var Store $store */
 		$store = new $storeClass;
 		$this->setUpdateObject($updateObject);
 		$this->triggerEvents('preUpdate', 'preSave');
-		$query = $store->updateQuery($updateObject, $conditions);
+		$query = $store->updateQuery($this, $updateObject);
 		$result = $query->execute();
 
 		// update current object on success
@@ -697,6 +702,11 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function save(): bool
 	{
+		if($this->exists() === false)
+		{
+			return $this->insert();
+		}
+	
 		if($this->isModified() === false)
 		{
 			return false;
@@ -719,9 +729,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 		$query = $this->source()->prepare('
 			SELECT ' . implode(', ', $properties) . '
 			FROM ' . self::getTable() . '
-			WHERE ' . $this->_getPrimaryKeysCondition()
+			WHERE ' . $this->getPrimaryKeysConditions()
 		);
-		$this->_bindPrimaryKeys($query);
+		$this->bindPrimaryKeys($query);
 		$result = $query->execute();
 
 		if($result)
@@ -750,7 +760,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		// refresh only loaded fields
 		$query = $this->source()->prepare('
 			DELETE FROM ' . self::getTable() . '
-			WHERE ' . $this->_getPrimaryKeysCondition()
+			WHERE ' . $this->getPrimaryKeysConditions()
 		);
 		$this->_bindPrimaryKeys($query);
 
@@ -768,11 +778,43 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * @return bool
+	 */
+	public function exists(): bool
+	{
+		return $this->_exists;
+	}
+
+	/**
+	 * Can be called only after population by PDO::FETCH_CLASS
+	 * @see https://electrictoolbox.com/php-pdo-fetch-class-gotcha/
+	 * 
+	 * @return bool
+	 */
+	protected function _primaryKeysLoaded(): bool
+	{
+		foreach($this->_primaryKeys as $primaryKey)
+		{
+			if(empty($this->_properties[$primaryKey]))
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	/**
 	 * @return string
 	 */
-	protected function _getPrimaryKeysCondition(): string
+	public function getPrimaryKeysConditions(): string
 	{
-		$conditions = array();
+		if($this->exists() === false)
+		{
+			throw new Exception('Primary keys have to be selected for update.');
+		}
+	
+		$conditions = [];
 		foreach($this->_primaryKeys as $primaryKey)
 		{
 			$conditions[] = sprintf('%s = :%s', $primaryKey, $primaryKey);
@@ -782,22 +824,17 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @param PDOStatement $query
+	 * @param PDOStatement $statement
 	 *
 	 * @return void
 	 *
 	 * @throws Exception
 	 */
-	protected function _bindPrimaryKeys(PDOStatement $query): void
+	public function bindPrimaryKeys(PDOStatement $statement): void
 	{
 		foreach($this->_primaryKeys as $primaryKey)
 		{
-			if(empty($this->_properties[$primaryKey]))
-			{
-				throw new Exception('Primary key "%s" cannot be empty.', $primaryKey);
-			}
-
-			$query->bindParam(':' . $primaryKey, $this->_properties[$primaryKey],
+			$statement->bindParam(':' . $primaryKey, $this->_properties[$primaryKey],
 				PDO::PARAM_STR);
 		}
 	}
