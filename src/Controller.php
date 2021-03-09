@@ -83,42 +83,7 @@ class Controller
 			return null;
 		}
 		
-		// detect type of action argument, cast string to type if needed
-		if(count($requestParams))
-		{
-			$method = new ReflectionMethod($this, $action);
-			$methodParams = $method->getParameters();
-			
-			$namedRequestParams = Arrays::getPairs($requestParams);
-			$namesOfMethodParams = array_column($methodParams, 'name');
-			$namesOfRequestParams = array_keys($namedRequestParams);
-			 // if first name matches any of the method param names, treat params as named parameters
-			$named = array_search($namesOfRequestParams[0], $namesOfMethodParams, true) !== false;
-			
-			$actionParams = $named ? $namedRequestParams : $requestParams;
-			
-			foreach($methodParams as $key => $methodParam)
-			{
-				$valueKey = $named ? $methodParam->name : $key;
-				if(isset($requestParams[$valueKey])
-					&& ($type = $methodParam->getType()))
-				{
-					$typeName = $type->getName();
-					if($typeName === 'int')
-					{
-						$requestParams[$valueKey] = (int)$requestParams[$valueKey];
-					}
-					/* already done in Router::_setRequest
-					else if($typeName === 'bool')
-					{
-						$requestParams[$valueKey] = (bool)$requestParams[$valueKey];
-					}
-					*/
-				}
-			}
-		}
-		var_dump($actionParams);
-		$response = $this->$action(...$actionParams);
+		$response = $this->$action(...$this->getActionParams($action, $requestParams));
 		if($response)
 		{
 			if(($response instanceof Response) === false)
@@ -131,6 +96,70 @@ class Controller
 		$this->postDispatch();
 
 		return $response;
+	}
+
+	/**
+	 * @param string $action
+	 * @param array $requestParams
+	 *
+	 * @return array
+	 */
+	public function getActionParams(string $action, array $requestParams = []): array
+	{
+		$count = count($requestParams);
+		if($count === 0)
+		{
+			return [];
+		}
+		
+		$method = new ReflectionMethod($this, $action);
+		$methodParams = $method->getParameters();
+		
+		if($count < 2)
+		{
+			return $this->_getCastedParams($methodParams, $requestParams);
+		}
+			
+		$namedRequestParams = Arrays::getPairs($requestParams);
+		$namesOfMethodParams = array_column($methodParams, 'name');
+		$namesOfRequestParams = array_keys($namedRequestParams);
+		 // if first name matches any of the method param names, treat params as named parameters
+		$named = array_search($namesOfRequestParams[0], $namesOfMethodParams, true) !== false;
+		
+		// not named parameters
+		if($named === false)
+		{
+			return $this->_getCastedParams($methodParams, $requestParams);
+		}
+		
+		return $this->_getCastedParams($methodParams, $namedRequestParams, true);
+	}
+
+	/**
+	 * @param array $methodParams
+	 * @param array $requestParams
+	 * @param bool $named
+	 *
+	 * @return array
+	 */
+	protected function _getCastedParams(
+		array $methodParams, array $requestParams, bool $named = false): array
+	{
+		foreach($methodParams as $key => $methodParam)
+		{
+			$valueKey = $named ? $methodParam->name : $key;
+			if(isset($requestParams[$valueKey])
+				&& ($type = $methodParam->getType()))
+			{
+				$typeName = $type->getName();
+				if($typeName === 'int')
+				{
+					$requestParams[$valueKey] = (int)$requestParams[$valueKey];
+				}
+			}
+		}
+		
+		return $requestParams;
 	}
 
 	/**

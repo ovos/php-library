@@ -14,6 +14,10 @@ use function Ovos\services;
 use function is_string;
 use function in_array;
 use function array_slice;
+use function is_numeric;
+use function strcmp;
+use function array_key_exists;
+use function count;
 
 /**
  * Router
@@ -199,15 +203,18 @@ class Router
 		foreach($params as $key => $param)
 		{
 			// determine the correct controller
+			// controller namespace loop
+			// while param is a valid namespace of controller, or a controller,
+			// continue to the last matching one
 			foreach($controllers as $name => $children)
 			{
 				if(is_string($name)
 					&& isset($params[$key + 1])
 					&& strcmp($name, $param) === 0
-					&& (in_array($params[$key + 1], $children, true)
-						|| array_key_exists($params[$key + 1], $children)))
+					&& (in_array($params[$key + 1], $children, true) // file
+						|| array_key_exists($params[$key + 1], $children))) // dir
 				{
-					$controllers = $children;
+					$controllers = $children; // loop children
 					$controllerClass.= Strings::studlyCase($param) . '\\';
 					$controller.= $param . '/';
 
@@ -233,7 +240,7 @@ class Router
 		}
 
 		// set action
-		if(\count($params))
+		if(count($params))
 		{
 			if(is_numeric($params[0]))
 			{
