@@ -32,7 +32,7 @@ class Form implements Iterator
 	 *
 	 * @var Form
 	 */
-	protected Form $_form;
+	protected null|Form $_form = null;
 
 	/**
 	 * @var Url
@@ -79,7 +79,7 @@ class Form implements Iterator
 	public function getId(): ?string
 	{
 		$id = $this->_id;
-		if($this->_form)
+		if($this->_form !== null)
 		{
 			$id = $this->_form->getId() . '_' . $id;
 		}
