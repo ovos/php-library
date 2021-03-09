@@ -239,27 +239,6 @@ class Request
 	{
 		return $this->_params;
 	}
-
-	/**
-	 * name => value
-	 *
-	 * @return array
-	 */
-	public function getPairedParams(): array
-	{
-		$params = [];
-
-		$count = \count($this->_params);
-		for($i = 0; $i < $count; $i++)
-		{
-			if($i % 2 === 0 && isset($this->_params[$i + 1])) // param pairs
-			{
-				$params[$this->_params[$i]] = $this->_params[$i + 1];
-			}
-		}
-
-		return $params;
-	}
 	
 	/**
 	 * @param string $name
