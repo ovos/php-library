@@ -14,16 +14,43 @@ use Ovos\Url as BaseUrl;
  */
 class Url extends Test
 {
-	public function firstTest()
+	public function self()
 	{
-		$url = new BaseUrl('test', 'param');
-		$urlWithHost = $url->getWithHost();
-		
-		return true;
+		$url = new BaseUrl;
+		return 'tests/run/' === $url->getUrl(true);
 	}
 	
-	public function secondTest()
+	public function fromArray()
 	{
-		return true;
+		$url = new BaseUrl('test', 'param');
+		return 'test/param/' === $url->getUrl(true);
+	}
+	
+	public function fromStringBs()
+	{
+		$url = new BaseUrl('test/param/');
+		return 'test/param/' === $url->getUrl(true);
+	}
+		
+	public function fromString()
+	{
+		$url = new BaseUrl('test/param');
+		return 'test/param/' === $url->getUrl(true);
+	}
+	
+	public function add()
+	{
+		$url = new BaseUrl('test');
+		$url->add('param' , 'two');
+		
+		return 'test/param/two/' === $url->getUrl(true);
+	}	
+	
+	public function setLast()
+	{
+		$url = new BaseUrl('test', 'param');
+		$url->setLast('different');
+		
+		return 'test/different/' === $url->getUrl(true);
 	}
 }

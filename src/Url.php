@@ -170,8 +170,7 @@ class Url
 	 */
 	public function addComponent($component): self
 	{
-		end($this->_components);
-		$lastComponentKey = key($this->_components);
+		$lastComponentKey = $this->_getLastComponentKey();
 		if($this->_components[$lastComponentKey] !== $component)
 		{
 			$this->_components[] = $component;	
@@ -200,15 +199,14 @@ class Url
 	 *
 	 * @return $this
 	 */
-	public function setLastComponent($component): self
+	public function setLastComponent(?string $component): self
 	{
 		if(\count($this->_components) === 0)
 		{
 			return $this;
 		}
-	
-		end($this->_components);
-		$lastComponentKey = key($this->_components);
+		
+		$lastComponentKey = $this->_getLastComponentKey();
 		if($component === null)
 		{
 			unset($this->_components[$lastComponentKey]);
@@ -219,6 +217,18 @@ class Url
 		}
 
 		return $this;
+	}
+
+	/**
+	 * @return int|string|null
+	 */
+	protected function _getLastComponentKey(): null|int|string
+	{
+		end($this->_components);
+		$lastComponentKey = key($this->_components);
+		reset($this->_components);
+		
+		return $lastComponentKey;
 	}
 	
 	/**
@@ -296,7 +306,7 @@ class Url
 	 *
 	 * @return string
 	 */
-	public function getUrl(bool $relative = null): string
+	public function getUrl(bool $relative = false): string
 	{
 		$components = $this->getComponents();
 

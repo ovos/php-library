@@ -14,14 +14,19 @@ use Ovos\Form as BaseForm;
  */
 class Form extends Test
 {
-	public function firstTest()
+	public function subformId()
 	{
-		$form = new BaseForm;
-		return true;
+		$form = new BaseForm('form');
+		$subform = new BaseForm('subform');
+		$subform->setForm($form);
+		
+		return $subform->getId() === 'form_subform';
 	}
 	
+	/*
 	public function secondTest()
 	{
 		return true;
 	}
+	*/
 }
