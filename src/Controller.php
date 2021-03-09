@@ -69,11 +69,11 @@ class Controller
 
 	/**
 	 * @param string $action
-	 * @param array $params
+	 * @param array $requestParams
 	 *
 	 * @return null|Response
 	 */
-	public function dispatch($action, $params = []): ?Response
+	public function dispatch(string $action, array $requestParams = []): ?Response
 	{
 		$this->setDispatchedAction($action);
 
@@ -83,29 +83,7 @@ class Controller
 			return null;
 		}
 		
-		// detect type of action argument, cast string to type if needed
-		if(count($params))
-		{
-			$method = new ReflectionMethod($this, $action);
-			$parameters = $method->getParameters();
-			foreach($parameters as $key => $parameter)
-			{
-				if(isset($params[$key]) && ($type = $parameter->getType()))
-				{
-					$typeName = $type->getName();
-					if($typeName === 'int')
-					{
-						$params[$key] = (int)$params[$key];
-					}
-					else if($typeName === 'bool')
-					{
-						$params[$key] = (bool)$params[$key];
-					}
-				}
-			}
-		}
-		
-		$response = $this->$action(...$params);
+		$response = $this->$action(...$this->getActionParams($action, $requestParams));
 		if($response)
 		{
 			if(($response instanceof Response) === false)
@@ -118,6 +96,70 @@ class Controller
 		$this->postDispatch();
 
 		return $response;
+	}
+
+	/**
+	 * @param string $action
+	 * @param array $requestParams
+	 *
+	 * @return array
+	 */
+	public function getActionParams(string $action, array $requestParams = []): array
+	{
+		$count = count($requestParams);
+		if($count === 0)
+		{
+			return [];
+		}
+		
+		$method = new ReflectionMethod($this, $action);
+		$methodParams = $method->getParameters();
+		
+		if($count < 2)
+		{
+			return $this->_getCastedParams($methodParams, $requestParams);
+		}
+			
+		$namedRequestParams = Arrays::getPairs($requestParams);
+		$namesOfMethodParams = array_column($methodParams, 'name');
+		$namesOfRequestParams = array_keys($namedRequestParams);
+		 // if first name matches any of the method param names, treat params as named parameters
+		$named = array_search($namesOfRequestParams[0], $namesOfMethodParams, true) !== false;
+		
+		// not named parameters
+		if($named === false)
+		{
+			return $this->_getCastedParams($methodParams, $requestParams);
+		}
+		
+		return $this->_getCastedParams($methodParams, $namedRequestParams, true);
+	}
+
+	/**
+	 * @param array $methodParams
+	 * @param array $requestParams
+	 * @param bool $named
+	 *
+	 * @return array
+	 */
+	protected function _getCastedParams(
+		array $methodParams, array $requestParams, bool $named = false): array
+	{
+		foreach($methodParams as $key => $methodParam)
+		{
+			$valueKey = $named ? $methodParam->name : $key;
+			if(isset($requestParams[$valueKey])
+				&& ($type = $methodParam->getType()))
+			{
+				$typeName = $type->getName();
+				if($typeName === 'int')
+				{
+					$requestParams[$valueKey] = (int)$requestParams[$valueKey];
+				}
+			}
+		}
+		
+		return $requestParams;
 	}
 
 	/**
@@ -145,7 +187,7 @@ class Controller
 	 *
 	 * @return $this
 	 */
-	public function setParams($params): self
+	public function setParams(array $params): self
 	{
 		$this->_params = $params;
 
@@ -161,11 +203,11 @@ class Controller
 	}
 
 	/**
-	 * @param string $path (optional)
+	 * @param string $path
 	 *
 	 * @return $this
 	 */
-	public function addTranslationPath($path = null): self
+	public function addTranslationPath(string $path): self
 	{
 		$this->_request->getLocale()->getTranslator()->addTranslationPath($path);
 
@@ -353,7 +395,6 @@ class Controller
 		
 		return $plugins;
 	}
-	
 	
 	/**
 	 * @param null|ArrayObject $plugins

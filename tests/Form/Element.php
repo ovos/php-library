@@ -14,6 +14,7 @@ use Ovos\Form\Element as BaseElement;
  */
 class Element extends Test
 {
+	/*
 	public function firstTest()
 	{
 		return true;
@@ -23,4 +24,5 @@ class Element extends Test
 	{
 		return false;
 	}
+	*/
 }
