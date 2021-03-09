@@ -8,6 +8,7 @@ use function func_num_args;
 use function func_get_args;
 use function is_array;
 use function call_user_func_array;
+use count;
 
 /**
  * Arrays
@@ -115,4 +116,28 @@ class Arrays
 			break;
 		}
 	}
+	
+	/**
+	 * Group values in pairs
+	 * 
+	 * name => value
+	 *
+	 * @return array
+	 */
+	public static function getPairs(array $elements): array
+	{
+		$paired = [];
+
+		$count = count($elements);
+		for($i = 0; $i < $count; $i+=2)
+		{
+			if($i % 2 === 0
+				&& isset($elements[$i + 1])) // param pairs
+			{
+				$paired[$elements[$i]] = $elements[$i + 1];
+			}
+		}
+
+		return $paired;
+	}	
 }

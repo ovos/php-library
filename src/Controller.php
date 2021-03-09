@@ -69,11 +69,11 @@ class Controller
 
 	/**
 	 * @param string $action
-	 * @param array $params
+	 * @param array $requestParams
 	 *
 	 * @return null|Response
 	 */
-	public function dispatch($action, $params = []): ?Response
+	public function dispatch(string $action, array $requestParams = []): ?Response
 	{
 		$this->setDispatchedAction($action);
 
@@ -84,28 +84,41 @@ class Controller
 		}
 		
 		// detect type of action argument, cast string to type if needed
-		if(count($params))
+		if(count($requestParams))
 		{
 			$method = new ReflectionMethod($this, $action);
-			$parameters = $method->getParameters();
-			foreach($parameters as $key => $parameter)
+			$methodParams = $method->getParameters();
+			
+			$namedRequestParams = Arrays::getPairs($requestParams);
+			$namesOfMethodParams = array_column($methodParams, 'name');
+			$namesOfRequestParams = array_keys($namedRequestParams);
+			 // if first name matches any of the method param names, treat params as named parameters
+			$named = array_search($namesOfRequestParams[0], $namesOfMethodParams, true) !== false;
+			
+			$actionParams = $named ? $namedRequestParams : $requestParams;
+			
+			foreach($methodParams as $key => $methodParam)
 			{
-				if(isset($params[$key]) && ($type = $parameter->getType()))
+				$valueKey = $named ? $methodParam->name : $key;
+				if(isset($requestParams[$valueKey])
+					&& ($type = $methodParam->getType()))
 				{
 					$typeName = $type->getName();
 					if($typeName === 'int')
 					{
-						$params[$key] = (int)$params[$key];
+						$requestParams[$valueKey] = (int)$requestParams[$valueKey];
 					}
+					/* already done in Router::_setRequest
 					else if($typeName === 'bool')
 					{
-						$params[$key] = (bool)$params[$key];
+						$requestParams[$valueKey] = (bool)$requestParams[$valueKey];
 					}
+					*/
 				}
 			}
 		}
-		
-		$response = $this->$action(...$params);
+		var_dump($actionParams);
+		$response = $this->$action(...$actionParams);
 		if($response)
 		{
 			if(($response instanceof Response) === false)
@@ -145,7 +158,7 @@ class Controller
 	 *
 	 * @return $this
 	 */
-	public function setParams($params): self
+	public function setParams(array $params): self
 	{
 		$this->_params = $params;
 
@@ -161,11 +174,11 @@ class Controller
 	}
 
 	/**
-	 * @param string $path (optional)
+	 * @param string $path
 	 *
 	 * @return $this
 	 */
-	public function addTranslationPath($path = null): self
+	public function addTranslationPath(string $path): self
 	{
 		$this->_request->getLocale()->getTranslator()->addTranslationPath($path);
 
@@ -353,7 +366,6 @@ class Controller
 		
 		return $plugins;
 	}
-	
 	
 	/**
 	 * @param null|ArrayObject $plugins
