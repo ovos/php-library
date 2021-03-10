@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function ob_get_level;
+
 /**
  * Response
  *
@@ -146,7 +148,10 @@ class Response
 			return null;
 		}
 
-		$this->sendHeaders();
+		if(ob_get_level() === 0) // nothing sent before
+		{
+			$this->sendHeaders();
+		}
 
 		echo $this;
 

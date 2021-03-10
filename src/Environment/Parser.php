@@ -1,9 +1,8 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Config;
+namespace Ovos\Environment;
 
-use Ovos\Environment;
 use Ovos\Exception;
 
 /**
@@ -16,24 +15,16 @@ class Parser
 {
 	/**
 	 * @param string $file
-	 * @param Environment $environment
-	 * 
 	 * @return null|array
 	 */
-	public static function parse(string $file, Environment $environment = null): ?array
+	public static function parse(string $file): ?array
 	{
-		$result = yaml_parse_file(
-			$file, 
-			0, 
-			$ndocs,
-			$environment->getYamlTags()
-		);
-		
+		$result = parse_ini_file($file, true, INI_SCANNER_TYPED);
 		if($result === false)
 		{
 			return null;
 		}
-		
+
 		return $result;
 	}
 }

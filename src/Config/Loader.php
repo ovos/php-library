@@ -6,10 +6,10 @@ namespace Ovos\Config;
 use Ovos\Arrays;
 use Ovos\Cache\Filesystem;
 use Ovos\ArrayObject;
+use Ovos\Environment;
 use Ovos\Exception;
 use Ovos\Service\Memory;
 use Ovos\Services;
-use function Ovos\services;
 
 /**
  * Loader
@@ -28,7 +28,7 @@ class Loader
 	 * @var string
 	 */
 	//public const CACHE_DIR = 'configs' . DIRECTORY_SEPARATOR;
-
+	
 	/**
 	 */
 	public function __construct()
@@ -38,16 +38,17 @@ class Loader
 
 	/**
 	 * @param string $file
-	 * @param string $rootSection
+	 * @param Environment $environment
 	 * @param string $cacheId
 	 *
-	 * @return ArrayObject|null
+	 * @return null|ArrayObject
 	 */
 	public function load(string $file,
-		string $rootSection,
+		Environment $environment,
 		string $cacheId = null
 	): ?ArrayObject
 	{
+		$rootSection = $environment->getEnv();
 		$mTime = filemtime($file);
 		$cacheId = ($cacheId ?? basename($file)) . '_'
 			. str_replace('-', '_', $rootSection);
@@ -65,11 +66,11 @@ class Loader
 			$itemValue = $item->get();
 			if($itemValue->mtime === $mTime)
 			{
-				return $itemValue->config;
+				//return $itemValue->config;
 			}
 		}
 
-		$config = Parser::parse($file);
+		$config = Parser::parse($file, $environment);
 		if($config === null)
 		{
 			return null;
