@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Config\Loader;
+use Ovos\Environment;
+use Ovos\Environment\Loader as EnvLoader;
+use Ovos\Config\Loader as ConfigLoader;
 use Ovos\Service\Memory;
 use Ovos\View\Layout;
 use Ovos\Pdo\Profiler\Reporter;
@@ -24,12 +26,6 @@ class Application
 	public static null|Application $instance = null;
 
 	/**#@+
-	 * Environment constants
-	 */
-	public const ENV_PRODUCTION = 'production';
-	/**#@-*/
-
-	/**#@+
 	 * Interface constants
 	 */
 	public const INT_HTTP = 'http';
@@ -39,9 +35,9 @@ class Application
 	/**
 	 * The environment state of current application
 	 *
-	 * @var string
+	 * @var Environment
 	 */
-	protected string $_environment;
+	protected Environment $_environment;
 
 	/**
 	 * The interface of current application
@@ -226,11 +222,15 @@ class Application
 	protected function _initEnvironment(): self
 	{
 		// get environment from file
-		$environmentFile = BASE_DIR . 'env';
-		$environment = file_exists($environmentFile) ? rtrim(file_get_contents($environmentFile)) : 'production';
-
-		$this->_environment = $environment;
-		$this->_config = $this->getConfig(BASE_DIR . 'application/configs/environments.yml', $environment);
+		$environmentFile = BASE_DIR . Environment::ENV_FILE;
+		$loader = new EnvLoader;
+		$environment = $loader->load($environmentFile);
+		$this->_environment = $environment ? $environment : new Environment;
+		
+		$this->_config = $this->getConfig(
+			BASE_DIR . 'application/configs/environments.yml',
+			$environment
+		);
 
 		return $this;
 	}
@@ -238,7 +238,7 @@ class Application
 	/**
 	 * Returns current environment
 	 *
-	 * @return string
+	 * @return Environment
 	 */
 	public function getEnvironment(): string
 	{
@@ -289,21 +289,23 @@ class Application
 	 * Returns the config object (with optional array access)
 	 *
 	 * @param null|string $configFile
-	 * @param null|string $rootSection
+	 * @param null|Environment $environment
 	 *
 	 * @return ArrayObject
 	 */
-	public function getConfig(string $configFile = null, string $rootSection = null): ArrayObject
+	public function getConfig(
+		string $configFile = null,
+		Environment $environment = null): ArrayObject
 	{
-		if($rootSection === null && $configFile === null)
+		if($environment === null && $configFile === null)
 		{
 			return $this->_config;
 		}
 
 		if(!isset($this->_configs[$configFile]))
 		{
-			$loader = new Loader;
-			$config = $loader->load($configFile, $rootSection);
+			$loader = new ConfigLoader;
+			$config = $loader->load($configFile, $environment);
 			$this->_configs[$configFile] = $config;
 		}
 
