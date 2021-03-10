@@ -139,5 +139,47 @@ class Arrays
 		}
 
 		return $paired;
-	}	
+	}
+	
+
+	/**
+	 * Returns a flattened array
+	 *
+	 * example:
+	 * 		[('Data' => ['first_name' => 'Heniek']]
+	 * will be transformed to
+	 * 		['Data[first_name]' => 'Heniek']
+	 *
+	 * @param array $array
+	 * @return array
+	 */
+	public static function flatten(array $array)
+	{
+		$flat = [];
+		foreach($array as $key => $value)
+		{
+			if(is_array($value))
+			{
+				$value = self::flatten($value);
+				foreach($value as $column => $columnValue)
+				{
+					if($arrayColumn = strstr($column, '['))
+					{
+						$column = '[' . str_replace($arrayColumn, '', $column) . ']' . $arrayColumn;
+					}
+					else
+					{
+						$column = '[' . $column . ']';
+					}
+					$flat[$key . $column] = $columnValue;
+				}
+			}
+			else
+			{
+				$flat[$key] = $value;
+			}
+		}
+
+		return $flat;
+	}
 }

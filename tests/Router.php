@@ -41,6 +41,20 @@ class Router extends Test
 		
 		return $firstParam === $controller->firstParam
 			&& $secondParam === $controller->secondParam;
+	}	
+	
+	public function parametersNamedSkipOptional()
+	{
+		$firstParam = false;
+		$secondParam = false;
+	
+		$controller = new RouterTestController;
+		$controller->dispatch('test', [
+			'secondParam', $secondParam
+		]);
+		
+		return $firstParam === $controller->firstParam
+			&& $secondParam === $controller->secondParam;
 	}
 }
 
