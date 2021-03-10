@@ -45,7 +45,7 @@ class Loader
 		if($pool->hasItem($cacheId))
 		{
 			$item = $pool->getItem($cacheId);
-			//return $item->get();
+			return $item->get();
 		}
 
 		$config = Parser::parse($file);

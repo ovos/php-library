@@ -66,7 +66,7 @@ class Loader
 			$itemValue = $item->get();
 			if($itemValue->mtime === $mTime)
 			{
-				//return $itemValue->config;
+				return $itemValue->config;
 			}
 		}
 
