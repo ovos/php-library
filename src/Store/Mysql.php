@@ -63,7 +63,7 @@ abstract class Mysql extends Store
 	{
 		return $this->getSource();
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -119,9 +119,19 @@ abstract class Mysql extends Store
 	/**
 	 * @return bool
 	 */
+	public function tableExists(): bool
+	{
+		return $this->getSource()->query('
+			SHOW TABLES LIKE "' . self::getTable() . '"
+		')->fetch(PDO::FETCH_NUM) !== false;
+	}
+
+	/**
+	 * @return bool
+	 */
 	public function optimize()
 	{
-		return $this->source()->query('
+		return $this->getSource()->query('
 			OPTIMIZE
 			TABLE ' . self::getTable() . '
 		')->closeCursor();
@@ -141,7 +151,7 @@ abstract class Mysql extends Store
 		$sql = 'INSERT INTO ' . self::getTable() . ' (%s) VALUES (%s);';
 		$sql = sprintf($sql, implode(', ', array_keys($values)), implode(', ', $values));
 
-		$statement = $this->source()->prepare($sql);
+		$statement = $this->getSource()->prepare($sql);
 		$this->bindValues($statement, $object);
 		
 		return $statement;
@@ -172,7 +182,7 @@ abstract class Mysql extends Store
 			, array_keys($values))),
 		);
 
-		$statement = $this->source()->prepare($sql);
+		$statement = $this->getSource()->prepare($sql);
 		$this->bindValues($statement, $conditions);
 		$this->bindValues($statement, $object);
 		
@@ -195,7 +205,7 @@ abstract class Mysql extends Store
 			. ' WHERE ' . $model->getPrimaryKeysConditions();
 		$sql = sprintf($sql, implode(', ', $sets));
 
-		$statement = $this->source()->prepare($sql);
+		$statement = $this->getSource()->prepare($sql);
 		$model->bindPrimaryKeys($statement);
 		$this->bindValues($statement, $updateObject);
 		
