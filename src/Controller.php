@@ -155,7 +155,8 @@ class Controller
 				&& ($type = $methodParam->getType()))
 			{
 				$typeName = $type->getName();
-				if($typeName === 'int')
+				if($typeName === 'int'
+					|| ($typeName === '?int' && $requestParams[$valueKey] !== null))
 				{
 					$requestParams[$valueKey] = (int)$requestParams[$valueKey];
 				}
