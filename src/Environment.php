@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use RecursiveArrayIterator;
-
 /**
  * ArrayObject
  *
@@ -53,13 +51,13 @@ class Environment
 	/**
 	 * @return string
 	 */
-	public function getEnv()
+	public function getEnv(): string
 	{
 		return $this->_env;
 	}
 	
 	/**
-	 * @return string
+	 * @return array
 	 */
 	public function getConfig(): array
 	{
@@ -83,7 +81,7 @@ class Environment
 		
 		foreach($this->_flat as $key => $replaceValue)
 		{
-			$tags['!' . $key] = function($value, $tag, $flags) use($replaceValue) 
+			$tags['!' . $key] = static function($value, $tag, $flags) use($replaceValue) 
 			{
 				return $replaceValue;
 			};

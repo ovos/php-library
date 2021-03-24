@@ -28,14 +28,14 @@ class Message
 	protected Messages $_messages;
 
 	/**
-	 * @var string
+	 * @var null|string
 	 */
-	protected string $_title;
+	protected null|string $_title;
 
 	/**
-	 * @var string
+	 * @var null|string
 	 */
-	protected string $_description;
+	protected null|string $_description;
 
 	/**
 	 * @var string
@@ -45,13 +45,13 @@ class Message
 	/**
 	 * @param Messages $messages
 	 * @param string $type
-	 * @param string $description
-	 * @param string $title
+	 * @param null|string $description
+	 * @param null|string $title
 	 */
 	public function __construct(Messages $messages,
 		string $type = self::TYPE_SUCCESS,
-		string $description = null,
-		string $title = null)
+		null|string $description = null,
+		null|string $title = null)
 	{
 		$this->setMessages($messages);
 		$this->setType($type);
@@ -76,7 +76,7 @@ class Message
 	 *
 	 * @return $this
 	 */
-	public function setTitle(?string $title): self
+	public function setTitle(null|string $title): self
 	{
 		$this->_title = $title;
 
@@ -166,7 +166,7 @@ class Message
 	/**
 	 * @return string
 	 */
-	public function __toString()
+	public function __toString(): string
 	{
 		return $this->_messages->__toString();
 	}

@@ -3,11 +3,27 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use DirectoryIterator;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
+use function strlen;
+use function count;
+use function krsort;
+use function substr;
+use function file_exists;
+use function umask;
+use function mkdir;
+use function str_replace;
+use function str_contains;
+use function unlink;
+use function rtrim;
+use function ltrim;
+use function preg_match;
+use function rmdir;
+use function is_readable;
+use function scandir;
+use function is_dir;
 
 /**
  * Dir
@@ -83,11 +99,11 @@ class Dir
 	 *
 	 * @param string $path
 	 * @param bool $remove
-	 * @param string $match (regular expression)
+	 * @param null|string $match (regular expression)
 	 *
 	 * @return void
 	 */
-	public static function remove(string $path, bool $remove = true, string $match = null): void
+	public static function remove(string $path, bool $remove = true, null|string $match = null): void
 	{
 		if(is_dir($path))
 		{
@@ -102,7 +118,7 @@ class Dir
 					continue;
 				}
 
-				if(strpos($file->getPathname(), '.svn') !== false)
+				if(str_contains($file->getPathname(), '.svn'))
 				{
 					continue;
 				}
@@ -125,11 +141,11 @@ class Dir
 	 * Empty the directory or remove recursively files and directories matching regular expression
 	 *
 	 * @param string $path
-	 * @param string $match (regular expression)
+	 * @param null|string $match (regular expression)
 	 *
 	 * @return void
 	 */
-	public static function clear(string $path, string $match = null): void
+	public static function clear(string $path, null|string $match = null): void
 	{
 		self::remove($path, false, $match);
 	}
@@ -163,7 +179,7 @@ class Dir
 				}
 			}
 
-			if(strpos($path, DIRECTORY_SEPARATOR) !== false)
+			if(str_contains($path, DIRECTORY_SEPARATOR))
 			{
 				$pathUp = substr($path, 0, strrpos($path, DIRECTORY_SEPARATOR));
 				self::removeEmpty($pathToKeep, $pathUp);
@@ -174,7 +190,7 @@ class Dir
 	/**
 	 * Moves contents of one directory to another recursively without removing target directory's contents
 	 *
-	 * @param string $dirFrom
+	 * @param string $pathFrom
 	 * @param string $pathTo
 	 *
 	 * @return void
@@ -184,7 +200,7 @@ class Dir
 		$pathFrom = self::preProcess($pathFrom);
 		$pathTo = self::preProcess($pathTo);
 
-		if(is_dir($dirFrom) && is_dir($pathTo))
+		if(is_dir($pathFrom) && is_dir($pathTo))
 		{
 			$iterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
 			foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
@@ -197,9 +213,9 @@ class Dir
 					$source = $file->getPathname();
 					$targetPath = $file->getPath();
 					
-					if(strpos($targetPath, $pathFrom) === 0)
+					if(str_starts_with($targetPath, $pathFrom) === 0)
 					{
-						$targetPath = substr($targetPath, \strlen($pathFrom));
+						$targetPath = substr($targetPath, strlen($pathFrom));
 					}
 
 					self::create($pathTo . $targetPath . DIRECTORY_SEPARATOR);
@@ -226,7 +242,7 @@ class Dir
 		{
 			return null;
 		}
-		return (\count(scandir($path, SCANDIR_SORT_NONE)) === 2); // if only array('..', '.');
+		return (count(scandir($path, SCANDIR_SORT_NONE)) === 2); // if only array('..', '.');
 	}
 
 	/**
@@ -257,11 +273,11 @@ class Dir
 
 	/**
 	 * @param string $path
-	 * @param callable $callback Callback function for basename processing
+	 * @param null|callable $callback Callback function for basename processing
 	 *
 	 * @return array
 	 */
-	public static function getFilesTree(string $path, callable $callback = null): array
+	public static function getFilesTree(string $path, null|callable $callback = null): array
 	{
 		$files = [];
 
@@ -299,12 +315,12 @@ class Dir
 	}
 
 	/**
-	 * @param array $path
-	 * @param callable $callback Callback function for basename processing
+	 * @param string $path
+	 * @param null|callable $callback Callback function for basename processing
 	 *
 	 * @return array
 	 */
-	public static function getFiles(string $path, callable $callback = null): array
+	public static function getFiles(string $path, null|callable $callback = null): array
 	{
 		$files = [];
 

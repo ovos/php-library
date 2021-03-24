@@ -5,6 +5,7 @@ namespace Ovos\View\Helper;
 
 use Ovos\View\Helper;
 use Ovos\Url as BaseUrl;
+use function count;
 
 /**
  * User
@@ -17,11 +18,11 @@ class Url extends Helper
 	/**
 	 * @param string[] $urlComponents
 	 *
-	 * @return Url
+	 * @return BaseUrl|string
 	 */
-	public function url(...$urlComponents)
+	public function url(...$urlComponents): BaseUrl|string
 	{
-		if(\count($urlComponents) === 0)
+		if(count($urlComponents) === 0)
 		{
 			return $this->_app->getRequest()->getUrl()->getClone();
 		}

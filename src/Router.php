@@ -3,14 +3,9 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Dir;
-use Ovos\Exception\NotFoundException;
 use Ovos\Exception\NotFoundException\FileNotFoundException;
 use ReflectionClass;
-use RecursiveIteratorIterator;
-use RecursiveDirectoryIterator;
-use SplFileObject;
-use function Ovos\services;
+use SplFileInfo;
 use function is_string;
 use function in_array;
 use function array_slice;
@@ -18,6 +13,8 @@ use function is_numeric;
 use function strcmp;
 use function array_key_exists;
 use function count;
+use function krsort;
+use function preg_match;
 
 /**
  * Router
@@ -27,7 +24,6 @@ use function count;
  */
 class Router
 {
-
 	/**
 	 * @var Application
 	 */
@@ -267,11 +263,10 @@ class Router
 
 	/**
 	 * @param ArrayObject $modules
-	 * @param string $dir
 	 *
 	 * @return array
 	 */
-	protected function _getControllers($modules): array
+	protected function _getControllers(ArrayObject $modules): array
 	{
 		$cacheId = self::CACHE_ID_CONTROLLERS;
 		
@@ -308,8 +303,6 @@ class Router
 			}
 		}
 		
-		//var_dump($controllers);
-		return $controllers;
 		if($pool = services()->cache->getPerishablePool())
 		{
 			$item = $pool->getItem($cacheId)->set($controllers);

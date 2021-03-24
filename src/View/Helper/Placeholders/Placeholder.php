@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 namespace Ovos\View\Helper\Placeholders;
+use function ob_start;
+use function ob_get_clean;
 
 /**
  * Placeholder
@@ -30,7 +32,9 @@ class Placeholder
 	 *
 	 * @return $this
 	 */
-	public function set($value, string $placement = self::PLACEMENT_REPLACE): self
+	public function set(null|string|bool|int $value,
+		string $placement = self::PLACEMENT_REPLACE
+	): self
 	{
 		switch($placement)
 		{
@@ -90,7 +94,7 @@ class Placeholder
 	/**
 	 * @return null|string|bool|int
 	 */
-	public function getValue()
+	public function getValue(): null|string|bool|int
 	{
 		return $this->_value;
 	}

@@ -6,6 +6,7 @@ namespace Ovos\View\Helper;
 use Ovos\View\Helper;
 use Ovos\Form\Element;
 use Ovos\View;
+use function sprintf;
 
 /**
  * FormElement
@@ -71,9 +72,9 @@ class FormElement extends Helper
 	}
 
 	/**
-	 * @param Element $element
+	 * @param null|Element $element
 	 */
-	public function __construct(Element $element = null)
+	public function __construct(null|Element $element = null)
 	{
 		parent::__construct();
 		
@@ -85,7 +86,7 @@ class FormElement extends Helper
 	 * 
 	 * @return $this;
 	 */
-	public function setElement(?Element $element): self
+	public function setElement(null|Element $element): self
 	{
 		$this->_element = $element;
 		
@@ -95,7 +96,7 @@ class FormElement extends Helper
 	/**
 	 * @return null|Element
 	 */
-	public function getElement(): ?Element
+	public function getElement(): null|Element
 	{
 		return $this->_element;
 	}
@@ -105,7 +106,7 @@ class FormElement extends Helper
 	 * 
 	 * @return $this
 	 */
-	public function setType(?string $type): self
+	public function setType(null|string $type): self
 	{
 		$this->_type = $type;
 		
@@ -115,7 +116,7 @@ class FormElement extends Helper
 	/**
 	 * @return null|string
 	 */
-	public function getType(): ?string
+	public function getType(): null|string
 	{
 		return $this->_type;
 	}
@@ -125,7 +126,7 @@ class FormElement extends Helper
 	 * 
 	 * @return $this
 	 */
-	public function setDescription(?string $description): self
+	public function setDescription(null|string $description): self
 	{
 		$this->_description = $description;
 		
@@ -145,7 +146,7 @@ class FormElement extends Helper
 	 * 
 	 * @return $this
 	 */
-	public function setPlaceholder(?string $placeholder): self
+	public function setPlaceholder(null|string $placeholder): self
 	{
 		$this->_placeholder = $placeholder;
 		
@@ -155,7 +156,7 @@ class FormElement extends Helper
 	/**
 	 * @return null|string
 	 */
-	public function getPlaceholder(): ?string
+	public function getPlaceholder(): null|string
 	{
 		return $this->_placeholder;
 	}
@@ -165,7 +166,7 @@ class FormElement extends Helper
 	 * 
 	 * @return $this
 	 */
-	public function setElementClass(?string $elementClass): self
+	public function setElementClass(null|string $elementClass): self
 	{
 		$this->_elementClass = $elementClass;
 		
@@ -175,7 +176,7 @@ class FormElement extends Helper
 	/**
 	 * @return null|string
 	 */
-	public function getElementClass(): ?string
+	public function getElementClass(): null|string
 	{
 		return $this->_elementClass;
 	}
@@ -185,7 +186,7 @@ class FormElement extends Helper
 	 * 
 	 * @return $this
 	 */
-	public function setFieldClass(?string $fieldClass): self
+	public function setFieldClass(null|string $fieldClass): self
 	{
 		$this->_fieldClass = $fieldClass;
 		
@@ -225,7 +226,7 @@ class FormElement extends Helper
 	 * 
 	 * @return $this
 	 */
-	public function setOptionWrap(?string $optionWrap): self
+	public function setOptionWrap(null|string $optionWrap): self
 	{
 		$this->_optionWrap = $optionWrap;
 		
@@ -235,7 +236,7 @@ class FormElement extends Helper
 	/**
 	 * @return null|string
 	 */
-	public function getOptionWrap(): ?string
+	public function getOptionWrap(): null|string
 	{
 		return $this->_optionWrap;
 	}
@@ -261,7 +262,7 @@ class FormElement extends Helper
 	 * 
 	 * @return $this
 	 */
-	public function setOption(string $key, $value): self
+	public function setOption(string $key, mixed $value): self
 	{
 		$this->_options[$key] = $value;
 		
@@ -271,9 +272,9 @@ class FormElement extends Helper
 	/**
 	 * @param string $key
 	 * 
-	 * @return null|mixed
+	 * @return mixed
 	 */
-	public function getOption(string $key)
+	public function getOption(string $key): mixed
 	{
 		return $this->_options[$key] ?? null;
 	}

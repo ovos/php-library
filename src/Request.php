@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function filter_var;
+
 /**
  * Response
  *
@@ -12,14 +14,14 @@ namespace Ovos;
 class Request
 {
 	/**
-	 * @var Url
+	 * @var null|Url
 	 */
 	protected null|Url $_url = null;
 
 	/**
 	 * The locale
 	 *
-	 * @var Locale
+	 * @var null|Locale
 	 */
 	protected null|Locale $_locale = null;
 
@@ -38,7 +40,7 @@ class Request
 	protected string $_controllerClass = 'Index';
 
 	/**
-	 * @var Controller
+	 * @var null|Controller
 	 */
 	protected null|Controller $_controllerInstance = null;
 
@@ -113,7 +115,7 @@ class Request
 	 *
 	 * @return $this
 	 */
-	public function setController($controller): self
+	public function setController(string $controller): self
 	{
 		$this->_controller = $controller;
 
@@ -133,7 +135,7 @@ class Request
 	 *
 	 * @return $this
 	 */
-	public function setControllerClass($class): self
+	public function setControllerClass(string $class): self
 	{
 		$this->_controllerClass = $class;
 
@@ -153,7 +155,7 @@ class Request
 	 *
 	 * @return $this
 	 */
-	public function setControllerInstance($instance): self
+	public function setControllerInstance(Controller $instance): self
 	{
 		$this->_controllerInstance = $instance;
 
@@ -173,7 +175,7 @@ class Request
 	 *
 	 * @return $this
 	 */
-	public function setAction($action): self
+	public function setAction(string $action): self
 	{
 		$this->_action = $action;
 
@@ -193,7 +195,7 @@ class Request
 	 *
 	 * @return $this
 	 */
-	public function setActionMethod($actionMethod): self
+	public function setActionMethod(string $actionMethod): self
 	{
 		$this->_actionMethod = $actionMethod;
 
@@ -213,7 +215,7 @@ class Request
 	 *
 	 * @return $this
 	 */
-	public function addParam($param): self
+	public function addParam(string $param): self
 	{
 		$this->_params[] = $param;
 
@@ -241,16 +243,18 @@ class Request
 	}
 	
 	/**
-	 * @param string $name
-	 * @param string $default
+	 * @param null|string $name
+	 * @param null|string $default
 	 * @see http://php.net/filter_var
-	 * @param int $filter
+	 * @param null|int $filter
 	 * @param int $options
 	 *
-	 * @return array|string|null
+	 * @return null|array|string
 	 */
-	public function get(string $name = null, string $default = null,
-		int $filter = null, int $options = FILTER_NULL_ON_FAILURE) // filter_var arguments
+	public function get(null|string $name = null,
+		null|string $default = null,
+		null|int $filter = null,
+		int $options = FILTER_NULL_ON_FAILURE) : null|array|string // filter_var arguments
 	{
 		if($name === null)
 		{
@@ -271,16 +275,18 @@ class Request
 	}
 
 	/**
-	 * @param string $name
-	 * @param mixed $default (string, array, int)
+	 * @param null|string $name
+	 * @param null|string|array|int $default
 	 * @see http://php.net/filter_var
-	 * @param int $filter
+	 * @param null|int $filter
 	 * @param int $options
 	 *
-	 * @return array|string|null
+	 * @return null|array|string
 	 */
-	public function getPost(string $name = null, $default = null,
-		int $filter = null, int $options = FILTER_NULL_ON_FAILURE) // filter_var arguments
+	public function getPost(null|string $name = null,
+		null|string|array|int $default = null,
+		null|int $filter = null,
+		int $options = FILTER_NULL_ON_FAILURE): null|array|string // filter_var arguments
 	{
 		if($name === null)
 		{
@@ -303,7 +309,7 @@ class Request
 	/**
 	 * @param string $name
 	 *
-	 * @return string|null
+	 * @return null|string
 	 */
 	public function getServer(string $name): ?string
 	{

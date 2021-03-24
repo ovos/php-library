@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos;
 
 use function ob_get_level;
+use function header;
+use function http_response_code;
 
 /**
  * Response
@@ -91,7 +93,7 @@ class Response
 	 *
 	 * @return $this
 	 */
-	public function clearHeader($name): self
+	public function clearHeader(string $name): self
 	{
 		if(isset($this->_headers[$name]))
 		{

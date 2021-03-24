@@ -4,6 +4,9 @@ declare(strict_types=1);
 namespace Ovos\View\Helper;
 
 use Ovos\View\Helper;
+use function is_string;
+use function preg_split;
+use function implode;
 
 /**
  * Elements
@@ -71,9 +74,9 @@ class Elements extends Helper
 	 *
 	 * @return $this
 	 */
-	public function addClasses($classes): self
+	public function addClasses(mixed $classes): self
 	{
-		if(\is_string($classes))
+		if(is_string($classes))
 		{
 			$classes = $this->stringToArray($classes);
 		}
@@ -134,7 +137,7 @@ class Elements extends Helper
 	 */
 	public function removeClasses($classes): self
 	{
-		if(\is_string($classes))
+		if(is_string($classes))
 		{
 			$classes = $this->stringToArray($classes);
 		}

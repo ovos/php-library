@@ -2,6 +2,10 @@
 
 namespace Ovos;
 
+use function str_replace;
+use function array_keys;
+use function array_values;
+
 /**
  * Command
  *
@@ -84,7 +88,7 @@ class Command
 
 		$command = $commands[$this->_name];
 
-		if(\count($this->_params))
+		if(count($this->_params))
 		{
 			$command = str_replace(array_keys($this->_params), array_values($this->_params), $command);
 		}
@@ -95,7 +99,7 @@ class Command
 	/**
 	 * @return string
 	 */
-	public function __toString()
+	public function __toString(): string
 	{
 		return $this->get();
 	}

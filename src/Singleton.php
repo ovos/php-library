@@ -12,7 +12,7 @@ namespace Ovos;
 trait Singleton
 {
 	/**
-	 * @var self
+	 * @var null|self
 	 */
 	protected static null|self $_instance = null;
 

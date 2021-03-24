@@ -3,11 +3,9 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Environment;
 use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Config\Loader as ConfigLoader;
 use Ovos\Service\Memory;
-use Ovos\View\Layout;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
 use function define;

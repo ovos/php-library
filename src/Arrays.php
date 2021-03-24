@@ -8,7 +8,7 @@ use function func_num_args;
 use function func_get_args;
 use function is_array;
 use function call_user_func_array;
-use count;
+use function count;
 
 /**
  * Arrays

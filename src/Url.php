@@ -2,10 +2,18 @@
 declare(strict_types=1);
 
 namespace Ovos;
-
-use Ovos\ArrayObject;
-use Ovos\Locale;
-use function Ovos\app;
+use function count;
+use function end;
+use function key;
+use function reset;
+use function strpos;
+use function is_string;
+use function array_unshift;
+use function array_merge;
+use function implode;
+use function preg_split;
+use function array_shift;
+use function strlen;
 
 /**
  * Url
@@ -16,7 +24,7 @@ use function Ovos\app;
 class Url
 {
 	/**
-	 * @var Locale
+	 * @var null|Locale
 	 */
 	protected null|Locale $_locale = null;
 
@@ -37,7 +45,7 @@ class Url
 	 */
 	public function __construct(...$components)
 	{
-		$componentsCount = \count($components);
+		$componentsCount = count($components);
 		if($componentsCount)
 		{
 			$urlComponents = [[]];
@@ -46,6 +54,7 @@ class Url
 				$component = (string)$component; // for ints
 				$urlComponents[] = self::getUrlComponents($component);
 			}
+			unset($component);
 			// https://github.com/kalessil/phpinspectionsea/blob/master/docs/performance.md#slow-array-function-used-in-loop
 			$urlComponents = array_merge(...$urlComponents);
 			
@@ -81,13 +90,13 @@ class Url
 	 * @param array $components
 	 * @param bool $relative
 	 *
-	 * @return string
+	 * @return ?string
 	 */
 	public static function getUrlFromComponents(array $components, bool $relative = false): ?string
 	{
 		$url = $relative ? '' : ROUTE_PATH;
 
-		if(\count($components) === 0)
+		if(count($components) === 0)
 		{
 			return $url;
 		}
@@ -112,7 +121,7 @@ class Url
 			{
 				$uri = $_SERVER['REQUEST_URI'];
 				$source = parse_url($uri, PHP_URL_PATH);
-				$source = substr($source, \strlen(ROUTE_PATH));
+				$source = substr($source, strlen(ROUTE_PATH));
 				if($source !== '' && $source !== false) // empty or ROUTE_PATH longer than source
 				{
 					$components = self::getUrlComponents($source);
@@ -138,7 +147,7 @@ class Url
 	{
 		// if first component is a locale symbol, use it
 		if($detectLocale
-			&& \count($components)
+			&& count($components)
 			&& Locales::exists($components[0]))
 		{
 			$localeUrlName = array_shift($components);
@@ -168,7 +177,7 @@ class Url
 	 *
 	 * @return $this
 	 */
-	public function addComponent($component): self
+	public function addComponent(int|string $component): self
 	{
 		$lastComponentKey = $this->_getLastComponentKey();
 		if($this->_components[$lastComponentKey] !== $component)
@@ -199,9 +208,9 @@ class Url
 	 *
 	 * @return $this
 	 */
-	public function setLastComponent(?string $component): self
+	public function setLastComponent(int|string|null $component): self
 	{
-		if(\count($this->_components) === 0)
+		if(count($this->_components) === 0)
 		{
 			return $this;
 		}
@@ -220,7 +229,7 @@ class Url
 	}
 
 	/**
-	 * @return int|string|null
+	 * @return null|int|string
 	 */
 	protected function _getLastComponentKey(): null|int|string
 	{
@@ -234,11 +243,11 @@ class Url
 	/**
 	 * @see setLastComponent
 	 * 
-	 * @param int|string|null $component (null to remove it)
+	 * @param null|int|string $component (null to remove it)
 	 *
 	 * @return $this
 	 */
-	public function setLast(?string $component): self
+	public function setLast(null|int|string $component): self
 	{
 		return $this->setLastComponent($component);
 	}
@@ -256,9 +265,9 @@ class Url
 	 *
 	 * @return $this
 	 */
-	public function setLocale($locale): self
+	public function setLocale(Locale|string $locale): self
 	{
-		if(\is_string($locale))
+		if(is_string($locale))
 		{
 			$locale = Locales::get($locale);
 		}
@@ -336,7 +345,7 @@ class Url
 	/**
 	 * @return string
 	 */
-	public function __toString()
+	public function __toString(): string
 	{
 		return $this->getUrl();
 	}
