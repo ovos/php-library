@@ -5,7 +5,7 @@ namespace Ovos;
 
 use ArrayObject as BaseArrayObject;
 use IteratorAggregate;
-use count;
+use function count;
 
 /**
  * ArrayObject

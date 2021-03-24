@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function preg_match;
+use function array_merge;
+use function explode;
+
 /**
  * Client
  *
@@ -19,13 +23,13 @@ class Client
 	protected static null|string $_ip = null;
 
 	/**
-	 * Returns visitors's IP address
+	 * Returns visitor's IP address
 	 * Supports proxies
 	 * Supports cloudflare
 	 *
 	 * @return string
 	 */
-	public static function getIP(): string
+	public static function getIp(): string
 	{
 		if(self::$_ip === null)
 		{
@@ -71,9 +75,9 @@ class Client
 	}
 
 	/**
-	 * @return string
+	 * @return null|string
 	 */
-	public static function getUserAgent(): ?string
+	public static function getUserAgent(): null|string
 	{
 		return $_SERVER['HTTP_USER_AGENT'] ?? null;
 	}

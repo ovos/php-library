@@ -5,6 +5,9 @@ namespace Ovos;
 
 use ResourceBundle;
 use Collator;
+use function array_reverse;
+use function array_key_exists;
+use function is_numeric;
 
 /**
  * Locale
@@ -233,7 +236,7 @@ class Locale
 	/**
 	 * @return array
 	 */
-	public function __debugInfo()
+	public function __debugInfo(): array
 	{
 		return [
 			'url_name' => $this->_urlName,

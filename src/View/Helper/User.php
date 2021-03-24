@@ -16,7 +16,7 @@ use function Ovos\services;
 class User extends Helper
 {
 	/**
-	 * @return Model
+	 * @return ?Model
 	 */
 	public function user(): ?Model
 	{

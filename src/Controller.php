@@ -5,11 +5,14 @@ namespace Ovos;
 
 use Ovos\Controller\Plugin;
 use Ovos\Exception\RuntimeException;
-use Models;
-use Plugins;
 use ReflectionMethod;
-use function key;
-use function current;
+use function count;
+use function array_key_exists;
+use function in_array;
+use function array_column;
+use function array_keys;
+use function class_exists;
+use function method_exists;
 
 /**
  * Controller
@@ -124,7 +127,7 @@ class Controller
 		$namesOfMethodParams = array_column($methodParams, 'name');
 		$namesOfRequestParams = array_keys($namedRequestParams);
 		 // if first name matches any of the method param names, treat params as named parameters
-		$named = array_search($namesOfRequestParams[0], $namesOfMethodParams, true) !== false;
+		$named = in_array($namesOfRequestParams[0], $namesOfMethodParams, true);
 		
 		// not named parameters
 		if($named === false)
@@ -304,7 +307,9 @@ class Controller
 	 * 
 	 * @return ArrayObject
 	 */
-	public function getGroupsPlugins($plugins, $groups)
+	public function getGroupsPlugins(ArrayObject $plugins,
+		ArrayObject $groups
+	): ArrayObject
 	{
 		if($groups->count() === 0)
 		{
@@ -325,12 +330,15 @@ class Controller
 	
 	/**
 	 * @param ArrayObject $plugins
-	 * @param ArrayObject $groups
+	 * @param ArrayObject $group
 	 * @param string $currentController
 	 * 
 	 * @return ArrayObject
 	 */
-	public function getGroupPlugins($plugins, $group, $currentController)
+	public function getGroupPlugins(ArrayObject $plugins,
+		ArrayObject $group,
+		string $currentController
+	): ArrayObject
 	{
 		if($group->controllers === null
 			|| $group->controllers->count() === 0)
@@ -341,7 +349,7 @@ class Controller
 		foreach($group->controllers as $controller)
 		{
 			// if controller matches (begins with the same name)
-			if(strpos($currentController, $controller) === 0)
+			if(str_starts_with($currentController, $controller))
 			{
 				$controllerPlugins = $group->get($this->_app->getInterface());
 				if($controllerPlugins !== null)
@@ -363,7 +371,9 @@ class Controller
 	 * 
 	 * @return ArrayObject
 	 */
-	public function getControllerPlugins($plugins, $controllerPlugins)
+	public function getControllerPlugins(ArrayObject $plugins,
+		ArrayObject $controllerPlugins
+	): ArrayObject
 	{
 		// skip
 		if($controllerPlugins->skip !== null
@@ -403,7 +413,7 @@ class Controller
 	 * 
 	 * @throws RuntimeException
 	 */
-	protected function _loadPluginsFromConfig(?ArrayObject $plugins): self
+	protected function _loadPluginsFromConfig(null|ArrayObject $plugins): self
 	{
 		if($plugins === null)
 		{
@@ -413,7 +423,7 @@ class Controller
 		foreach($plugins as $plugin)
 		{
 			/** @var Plugin $pluginClass */
-			$pluginClass = strpos($plugin, '\\') === 0
+			$pluginClass = str_starts_with($plugin, '\\')
 				? $plugin : 'Plugins\\' . $plugin;
 			
 			if(!class_exists($pluginClass))
@@ -435,11 +445,11 @@ class Controller
 
 	/**
 	 * @param Plugin $plugin
-	 * @param string $symbol
+	 * @param null|string $symbol
 	 *
 	 * @return $this
 	 */
-	public function addPlugin(Plugin $plugin, string $symbol = null): self
+	public function addPlugin(Plugin $plugin, null|string $symbol = null): self
 	{
 		if($symbol === null)
 		{
@@ -452,12 +462,12 @@ class Controller
 	}
 
 	/**
-	 * @param string $symbol
+	 * @param null|string $symbol
 	 * @param array $arguments
 	 *
-	 * @return mixed|null
+	 * @return mixed
 	 */
-	public function getPlugin(string $symbol = null, array $arguments = []): mixed
+	public function getPlugin(null|string $symbol = null, array $arguments = []): mixed
 	{
 		if($this->hasPlugin($symbol) === false)
 		{
@@ -474,11 +484,11 @@ class Controller
 	}
 
 	/**
-	 * @param string $symbol
+	 * @param null|string $symbol
 	 *
 	 * @return bool
 	 */
-	public function hasPlugin($symbol = null): bool
+	public function hasPlugin(null|string $symbol = null): bool
 	{
 		return array_key_exists($symbol, $this->_plugins);
 	}
@@ -487,7 +497,7 @@ class Controller
 	 * @param string $symbol
 	 * @param array $arguments
 	 *
-	 * @return mixed|null
+	 * @return mixed
 	 */
 	public function __call(string $symbol, array $arguments): mixed
 	{

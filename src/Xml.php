@@ -5,6 +5,7 @@ namespace Ovos;
 
 use DOMDocument;
 use SimpleXMLElement;
+use function simplexml_load_string;
 
 /**
  * Xml

@@ -5,10 +5,8 @@ namespace Ovos\Migration;
 
 use Ovos\Migration;
 use Ovos\Measurement;
-use Ovos\ArrayObject;
 use Ovos\Exception\NotFoundException;
 use ReflectionClass;
-use ReflectionMethod;
 
 /**
  * Runner
@@ -27,6 +25,11 @@ class Runner
 	 * @var int
 	 */
 	public int $id;
+	
+	/**
+	 * @var null|Measurement
+	 */
+	public null|Measurement $measurement = null;
 
 	/**
 	 * @param ReflectionClass $class
