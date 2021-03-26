@@ -13,6 +13,8 @@ use function array_column;
 use function array_keys;
 use function class_exists;
 use function method_exists;
+use function substr;
+use function strpos;
 
 /**
  * Controller
