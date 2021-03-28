@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Controller\Traits;
 
 use Ovos\Terminal;
+use function count;
 
 /**
  * Trait Cli
@@ -93,7 +94,7 @@ trait Cli
 	 */
 	public function log(...$message): self
 	{
-		if(\count($message))
+		if(count($message))
 		{
 			$message = sprintf(...$message);
 		}
