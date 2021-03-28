@@ -34,7 +34,7 @@ class EmailAddress extends Validator
 	 *
 	 * @return bool
 	 */
-	public function isValid($value): bool
+	public function isValid(mixed $value): bool
 	{
 		if(empty($value))
 		{
