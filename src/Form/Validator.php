@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 namespace Ovos\Form;
+use function count;
+use function array_key_exists;
 
 /**
  * Validator
@@ -51,7 +53,7 @@ abstract class Validator
 	 */
 	public function hasErrors(): bool
 	{
-		return \count($this->_errors) > 0;
+		return count($this->_errors) > 0;
 	}
 
 	/**
@@ -117,5 +119,5 @@ abstract class Validator
 	 *
 	 * @return bool
 	 */
-	abstract public function isValid($value): bool;
+	abstract public function isValid(mixed $value): bool;
 }
