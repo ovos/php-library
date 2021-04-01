@@ -3,11 +3,16 @@ declare(strict_types=1);
 
 namespace Ovos\Controller;
 
-use Ovos\Application;
 use Ovos\Controller;
 use Ovos\Exception;
-use function Ovos\services;
-use Plugins\Auth;
+use Ovos\Terminal;
+use function in_array;
+use function array_merge;
+use function sprintf;
+use function round;
+use function memory_get_usage;
+use function count;
+use function getmypid;
 
 /**
  * Cli
@@ -28,7 +33,57 @@ class Cli extends Controller
 	 * @var array
 	 */
 	protected array $_httpActions = [];
+	
+	/**
+	 * Process id
+	 *
+	 * @var null|int
+	 */
+	protected null|int $_pid = null;
+	
+	/**
+	 * @var bool
+	 */
+	protected bool $_coloredOutput = false;
+	
+	/**
+	 * preDispatch
+	 */
+	public function preDispatch(): void
+	{
+		parent::preDispatch();
+	
+		if($this->getRequest()->isCli() === true)
+		{
+			return;
+		}
+		
+		if($this->isAllowedHttpAccess())
+		{
+			return;
+		}
+	
+		if(in_array($this->getRequest()->getAction(), $this->_httpActions, true) === true)
+		{
+			return;
+		}
+		
+		throw new Exception('Forbidden.');
+	}
+	
+	/**
+	 * @return int
+	 */
+	public function getPid(): int
+	{
+		if($this->_pid === null)
+		{
+			$this->_pid = getmypid();
+		}
 
+		return $this->_pid;
+	}
+	
 	/**
 	 * @param bool $allowHttpAccess
 	 *
@@ -54,7 +109,7 @@ class Cli extends Controller
 	 *
 	 * @return $this
 	 */
-	public function addHttpAction($action): self
+	public function addHttpAction(string $action): self
 	{
 		$this->_httpActions[] = $action;
 
@@ -82,27 +137,53 @@ class Cli extends Controller
 	}
 
 	/**
-	 * preDispatch
+	 * @param bool $coloredOutput
+	 * 
+	 * @return $this
 	 */
-	public function preDispatch(): void
+	public function setColoredOutput(bool $coloredOutput): self
 	{
-		parent::preDispatch();
-	
-		if($this->getRequest()->isCli() === true)
-		{
-			return;
-		}
+		$this->_coloredOutput = $coloredOutput;
 		
-		if($this->isAllowedHttpAccess())
-		{
-			return;
-		}
+		return $this;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function getColoredOutput(): bool
+	{
+		return $this->_coloredOutput;
+	}
 	
-		if(\in_array($this->getRequest()->getAction(), $this->_httpActions, true) === true)
+	/**
+	 * Returns memory usage in MB
+	 *
+	 * @return float
+	 */
+	public function getMemoryUsageMb(): float
+	{
+		return round(memory_get_usage(false) / (1024 * 1024), 2);
+	}
+	
+	/**
+	 * Log messages
+	 *
+	 * @param string ...$message,... params for sprintf
+	 *
+	 * @return $this
+	 */
+	public function log(...$message): self
+	{
+		if(count($message))
 		{
-			return;
+			$message = sprintf(...$message);
 		}
-		
-		throw new Exception('Forbidden.');
+
+		Terminal::output('<darkgray>[' . $this->getPid() . '] '
+			. '<purple>' . date('Y-m-d H:i:s') . ': '
+			. '<reset>' . $message . '<reset>' . PHP_EOL, $this->_coloredOutput);
+			
+		return $this;
 	}
 }

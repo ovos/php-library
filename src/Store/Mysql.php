@@ -79,7 +79,6 @@ abstract class Mysql extends Store
 
 	/**
 	 * @return QueryBuilder
-	 * @throws \Doctrine\DBAL\Exception
 	 */
 	public function query(): QueryBuilder
 	{
@@ -141,16 +140,14 @@ abstract class Mysql extends Store
 	 * @param Model $object
 	 *
 	 * @return false|PDOStatement
-	 *
-	 * @throws Exception
 	 */
-	public function insertQuery(Model $object)
+	public function insertQuery(Model $object): false|PDOStatement
 	{
 		$values = $this->getQueryValues($object);
 
 		$sql = 'INSERT INTO ' . self::getTable() . ' (%s) VALUES (%s);';
 		$sql = sprintf($sql, implode(', ', array_keys($values)), implode(', ', $values));
-
+		
 		$statement = $this->getSource()->prepare($sql);
 		$this->bindValues($statement, $object);
 		
@@ -163,8 +160,6 @@ abstract class Mysql extends Store
 	 * @param array $conditions
 	 *
 	 * @return false|PDOStatement
-	 *
-	 * @throws Exception
 	 */
 	/*
 	public function insertUpdateQuery(Model $object, array $conditions = [])
@@ -191,16 +186,15 @@ abstract class Mysql extends Store
 	*/
 
 	/**
-	 * @param Model $object
+	 * @param Model $model
+	 * @param Model $updateObject
 	 *
 	 * @return false|PDOStatement
-	 *
-	 * @throws Exception
 	 */
-	public function updateQuery(Model $model, Model $updateObject)
+	public function updateQuery(Model $model, Model $updateObject): false|PDOStatement
 	{
 		$sets = $this->getQueryValues($updateObject, true);
-
+		
 		$sql = 'UPDATE ' . self::getTable() . ' SET %s'
 			. ' WHERE ' . $model->getPrimaryKeysConditions();
 		$sql = sprintf($sql, implode(', ', $sets));
@@ -254,15 +248,15 @@ abstract class Mysql extends Store
 			{
 				continue;
 			}
-
-			if(is_numeric($value))
+			
+			$bindType = match($value)
 			{
-				$query->bindValue(':' . $field, $value, PDO::PARAM_INT);
-			}
-			else
-			{
-				$query->bindValue(':' . $field, $value, PDO::PARAM_STR);
-			}
+				is_bool($value) => PDO::PARAM_BOOL,
+				is_numeric($value) => PDO::PARAM_INT,
+				default => PDO::PARAM_STR,
+			};
+			
+			$query->bindValue(':' . $field, $value, $bindType);
 		}
 	}
 
@@ -274,7 +268,7 @@ abstract class Mysql extends Store
 	 *
 	 * @throws Exception
 	 */
-	public function update($object, $objectUpdate): bool
+	public function update(Model $object, Model $objectUpdate): bool
 	{
 		return $object->update($objectUpdate);
 	}
@@ -286,7 +280,7 @@ abstract class Mysql extends Store
 	 *
 	 * @throws Exception
 	 */
-	public function insert($model): bool
+	public function insert(Model $model): bool
 	{
 		return $model->insert();
 	}
