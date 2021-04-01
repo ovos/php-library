@@ -287,7 +287,13 @@ class Router
 			{
 				$dir = $moduleDir . DIRECTORY_SEPARATOR . 'controllers';
 				
-				$moduleControllers = Dir::getFilesTree($dir, function($file)
+				$moduleControllers = Dir::getTree($dir, skipCallback: function($file)
+				{
+					/**
+					* @var SplFileInfo $file
+					*/
+					return $file->getExtension() !== 'php';
+				}, basenameCallback: function($file)
 				{
 					/**
 					* @var SplFileInfo $file
