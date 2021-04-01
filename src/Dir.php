@@ -24,6 +24,7 @@ use function rmdir;
 use function is_readable;
 use function scandir;
 use function is_dir;
+use function func_get_args;
 
 /**
  * Dir
@@ -34,6 +35,14 @@ use function is_dir;
  */
 class Dir
 {
+	/**#@+
+	 * Filter constants
+	 */
+	public const FILTER_NONE = 0;
+	public const FILTER_DIRECTORIES = 1;
+	public const FILTER_FILES = 2;
+	/**#@-*/
+	
 	/**
 	 * Creates a directory structure
 	 *
@@ -202,29 +211,61 @@ class Dir
 
 		if(is_dir($pathFrom) && is_dir($pathTo))
 		{
-			$iterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
-			foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+			$directoryIterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
+			/**
+			 * @var RecursiveDirectoryIterator $iterator
+			 */
+			foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
 			{
 				/**
 				 * @var SplFileInfo $file
 				 */
 				if($file->isFile())
 				{
-					$source = $file->getPathname();
-					$targetPath = $file->getPath();
-					
-					if(str_starts_with($targetPath, $pathFrom) === 0)
-					{
-						$targetPath = substr($targetPath, strlen($pathFrom));
-					}
-
-					self::create($pathTo . $targetPath . DIRECTORY_SEPARATOR);
-					rename($source, $pathTo . $targetPath . DIRECTORY_SEPARATOR . $file->getFilename());
+					self::create($pathTo . DIRECTORY_SEPARATOR . $iterator->getSubPath());
+					rename((string)$file, $pathTo . DIRECTORY_SEPARATOR . $iterator->getSubPathName());
 				}
 				else
 				{
 					self::remove($file->getPathname());
 				}
+			}
+		}
+	}
+	
+	/**
+	 * Copy contents of one directory to another recursively without removing target directory's contents
+	 *
+	 * @param string $pathFrom
+	 * @param string $pathTo
+	 *
+	 * @return void
+	 */
+	public static function copyFiles(string $pathFrom, string $pathTo): void
+	{
+		$pathFrom = self::preProcess($pathFrom);
+		$pathTo = self::preProcess($pathTo);
+
+		if(is_dir($pathFrom) && is_dir($pathTo))
+		{
+			$directoryIterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
+			/**
+			 * @var RecursiveDirectoryIterator $iterator
+			 */
+			foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::SELF_FIRST) as $file)
+			{
+				/**
+				 * @var SplFileInfo $file
+				 */
+				if($file->isDir())
+				{
+					self::create($pathTo . DIRECTORY_SEPARATOR . $iterator->getSubPathName());
+				}
+				else
+				{
+					copy((string)$file, $pathTo . DIRECTORY_SEPARATOR . $iterator->getSubPathName());
+				}
+
 			}
 		}
 	}
@@ -244,69 +285,88 @@ class Dir
 		}
 		return (count(scandir($path, SCANDIR_SORT_NONE)) === 2); // if only array('..', '.');
 	}
-
+	
 	/**
 	 * @param string $path
+	 * @param bool $skipHidden
+	 * @param null|callable $skipCallback
+	 * @param null|callable $basenameCallback Callback function for basename processing
+	 * @param int $filter
 	 *
 	 * @return array
 	 */
-	public static function getTree(string $path): array
+	public static function getDirectoriesTree(string $path,
+		$skipHidden = true,
+		null|callable $skipCallback = null,
+		null|callable $basenameCallback = null,
+		$filter = self::FILTER_FILES
+	): array
 	{
-		$dirs = [];
-
-		foreach(new FilesystemIterator($path, FilesystemIterator::SKIP_DOTS) as $file)
-		{
-			/**
-			 * @var SplFileInfo $file
-			 */
-			if($file->isDir() === false)
-			{
-				continue;
-			}
-
-			$dirs[$file->getFilename()] = self::getTree($file->getPathname());
-		}
-		ksort($dirs, SORT_NATURAL);
-
-		return $dirs;
+		return self::getTree(...func_get_args());
 	}
-
+	
 	/**
 	 * @param string $path
-	 * @param null|callable $callback Callback function for basename processing
+	 * @param bool $skipHidden
+	 * @param null|callable $skipCallback
+	 * @param null|callable $basenameCallback Callback function for basename processing
+	 * @param int $filter
 	 *
 	 * @return array
 	 */
-	public static function getFilesTree(string $path, null|callable $callback = null): array
+	public static function getTree(string $path,
+		$skipHidden = true,
+		null|callable $skipCallback = null,
+		null|callable $basenameCallback = null,
+		$filter = self::FILTER_NONE
+	): array
 	{
 		$files = [];
 
 		foreach(new FilesystemIterator($path, FilesystemIterator::SKIP_DOTS) as $file)
 		{
 			// hidden files, eg. ".gitkeep"
-			if($file->getBasename()[0] === '.')
+			if($skipHidden && $file->getBasename()[0] === '.')
 			{
 				continue;
 			}
-
-			$basename = $callback ? $callback($file) : $file->getBasename();
-			if($basename === null)
-			{
-				continue;
-			}
-
+			
 			/**
 			 * @var SplFileInfo $file
 			 */
+			if($filter && $filter === self::FILTER_FILES
+				&& $file->isDir() === false)
+			{
+				continue;
+			}
+			
+			if($skipCallback && $skipCallback($file) === true)
+			{
+				continue;
+			}
+			
+			$basename = $basenameCallback
+				? $basenameCallback($file)
+				: $file->getBasename();
+			if($basename === null)
+			{
+				continue;
+			}			
+			
 			if($file->isDir() === false)
 			{
 				$files[] = $basename;
-
+				
 				continue;
 			}
 			
 			// dir
-			$files[$basename] = self::getFilesTree($file->getPathname(), $callback);
+			$files[$basename] = self::getTree(
+				$file->getPathname(),
+				$skipHidden,
+				$skipCallback,
+				$filter
+			);
 		}
 		// directories first
 		krsort($files, SORT_NATURAL);
@@ -316,38 +376,46 @@ class Dir
 
 	/**
 	 * @param string $path
-	 * @param null|callable $callback Callback function for basename processing
+	 * @param bool $skipHidden
+	 * @param null|callable $skipCallback
+	 * @param int $filter
 	 *
 	 * @return array
 	 */
-	public static function getFiles(string $path, null|callable $callback = null): array
+	public static function getFiles(string $path,
+		$skipHidden = true,
+		null|callable $skipCallback = null,
+		$filter = self::FILTER_NONE
+	): array
 	{
 		$files = [];
 
-		$iterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
-		foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+		$directoryIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
+		/**
+		 * @var RecursiveDirectoryIterator $iterator
+		 */
+		foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
 		{
-			/**
-			* @var SplFileInfo $file
-			*/
-			if($file->isDir())
-			{
-				continue;
-			}
-			
 			// hidden files, eg. ".gitkeep"
-			if($file->getBasename()[0] === '.')
+			if($skipHidden && $file->getBasename()[0] === '.')
+			{
+				continue;
+			}
+		
+			/**
+			 * @var SplFileInfo $file
+			 */
+			if($filter && $file->isDir() === ($filter === self::FILTER_FILES))
 			{
 				continue;
 			}
 			
-			$basename = $callback ? $callback($file) : $file->getBasename();
-			if($basename === null)
+			if($skipCallback && $skipCallback($file) === true)
 			{
 				continue;
 			}
 			
-			$files[$basename] = $file;
+			$files[$iterator->getSubPathname()] = $file;
 		}
 		
 		return $files;

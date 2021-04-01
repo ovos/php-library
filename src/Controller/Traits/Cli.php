@@ -47,10 +47,11 @@ trait Cli
 	
 	/**
 	 * @param string $dir
+	 * @param bool $selectDirectory
 	 *
-	 * @return null|SplFileInfo
+	 * @return ?SplFileInfo
 	 */
-	public function selectFile(string $dir): ?SplFileInfo
+	public function selectFile(string $dir, bool $selectDirectory = false): ?SplFileInfo
 	{
 		$files = [];
 
@@ -60,7 +61,7 @@ trait Cli
 			/**
 			 * @var SplFileInfo $file
 			 */
-			if($file->isDir())
+			if($file->isDir() !== $selectDirectory)
 			{
 				continue;
 			}
@@ -75,7 +76,9 @@ trait Cli
 
 		if(count($files))
 		{
-			$this->log('Please pick a file (type the number and hit <blue>ENTER<reset>):');
+			$this->log('Please pick a %s (type the number and hit <blue>ENTER<reset>):', 
+				$selectDirectory ? 'directory' : 'file');
+				
 			foreach($files as $key => $file)
 			{
 				printf("\t%d. %s" . PHP_EOL, $key + 1, $file->getBasename());
@@ -89,5 +92,15 @@ trait Cli
 		}
 
 		return null;
+	}
+	
+	/**
+	 * @param string $dir
+	 *
+	 * @return ?SplFileInfo
+	 */
+	public function selectDirectory(string $dir): ?SplFileInfo
+	{
+		return $this->selectFile($dir, true);
 	}
 }
