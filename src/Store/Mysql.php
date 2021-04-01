@@ -198,7 +198,7 @@ abstract class Mysql extends Store
 		$sql = 'UPDATE ' . self::getTable() . ' SET %s'
 			. ' WHERE ' . $model->getPrimaryKeysConditions();
 		$sql = sprintf($sql, implode(', ', $sets));
-
+		
 		$statement = $this->getSource()->prepare($sql);
 		$model->bindPrimaryKeys($statement);
 		$this->bindValues($statement, $updateObject);
@@ -249,12 +249,9 @@ abstract class Mysql extends Store
 				continue;
 			}
 			
-			$bindType = match($value)
-			{
-				is_bool($value) => PDO::PARAM_BOOL,
-				is_numeric($value) => PDO::PARAM_INT,
-				default => PDO::PARAM_STR,
-			};
+			$bindType = PDO::PARAM_STR;
+			$bindType = is_bool($value) ? PDO::PARAM_BOOL : $bindType;
+			$bindType = is_numeric($value) ? PDO::PARAM_INT : $bindType;
 			
 			$query->bindValue(':' . $field, $value, $bindType);
 		}
