@@ -128,7 +128,7 @@ abstract class Mysql extends Store
 	/**
 	 * @return bool
 	 */
-	public function optimize()
+	public function optimize(): bool
 	{
 		return $this->getSource()->query('
 			OPTIMIZE
@@ -265,8 +265,6 @@ abstract class Mysql extends Store
 	 * @param Model $objectUpdate
 	 *
 	 * @return bool
-	 *
-	 * @throws Exception
 	 */
 	public function update(Model $object, Model $objectUpdate): bool
 	{
@@ -277,8 +275,6 @@ abstract class Mysql extends Store
 	 * @param Model $model
 	 *
 	 * @return bool
-	 *
-	 * @throws Exception
 	 */
 	public function insert(Model $model): bool
 	{

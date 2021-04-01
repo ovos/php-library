@@ -15,7 +15,7 @@ class Exception extends \Exception
 	/**
 	 * Construct the exception.
 	 *
-	 * @param string[] ...$message [optional] The Exception message to throw.
+	 * @param string|string[] ...$message [optional] The Exception message to throw.
 	 */
 	public function __construct(...$message)
 	{
