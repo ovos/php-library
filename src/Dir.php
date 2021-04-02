@@ -116,8 +116,11 @@ class Dir
 	{
 		if(is_dir($path))
 		{
-			$iterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
-			foreach(new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+			$directoryIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
+			/**
+			 * @var RecursiveDirectoryIterator $iterator
+			 */
+			foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
 			{
 				/**
 				 * @var SplFileInfo $file
@@ -322,7 +325,7 @@ class Dir
 	): array
 	{
 		$files = [];
-
+		
 		foreach(new FilesystemIterator($path, FilesystemIterator::SKIP_DOTS) as $file)
 		{
 			// hidden files, eg. ".gitkeep"
@@ -335,7 +338,7 @@ class Dir
 			 * @var SplFileInfo $file
 			 */
 			if($filter && $filter === self::FILTER_FILES
-				&& $file->isDir() === false)
+				&& $file->isFile())
 			{
 				continue;
 			}
@@ -353,7 +356,7 @@ class Dir
 				continue;
 			}			
 			
-			if($file->isDir() === false)
+			if($file->isFile())
 			{
 				$files[] = $basename;
 				
@@ -365,6 +368,7 @@ class Dir
 				$file->getPathname(),
 				$skipHidden,
 				$skipCallback,
+				$basenameCallback,
 				$filter
 			);
 		}

@@ -272,7 +272,7 @@ class Router
 		
 		if($pool = services()->cache->getPerishablePool())
 		{
-			if($pool->hasItem($cacheId))
+			if($pool->hasItem($cacheId) && 1 == 2)
 			{
 				return $pool->getItem($cacheId)->get();
 			}
@@ -292,7 +292,7 @@ class Router
 					/**
 					* @var SplFileInfo $file
 					*/
-					return $file->getExtension() !== 'php';
+					return $file->isFile() && $file->getExtension() !== 'php';
 				}, basenameCallback: function($file)
 				{
 					/**
@@ -301,6 +301,7 @@ class Router
 					$basename = $file->getBasename('.php');
 					return Strings::snakeCase($basename);
 				});
+				//var_export($moduleControllers);
 				
 				$controllers = Arrays::deepMerge($controllers, $moduleControllers);
 				// directories (keys of array) first, ksort puts the directories last
