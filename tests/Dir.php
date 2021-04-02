@@ -21,7 +21,7 @@ class Dir extends Test
 		. DIRECTORY_SEPARATOR . 'Dir'
 		. DIRECTORY_SEPARATOR;
 
-	public function copy()
+	public function copyFiles()
 	{
 		$copy = $this->_dir . 'copy';
 		$copy2 = $this->_dir . 'copy2';
@@ -35,7 +35,7 @@ class Dir extends Test
 		return $copyFiles === $copy2Files;
 	}
 	
-	public function move()
+	public function moveFiles()
 	{
 		$copy = $this->_dir . 'copy';
 		$copy2 = $this->_dir . 'copy2';
@@ -51,5 +51,40 @@ class Dir extends Test
 		BaseDir::remove($move);
 		
 		return $copyFiles === $moveFiles;
+	}
+	
+	public function getTree()
+	{
+		$copy = $this->_dir . 'copy';
+		$tree = [
+			'dir2' => [
+				0 => 'file1.txt',
+			],
+			'dir1' => [
+				'dir1' => [
+					0 => 'file1.txt',
+				],
+				1 => 'file2.txt',
+				0 => 'file1.txt',
+			],
+			1 => 'file2.txt',
+			0 => 'file1.txt',
+		];
+		
+		return $tree === BaseDir::getTree($copy);
+	}	
+	
+	public function getFiles()
+	{
+		$copy = $this->_dir . 'copy';
+		
+		return count(BaseDir::getFiles($copy)) === 9;
+	}
+	
+	public function getFilesFilterFiles()
+	{
+		$copy = $this->_dir . 'copy';
+		
+		return count(BaseDir::getFiles($copy, filter: BaseDir::FILTER_FILES)) === 6;
 	}
 }
