@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Pdo\Profiler;
 
 use Ovos\Measurement;
+use SplQueue;
+use function Ovos\config;
 
 /**
  * Collector
@@ -23,9 +25,14 @@ class Collector
 	/**
 	 * Contains collected data
 	 *
-	 * @var array
+	 * @var SplQueue
 	 */
-	protected $_queries = [];
+	protected SplQueue $_queries;
+
+	/**
+	 * @var int
+	 */
+	public static int $limit = 0;
 
 	/**
 	 * @return self
@@ -41,22 +48,34 @@ class Collector
 	}
 
 	/**
+	 */
+	public function __construct()
+	{
+		$this->_queries = new SplQueue;
+	}
+
+	/**
 	 * Adds a query to collector
 	 *
 	 * @param string $sql SQL statement
 	 * @param array $parameters Statement values
 	 * @param Measurement $measurement time and memory usage
 	 *
-	 * @return self
+	 * @return $this
 	 */
-	public function setQuery(string $sql, array $parameters, Measurement $measurement)
+	public function setQuery(string $sql, array $parameters, Measurement $measurement): self
 	{
-		$this->_queries[] = array
-		(
+		$this->_queries->push([
 			'sql' => $sql,
 			'parameters' => $parameters,
 			'measurement' => $measurement,
-		);
+		]);
+		
+		// delete oldest element from the queue if we reached the limit
+		if(self::$limit && $this->_queries->count() > self::$limit)
+		{
+			$this->_queries->shift();
+		}
 
 		return $this;
 	}
@@ -64,9 +83,9 @@ class Collector
 	/**
 	 * Returns collected data
 	 *
-	 * @return array
+	 * @return SplQueue
 	 */
-	public function getQueries(): array
+	public function getQueries(): SplQueue
 	{
 		return $this->_queries;
 	}
