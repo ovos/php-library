@@ -61,7 +61,7 @@ class Collector
 	 * @param array $parameters Statement values
 	 * @param Measurement $measurement time and memory usage
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setQuery(string $sql, array $parameters, Measurement $measurement): self
 	{

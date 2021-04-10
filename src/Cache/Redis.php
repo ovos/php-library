@@ -30,14 +30,14 @@ class Redis
 	protected null|Connection $_connection = null;
 
 	/**
-	 * @var RedisCachePool
+	 * @var null|RedisCachePool
 	 */
 	protected null|RedisCachePool $_pool = null;
 
 	/**
 	 * @param ArrayObject $config
 	 */
-	public function __construct($config)
+	public function __construct(ArrayObject $config)
 	{
 		$this->setConfig($config);
 	}
@@ -45,7 +45,7 @@ class Redis
 	/**
 	 * @param ArrayObject $config
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setConfig(ArrayObject $config): self
 	{
@@ -72,7 +72,7 @@ class Redis
 	}
 
 	/**
-	 * @return null|BaseRedis
+	 * @return ?BaseRedis
 	 */
 	public function getClient(): ?BaseRedis
 	{

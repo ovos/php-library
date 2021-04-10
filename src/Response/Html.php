@@ -35,7 +35,7 @@ class Html extends Response
 	/**
 	 * @param null|string $response
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function set(?string $response): self
 	{
@@ -47,7 +47,7 @@ class Html extends Response
 	/**
 	 * @param string $response
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function append(string $response): self
 	{

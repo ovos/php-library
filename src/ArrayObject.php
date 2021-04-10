@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos;
 
 use ArrayObject as BaseArrayObject;
-use IteratorAggregate;
 use function count;
 
 /**
@@ -30,23 +29,23 @@ class ArrayObject extends BaseArrayObject
 	/**
 	 * @param string $offset
 	 * 
-	 * @return null|mixed
+	 * @return mixed
 	 */
-	public function offsetGet($offset)
+	public function offsetGet($offset): mixed
 	{
-		if(parent::offsetExists($offset) === false)
+		if($this->offsetExists($offset) === false)
 		{
 			return null;
 		}
 		
-		return parent::offsetGet($offset);
+		return $this->offsetGet($offset);
 	}
 
 	/**
 	 * Returns a nested value specified by dot separated path
 	 *
 	 * @param string $path
-	 * @param self $config
+	 * @param null|self $config
 	 *
 	 * @return mixed (self|mixed|null)
 	 *
@@ -81,7 +80,7 @@ class ArrayObject extends BaseArrayObject
 	/**
 	 * @param array $toMerge
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function merge(array $toMerge): self
 	{

@@ -171,7 +171,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param array $properties
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setProperties(array $properties): self
 	{
@@ -192,7 +192,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $name
 	 * @param mixed $value
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setProperty(string $name, $value): self
 	{
@@ -232,7 +232,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param array $modified
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setModified(array $modified): self
 	{
@@ -258,7 +258,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 	
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function resetModified(): self
 	{
@@ -270,7 +270,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param null|self $updateObject
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setUpdateObject(?self $updateObject): self
 	{
@@ -290,7 +290,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param Template $template
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addTemplate(Template $template): self
 	{
@@ -311,7 +311,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $property
 	 * @param string $method
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addSetter(string $property, string $method): self
 	{
@@ -323,7 +323,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $property
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function removeSetter(string $property): self
 	{
@@ -336,7 +336,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $property
 	 * @param string $method
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addGetter(string $property, string $method): self
 	{
@@ -348,7 +348,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $property
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function removeGetter(string $property): self
 	{
@@ -362,7 +362,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $getter
 	 * @param string $setter
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addManipulators(string $property,
 		string $getter, string $setter): self

@@ -31,7 +31,7 @@ class Elements extends Helper
 	protected array $_classes = [];
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function elements(): self
 	{
@@ -41,7 +41,7 @@ class Elements extends Helper
 	/**
 	 * @param string $name
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function __get(string $name): self
 	{
@@ -58,7 +58,7 @@ class Elements extends Helper
 	 *
 	 * @param string $class
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addClass(string $class): self
 	{
@@ -72,7 +72,7 @@ class Elements extends Helper
 	 *
 	 * @param mixed $classes
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addClasses(mixed $classes): self
 	{
@@ -106,7 +106,7 @@ class Elements extends Helper
 	 *
 	 * @return bool
 	 */
-	public function hasAnyClasses()
+	public function hasAnyClasses(): bool
 	{
 		return empty($this->_classes) === false;
 	}
@@ -116,7 +116,7 @@ class Elements extends Helper
 	 *
 	 * @param string $class
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function removeClass(string $class): self
 	{
@@ -133,9 +133,9 @@ class Elements extends Helper
 	 *
 	 * @param mixed $classes
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function removeClasses($classes): self
+	public function removeClasses(mixed $classes): self
 	{
 		if(is_string($classes))
 		{

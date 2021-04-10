@@ -87,7 +87,7 @@ class Cli extends Controller
 	/**
 	 * @param bool $allowHttpAccess
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setAllowHttpAccess(bool $allowHttpAccess): self
 	{
@@ -107,7 +107,7 @@ class Cli extends Controller
 	/**
 	 * @param string $action
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addHttpAction(string $action): self
 	{
@@ -119,7 +119,7 @@ class Cli extends Controller
 	/**
 	 * @param array $actions
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addHttpActions(array $actions): self
 	{
@@ -139,7 +139,7 @@ class Cli extends Controller
 	/**
 	 * @param bool $coloredOutput
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setColoredOutput(bool $coloredOutput): self
 	{
@@ -171,7 +171,7 @@ class Cli extends Controller
 	 *
 	 * @param string ...$message,... params for sprintf
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function log(...$message): self
 	{

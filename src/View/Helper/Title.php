@@ -38,7 +38,7 @@ class Title extends Helper
 	/**
 	 * @param null|string $defaultTitle
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function title(null|string $defaultTitle = null): self
 	{
@@ -53,7 +53,7 @@ class Title extends Helper
 	/**
 	 * @param string $title
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function set(string $title): self
 	{
@@ -73,7 +73,7 @@ class Title extends Helper
 	/**
 	 * @param string $defaultTitle
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDefault(string $defaultTitle): self
 	{
@@ -105,7 +105,7 @@ class Title extends Helper
 	/**
 	 * @param string $item
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function add(string $item): self
 	{
