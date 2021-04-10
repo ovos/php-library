@@ -14,7 +14,7 @@ use Ovos\View\Helper\Elements;
 class Body extends Elements
 {
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function body(): Elements
 	{

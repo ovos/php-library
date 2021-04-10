@@ -31,7 +31,7 @@ abstract class Validator
 	/**
 	 * @param Element $element
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setElement(Element $element): self
 	{
@@ -59,7 +59,7 @@ abstract class Validator
 	/**
 	 * @param Error $error
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function addError(Error $error): self
 	{
@@ -90,7 +90,7 @@ abstract class Validator
 	 * @param string $errorCode
 	 * @param string $value
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setMessage(string $errorCode, string $value): self
 	{
