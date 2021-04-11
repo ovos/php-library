@@ -38,7 +38,7 @@ class ArrayObject extends BaseArrayObject
 			return null;
 		}
 		
-		return $this->offsetGet($offset);
+		return parent::offsetGet($offset);
 	}
 
 	/**
