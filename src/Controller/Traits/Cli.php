@@ -44,14 +44,14 @@ trait Cli
 		
 		return $line;
 	}
-	
+
 	/**
 	 * @param string $dir
 	 * @param bool $selectDirectory
 	 *
-	 * @return ?SplFileInfo
+	 * @return array
 	 */
-	public function selectFile(string $dir, bool $selectDirectory = false): ?SplFileInfo
+	public function listFiles(string $dir, bool $selectDirectory = false): array
 	{
 		$files = [];
 
@@ -73,25 +73,37 @@ trait Cli
 
 			$files[] = $file;
 		}
-
-		if(count($files))
+		
+		return $files;
+	}
+	
+	/**
+	 * @param string $dir
+	 * @param bool $selectDirectory
+	 *
+	 * @return ?SplFileInfo
+	 */
+	public function selectFile(string $dir, bool $selectDirectory = false): ?SplFileInfo
+	{
+		$files = $this->listFiles($dir, $selectDirectory);
+		if(count($files) === 0)
 		{
-			$this->log('Please pick a %s (type the number and hit <blue>ENTER<reset>):', 
-				$selectDirectory ? 'directory' : 'file');
-				
-			foreach($files as $key => $file)
-			{
-				printf("\t%d. %s" . PHP_EOL, $key + 1, $file->getBasename());
-			}
-
-			$selection = (int)$this->readLine() - 1;
-			if(isset($files[$selection]))
-			{
-				return $files[$selection];
-			}
+			return null;
 		}
 
-		return null;
+		$this->log('Please pick a %s (type the number and hit <blue>ENTER<reset>):', 
+			$selectDirectory ? 'directory' : 'file');
+			
+		foreach($files as $key => $file)
+		{
+			printf("\t%d. %s" . PHP_EOL, $key + 1, $file->getBasename());
+		}
+
+		$selection = (int)$this->readLine() - 1;
+		if(isset($files[$selection]))
+		{
+			return $files[$selection];
+		}
 	}
 	
 	/**
