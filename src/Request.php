@@ -211,11 +211,11 @@ class Request
 	}
 	
 	/**
-	 * @param string $param
+	 * @param mixed $param
 	 *
 	 * @return $this
 	 */
-	public function addParam(string $param): self
+	public function addParam(mixed $param): self
 	{
 		$this->_params[] = $param;
 
