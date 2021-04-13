@@ -70,6 +70,7 @@ class View
 		$this->request = $this->_app->getRequest();
 		$this->url = $this->_app->getRequest()->getUrl();
 		$this->controller = $this->_app->getRequest()->getController();
+		$this->controllerInstance = $this->_app->getRequest()->getControllerInstance();
 		$this->action = $this->_app->getRequest()->getAction();
 		$this->locale = $this->_app->getRequest()->getLocale();
 		$this->client = Client::class;
