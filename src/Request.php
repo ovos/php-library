@@ -88,7 +88,7 @@ class Request
 	/**
 	 * @param Locale $locale
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setLocale(Locale $locale): self
 	{
@@ -133,7 +133,7 @@ class Request
 	/**
 	 * @param string $class
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setControllerClass(string $class): self
 	{
@@ -153,7 +153,7 @@ class Request
 	/**
 	 * @param Controller $instance
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setControllerInstance(Controller $instance): self
 	{
@@ -173,7 +173,7 @@ class Request
 	/**
 	 * @param string $action
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setAction(string $action): self
 	{
@@ -193,7 +193,7 @@ class Request
 	/**
 	 * @param string $actionMethod
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setActionMethod(string $actionMethod): self
 	{
@@ -213,7 +213,7 @@ class Request
 	/**
 	 * @param mixed $param
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addParam(mixed $param): self
 	{
@@ -225,7 +225,7 @@ class Request
 	/**
 	 * @param array $params
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setParams(array $params = []): self
 	{
