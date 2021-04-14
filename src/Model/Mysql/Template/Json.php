@@ -64,22 +64,21 @@ class Json extends Template
 	
 	/**
 	 * @param Mysql $model
-	 * @param string $string
+	 * @param mixed $object
 	 * 
 	 * @return ?string
 	 */
-	public function encode(Mysql $model, string $string): ?string
+	public function encode(Mysql $model, mixed $object): ?string
 	{
-		if($string === null)
+		if($object === null)
 		{
 			return null;
 		}
 	
-		$string = json_encode($strng, JSON_THROW_ON_ERROR
+		$string = json_encode($object, JSON_THROW_ON_ERROR
 			| JSON_UNESCAPED_UNICODE
 			| JSON_UNESCAPED_SLASHES
 		 	| JSON_NUMERIC_CHECK
-			| JSON_PRETTY_PRINT
 		);
 			
 		return $string ?: null;	
@@ -89,17 +88,17 @@ class Json extends Template
 	 * @param Mysql $model
 	 * @param string $string
 	 * 
-	 * @return ?string
+	 * @return mixed
 	 */
-	public function decode(Mysql $model, string $string): ?string
+	public function decode(Mysql $model, string $string): mixed
 	{
 		if($string === null)
 		{
 			return null;
 		}
 		
-		$string = json_decode($string, flags: JSON_THROW_ON_ERROR);
+		$object = json_decode($string, flags: JSON_THROW_ON_ERROR);
 			
-		return $string ?: null;	
+		return $object ?: null;	
 	}
 }
