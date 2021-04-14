@@ -41,7 +41,7 @@ class Option
 	/**
 	 * @param Options $options
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setOptions(Options $options): self
 	{
@@ -61,7 +61,7 @@ class Option
 	/**
 	 * @param mixed $value
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setValue($value): self
 	{
@@ -81,7 +81,7 @@ class Option
 	/**
 	 * @param null|mixed $label
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setLabel($label): self
 	{

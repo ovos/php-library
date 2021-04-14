@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\ArrayObject;
+use Ovos\Pdo\Profiler\Collector;
 use Ovos\Service;
 use Ovos\Pdo\Profiler\Pdo;
 use Doctrine\DBAL\Connection;
@@ -72,9 +73,15 @@ class Database extends Service
 				PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 			]);
 
-			if($this->_app->getConfig()->system->profilers->enabled)
+			/** @var ArrayObject $configProfilers */
+			$configProfilers = $this->_app->getConfig()->system->profilers;
+			if($configProfilers->enabled)
 			{
 				$database->setAttribute(PDO::ATTR_STATEMENT_CLASS, ['Ovos\Pdo\Profiler\PdoStatement']);
+				if($configProfilers->offsetExists('queries'))
+				{
+					Collector::$limit = $configProfilers->queries->limit;
+				}
 			}
 		}
 

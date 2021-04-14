@@ -50,7 +50,7 @@ class Json extends Response
 	 *
 	 * @param int $value
 
-	 * @return $this
+	 * @return self
 	 */
 	public function setOptions(int $value): self
 	{
@@ -114,7 +114,7 @@ class Json extends Response
 	 *
 	 * @param stdClass $response
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function set(stdClass $response): self
 	{
@@ -129,7 +129,7 @@ class Json extends Response
 	 *
 	 * @param string $message
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function success(string $message = null): self
 	{
@@ -150,7 +150,7 @@ class Json extends Response
 	 * @param Exception|string $exception
 	 * @param bool $silent true = do not log this exception
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function failure($exception = null, bool $silent = false): self
 	{
@@ -181,7 +181,7 @@ class Json extends Response
 	 * @param mixed $message
 	 * @param mixed $key
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function error($message, $key = null): self
 	{
@@ -207,7 +207,7 @@ class Json extends Response
 	 *
 	 * @param array $errors
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function errors(array $errors): self
 	{
@@ -231,7 +231,7 @@ class Json extends Response
 	/**
 	 * Clear response errors
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function clearErrors(): self
 	{

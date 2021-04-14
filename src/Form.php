@@ -7,6 +7,14 @@ use Ovos\Form\Element;
 use Ovos\Form\Error;
 use Iterator;
 
+use function reset;
+use function current;
+use function next;
+use function key;
+use function array_merge;
+use function count;
+use function array_key_exists;
+
 /**
  * Form
  *
@@ -23,14 +31,14 @@ class Form implements Iterator
 	protected Application $_app;
 
 	/**
-	 * @var string
+	 * @var null|string
 	 */
 	protected null|string $_id = null;
 
 	/**
 	 * Parent form
 	 *
-	 * @var Form
+	 * @var null|Form
 	 */
 	protected null|Form $_form = null;
 
@@ -57,9 +65,9 @@ class Form implements Iterator
 	protected array $_defaults = [];
 
 	/**
-	 * @param string $id
+	 * @param null|string $id
 	 */
-	public function __construct(string $id = null)
+	public function __construct(null|string $id = null)
 	{
 		$this->_app = app();
 		$this->_id = $id;
@@ -90,7 +98,7 @@ class Form implements Iterator
 	/**
 	 * @param Form $form
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setForm(Form $form): self
 	{
@@ -102,7 +110,7 @@ class Form implements Iterator
 	/**
 	 * @param Url $action
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setAction(Url $action): self
 	{
@@ -122,7 +130,7 @@ class Form implements Iterator
 	/**
 	 * @param array $values
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setValues(array $values): self
 	{
@@ -140,9 +148,9 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param null|string|int|float|array $value
 	 * 
-	 * @return $this
+	 * @return self
 	 */
-	public function setValue(string $id, $value): self
+	public function setValue(string $id, null|string|int|float|array $value): self
 	{
 		$this->_values[$id] = $value;
 	
@@ -156,7 +164,7 @@ class Form implements Iterator
 	 *
 	 * @return null|string|int|float|array
 	 */
-	public function getValue(string $id)
+	public function getValue(string $id): null|string|int|float|array
 	{
 		if(isset($this->_values[$id]))
 		{
@@ -199,7 +207,7 @@ class Form implements Iterator
 	/**
 	 * @param array $defaults
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDefaults(array $defaults): self
 	{
@@ -217,9 +225,9 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param null|string|int|float|array $default
 	 * 
-	 * @return $this
+	 * @return self
 	 */
-	public function setDefault(string $id, $default): self
+	public function setDefault(string $id, null|string|int|float|array $default): self
 	{
 		$this->_defaults[$id] = $default;
 	
@@ -231,7 +239,7 @@ class Form implements Iterator
 	 *
 	 * @return Element
 	 */
-	public function __get($id)
+	public function __get(string $id): Element
 	{
 		if($this->__isset($id) === false)
 		{
@@ -247,7 +255,7 @@ class Form implements Iterator
 	 *
 	 * @return Element
 	 */
-	public function getElement(string $id)
+	public function getElement(string $id): Element
 	{
 		return $this->__get($id);
 	}
@@ -268,7 +276,7 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param Element $element
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setElement(string $id, Element $element): self
 	{
@@ -366,7 +374,7 @@ class Form implements Iterator
 	}
 
 	/**
-	 * @return int|mixed|null|string
+	 * @return mixed
 	 */
 	public function key(): mixed
 	{

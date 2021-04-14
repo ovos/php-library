@@ -21,7 +21,7 @@ class Prefix extends Filter
 	/**
 	 * @param string $prefix
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setPrefix(?string $prefix): self
 	{

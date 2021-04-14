@@ -47,7 +47,7 @@ abstract class Widget
 	/**
 	 * @param string $script
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setScript(string $script): self
 	{

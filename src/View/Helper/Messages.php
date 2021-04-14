@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
-use Ovos\Exception;
 use Ovos\Service\Session;
 use Ovos\View;
 use Ovos\View\Helper;
@@ -55,11 +54,11 @@ class Messages extends Helper
 	}
 	
 	/**
-	 * @param string $namespace
+	 * @param null|string $namespace
 	 * 
 	 * @return self
 	 */
-	public function messages(string $namespace = null)
+	public function messages(null|string $namespace = null): self
 	{
 		$this->setNamespace($namespace);
 		
@@ -69,9 +68,9 @@ class Messages extends Helper
 	/**
 	 * @param null|string $namespace
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function setNamespace(?string $namespace): self
+	public function setNamespace(null|string $namespace): self
 	{
 		$this->_namespace = $namespace;
 
@@ -81,7 +80,7 @@ class Messages extends Helper
 	/**
 	 * @return null|string
 	 */
-	public function getNamespace(): ?string
+	public function getNamespace(): null|string
 	{
 		return $this->_namespace;
 	}
@@ -89,7 +88,7 @@ class Messages extends Helper
 	/**
 	 * @return Message[]
 	 */
-	public function &getItems()
+	public function &getItems(): array
 	{
 		if($this->_items === null)
 		{
@@ -110,13 +109,16 @@ class Messages extends Helper
 	}
 
 	/**
-	 * @param string $type
-	 * @param string $description
-	 * @param string $title
+	 * @param null|string $type
+	 * @param null|string $description
+	 * @param null|string $title
 	 *
 	 * @return Message
 	 */
-	public function addMessage(string $type = null, string $description = null, string $title = null): Message
+	public function addMessage(null|string $type = null,
+		null|string $description = null,
+		null|string $title = null
+	): Message
 	{
 		$message = new Message($this, $type, $description, $title);
 		$this->getItems()[] = $message;
@@ -125,45 +127,50 @@ class Messages extends Helper
 	}
 
 	/**
-	 * @param string $description
-	 * @param string $title
+	 * @param null|string $description
+	 * @param null|string $title
 	 * 
 	 * @return Message
 	 */
-	public function addSuccess(string $description = null, string $title = null): Message
+	public function addSuccess(
+		null|string $description = null,
+		null|string $title = null): Message
 	{
 		return $this->addMessage(Message::TYPE_SUCCESS, $description, $title);
 	}
 
 	/**
-	 * @param string $description
-	 * @param string $title
+	 * @param null|string $description
+	 * @param null|string $title
 	 * 
 	 * @return Message
 	 */
-	public function addInfo(string $description = null, string $title = null): Message
+	public function addInfo(null|string $description = null,
+		null|string $title = null): Message
 	{
 		return $this->addMessage(Message::TYPE_INFO, $description, $title);
 	}
 
 	/**
-	 * @param string $description
-	 * @param string $title
+	 * @param null|string $description
+	 * @param null|string $title
 	 * 
 	 * @return Message
 	 */
-	public function addError(string $description = null, string $title = null): Message
+	public function addError(null|string $description = null,
+		null|string $title = null): Message
 	{
 		return $this->addMessage(Message::TYPE_ERROR, $description, $title);
 	}
 
 	/**
-	 * @param string $description
-	 * @param string $title
+	 * @param null|string $description
+	 * @param null|string $title
 	 * 
 	 * @return Message
 	 */
-	public function addWarning(string $description = null, string $title = null): Message
+	public function addWarning(null|string $description = null,
+		null|string $title = null): Message
 	{
 		return $this->addMessage(Message::TYPE_WARNING, $description, $title);
 	}

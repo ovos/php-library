@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Pdo\Profiler;
 
 use Ovos\Measurements;
+use SplQueue;
 
 /**
  * Reporter
@@ -17,9 +18,9 @@ class Reporter
 	/**
 	 * Contains data taken from collector
 	 *
-	 * @var array
+	 * @var SplQueue
 	 */
-	protected array $_queries = [];
+	protected SplQueue $_queries;
 
 	/**
 	 * Stores collector data into internal array

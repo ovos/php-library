@@ -3,6 +3,12 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function count;
+use function str_replace;
+use function preg_replace;
+use function exec;
+use function sprintf;
+
 /**
  * ShellCommand
  *
@@ -84,7 +90,7 @@ class ShellCommand
 	{
 		$command = $this->getCommand();
 		
-		if(\count($args))
+		if(count($args))
 		{
 			$command = sprintf($command, ...$args);
 		}

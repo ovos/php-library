@@ -46,7 +46,7 @@ class Error
 	/**
 	 * @param Element $element
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setElement(Element $element): self
 	{
@@ -74,7 +74,7 @@ class Error
 	/**
 	 * @param Validator $validator
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setValidator(Validator $validator): self
 	{
@@ -94,7 +94,7 @@ class Error
 	/**
 	 * @param null|string $message
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setMessage(?string $message): self
 	{
@@ -114,7 +114,7 @@ class Error
 	/**
 	 * @param string $code
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setCode(string $code): self
 	{

@@ -31,7 +31,7 @@ class RedisCachePool extends BaseRedisCachePool
 	/**
 	 * @param ArrayObject $config
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setConfig(ArrayObject $config): self
 	{

@@ -12,7 +12,6 @@ use Ovos\Service\Session;
 use Ovos\Service\Cookies;
 use Ovos\Service\Cache;
 use Ovos\Service\Database;
-use Ovos\Service\Auth;
 use function Ovos\config;
 
 /**
@@ -29,7 +28,6 @@ use function Ovos\config;
  * @property Cookies $cookies
  * @property Cache $cache
  * @property Database $database
- * @property Auth $auth
  */
 class Services
 {
@@ -43,9 +41,9 @@ class Services
 	/**
 	 * @param string $symbol
 	 *
-	 * @return Service|null
+	 * @return null|Service
 	 */
-	public function get(string $symbol): ?Service
+	public function get(string $symbol): null|Service
 	{
 		if(isset(self::$_items[$symbol]))
 		{
@@ -66,18 +64,18 @@ class Services
 	 *
 	 * @return null|Service
 	 */
-	public function __get(string $symbol): ?Service
+	public function __get(string $symbol): null|Service
 	{
 		return $this->get($symbol);
 	}
 
 	/**
 	 * @param Service $service
-	 * @param string $symbol
+	 * @param null|string $symbol
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function register(Service $service, string $symbol = null): self
+	public function register(Service $service, null|string $symbol = null): self
 	{
 		if($symbol === null)
 		{
@@ -102,7 +100,7 @@ class Services
 	/**
 	 * @return ArrayObject
 	 */
-	public function getConfig()
+	public function getConfig(): ArrayObject
 	{
 		return config()->system->services;
 	}

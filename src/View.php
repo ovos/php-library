@@ -4,8 +4,12 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\View\Helper;
-use Ovos\Translatable;
-use ReflectionClass;
+use function call_user_func_array;
+use function method_exists;
+use function ob_start;
+use function ob_get_clean;
+use function array_key_exists;
+use function class_exists;
 
 /**
  * View
@@ -34,27 +38,28 @@ class View
 	/**
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
-	 * @var string
+	 * @var null|string
 	 */
-	protected $_viewScriptFile;
-
-	/**
-	 * @var array
-	 */
-	protected $_vars = [];
+	protected null|string $_viewScriptFile;
 
 	/**
 	 * @var array
 	 */
-	protected static $_helpers = [];
+	protected array $_vars = [];
 
 	/**
-	 * @param string $viewScriptFile
+	 * @var array
 	 */
-	public function __construct(string $viewScriptFile = null, array $variables = [])
+	protected static array $_helpers = [];
+
+	/**
+	 * @param null|string $viewScriptFile
+	 * @param array $vars
+	 */
+	public function __construct(null|string $viewScriptFile = null, array $vars = [])
 	{
 		$this->_viewScriptFile = $viewScriptFile;
 
@@ -65,12 +70,13 @@ class View
 		$this->request = $this->_app->getRequest();
 		$this->url = $this->_app->getRequest()->getUrl();
 		$this->controller = $this->_app->getRequest()->getController();
+		$this->controllerInstance = $this->_app->getRequest()->getControllerInstance();
 		$this->action = $this->_app->getRequest()->getAction();
 		$this->locale = $this->_app->getRequest()->getLocale();
 		$this->client = Client::class;
 
 		// assign additional variables
-		$this->setMultiple($variables);
+		$this->setMultiple($vars);
 	}
 
 	/**
@@ -102,7 +108,7 @@ class View
 	 * @param string $name
 	 * @param mixed $value
 	 */
-	public function __set(string $name, $value): void
+	public function __set(string $name, mixed $value): void
 	{
 		$this->_vars[$name] = $value;
 	}
@@ -149,7 +155,7 @@ class View
 
 		if(method_exists($instance, $name))
 		{
-			return \call_user_func_array([$instance, $name], $arguments);
+			return call_user_func_array([$instance, $name], $arguments);
 		}
 
 		return $instance;
@@ -184,9 +190,9 @@ class View
 	/**
 	 * Escapes a value for output in a view script.
 	 *
-	 * @param null|mixed $value The output to escape.
+	 * @param mixed $value The output to escape.
 	 *
-	 * @return null|mixed The escaped value.
+	 * @return mixed The escaped value.
 	 */
 	public function escape(mixed $value): mixed
 	{
@@ -209,14 +215,14 @@ class View
 	}
 
 	/**
-	 * @param string $viewScriptFile (optional)
+	 * @param null|string $viewScriptFile (optional)
 	 * @param array $variables (optional)
 	 *
 	 * @return string
 	 *
 	 * @throws Exception
 	 */
-	public function render(string $viewScriptFile = null, array $variables = []): string
+	public function render(null|string $viewScriptFile = null, array $variables = []): string
 	{
 		if($viewScriptFile === null)
 		{
@@ -240,7 +246,7 @@ class View
 	/**
 	 * @param array $variables
 	 */
-	public function setMultiple($variables)
+	public function setMultiple(array $variables): void
 	{
 		foreach($variables as $name => $value)
 		{

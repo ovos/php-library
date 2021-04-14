@@ -58,7 +58,7 @@ class Redirect extends Response
 	/**
 	 * Send headers
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function sendHeaders(): Response
 	{

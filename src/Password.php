@@ -4,6 +4,15 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Password\Hash;
+use function strlen;
+use function count;
+use function array_rand;
+use function str_shuffle;
+use function floor;
+use function sqrt;
+use function substr;
+use function password_verify;
+use function str_split;
 
 /**
  * Password
@@ -23,29 +32,37 @@ class Password
 	public const SET_SPECIAL_FTP = 16;
 	/**#@-*/
 	
-	/** @var Hash */
-	public static $hashInstance;
+	/**
+	 * @var null|Hash 
+	 */
+	public static null|Hash $hashInstance = null;
 	
 	/**
 	 * @param string $password
-	 * @param int $algorithm
-	 * @param array $options
+	 * @param null|int $algorithm
+	 * @param null|array $options
 	 *
 	 * @return bool|string
 	 */
-	public static function hash(string $password, int $algorithm = null, $options = null)
+	public static function hash(string $password,
+		null|int $algorithm = null,
+		null|array $options = null
+	): bool|string	
 	{
 		return self::getHashInstance()->hash($password, $algorithm, $options);
 	}
 	
 	/**
 	 * @param string $password
-	 * @param int $algorithm
-	 * @param array $options
+	 * @param null|int $algorithm
+	 * @param null|array $options
 	 *
 	 * @return bool|string
 	 */
-	public static function needsRehash(string $password, int $algorithm = null, $options = null)
+	public static function needsRehash(string $password,
+		null|int $algorithm = null,
+		null|array $options = null
+	): bool|string
 	{
 		return self::getHashInstance()->needsRehash($password, $algorithm, $options);
 	}
@@ -130,7 +147,7 @@ class Password
 		}
 		$all = str_split($all);
 
-		for($i = 0; $i < $length - \count($sets); $i++)
+		for($i = 0; $i < $length - count($sets); $i++)
 		{
 			$password.= $all[array_rand($all)];
 		}
@@ -144,7 +161,7 @@ class Password
 
 		$dashesCount = (int)floor(sqrt($length));
 		$passwordDashed = '';
-		while(\strlen($password) > $dashesCount)
+		while(strlen($password) > $dashesCount)
 		{
 			$passwordDashed.= substr($password, 0, $dashesCount) . '-';
 			$password = substr($password, $dashesCount);

@@ -5,10 +5,8 @@ namespace Ovos\Service;
 
 use Ovos\ArrayObject;
 use Ovos\Service;
-use Cache\Adapter\Common\AbstractCachePool;
 use Cache\Prefixed\PrefixedCachePool;
 use Cache\Adapter\Apcu\ApcuCachePool;
-use Cache\Adapter\Filesystem\FilesystemCachePool;
 use Ovos\Cache\Adapter\Redis\RedisCachePool;
 use function Ovos\services;
 
@@ -31,12 +29,12 @@ class Cache extends Service
 	protected ArrayObject $_config;
 
 	/**
-	 * @var RedisCachePool
+	 * @var null|RedisCachePool
 	 */
 	protected null|RedisCachePool $_persistentPool = null;
 
 	/**
-	 * @var PrefixedCachePool
+	 * @var null|PrefixedCachePool
 	 */
 	protected null|PrefixedCachePool $_perishablePool = null;
 
@@ -66,9 +64,9 @@ class Cache extends Service
 	/**
 	 * @param bool $persistent
 	 * 
-	 * @return ?RedisCachePool|PrefixedCachePool
+	 * @return null|RedisCachePool|PrefixedCachePool
 	 */
-	public function getPool($persistent = true)
+	public function getPool($persistent = true): null|RedisCachePool|PrefixedCachePool
 	{
 		return $persistent ?
 			$this->getPersistentPool()

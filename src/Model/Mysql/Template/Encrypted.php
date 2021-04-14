@@ -24,7 +24,7 @@ class Encrypted extends Template
 	/**
 	 * @param array $properties
 	 */
-	public function __construct($properties = [])
+	public function __construct(array $properties = [])
 	{
 		parent::__construct();
 	
@@ -34,7 +34,7 @@ class Encrypted extends Template
 	/**
 	 * @param array $properties
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setProperties(array $properties): self
 	{
@@ -63,7 +63,7 @@ class Encrypted extends Template
 	}
 	
 	/**
-	 * @return null|ArrayObject
+	 * @return ?ArrayObject
 	 */
 	public function getEncryptionConfig(): ?ArrayObject
 	{
@@ -74,9 +74,9 @@ class Encrypted extends Template
 	 * @param Mysql $model
 	 * @param string $string
 	 * 
-	 * @return null|string
+	 * @return ?string
 	 */
-	public function encrypt(Mysql $model, $string): ?string
+	public function encrypt(Mysql $model, string $string): ?string
 	{
 		if($string === null)
 		{
@@ -112,9 +112,9 @@ class Encrypted extends Template
 	 * @param Mysql $model
 	 * @param string $string
 	 * 
-	 * @return null|string
+	 * @return ?string
 	 */
-	public function decrypt(Mysql $model, $string): ?string
+	public function decrypt(Mysql $model, string $string): ?string
 	{
 		if($string === null)
 		{

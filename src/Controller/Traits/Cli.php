@@ -4,9 +4,16 @@ declare(strict_types=1);
 namespace Ovos\Controller\Traits;
 
 use Ovos\Terminal;
+use SplFileInfo;
+use FilesystemIterator;
+use function count;
+use function str_starts_with;
+use function printf;
 
 /**
  * Trait Cli
+ * Additional tools for user-interacting CLI
+ * Warning: by default including this trait turns on the colored output
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
@@ -14,28 +21,12 @@ use Ovos\Terminal;
 trait Cli
 {
 	/**
-	 * Process id
-	 *
-	 * @var int
 	 */
-	protected null|int $_pid = null;
-
-	/**
-	 * @var bool
-	 */
-	protected bool $_coloredOutput = false;
-
-	/**
-	 * @return int
-	 */
-	public function getPid(): int
+	public function __construct()
 	{
-		if($this->_pid === null)
-		{
-			$this->_pid = getmypid();
-		}
-
-		return $this->_pid;
+		parent::__construct();
+		
+		$this->setColoredOutput(true);
 	}
 
 	/**
@@ -55,53 +46,73 @@ trait Cli
 	}
 
 	/**
-	 * Returns memory usage in MB
+	 * @param string $dir
+	 * @param bool $selectDirectory
 	 *
-	 * @return float
+	 * @return array
 	 */
-	public function getMemoryUsageMB(): float
+	public function listFiles(string $dir, bool $selectDirectory = false): array
 	{
-		return round(memory_get_usage(false) / (1024 * 1024), 2);
-	}
+		$files = [];
 
-	/**
-	 * @param bool $coloredOutput
-	 * 
-	 * @return $this
-	 */
-	public function setColoredOutput(bool $coloredOutput): self
-	{
-		$this->_coloredOutput = $coloredOutput;
-		
-		return $this;
-	}
-
-	/**
-	 * @return bool
-	 */
-	public function isColoredOutput(): bool
-	{
-		return $this->_coloredOutput;
-	}
-
-	/**
-	 * Log messages
-	 *
-	 * @param string ...$message,... params for sprintf
-	 *
-	 * @return $this
-	 */
-	public function log(...$message): self
-	{
-		if(\count($message))
+		$iterator = new FilesystemIterator($dir, FilesystemIterator::SKIP_DOTS);
+		foreach($iterator as $file)
 		{
-			$message = sprintf(...$message);
+			/**
+			 * @var SplFileInfo $file
+			 */
+			if($file->isDir() !== $selectDirectory)
+			{
+				continue;
+			}
+			
+			if(str_starts_with($file->getBasename(), '.')) // skip hidden files
+			{
+				continue;
+			}
+
+			$files[] = $file;
+		}
+		
+		return $files;
+	}
+	
+	/**
+	 * @param string $dir
+	 * @param bool $selectDirectory
+	 *
+	 * @return ?SplFileInfo
+	 */
+	public function selectFile(string $dir, bool $selectDirectory = false): ?SplFileInfo
+	{
+		$files = $this->listFiles($dir, $selectDirectory);
+		if(count($files) === 0)
+		{
+			return null;
 		}
 
-		Terminal::output('<darkgray>[' . $this->getPid() . '] '
-			. '<purple>' . date('Y-m-d H:i:s') . ': '
-			. '<reset>' . $message . '<reset>' . PHP_EOL, $this->_coloredOutput);
+		$this->log('Please pick a %s (type the number and hit <blue>ENTER<reset>):', 
+			$selectDirectory ? 'directory' : 'file');
 			
-		return $this;
+		foreach($files as $key => $file)
+		{
+			printf("\t%d. %s" . PHP_EOL, $key + 1, $file->getBasename());
+		}
+
+		$selection = (int)$this->readLine() - 1;
+		if(isset($files[$selection]))
+		{
+			return $files[$selection];
+		}
+	}
+	
+	/**
+	 * @param string $dir
+	 *
+	 * @return ?SplFileInfo
+	 */
+	public function selectDirectory(string $dir): ?SplFileInfo
+	{
+		return $this->selectFile($dir, true);
 	}
 }

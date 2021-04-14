@@ -62,9 +62,9 @@ abstract class Service
 	/**
 	 * @param bool $enabled
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function setEnabled($enabled): self
+	public function setEnabled(bool $enabled): self
 	{
 		$this->_enabled = $enabled;
 

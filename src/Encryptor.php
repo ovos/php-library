@@ -34,7 +34,7 @@ class Encryptor
 	/**
 	 * @param null|string $method
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setMethod(?string $method): self
 	{
@@ -54,7 +54,7 @@ class Encryptor
 	/**
 	 * @param string $key
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setKey($key): self
 	{
@@ -77,14 +77,14 @@ class Encryptor
 	 * 
 	 * @return null|string
 	 */
-	public function encrypt($string, ?string $method = null): ?string
+	public function encrypt(string $string, ?string $method = null): ?string
 	{
 		if($string === null)
 		{
 			return null;
 		}
 		
-		if($this->getMethod() === null && $method === null)
+		if($method === null && $this->getMethod() === null)
 		{
 			return null;
 		}
@@ -117,7 +117,7 @@ class Encryptor
 	 * 
 	 * @return null|string
 	 */
-	public function decrypt($string): ?string
+	public function decrypt(string $string): ?string
 	{
 		if($string === null)
 		{
@@ -125,7 +125,7 @@ class Encryptor
 		}
 		
 		$string = base64_decode($string);
-		list($method, $cipherKey, $cipherIv, $tag, $string) = explode(':', $string);	
+		[$method, $cipherKey, $cipherIv, $tag, $string] = explode(':', $string);	
 	
 		$string = openssl_decrypt($string, 
 			$method,
@@ -146,8 +146,6 @@ class Encryptor
 	 */
 	public function encryptArray(array $patterns, array &$data): array
 	{
-		$encryptor = new Encryptor($config->getKey(), $config->getMethod());
-	
 		foreach($data as $key => &$value)
 		{
 			if(is_array($value))
@@ -161,7 +159,7 @@ class Encryptor
 			{
 				if(preg_match($pattern, $key, $matches))
 				{
-					$value = $encryptor->encrypt($value);
+					$value = $this->encrypt($value);
 					
 					break;
 				}

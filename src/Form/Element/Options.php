@@ -32,7 +32,7 @@ class Options extends Element
 	 * @param string $columnKey
 	 * @param string $indexKey
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function fromObjects(array $options, string $columnKey,
 		string $indexKey = null): self
@@ -50,7 +50,7 @@ class Options extends Element
 	/**
 	 * @param array $options
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setOptions(...$options): self
 	{
@@ -70,7 +70,7 @@ class Options extends Element
 	/**
 	 * @param int|string $option
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function addOption(int|string $option): self
 	{
@@ -87,7 +87,7 @@ class Options extends Element
 	 * @param array $options
 	 * @param bool $keyIsValue
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function addOptions(array $options, bool $keyIsValue = false): self
 	{

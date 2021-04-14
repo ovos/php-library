@@ -16,8 +16,15 @@ use PDOStatement;
 use ReflectionClass;
 use ReflectionObject;
 use ReflectionProperty;
-use in_array;
 use function Ovos\services;
+use function in_array;
+use function count;
+use function array_key_exists;
+use function method_exists;
+use function reset;
+use function current;
+use function next;
+use function key;
 
 /**
  * Mysql
@@ -38,7 +45,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * A connection between PHP and a database server
 	 *
-	 * @var PDO
+	 * @var null|PDO
 	 */
 	protected null|PDO $_source = null;
 
@@ -89,7 +96,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	protected bool $_exists = false;
 
 	/**
-	 * @var self
+	 * @var null|self
 	 */
 	protected null|self $_updateObject = null;
 
@@ -129,7 +136,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 	/**
 	 */
-	public function _initSource()
+	public function _initSource(): void
 	{
 		// get database connection
 		$this->_source = services()->database->get($this->_sourceName);
@@ -164,7 +171,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param array $properties
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setProperties(array $properties): self
 	{
@@ -185,7 +192,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $name
 	 * @param mixed $value
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setProperty(string $name, $value): self
 	{
@@ -225,7 +232,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param array $modified
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setModified(array $modified): self
 	{
@@ -247,11 +254,11 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function isModified(): bool
 	{
-		return \count($this->_modified) > 0;
+		return count($this->_modified) > 0;
 	}
 	
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function resetModified(): self
 	{
@@ -261,9 +268,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @param null|self $updateObject
+	 * @param ?self $updateObject
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setUpdateObject(?self $updateObject): self
 	{
@@ -283,7 +290,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param Template $template
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addTemplate(Template $template): self
 	{
@@ -304,7 +311,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $property
 	 * @param string $method
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addSetter(string $property, string $method): self
 	{
@@ -316,7 +323,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $property
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function removeSetter(string $property): self
 	{
@@ -329,7 +336,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $property
 	 * @param string $method
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addGetter(string $property, string $method): self
 	{
@@ -341,7 +348,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $property
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function removeGetter(string $property): self
 	{
@@ -355,7 +362,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $getter
 	 * @param string $setter
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addManipulators(string $property,
 		string $getter, string $setter): self
@@ -494,7 +501,6 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public static function import(object $source, array $skip = []): self
 	{
-		/** @var self $destination */
 		$destination = new static; // late static binding
 		foreach($source as $property => $value)
 		{
@@ -511,7 +517,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param array $values
 	 */
-	public function fromArray(array $values)
+	public function fromArray(array $values): void
 	{
 		foreach($values as $property => $value)
 		{
@@ -543,7 +549,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @return array
 	 */
-	public function __debugInfo()
+	public function __debugInfo(): array
 	{
 		return $this->toArray();
 	}
@@ -553,7 +559,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function count(): int
 	{
-		return \count($this->_properties);
+		return count($this->_properties);
 	}
 
 	/**
@@ -589,9 +595,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @return int|mixed|null|string
+	 * @return null|int|string
 	 */
-	public function key()
+	public function key(): null|int|string
 	{
 		return key($this->_properties);
 	}
@@ -608,8 +614,6 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 	/**
 	 * @return bool
-	 *
-	 * @throws Exception
 	 */
 	public function insert(): bool
 	{
@@ -661,16 +665,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 				$attempt++;
 			}
 		}
-
-		return false;
 	}
 
 	/**
 	 * @param self $updateObject
 	 *
 	 * @return bool
-	 *
-	 * @throws Exception
 	 */
 	public function update(self $updateObject): bool
 	{
@@ -827,8 +827,6 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param PDOStatement $statement
 	 *
 	 * @return void
-	 *
-	 * @throws Exception
 	 */
 	public function bindPrimaryKeys(PDOStatement $statement): void
 	{
@@ -840,7 +838,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @param array|null $filter
+	 * @param ?array $filter
 	 *
 	 * @return stdClass
 	 */
@@ -882,7 +880,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param mixed ...$events
 	 */
-	public function triggerEvents(...$events)
+	public function triggerEvents(...$events): void
 	{
 		foreach($events as $event)
 		{
@@ -896,7 +894,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getErrorMessage(): ?string
 	{

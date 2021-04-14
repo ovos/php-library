@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos\View\Helper;
 
 use Ovos\View\Helper;
+use function array_unshift;
+use function implode;
 
 /**
  * Title
@@ -19,7 +21,7 @@ class Title extends Helper
 	protected string $_defaultTitle;
 
 	/**
-	 * @var string
+	 * @var null|string
 	 */
 	protected null|string $_title = null;
 
@@ -34,11 +36,11 @@ class Title extends Helper
 	protected array $_items = [];
 
 	/**
-	 * @param string $defaultTitle
+	 * @param null|string $defaultTitle
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function title(string $defaultTitle = null): self
+	public function title(null|string $defaultTitle = null): self
 	{
 		if($defaultTitle !== null)
 		{
@@ -51,9 +53,9 @@ class Title extends Helper
 	/**
 	 * @param string $title
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function set($title): self
+	public function set(string $title): self
 	{
 		$this->_title = $title;
 
@@ -71,7 +73,7 @@ class Title extends Helper
 	/**
 	 * @param string $defaultTitle
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDefault(string $defaultTitle): self
 	{
@@ -93,7 +95,7 @@ class Title extends Helper
 	 *
 	 * @return self
 	 */
-	public function setSeparator($separator): self
+	public function setSeparator(string $separator): self
 	{
 		$this->_separator = $separator;
 
@@ -103,7 +105,7 @@ class Title extends Helper
 	/**
 	 * @param string $item
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function add(string $item): self
 	{

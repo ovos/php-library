@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function array_slice;
+
 /**
  * Error
  *
@@ -180,7 +182,7 @@ class Error
 
 		// Remove first 3 lines
 		$trace = explode("\n", $trace);
-		$trace = \array_slice($trace, $tracesToIgnore);
+		$trace = array_slice($trace, $tracesToIgnore);
 		$trace = implode("\n", $trace);
 
 		return $trace;

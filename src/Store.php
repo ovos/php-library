@@ -16,7 +16,7 @@ abstract class Store
 	 *
 	 * @var Application
 	 */
-	protected $_app;
+	protected Application $_app;
 
 	/**
 	 */
