@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\Client;
-use Ovos\Encryptor;
 use Ovos\Error;
 use Ovos\Exception;
 use Ovos\Logger as LoggerTrait;
@@ -57,7 +56,7 @@ class Logger extends Service
 	/**
 	 * @param array $remove
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addRemove(array $remove): self
 	{
@@ -79,7 +78,7 @@ class Logger extends Service
 	 *
 	 * @param mixed[] ...$event
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function log(...$event): self
 	{
@@ -138,7 +137,7 @@ class Logger extends Service
 				"%s: %s\n%s %s",
 				$_SERVER['REQUEST_METHOD'],
 				$_SERVER['REQUEST_URI'] ?? '',
-				Client::getIP(),
+				Client::getIp(),
 				$_SERVER['HTTP_USER_AGENT'] ?? ''
 			);
 		}
@@ -182,7 +181,7 @@ class Logger extends Service
 	 * 
 	 * @return array
 	 */
-	public function remove($data)
+	public function remove(array $data): array
 	{
 		foreach($data as $key => $value)
 		{

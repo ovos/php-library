@@ -7,8 +7,8 @@ use Ovos\Service\Memory;
 use Ovos\View\Helper;
 use Ovos\Dir;
 use Ovos\Services;
-use SplFileObject;
 use ErrorException;
+use function Ovos\services;
 
 /**
  * Asset
@@ -40,7 +40,7 @@ class Asset extends Helper
 	/**
 	 * @param string $asset
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function asset(string $asset): self
 	{
@@ -52,9 +52,9 @@ class Asset extends Helper
 	/**
 	 * @param string $asset
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function set($asset): self
+	public function set(string $asset): self
 	{
 		$this->_asset = $asset;
 

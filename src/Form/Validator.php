@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 namespace Ovos\Form;
+use function count;
+use function array_key_exists;
 
 /**
  * Validator
@@ -29,7 +31,7 @@ abstract class Validator
 	/**
 	 * @param Element $element
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setElement(Element $element): self
 	{
@@ -51,13 +53,13 @@ abstract class Validator
 	 */
 	public function hasErrors(): bool
 	{
-		return \count($this->_errors) > 0;
+		return count($this->_errors) > 0;
 	}
 
 	/**
 	 * @param Error $error
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function addError(Error $error): self
 	{
@@ -88,7 +90,7 @@ abstract class Validator
 	 * @param string $errorCode
 	 * @param string $value
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setMessage(string $errorCode, string $value): self
 	{
@@ -117,5 +119,5 @@ abstract class Validator
 	 *
 	 * @return bool
 	 */
-	abstract public function isValid($value): bool;
+	abstract public function isValid(mixed $value): bool;
 }

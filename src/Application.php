@@ -3,11 +3,9 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Environment;
 use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Config\Loader as ConfigLoader;
 use Ovos\Service\Memory;
-use Ovos\View\Layout;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
 use function define;
@@ -194,7 +192,7 @@ class Application
 	 *
 	 * @param Response $response
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setResponse(Response $response): self
 	{
@@ -204,7 +202,7 @@ class Application
 	}
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	protected function _init(): self
 	{
@@ -217,7 +215,7 @@ class Application
 	/**
 	 * Sets the environment
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _initEnvironment(): self
 	{
@@ -250,7 +248,7 @@ class Application
 	 *
 	 * @param string $interface
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setInterface($interface): self
 	{
@@ -315,7 +313,7 @@ class Application
 	/**
 	 * Sets up shutdown handler
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _initShutdownHandler(): self
 	{
@@ -327,7 +325,7 @@ class Application
 	/**
 	 * Initializes the bootstrap
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _initBootstrap(): self
 	{
@@ -393,7 +391,7 @@ class Application
 	/**
 	 * Initializes constants
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _initConstants(): self
 	{
@@ -434,7 +432,7 @@ class Application
 	/**
 	 * Initializes modules
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _initModules(): self
 	{
@@ -480,7 +478,7 @@ class Application
 	/**
 	 * Initializes services
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _initServices(): self
 	{
@@ -595,7 +593,7 @@ class Application
 	 *
 	 * @param Response $response
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _sendResponse($response): self
 	{
@@ -638,7 +636,7 @@ class Application
 	 *
 	 * @param Response\Json $response
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _sendJsonResponse($response): self
 	{
@@ -682,7 +680,7 @@ class Application
 	 *
 	 * @param Response\Html $response
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	protected function _sendHtmlResponse($response): self
 	{

@@ -5,6 +5,9 @@ namespace Ovos;
 
 use ResourceBundle;
 use Collator;
+use function array_reverse;
+use function array_key_exists;
+use function is_numeric;
 
 /**
  * Locale
@@ -65,7 +68,7 @@ class Locale
 	/**
 	 * @param string $urlName
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setUrlName(string $urlName): self
 	{
@@ -85,7 +88,7 @@ class Locale
 	/**
 	 * @param string $symbol
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setSymbol(string $symbol): self
 	{
@@ -105,7 +108,7 @@ class Locale
 	/**
 	 * @param string $language
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setLanguage(string $language): self
 	{
@@ -125,7 +128,7 @@ class Locale
 	/**
 	 * @param string $country
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setCountry(string $country): self
 	{
@@ -145,7 +148,7 @@ class Locale
 	/**
 	 * @param string $name
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setName(string $name): self
 	{
@@ -157,7 +160,7 @@ class Locale
 	/**
 	 * @param bool $default
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDefault(bool $default): self
 	{
@@ -233,7 +236,7 @@ class Locale
 	/**
 	 * @return array
 	 */
-	public function __debugInfo()
+	public function __debugInfo(): array
 	{
 		return [
 			'url_name' => $this->_urlName,

@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos;
 
 use function ob_get_level;
+use function header;
+use function http_response_code;
 
 /**
  * Response
@@ -60,7 +62,7 @@ class Response
 	/**
 	 * @param int $httpCode
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setHttpCode(int $httpCode): self
 	{
@@ -74,7 +76,7 @@ class Response
 	 * @param mixed $value
 	 * @param bool $replace
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setHeader(string $name, $value, bool $replace = false): self
 	{
@@ -89,9 +91,9 @@ class Response
 	/**
 	 * @param string $name
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function clearHeader($name): self
+	public function clearHeader(string $name): self
 	{
 		if(isset($this->_headers[$name]))
 		{
@@ -102,7 +104,7 @@ class Response
 	}
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function clearAllHeaders(): self
 	{
@@ -114,7 +116,7 @@ class Response
 	/**
 	 * Send headers
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function sendHeaders(): self
 	{
@@ -163,7 +165,7 @@ class Response
 	/**
 	 * @param bool $sent
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setIsSent(bool $sent): self
 	{
@@ -183,7 +185,7 @@ class Response
 	/**
 	 * @param bool $headersSent
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setHeadersSent(bool $headersSent): self
 	{

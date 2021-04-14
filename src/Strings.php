@@ -4,6 +4,20 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Cocur\Slugify\Slugify;
+use function str_starts_with;
+use function str_contains;
+use function ucwords;
+use function str_replace;
+use function lcfirst;
+use function str_pad;
+use function ctype_lower;
+use function strtolower;
+use function preg_replace;
+use function dechex;
+use function random_int;
+use function mt_rand;
+use function strlen;
+use function htmlspecialchars;
 
 /**
  * Strings
@@ -14,6 +28,8 @@ use Cocur\Slugify\Slugify;
 class Strings
 {
 	/**
+	 * @deprecated 
+	 * 
 	 * @param string $haystack
 	 * @param string $needle
 	 *
@@ -21,7 +37,7 @@ class Strings
 	 */
 	public static function startsWith(string $haystack, string $needle): bool
 	{
-		return strpos($haystack, $needle) === 0;
+		return str_starts_with($haystack, $needle);
 	}
 
 	/**
@@ -34,7 +50,7 @@ class Strings
 	 */
 	public static function contains(string $haystack, string $needle): bool
 	{
-		return strpos($haystack, $needle) !== false;
+		return str_contains($haystack, $needle);
 	}
 
 	/**

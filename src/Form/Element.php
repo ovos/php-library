@@ -51,7 +51,7 @@ class Element
 	/**
 	 * @param string $id
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setId(string $id): self
 	{
@@ -91,7 +91,7 @@ class Element
 	/**
 	 * @param Form $form
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setForm(Form $form): self
 	{
@@ -111,7 +111,7 @@ class Element
 	/**
 	 * @param null|string|int|float|array $value
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setValue($value): self
 	{
@@ -156,7 +156,7 @@ class Element
 	/**
 	 * @param null|string $label
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setLabel(?string $label): self
 	{
@@ -176,7 +176,7 @@ class Element
 	/**
 	 * @param null|string|int|float|array $default
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDefault($default): self
 	{
@@ -203,7 +203,7 @@ class Element
 	/**
 	 * @param Filter $filter
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addFilter(Filter $filter): self
 	{
@@ -215,7 +215,7 @@ class Element
 	/**
 	 * @param Validator $validator
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addValidator(Validator $validator): self
 	{
@@ -247,7 +247,7 @@ class Element
 	/**
 	 * @param Error $error
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addError(Error $error): self
 	{
@@ -260,7 +260,7 @@ class Element
 	/**
 	 * @param Error[] $errors
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addErrors(array $errors): self
 	{

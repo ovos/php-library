@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function nl2br;
+
 /**
  * Functions
  *

@@ -5,6 +5,8 @@ namespace Ovos;
 
 use Ovos\Terminal\Formatter;
 use function Ovos\app;
+use function stream_get_line;
+use function fwrite;
 
 /**
  * Terminal
@@ -15,9 +17,9 @@ use function Ovos\app;
 class Terminal
 {
 	/**
-	 * @return string|null
+	 * @return null|string
 	 */
-	public static function readLine(): ?string
+	public static function readLine(): null|string
 	{
 		$line = stream_get_line(STDIN, 1024, PHP_EOL);
 		
@@ -37,7 +39,7 @@ class Terminal
 	 * 
 	 * @return void
 	 */
-	public static function output(string $message, $markup = false): void
+	public static function output(string $message, bool $markup = false): void
 	{
 		$isCli = PHP_SAPI === 'cli';
 		

@@ -43,7 +43,7 @@ class Placeholders extends Helper
 	}
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function clear(): self
 	{

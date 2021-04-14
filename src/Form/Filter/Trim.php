@@ -29,7 +29,7 @@ class Trim extends Filter
 	/**
 	 * @param string $characterMask
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setCharacterMask(string $characterMask): self
 	{

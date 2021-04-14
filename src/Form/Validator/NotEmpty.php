@@ -33,7 +33,7 @@ class NotEmpty extends Validator
 	 *
 	 * @return bool
 	 */
-	public function isValid($value): bool
+	public function isValid(mixed $value): bool
 	{
 		$valid = empty($value) === false;
 		if($valid === false)

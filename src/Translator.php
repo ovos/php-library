@@ -35,9 +35,9 @@ class Translator
 	/**
 	 * @param string|Translation $translation
 	 *
-	 * @return $this
+	 * @return self
 	 */
-	public function addTranslation($translation): self
+	public function addTranslation(string|Translation $translation): self
 	{
 		$this->_translations[$translation->getPath()] = $translation;
 
@@ -47,7 +47,7 @@ class Translator
 	/**
 	 * @param string $path
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addTranslationPath(string $path): self
 	{
