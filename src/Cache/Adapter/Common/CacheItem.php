@@ -42,7 +42,7 @@ class CacheItem extends BaseCacheItem
 	/**
 	 * @param ArrayObject $config
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setConfig(ArrayObject $config): self
 	{
@@ -62,7 +62,7 @@ class CacheItem extends BaseCacheItem
 	/**
 	 * @param bool $raw
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setRaw(bool $raw): self
 	{

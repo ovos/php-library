@@ -73,7 +73,7 @@ class Services
 	 * @param Service $service
 	 * @param null|string $symbol
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function register(Service $service, null|string $symbol = null): self
 	{

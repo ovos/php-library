@@ -50,7 +50,7 @@ class Benchmark extends Service
 	/**
 	 * @param string $name
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function start(string $name = self::TOTAL): self
 	{
@@ -63,7 +63,7 @@ class Benchmark extends Service
 	/**
 	 * @param string $name
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function stop(string $name = self::TOTAL): self
 	{

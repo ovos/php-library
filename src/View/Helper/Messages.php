@@ -68,7 +68,7 @@ class Messages extends Helper
 	/**
 	 * @param null|string $namespace
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setNamespace(null|string $namespace): self
 	{

@@ -141,7 +141,7 @@ class Url
 	 * @param array $components
 	 * @param bool $detectLocale
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setComponents(array $components, bool $detectLocale = false): self
 	{
@@ -163,7 +163,7 @@ class Url
 	 * @param array $components
 	 * @param bool $detectLocale
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function set(array $components, bool $detectLocale = false): self
 	{
@@ -175,7 +175,7 @@ class Url
 	 * 
 	 * @param int|string $component
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addComponent(int|string $component): self
 	{
@@ -191,7 +191,7 @@ class Url
 	/**
 	 * @param string[] $components
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function add(...$components): self
 	{
@@ -206,7 +206,7 @@ class Url
 	/**
 	 * @param int|string|null $component (null to remove it)
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setLastComponent(int|string|null $component): self
 	{
@@ -245,7 +245,7 @@ class Url
 	 * 
 	 * @param null|int|string $component (null to remove it)
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setLast(null|int|string $component): self
 	{
@@ -263,7 +263,7 @@ class Url
 	/**
 	 * @param Locale|string $locale
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setLocale(Locale|string $locale): self
 	{
@@ -293,7 +293,7 @@ class Url
 	/**
 	 * @param bool $relative
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setRelative(bool $relative): self
 	{

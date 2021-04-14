@@ -34,7 +34,7 @@ class Encryptor
 	/**
 	 * @param null|string $method
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setMethod(?string $method): self
 	{
@@ -54,7 +54,7 @@ class Encryptor
 	/**
 	 * @param string $key
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setKey($key): self
 	{

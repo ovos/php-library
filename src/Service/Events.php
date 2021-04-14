@@ -126,7 +126,7 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @param mixed[] ...$event
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function log(...$event): self
 	{
@@ -140,7 +140,7 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @param mixed $event
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function add($event): self
 	{

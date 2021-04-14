@@ -40,7 +40,7 @@ class Asset extends Helper
 	/**
 	 * @param string $asset
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function asset(string $asset): self
 	{
@@ -52,7 +52,7 @@ class Asset extends Helper
 	/**
 	 * @param string $asset
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function set(string $asset): self
 	{

@@ -64,7 +64,7 @@ class FormElement extends Helper
 	/**
 	 * @param Element $element
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function formElement(Element $element): self
 	{
@@ -84,7 +84,7 @@ class FormElement extends Helper
 	/**
 	 * @param null|Element $element
 	 * 
-	 * @return $this;
+	 * @return self;
 	 */
 	public function setElement(null|Element $element): self
 	{
@@ -104,7 +104,7 @@ class FormElement extends Helper
 	/**
 	 * @param null|string $type
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setType(null|string $type): self
 	{
@@ -124,7 +124,7 @@ class FormElement extends Helper
 	/**
 	 * @param null|string $description
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setDescription(null|string $description): self
 	{
@@ -144,7 +144,7 @@ class FormElement extends Helper
 	/**
 	 * @param null|string $placeholder
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setPlaceholder(null|string $placeholder): self
 	{
@@ -164,7 +164,7 @@ class FormElement extends Helper
 	/**
 	 * @param null|string $elementClass
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setElementClass(null|string $elementClass): self
 	{
@@ -184,7 +184,7 @@ class FormElement extends Helper
 	/**
 	 * @param null|string $fieldClass
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setFieldClass(null|string $fieldClass): self
 	{
@@ -204,7 +204,7 @@ class FormElement extends Helper
 	/**
 	 * @param array $attributes
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setAttributes(array $attributes): self
 	{
@@ -224,7 +224,7 @@ class FormElement extends Helper
 	/**
 	 * @param null|string $optionWrap
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setOptionWrap(null|string $optionWrap): self
 	{
@@ -260,7 +260,7 @@ class FormElement extends Helper
 	 * @param string $key
 	 * @param mixed $value
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setOption(string $key, mixed $value): self
 	{

@@ -68,7 +68,7 @@ class Locale
 	/**
 	 * @param string $urlName
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setUrlName(string $urlName): self
 	{
@@ -88,7 +88,7 @@ class Locale
 	/**
 	 * @param string $symbol
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setSymbol(string $symbol): self
 	{
@@ -108,7 +108,7 @@ class Locale
 	/**
 	 * @param string $language
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setLanguage(string $language): self
 	{
@@ -128,7 +128,7 @@ class Locale
 	/**
 	 * @param string $country
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setCountry(string $country): self
 	{
@@ -148,7 +148,7 @@ class Locale
 	/**
 	 * @param string $name
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setName(string $name): self
 	{
@@ -160,7 +160,7 @@ class Locale
 	/**
 	 * @param bool $default
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDefault(bool $default): self
 	{

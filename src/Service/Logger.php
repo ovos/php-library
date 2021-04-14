@@ -56,7 +56,7 @@ class Logger extends Service
 	/**
 	 * @param array $remove
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addRemove(array $remove): self
 	{
@@ -78,7 +78,7 @@ class Logger extends Service
 	 *
 	 * @param mixed[] ...$event
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function log(...$event): self
 	{

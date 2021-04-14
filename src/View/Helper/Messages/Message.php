@@ -62,7 +62,7 @@ class Message
 	/**
 	 * @param Messages $messages
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setMessages(Messages $messages): self
 	{
@@ -74,7 +74,7 @@ class Message
 	/**
 	 * @param null|string $title
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setTitle(null|string $title): self
 	{
@@ -94,7 +94,7 @@ class Message
 	/**
 	 * @param null|string $description
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDescription(?string $description): self
 	{
@@ -114,7 +114,7 @@ class Message
 	/**
 	 * @param string $type
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setType(string $type): self
 	{

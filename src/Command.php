@@ -46,7 +46,7 @@ class Command
 	/**
 	 * @param string $name
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setName(string $name): self
 	{
@@ -58,7 +58,7 @@ class Command
 	/**
 	 * @param array $params
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setParams(array $params): self
 	{
