@@ -26,7 +26,7 @@ class Replace extends Filter
 	/**
 	 * @param string $pattern
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setPattern(string $pattern): self
 	{
@@ -46,7 +46,7 @@ class Replace extends Filter
 	/**
 	 * @param string $replacement
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setReplacement(?string $replacement): self
 	{

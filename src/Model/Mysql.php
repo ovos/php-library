@@ -268,7 +268,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @param null|self $updateObject
+	 * @param ?self $updateObject
 	 *
 	 * @return self
 	 */

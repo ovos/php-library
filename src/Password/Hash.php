@@ -46,7 +46,7 @@ class Hash
 	/**
 	 * @param string $algorithm
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setAlgorithm($algorithm): self
 	{
@@ -66,7 +66,7 @@ class Hash
 	/**
 	 * @param array $options
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setOptions(array $options): self
 	{

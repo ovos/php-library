@@ -44,7 +44,7 @@ class SameAs extends Validator
 	/**
 	 * @param string $id
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setId(string $id): self
 	{

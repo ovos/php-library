@@ -36,7 +36,7 @@ class Translation
 	/**
 	 * @param string $path
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setPath(string $path): self
 	{

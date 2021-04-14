@@ -30,7 +30,7 @@ class Placeholder
 	 * @param null|string|bool|int $value
 	 * @param string $placement
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function set(null|string|bool|int $value,
 		string $placement = self::PLACEMENT_REPLACE
@@ -55,7 +55,7 @@ class Placeholder
 	/**
 	 * @param null|string|bool|int $value
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function prepend(null|string|bool|int $value): self
 	{
@@ -67,7 +67,7 @@ class Placeholder
 	/**
 	 * @param  null|string|bool|int $value
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function append( null|string|bool|int $value): self
 	{

@@ -62,7 +62,7 @@ abstract class Service
 	/**
 	 * @param bool $enabled
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setEnabled(bool $enabled): self
 	{

@@ -32,7 +32,7 @@ class File extends Element
 	/**
 	 * @param array $types
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setTypes(array $types): self
 	{

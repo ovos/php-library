@@ -34,7 +34,7 @@ class Measurement
 	}
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function start(): self
 	{
@@ -45,7 +45,7 @@ class Measurement
 	}
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function stop(): self
 	{

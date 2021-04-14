@@ -171,7 +171,7 @@ class Controller
 	/**
 	 * @param string $dispatchedAction
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDispatchedAction(string $dispatchedAction): self
 	{
@@ -191,7 +191,7 @@ class Controller
 	/**
 	 * @param array $params
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setParams(array $params): self
 	{
@@ -211,7 +211,7 @@ class Controller
 	/**
 	 * @param string $path
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addTranslationPath(string $path): self
 	{
@@ -259,7 +259,7 @@ class Controller
 	/**
 	 * @param bool $dispatched
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDispatched(bool $dispatched): self
 	{
@@ -412,7 +412,7 @@ class Controller
 	/**
 	 * @param null|ArrayObject $plugins
 	 * 
-	 * @return $this
+	 * @return self
 	 * 
 	 * @throws RuntimeException
 	 */
@@ -450,7 +450,7 @@ class Controller
 	 * @param Plugin $plugin
 	 * @param null|string $symbol
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function addPlugin(Plugin $plugin, null|string $symbol = null): self
 	{
@@ -510,7 +510,7 @@ class Controller
 	/**
 	 * @param string $symbol
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function removePlugin(string $symbol): self
 	{

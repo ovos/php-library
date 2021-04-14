@@ -113,7 +113,7 @@ class Request
 	/**
 	 * @param string $controller
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setController(string $controller): self
 	{

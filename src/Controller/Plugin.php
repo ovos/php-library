@@ -81,7 +81,7 @@ abstract class Plugin
 	/**
 	 * @param Controller $controller
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setController(Controller $controller): self
 	{
@@ -121,7 +121,7 @@ abstract class Plugin
 	/**
 	 * @param bool $enabled
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setEnabled(bool $enabled = true): self
 	{
@@ -131,7 +131,7 @@ abstract class Plugin
 	}
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function disable(): self
 	{

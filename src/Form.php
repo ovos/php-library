@@ -98,7 +98,7 @@ class Form implements Iterator
 	/**
 	 * @param Form $form
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setForm(Form $form): self
 	{
@@ -110,7 +110,7 @@ class Form implements Iterator
 	/**
 	 * @param Url $action
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setAction(Url $action): self
 	{
@@ -130,7 +130,7 @@ class Form implements Iterator
 	/**
 	 * @param array $values
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setValues(array $values): self
 	{
@@ -148,7 +148,7 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param null|string|int|float|array $value
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setValue(string $id, null|string|int|float|array $value): self
 	{
@@ -207,7 +207,7 @@ class Form implements Iterator
 	/**
 	 * @param array $defaults
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setDefaults(array $defaults): self
 	{
@@ -225,7 +225,7 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param null|string|int|float|array $default
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setDefault(string $id, null|string|int|float|array $default): self
 	{
@@ -276,7 +276,7 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param Element $element
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function setElement(string $id, Element $element): self
 	{
