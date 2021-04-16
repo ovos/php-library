@@ -279,6 +279,39 @@ abstract class Mysql extends Store
 	}
 	
 	/**
+	 * @param array $where
+	 * @param string $select
+	 * @param array $options
+	 *
+	 * @return PDOStatement
+	 */
+	public function prepareFind(
+		array $where = [],
+		string $select = '*',
+		array $options = [],
+	): false|PDOStatement
+	{
+		$query = $this->query()
+			->select($select)
+			->from(static::TABLE);
+		
+		foreach($where as $property => $value)
+		{
+			$query->andWhere($property . ' = ?');
+		}
+		
+		if(isset($options['order']))
+		{
+			$query->orderBy(...$options['order']);
+		}
+		
+		$query = $this->prepareQuery($query);
+		$query->execute(array_values($where));
+		
+		return $query;
+	}
+	
+	/**
 	 * @param PDOStatement $statement
 	 * @param string $class
 	 *

@@ -26,12 +26,12 @@ class Element
 	/**
 	 * @var null|string|int|float|array
 	 */
-	protected null|string|int|float|array $_value;
+	protected null|string|int|float|array $_value = null;
 
 	/**
 	 * @var null|string
 	 */
-	protected null|string $_label;
+	protected null|string $_label = null;
 
 	/**
 	 * @var Validator[]

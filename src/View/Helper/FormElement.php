@@ -19,32 +19,32 @@ class FormElement extends Helper
 	/**
 	 * @var null|Element
 	 */
-	protected null|Element $_element;
+	protected null|Element $_element = null;
 
 	/**
 	 * @var null|string
 	 */
-	protected null|string $_type;
+	protected null|string $_type = null;
 
 	/**
 	 * @var null|string
 	 */
-	protected null|string $_description;
+	protected null|string $_description = null;
 
 	/**
 	 * @var null|string
 	 */
-	protected null|string $_placeholder;
+	protected null|string $_placeholder = null;
 
 	/**
 	 * @var null|string
 	 */
-	protected null|string $_elementClass;
+	protected null|string $_elementClass = null;
 
 	/**
 	 * @var null|string
 	 */
-	protected null|string $_fieldClass;
+	protected null|string $_fieldClass = null;
 
 	/**
 	 * @var array
@@ -54,7 +54,7 @@ class FormElement extends Helper
 	/**
 	 * @var null|string
 	 */
-	protected null|string $_optionWrap;
+	protected null|string $_optionWrap = null;
 
 	/**
 	 * @var array
