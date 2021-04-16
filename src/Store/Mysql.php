@@ -285,7 +285,7 @@ abstract class Mysql extends Store
 	 *
 	 * @return PDOStatement
 	 */
-	public function prepareFind(
+	public function executeFind(
 		array $where = [],
 		string $select = '*',
 		array $options = [],
