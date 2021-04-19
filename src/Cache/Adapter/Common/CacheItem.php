@@ -100,7 +100,7 @@ class CacheItem extends BaseCacheItem
 	/**
 	 * @param null|mixed $value
 	 * 
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function compress($value): ?string
 	{
@@ -138,7 +138,7 @@ class CacheItem extends BaseCacheItem
 	}	
 
 	/**
-	 * @param null|string $value
+	 * @param ?string $value
 	 * 
 	 * @return null|mixed
 	 */

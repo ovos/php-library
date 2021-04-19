@@ -36,9 +36,9 @@ abstract class Mysql extends Store
 	/**
 	 * A connection between PHP and a database server
 	 *
-	 * @var null|PDO
+	 * @var ?PDO
 	 */
-	protected null|PDO $_source = null;
+	protected ?PDO $_source = null;
 
 	/**
 	 * @return PDO
@@ -276,6 +276,39 @@ abstract class Mysql extends Store
 	public function insert(Model $model): bool
 	{
 		return $model->insert();
+	}
+	
+	/**
+	 * @param array $where
+	 * @param string $select
+	 * @param array $options
+	 *
+	 * @return PDOStatement
+	 */
+	public function executeFind(
+		array $where = [],
+		string $select = '*',
+		array $options = [],
+	): false|PDOStatement
+	{
+		$query = $this->query()
+			->select($select)
+			->from(static::TABLE);
+		
+		foreach($where as $property => $value)
+		{
+			$query->andWhere($property . ' = ?');
+		}
+		
+		if(isset($options['order']))
+		{
+			$query->orderBy(...$options['order']);
+		}
+		
+		$query = $this->prepareQuery($query);
+		$query->execute(array_values($where));
+		
+		return $query;
 	}
 	
 	/**

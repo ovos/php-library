@@ -18,9 +18,9 @@ class Collector
 	/**
 	 * Collector instance
 	 *
-	 * @var null|self
+	 * @var ?self
 	 */
-	protected static null|self $instance = null;
+	protected static ?self $instance = null;
 
 	/**
 	 * Contains collected data

@@ -71,11 +71,11 @@ class Services
 
 	/**
 	 * @param Service $service
-	 * @param null|string $symbol
+	 * @param ?string $symbol
 	 *
 	 * @return self
 	 */
-	public function register(Service $service, null|string $symbol = null): self
+	public function register(Service $service, ?string $symbol = null): self
 	{
 		if($symbol === null)
 		{

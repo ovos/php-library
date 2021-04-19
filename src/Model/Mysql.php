@@ -45,9 +45,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * A connection between PHP and a database server
 	 *
-	 * @var null|PDO
+	 * @var ?PDO
 	 */
-	protected null|PDO $_source = null;
+	protected ?PDO $_source = null;
 
 	/**
 	 * List of primary keys
@@ -59,9 +59,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * Autoincrement key
 	 *
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected null|string $_autoIncrementKey = 'id';
+	protected ?string $_autoIncrementKey = 'id';
 
 	/**
 	 * @var array
@@ -96,9 +96,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	protected bool $_exists = false;
 
 	/**
-	 * @var null|self
+	 * @var ?self
 	 */
-	protected null|self $_updateObject = null;
+	protected ?self $_updateObject = null;
 
 	/**
 	 * @param array|null $properties
@@ -161,7 +161,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getAutoIncrementKey(): ?string
 	{
@@ -280,7 +280,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @return null|self
+	 * @return ?self
 	 */
 	public function getUpdateObject(): ?self
 	{

@@ -26,12 +26,12 @@ class Element
 	/**
 	 * @var null|string|int|float|array
 	 */
-	protected null|string|int|float|array $_value;
+	protected null|string|int|float|array $_value = null;
 
 	/**
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected null|string $_label;
+	protected ?string $_label = null;
 
 	/**
 	 * @var Validator[]
@@ -154,7 +154,7 @@ class Element
 	}
 
 	/**
-	 * @param null|string $label
+	 * @param ?string $label
 	 * 
 	 * @return self
 	 */
@@ -166,7 +166,7 @@ class Element
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getLabel(): ?string
 	{

@@ -5,6 +5,8 @@ namespace Ovos\Form\Element;
 
 use Ovos\Form\Element;
 use Ovos\Form\Element\Options\Option;
+use function array_column;
+use function is_array;
 
 /**
  * Options
@@ -54,7 +56,7 @@ class Options extends Element
 	 */
 	public function setOptions(...$options): self
 	{
-		if(\is_array($options[0]))
+		if(is_array($options[0]))
 		{
 			$options = $options[0];
 		}
@@ -68,11 +70,11 @@ class Options extends Element
 	}
 
 	/**
-	 * @param int|string $option
+	 * @param int|string|Option $option
 	 * 
 	 * @return self
 	 */
-	public function addOption(int|string $option): self
+	public function addOption(int|string|Option $option): self
 	{
 		$optionObj = $option instanceof Option ? 
 			$option : new Option($option);
@@ -138,7 +140,7 @@ class Options extends Element
 	{
 		$value = (string)$this->getValue();
 		$values = $this->getOptionsValues();
-		if(\in_array($value, $values, true) === false)
+		if(in_array($value, $values, true) === false)
 		{
 			$this->setValue(null);
 		}
