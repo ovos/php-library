@@ -56,6 +56,11 @@ class FormElement extends Helper
 	 * @var array
 	 */
 	protected array $_attributes = [];
+	
+	/**
+	 * @var Closure
+	 */
+	protected ?Closure $_attributesCallback = null;
 
 	/**
 	 * @var ?string
@@ -245,6 +250,26 @@ class FormElement extends Helper
 	public function getAttributes(): array
 	{
 		return $this->_attributes;
+	}
+	
+	/**
+	 * @param ?Closure $attributes
+	 * 
+	 * @return self
+	 */
+	public function setAttributesCallback(?Closure $attributesCallback): self
+	{
+		$this->_attributesCallback = $attributesCallback;
+		
+		return $this;
+	}
+
+	/**
+	 * @return ?Closure
+	 */
+	public function getAttributesCallback(): ?Closure
+	{
+		return $this->_attributesCallback;
 	}
 
 	/**

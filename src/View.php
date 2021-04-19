@@ -17,9 +17,11 @@ use function class_exists;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  *
+ * @method static Helper\Asset asset
  * @method static Helper\Benchmark benchmark
  * @method static Helper\Body body
  * @method static Helper\Elements elements
+ * @method static Helper\FormElement formElement
  * @method static Helper\Queries queries
  * @method static Helper\Messages messages
  * @method static Helper\Placeholders placeholders
