@@ -286,7 +286,7 @@ class Application
 	/**
 	 * Returns the config object (with optional array access)
 	 *
-	 * @param null|string $configFile
+	 * @param ?string $configFile
 	 * @param null|Environment $environment
 	 *
 	 * @return ArrayObject

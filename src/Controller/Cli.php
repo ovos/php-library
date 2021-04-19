@@ -37,9 +37,9 @@ class Cli extends Controller
 	/**
 	 * Process id
 	 *
-	 * @var null|int
+	 * @var ?int
 	 */
-	protected null|int $_pid = null;
+	protected ?int $_pid = null;
 	
 	/**
 	 * @var bool

@@ -36,9 +36,9 @@ abstract class Mysql extends Store
 	/**
 	 * A connection between PHP and a database server
 	 *
-	 * @var null|PDO
+	 * @var ?PDO
 	 */
-	protected null|PDO $_source = null;
+	protected ?PDO $_source = null;
 
 	/**
 	 * @return PDO

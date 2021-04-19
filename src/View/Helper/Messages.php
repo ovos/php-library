@@ -31,9 +31,9 @@ class Messages extends Helper
 	/**
 	 * Internal namespace
 	 * 
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected null|string $_namespace;
+	protected ?string $_namespace;
 
 	/**
 	 * @var Message[]
@@ -54,11 +54,11 @@ class Messages extends Helper
 	}
 	
 	/**
-	 * @param null|string $namespace
+	 * @param ?string $namespace
 	 * 
 	 * @return self
 	 */
-	public function messages(null|string $namespace = null): self
+	public function messages(?string $namespace = null): self
 	{
 		$this->setNamespace($namespace);
 		
@@ -66,11 +66,11 @@ class Messages extends Helper
 	}
 
 	/**
-	 * @param null|string $namespace
+	 * @param ?string $namespace
 	 *
 	 * @return self
 	 */
-	public function setNamespace(null|string $namespace): self
+	public function setNamespace(?string $namespace): self
 	{
 		$this->_namespace = $namespace;
 
@@ -78,7 +78,7 @@ class Messages extends Helper
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getNamespace(): null|string
 	{
@@ -109,15 +109,15 @@ class Messages extends Helper
 	}
 
 	/**
-	 * @param null|string $type
-	 * @param null|string $description
-	 * @param null|string $title
+	 * @param ?string $type
+	 * @param ?string $description
+	 * @param ?string $title
 	 *
 	 * @return Message
 	 */
-	public function addMessage(null|string $type = null,
-		null|string $description = null,
-		null|string $title = null
+	public function addMessage(?string $type = null,
+		?string $description = null,
+		?string $title = null
 	): Message
 	{
 		$message = new Message($this, $type, $description, $title);
@@ -127,50 +127,50 @@ class Messages extends Helper
 	}
 
 	/**
-	 * @param null|string $description
-	 * @param null|string $title
+	 * @param ?string $description
+	 * @param ?string $title
 	 * 
 	 * @return Message
 	 */
 	public function addSuccess(
-		null|string $description = null,
-		null|string $title = null): Message
+		?string $description = null,
+		?string $title = null): Message
 	{
 		return $this->addMessage(Message::TYPE_SUCCESS, $description, $title);
 	}
 
 	/**
-	 * @param null|string $description
-	 * @param null|string $title
+	 * @param ?string $description
+	 * @param ?string $title
 	 * 
 	 * @return Message
 	 */
-	public function addInfo(null|string $description = null,
-		null|string $title = null): Message
+	public function addInfo(?string $description = null,
+		?string $title = null): Message
 	{
 		return $this->addMessage(Message::TYPE_INFO, $description, $title);
 	}
 
 	/**
-	 * @param null|string $description
-	 * @param null|string $title
+	 * @param ?string $description
+	 * @param ?string $title
 	 * 
 	 * @return Message
 	 */
-	public function addError(null|string $description = null,
-		null|string $title = null): Message
+	public function addError(?string $description = null,
+		?string $title = null): Message
 	{
 		return $this->addMessage(Message::TYPE_ERROR, $description, $title);
 	}
 
 	/**
-	 * @param null|string $description
-	 * @param null|string $title
+	 * @param ?string $description
+	 * @param ?string $title
 	 * 
 	 * @return Message
 	 */
-	public function addWarning(null|string $description = null,
-		null|string $title = null): Message
+	public function addWarning(?string $description = null,
+		?string $title = null): Message
 	{
 		return $this->addMessage(Message::TYPE_WARNING, $description, $title);
 	}

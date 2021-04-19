@@ -102,7 +102,7 @@ abstract class Validator
 	/**
 	 * @param string $errorCode
 	 * 
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getMessage(string $errorCode): ?string
 	{

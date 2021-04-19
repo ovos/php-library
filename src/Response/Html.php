@@ -14,9 +14,9 @@ use Ovos\Response;
 class Html extends Response
 {
 	/**
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected null|string $_response = null;
+	protected ?string $_response = null;
 
 	/**
 	 * Construct
@@ -33,7 +33,7 @@ class Html extends Response
 	}
 
 	/**
-	 * @param null|string $response
+	 * @param ?string $response
 	 *
 	 * @return self
 	 */
@@ -57,7 +57,7 @@ class Html extends Response
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function get(): ?string
 	{
