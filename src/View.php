@@ -41,9 +41,9 @@ class View
 	protected Application $_app;
 
 	/**
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected null|string $_viewScriptFile;
+	protected ?string $_viewScriptFile;
 
 	/**
 	 * @var array
@@ -56,10 +56,10 @@ class View
 	protected static array $_helpers = [];
 
 	/**
-	 * @param null|string $viewScriptFile
+	 * @param ?string $viewScriptFile
 	 * @param array $vars
 	 */
-	public function __construct(null|string $viewScriptFile = null, array $vars = [])
+	public function __construct(?string $viewScriptFile = null, array $vars = [])
 	{
 		$this->_viewScriptFile = $viewScriptFile;
 
@@ -215,14 +215,14 @@ class View
 	}
 
 	/**
-	 * @param null|string $viewScriptFile (optional)
+	 * @param ?string $viewScriptFile (optional)
 	 * @param array $variables (optional)
 	 *
 	 * @return string
 	 *
 	 * @throws Exception
 	 */
-	public function render(null|string $viewScriptFile = null, array $variables = []): string
+	public function render(?string $viewScriptFile = null, array $variables = []): string
 	{
 		if($viewScriptFile === null)
 		{

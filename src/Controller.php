@@ -448,11 +448,11 @@ class Controller
 
 	/**
 	 * @param Plugin $plugin
-	 * @param null|string $symbol
+	 * @param ?string $symbol
 	 *
 	 * @return self
 	 */
-	public function addPlugin(Plugin $plugin, null|string $symbol = null): self
+	public function addPlugin(Plugin $plugin, ?string $symbol = null): self
 	{
 		if($symbol === null)
 		{
@@ -465,12 +465,12 @@ class Controller
 	}
 
 	/**
-	 * @param null|string $symbol
+	 * @param ?string $symbol
 	 * @param array $arguments
 	 *
 	 * @return mixed
 	 */
-	public function getPlugin(null|string $symbol = null, array $arguments = []): mixed
+	public function getPlugin(?string $symbol = null, array $arguments = []): mixed
 	{
 		if($this->hasPlugin($symbol) === false)
 		{
@@ -487,11 +487,11 @@ class Controller
 	}
 
 	/**
-	 * @param null|string $symbol
+	 * @param ?string $symbol
 	 *
 	 * @return bool
 	 */
-	public function hasPlugin(null|string $symbol = null): bool
+	public function hasPlugin(?string $symbol = null): bool
 	{
 		return array_key_exists($symbol, $this->_plugins);
 	}

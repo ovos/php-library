@@ -32,7 +32,7 @@ trait Cli
 	/**
 	 * @param mixed $default
 	 * 
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function readLine(mixed $default = null): ?string
 	{

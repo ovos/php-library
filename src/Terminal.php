@@ -17,7 +17,7 @@ use function fwrite;
 class Terminal
 {
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public static function readLine(): null|string
 	{

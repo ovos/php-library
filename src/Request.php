@@ -243,17 +243,17 @@ class Request
 	}
 	
 	/**
-	 * @param null|string $name
-	 * @param null|string $default
+	 * @param ?string $name
+	 * @param ?string $default
 	 * @see http://php.net/filter_var
-	 * @param null|int $filter
+	 * @param ?int $filter
 	 * @param int $options
 	 *
 	 * @return null|array|string
 	 */
-	public function get(null|string $name = null,
-		null|string $default = null,
-		null|int $filter = null,
+	public function get(?string $name = null,
+		?string $default = null,
+		?int $filter = null,
 		int $options = FILTER_NULL_ON_FAILURE) : null|array|string // filter_var arguments
 	{
 		if($name === null)
@@ -275,17 +275,17 @@ class Request
 	}
 
 	/**
-	 * @param null|string $name
+	 * @param ?string $name
 	 * @param null|string|array|int $default
 	 * @see http://php.net/filter_var
-	 * @param null|int $filter
+	 * @param ?int $filter
 	 * @param int $options
 	 *
 	 * @return null|array|string
 	 */
-	public function getPost(null|string $name = null,
+	public function getPost(?string $name = null,
 		null|string|array|int $default = null,
-		null|int $filter = null,
+		?int $filter = null,
 		int $options = FILTER_NULL_ON_FAILURE): null|array|string // filter_var arguments
 	{
 		if($name === null)
@@ -309,7 +309,7 @@ class Request
 	/**
 	 * @param string $name
 	 *
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getServer(string $name): ?string
 	{

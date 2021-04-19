@@ -92,7 +92,7 @@ class Error
 	}	
 
 	/**
-	 * @param null|string $message
+	 * @param ?string $message
 	 * 
 	 * @return self
 	 */
@@ -104,7 +104,7 @@ class Error
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getMessage(): ?string
 	{

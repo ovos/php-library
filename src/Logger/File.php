@@ -16,7 +16,7 @@ trait File
 	/**
 	 * @var string
 	 */
-	protected null|string $_absoluteDir = null;	
+	protected ?string $_absoluteDir = null;	
 
 	/**
 	 * @return string
