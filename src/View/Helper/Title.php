@@ -21,9 +21,9 @@ class Title extends Helper
 	protected string $_defaultTitle;
 
 	/**
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected null|string $_title = null;
+	protected ?string $_title = null;
 
 	/**
 	 * @var string
@@ -36,11 +36,11 @@ class Title extends Helper
 	protected array $_items = [];
 
 	/**
-	 * @param null|string $defaultTitle
+	 * @param ?string $defaultTitle
 	 *
 	 * @return self
 	 */
-	public function title(null|string $defaultTitle = null): self
+	public function title(?string $defaultTitle = null): self
 	{
 		if($defaultTitle !== null)
 		{

@@ -45,7 +45,7 @@ class ArrayObject extends BaseArrayObject
 	 * Returns a nested value specified by dot separated path
 	 *
 	 * @param string $path
-	 * @param null|self $config
+	 * @param ?self $config
 	 *
 	 * @return mixed (self|mixed|null)
 	 *

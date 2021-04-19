@@ -37,7 +37,7 @@ abstract class Migration
 	 *
 	 * @var PDO
 	 */
-	protected null|PDO $_source = null;
+	protected ?PDO $_source = null;
 	
 	/**
 	 * @param ReflectionClass $class
@@ -116,7 +116,7 @@ abstract class Migration
 	/**
 	 * @param string $suffix
 	 *
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getSqlFilepath(string $suffix): ?string
 	{

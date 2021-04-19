@@ -14,9 +14,9 @@ use Ovos\View;
 class Layout extends View
 {
 	/**
-	 * @param null|string $viewScriptFile
+	 * @param ?string $viewScriptFile
 	 */
-	public function __construct(null|string $viewScriptFile = null)
+	public function __construct(?string $viewScriptFile = null)
 	{
 		if($viewScriptFile !== null)
 		{

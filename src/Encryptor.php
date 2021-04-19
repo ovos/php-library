@@ -12,9 +12,9 @@ namespace Ovos;
 class Encryptor
 {
 	/**
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected null|string $_method;
+	protected ?string $_method;
 
 	/**
 	 * @var string
@@ -23,7 +23,7 @@ class Encryptor
 
 	/**
 	 * @param string $key
-	 * @param null|string $method (optional)
+	 * @param ?string $method (optional)
 	 */
 	public function __construct(string $key, string $method = null)
 	{
@@ -32,7 +32,7 @@ class Encryptor
 	}
 
 	/**
-	 * @param null|string $method
+	 * @param ?string $method
 	 * 
 	 * @return self
 	 */
@@ -44,7 +44,7 @@ class Encryptor
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getMethod(): ?string
 	{
@@ -73,9 +73,9 @@ class Encryptor
 
 	/**
 	 * @param string $string
-	 * @param null|string $method
+	 * @param ?string $method
 	 * 
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function encrypt(string $string, ?string $method = null): ?string
 	{
@@ -115,7 +115,7 @@ class Encryptor
 	/**
 	 * @param string $string
 	 * 
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function decrypt(string $string): ?string
 	{

@@ -18,9 +18,9 @@ class Client
 	/**
 	 * IP Address
 	 *
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected static null|string $_ip = null;
+	protected static ?string $_ip = null;
 
 	/**
 	 * Returns visitor's IP address
@@ -75,7 +75,7 @@ class Client
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public static function getUserAgent(): null|string
 	{

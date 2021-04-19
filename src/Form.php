@@ -31,9 +31,9 @@ class Form implements Iterator
 	protected Application $_app;
 
 	/**
-	 * @var null|string
+	 * @var ?string
 	 */
-	protected null|string $_id = null;
+	protected ?string $_id = null;
 
 	/**
 	 * Parent form
@@ -65,9 +65,9 @@ class Form implements Iterator
 	protected array $_defaults = [];
 
 	/**
-	 * @param null|string $id
+	 * @param ?string $id
 	 */
-	public function __construct(null|string $id = null)
+	public function __construct(?string $id = null)
 	{
 		$this->_app = app();
 		$this->_id = $id;
@@ -82,7 +82,7 @@ class Form implements Iterator
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getId(): ?string
 	{

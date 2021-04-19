@@ -56,7 +56,7 @@ class Measurement
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getTotalTime(): ?string
 	{
@@ -76,7 +76,7 @@ class Measurement
 	}
 
 	/**
-	 * @return null|string
+	 * @return ?string
 	 */
 	public function getTotalMemory(): ?string
 	{

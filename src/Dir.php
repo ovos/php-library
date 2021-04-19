@@ -108,11 +108,11 @@ class Dir
 	 *
 	 * @param string $path
 	 * @param bool $remove
-	 * @param null|string $match (regular expression)
+	 * @param ?string $match (regular expression)
 	 *
 	 * @return void
 	 */
-	public static function remove(string $path, bool $remove = true, null|string $match = null): void
+	public static function remove(string $path, bool $remove = true, ?string $match = null): void
 	{
 		if(is_dir($path))
 		{
@@ -153,11 +153,11 @@ class Dir
 	 * Empty the directory or remove recursively files and directories matching regular expression
 	 *
 	 * @param string $path
-	 * @param null|string $match (regular expression)
+	 * @param ?string $match (regular expression)
 	 *
 	 * @return void
 	 */
-	public static function clear(string $path, null|string $match = null): void
+	public static function clear(string $path, ?string $match = null): void
 	{
 		self::remove($path, false, $match);
 	}

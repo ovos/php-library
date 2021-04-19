@@ -39,13 +39,13 @@ class Password
 	
 	/**
 	 * @param string $password
-	 * @param null|int $algorithm
+	 * @param ?int $algorithm
 	 * @param null|array $options
 	 *
 	 * @return bool|string
 	 */
 	public static function hash(string $password,
-		null|int $algorithm = null,
+		?int $algorithm = null,
 		null|array $options = null
 	): bool|string	
 	{
@@ -54,13 +54,13 @@ class Password
 	
 	/**
 	 * @param string $password
-	 * @param null|int $algorithm
+	 * @param ?int $algorithm
 	 * @param null|array $options
 	 *
 	 * @return bool|string
 	 */
 	public static function needsRehash(string $password,
-		null|int $algorithm = null,
+		?int $algorithm = null,
 		null|array $options = null
 	): bool|string
 	{
