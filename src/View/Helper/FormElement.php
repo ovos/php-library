@@ -53,6 +53,11 @@ class FormElement extends Helper
 	protected ?Closure $_fieldClassCallback = null;
 
 	/**
+	 * @var ?Closure
+	 */
+	protected ?Closure $_fieldLabelCallback = null;
+
+	/**
 	 * @var array
 	 */
 	protected array $_attributes = [];
@@ -105,9 +110,9 @@ class FormElement extends Helper
 	}
 
 	/**
-	 * @return null|Element
+	 * @return ?Element
 	 */
-	public function getElement(): null|Element
+	public function getElement(): ?Element
 	{
 		return $this->_element;
 	}
@@ -253,7 +258,7 @@ class FormElement extends Helper
 	}
 	
 	/**
-	 * @param ?Closure $attributes
+	 * @param ?Closure $attributesCallback
 	 * 
 	 * @return self
 	 */
@@ -328,6 +333,26 @@ class FormElement extends Helper
 	public function getOption(string $key): mixed
 	{
 		return $this->_options[$key] ?? null;
+	}
+	
+	/**
+	 * @param ?Closure $fieldLabelCallback
+	 * 
+	 * @return self
+	 */
+	public function setFieldLabelCallback(?Closure $fieldLabelCallback): self
+	{
+		$this->_fieldLabelCallback = $fieldLabelCallback;
+		
+		return $this;
+	}
+
+	/**
+	 * @return ?Closure
+	 */
+	public function getFieldLabelCallback(): ?Closure
+	{
+		return $this->_fieldLabelCallback;
 	}
 	
 	/**
