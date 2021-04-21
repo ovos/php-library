@@ -29,13 +29,25 @@ class Option
 	protected mixed $_label = null;
 	
 	/**
+	 * Object associated with the option
+	 * Can be used for futher processing of the option
+	 * 
+	 * @var ?object
+	 */
+	protected ?object $_object = null;
+	
+	/**
 	 * @param mixed $value
 	 * @param null|mixed $label
+	 * @param ?object $object
 	 */
-	public function __construct($value, $label = null)
+	public function __construct(mixed $value,
+		mixed $label = null,
+		?object $object = null)
 	{
 		$this->setValue($value);
 		$this->setLabel($label);
+		$this->setObject($object);
 	}
 
 	/**
@@ -116,4 +128,25 @@ class Option
 	
 		return (string)$this->getOptions()->getValue() === (string)$this->getValue();
 	}
+
+	/**
+	 * @param ?object $object
+	 * 
+	 * @return self
+	 */
+	public function setObject(?object $object): self
+	{
+		$this->_object = $object;
+		
+		return $this;
+	}
+
+	/**
+	 * @return ?object
+	 */
+	public function getObject(): ?object
+	{
+		return $this->_object;
+	}
+
 }
