@@ -31,18 +31,21 @@ class Options extends Element
 
 	/**
 	 * @param array $options
-	 * @param string $columnKey
-	 * @param string $indexKey
+	 * @param string $valueKey
+	 * @param string $labelKey
 	 * 
 	 * @return self
 	 */
-	public function fromObjects(array $options, string $columnKey,
-		string $indexKey = null): self
+	public function fromObjects(array $options, string $valueKey,
+		string $labelKey = null): self
 	{
-		$options = array_column($options, $columnKey, $indexKey);
-		foreach($options as $key => $option)
+		foreach($options as $object)
 		{
-			$option = new Option($key, $option);
+			$option = new Option(
+				$object->{$valueKey}, 
+				$labelKey ? $object->{$labelKey} : null,
+				$object,
+			);
 			$this->addOption($option);
 		}
 		
