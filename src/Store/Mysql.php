@@ -11,6 +11,7 @@ use PDO;
 use PDOStatement;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Query\QueryBuilder;
+use Closure;
 use function Ovos\services;
 
 /**
@@ -78,6 +79,9 @@ abstract class Mysql extends Store
 	}
 
 	/**
+	 * Only used for getSQL() calls, never used to query the database
+	 * or fetch results due to lack of FETCH_CLASS implementation
+	 * 
 	 * @return QueryBuilder
 	 */
 	public function query(): QueryBuilder
@@ -283,7 +287,7 @@ abstract class Mysql extends Store
 	 * @param string $select
 	 * @param array $options
 	 *
-	 * @return PDOStatement
+	 * @return false|PDOStatement
 	 */
 	public function executeFind(
 		array $where = [],
@@ -321,5 +325,139 @@ abstract class Mysql extends Store
 	{
 		$result = $statement->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP , $class); // group by first column
 		return array_map(fn($row) => reset($row), $result);
+	}
+	
+	/**
+	 * @param array $referenced
+	 * @param string $referencedBy
+	 * @param string $class
+	 * @param ?Closure $queryCallback
+	 * @param string $groupBy
+	 *
+	 * @return array
+	 */
+	public function fetchReferenced(
+		array $referenced,
+		string $referencedBy,
+		string $class,
+		?Closure $queryCallback = null,
+		string $groupBy = 'id',
+	): array
+	{
+		$ids = array_unique(array_column($referenced, $referencedBy));
+		if(empty($ids))
+		{
+			return [];
+		}
+		
+		$query = $this->query()
+			->select($groupBy . ', ' . static::TABLE . '.*')
+			->from(static::TABLE)
+			->where(sprintf($groupBy . ' IN (%s)', implode( ', ', $ids)));
+		if($queryCallback)	
+		{
+			$queryCallback($query);
+		}
+			
+		$query = $this->getSource()->query($query->getSQL());
+		return $this->fetchGrouped($query, $class);
+	}
+	
+	/**
+	 * @param array $referenced
+	 * @param string $referencedBy
+	 * @param string $class
+	 * @param ?Closure $queryCallback
+	 *
+	 * @return array
+	 */
+	public function fetchByReference(
+		array $referenced,
+		string $referencedBy,
+		string $class,
+		?Closure $queryCallback = null
+	): array
+	{
+		$ids = array_keys($referenced);
+		if(empty($ids))
+		{
+			return [];
+		}
+		
+		$query = $this->query()
+			->select('*')
+			->from(static::TABLE)
+			->where(sprintf($referencedBy . ' IN (%s)', implode( ', ', $ids)));
+		if($queryCallback)	
+		{
+			$queryCallback($query);
+		}
+			
+		$query = $this->getSource()->query($query->getSQL());
+		return $query->fetchAll(PDO::FETCH_CLASS, $class);
+	}
+	
+	/**
+	 * @param array $referenced
+	 * @param string $referencedBy
+	 * @param string $reference
+	 * @param array $items
+	 * @param string $key
+	 *
+	 * @return array
+	 */
+	public function assignByReference(
+		array $referenced,
+		string $referencedBy,
+		string $reference,
+		array $items,
+		string $key,	
+	): array
+	{
+		foreach($items as $item)
+		{
+			if(isset($referenced[$item->$referencedBy]) === false)
+			{
+				continue;
+			}
+			
+			$model = $referenced[$item->$referencedBy];
+			if($model->hasReference($reference) === false)
+			{
+				$model->reference($reference, []);
+			}
+			
+			$model->$reference[$item->$key] = $item;
+		}
+		
+		return $referenced;
+	}
+	
+	/**
+	 * @param array $referenced
+	 * @param string $referencedBy
+	 * @param string $reference
+	 * @param array $items
+	 *
+	 * @return array
+	 */
+	public function assignReferenced(
+		array $referenced,
+		string $referencedBy,
+		string $reference,
+		array $items,
+	): array
+	{
+		foreach($referenced as $model)
+		{
+			if(isset($items[$model->$referencedBy]) === false)
+			{
+				continue;
+			}
+			
+			$model->reference($reference, $items[$model->$referencedBy]);
+		}
+		
+		return $referenced;
 	}
 }
