@@ -38,6 +38,11 @@ use function key;
 abstract class Mysql extends Model implements Iterator, Countable
 {
 	/**
+	 * Return null by reference
+	 */
+	public mixed $null = null;
+
+	/**
 	 * @var string
 	 */
 	protected string $_sourceName = 'database';
@@ -87,6 +92,11 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @var array
 	 */
 	protected array $_modified = [];
+	
+	/**
+	 * @var array
+	 */
+	protected array $_references = [];	
 	
 	/**
 	 * A record exists if it was fetched with PK, otherwise it's considered new
@@ -194,7 +204,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return self
 	 */
-	public function setProperty(string $name, $value): self
+	public function setProperty(string $name, mixed $value): self
 	{
 		if(
 			// property does not exist
@@ -227,6 +237,60 @@ abstract class Mysql extends Model implements Iterator, Countable
 		}
 
 		return $this->_properties[$name];
+	}
+
+	/**
+	 * @param string $name
+	 * @param mixed $value
+	 *
+	 * @return self
+	 */
+	public function setReference(string $name, mixed $value): self
+	{
+		$this->_references[$name] = $value;
+
+		return $this;
+	}
+
+	/**
+	 * @param string $name
+	 *
+	 * @return mixed
+	 */
+	public function getReference(string $name): mixed
+	{
+		if(isset($this->_references[$name]))
+		{
+			return $this->_references[$name];
+		}
+
+		return null;
+	}
+	
+	/**
+	 * @param string $name
+	 *
+	 * @return bool
+	 */
+	public function hasReference(string $name): bool
+	{
+		return isset($this->_references[$name]);
+	}
+	
+	/**
+	 * @param string $name
+	 * @param mixed $value
+	 *
+	 * @return self
+	 */
+	public function reference(string $name, mixed $value = null): self
+	{
+		if($value === null)
+		{
+			return $this->getReference($name);
+		}
+		
+		return $this->setReference($name, $value);
 	}
 
 	/**
@@ -379,12 +443,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function __get(string $property): mixed
+	public function &__get(string $property): mixed
 	{
-		$value = $this->__getRaw($property);
+		$value = &$this->__getRaw($property);
 		if($value === null)
 		{
-			return null;
+			return $this->null;
 		}
 
 		// run getter
@@ -415,14 +479,19 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function __getRaw(string $property): mixed
+	public function &__getRaw(string $property): mixed
 	{
-		if($this->__isset($property) === false)
+		if(array_key_exists($property, $this->_properties))
 		{
-			return null;
+			return $this->_properties[$property];
 		}
 
-		return $this->_properties[$property];
+		if(array_key_exists($property, $this->_references))
+		{
+			return $this->_references[$property];
+		}
+
+		return $this->null;
 	}
 
 	/**
@@ -432,14 +501,17 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function __isset(string $property): bool
 	{
-		return array_key_exists($property, $this->_properties);
+		return array_key_exists($property, $this->_properties)
+			|| array_key_exists($property, $this->_references);
 	}
 
 	/**
+	 * Called also by PDO on FETCH_CLASS
+	 * 
 	 * @param string $property
 	 * @param mixed $value
 	 */
-	public function __set(string $property, $value): void
+	public function __set(string $property, mixed $value): void
 	{
 		// run setter
 		if(isset($this->_setters[$property]))
@@ -468,7 +540,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $property
 	 * @param mixed $value
 	 */
-	public function __setRaw(string $property, $value): void
+	public function __setRaw(string $property, mixed $value): void
 	{
 		$this->setProperty($property, $value);
 
@@ -484,7 +556,15 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function __unset(string $property): void
 	{
-		unset($this->_properties[$property]);
+		if(array_key_exists($property, $this->_properties))
+		{
+			unset($this->_properties[$property]);
+		}
+		
+		if(array_key_exists($property, $this->_references))
+		{
+			unset($this->_references[$property]);
+		}
 
 		// set also on update object
 		if($this->_updateObject !== null)
@@ -527,10 +607,11 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 	/**
 	 * @param array $skip fields to skip
+	 * @param bool $references include references
 	 *
 	 * @return stdClass
 	 */
-	public function export(array $skip = []): stdClass
+	public function export(array $skip = [], bool $references = false): stdClass
 	{
 		$destination = new stdClass;
 
@@ -540,7 +621,18 @@ abstract class Mysql extends Model implements Iterator, Countable
 			{
 				continue;
 			}
+			
 			$destination->$property = $this->__get($property);
+		}
+		
+		foreach($this->_references as $reference => $value)
+		{
+			if(in_array($reference, $skip, true) === true)
+			{
+				continue;
+			}
+			
+			$destination->$reference = $this->__get($reference);
 		}
 
 		return $destination;
@@ -551,7 +643,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function __debugInfo(): array
 	{
-		return $this->toArray();
+		return (array)$this->export(references: true);
 	}
 
 	/**
