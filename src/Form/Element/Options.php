@@ -7,6 +7,7 @@ use Ovos\Form\Element;
 use Ovos\Form\Element\Options\Option;
 use function array_column;
 use function is_array;
+use function array_intersect;
 
 /**
  * Options
@@ -135,17 +136,31 @@ class Options extends Element
 	}
 	
 	/**
-	 * Validate value against options
+	 * Validate value (or values) against options
 	 * 
 	 * @return bool
 	 */
 	public function isValid(): bool
 	{
-		$value = (string)$this->getValue();
-		$values = $this->getOptionsValues();
-		if(in_array($value, $values, true) === false)
+		$valuesSelected = $this->getValue();	
+		$values = $this->getOptionsValues();	
+	
+		// multiple values (name[] of input)
+		if(is_array($valuesSelected))
 		{
-			$this->setValue(null);
+			if(count(array_intersect($valuesSelected, $values)) === 0)
+			{
+				$this->setValue(null);
+			}
+		}
+		// single value (name of input)
+		else
+		{
+			$valueSelected = (string)$valuesSelected;
+			if(in_array($valueSelected, $values, true) === false)
+			{
+				$this->setValue(null);
+			}
 		}
 		
 		return parent::isValid();

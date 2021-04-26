@@ -5,6 +5,7 @@ namespace Ovos\Form;
 
 use Ovos\Form;
 use function count;
+use function is_array;
 
 /**
  * Element
@@ -135,7 +136,7 @@ class Element
 				return null;
 			}
 			
-			if(\is_array($value))
+			if(is_array($value))
 			{
 				foreach($value as &$item)
 				{
