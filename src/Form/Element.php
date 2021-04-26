@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Form;
 
 use Ovos\Form;
+use function count;
 
 /**
  * Element
@@ -277,7 +278,17 @@ class Element
 	 */
 	public function hasErrors(): bool
 	{
-		return \count($this->_errors) > 0;
+		return count($this->_errors) > 0;
+	}
+	
+	/**
+	 * @return self
+	 */
+	public function clearErrors(): self
+	{
+		$this->_errors = [];
+		
+		return $this;
 	}
 
 	/**

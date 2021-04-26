@@ -79,6 +79,16 @@ abstract class Validator
 	}
 
 	/**
+	 * @return self
+	 */
+	public function clearErrors(): self
+	{
+		$this->_errors = [];
+		
+		return $this;
+	}
+
+	/**
 	 * @return array
 	 */
 	public function getMessages(): array
