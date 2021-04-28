@@ -22,23 +22,42 @@ abstract class Template
 	 *
 	 * @var Application
 	 */
-	protected Application $_app;
+	protected null|Application $_app = null;
 
 	/**
 	 * Config
 	 *
 	 * @var ArrayObject
 	 */
-	protected ArrayObject $_config;
+	protected null|ArrayObject $_config = null;
 
 	/**
 	 */
 	public function __construct()
 	{
+		$this->__wakeup();
+	}
+
+	/**
+	 * @return array
+	 */
+	public function __sleep(): array
+	{
+		$properties = get_object_vars($this);
+		unset($properties['_app']);
+		unset($properties['_config']);
+		
+		return array_keys($properties);
+	}
+
+	/**
+	 */
+	public function __wakeup()
+	{
 		$this->_app = app();
 		$this->_config = $this->_app->getConfig();
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */
