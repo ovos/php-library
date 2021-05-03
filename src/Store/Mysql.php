@@ -368,6 +368,7 @@ abstract class Mysql extends Store
 	 * @param string $referencedBy
 	 * @param string $class
 	 * @param ?Closure $queryCallback
+	 * @param string $groupBy
 	 *
 	 * @return array
 	 */
@@ -375,7 +376,8 @@ abstract class Mysql extends Store
 		array $referenced,
 		string $referencedBy,
 		string $class,
-		?Closure $queryCallback = null
+		?Closure $queryCallback = null,
+		string $groupBy = 'id',
 	): array
 	{
 		$ids = array_keys($referenced);
@@ -385,7 +387,7 @@ abstract class Mysql extends Store
 		}
 		
 		$query = $this->query()
-			->select('*')
+			->select($groupBy . ', ' . static::TABLE . '.*')
 			->from(static::TABLE)
 			->where(sprintf($referencedBy . ' IN (%s)', implode( ', ', $ids)));
 		if($queryCallback)	
@@ -394,7 +396,7 @@ abstract class Mysql extends Store
 		}
 			
 		$query = $this->getSource()->query($query->getSQL());
-		return $query->fetchAll(PDO::FETCH_CLASS, $class);
+		return $this->fetchGrouped($query, $class);
 	}
 	
 	/**
