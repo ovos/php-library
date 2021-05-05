@@ -149,8 +149,8 @@ class Response
 		{
 			return null;
 		}
-
-		if(ob_get_level() === 0) // nothing sent before
+		
+		if(ob_get_length() === 0) // nothing sent before
 		{
 			$this->sendHeaders();
 		}
