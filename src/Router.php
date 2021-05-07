@@ -4,7 +4,9 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Exception\NotFoundException\FileNotFoundException;
+use Ovos\Exception\NotFoundException;
 use ReflectionClass;
+use ReflectionException;
 use SplFileInfo;
 use function is_string;
 use function in_array;
@@ -246,7 +248,15 @@ class Router
 			// check if controller has such method
 			$method = Strings::camelCase($params[0]);
 			$controllerClassNs = 'Controllers\\' . $controllerClass;
-			$reflectionClass = new ReflectionClass($controllerClassNs);
+			try
+			{
+				$reflectionClass = new ReflectionClass($controllerClassNs);
+			}
+			catch(ReflectionException $exception)
+			{
+				throw new NotFoundException($exception->getMessage());
+			}
+			
 			if($reflectionClass->hasMethod($method) === false)
 			{
 				return $params;
