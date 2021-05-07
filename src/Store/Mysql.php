@@ -424,12 +424,22 @@ abstract class Mysql extends Store
 			}
 			
 			$model = $referenced[$item->$referencedBy];
+			/**
+			 * @var Model $model
+			 */
 			if($model->hasReference($reference) === false)
 			{
 				$model->reference($reference, []);
 			}
 			
-			$model->$reference[$item->$key] = $item;
+			$model->getReference($reference)[$item->$key] = $item;
+			
+			/*
+			$array = $model->getReference($reference);
+			$array[$item->$key] = $item;
+			
+			$model->setReference($reference, $array);
+			*/
 		}
 		
 		return $referenced;

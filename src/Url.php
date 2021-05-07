@@ -48,7 +48,7 @@ class Url
 		$componentsCount = count($components);
 		if($componentsCount)
 		{
-			$urlComponents = [[]];
+			$urlComponents = [];
 			foreach($components as &$component)
 			{
 				$component = (string)$component; // for ints
