@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Form\Element;
 use Ovos\View\Helper;
 use function call_user_func_array;
 use function method_exists;
@@ -21,7 +22,7 @@ use function class_exists;
  * @method static Helper\Benchmark benchmark
  * @method static Helper\Body body
  * @method static Helper\Elements elements
- * @method static Helper\FormElement formElement
+ * @method static Helper\FormElement formElement(Element $element)
  * @method static Helper\Queries queries
  * @method static Helper\Messages messages
  * @method static Helper\Placeholders placeholders
