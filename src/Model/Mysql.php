@@ -257,14 +257,14 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function getReference(string $name): mixed
+	public function &getReference(string $name): mixed
 	{
 		if(isset($this->_references[$name]))
 		{
 			return $this->_references[$name];
 		}
 
-		return null;
+		return $this->null;
 	}
 	
 	/**
@@ -436,21 +436,20 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 		return $this;
 	}
-
-
+	
 	/**
 	 * @param string $property
 	 *
 	 * @return mixed
 	 */
-	public function &__get(string $property): mixed
+	public function __get(string $property): mixed
 	{
-		$value = &$this->__getRaw($property);
+		$value = $this->__getRaw($property);
 		if($value === null)
 		{
-			return $this->null;
+			return null;
 		}
-
+			
 		// run getter
 		if(isset($this->_getters[$property]))
 		{
@@ -479,19 +478,19 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function &__getRaw(string $property): mixed
+	public function __getRaw(string $property): mixed
 	{
+		if(array_key_exists($property, $this->_references))
+		{
+			return $this->_references[$property];
+		}
+	
 		if(array_key_exists($property, $this->_properties))
 		{
 			return $this->_properties[$property];
 		}
 
-		if(array_key_exists($property, $this->_references))
-		{
-			return $this->_references[$property];
-		}
-
-		return $this->null;
+		return null;
 	}
 
 	/**

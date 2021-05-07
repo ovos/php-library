@@ -6,6 +6,8 @@ namespace Ovos\Response;
 use Ovos\Response;
 use Ovos\Url;
 
+use function count;
+
 /**
  * Redirect
  *
@@ -39,7 +41,7 @@ class Redirect extends Response
 			return;
 		}
 
-		if(\count($urlComponents) === 0)
+		if(count($urlComponents) === 0)
 		{
 			$urlComponents[] = '/';
 		}
