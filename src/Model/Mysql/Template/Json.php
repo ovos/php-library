@@ -88,7 +88,7 @@ class Json extends Template
 	 * @param Mysql $model
 	 * @param string $string
 	 * 
-	 * @return mixed
+	 * @return ?array
 	 */
 	public function decode(Mysql $model, string $string): mixed
 	{
@@ -99,6 +99,6 @@ class Json extends Template
 		
 		$object = json_decode($string, flags: JSON_THROW_ON_ERROR);
 			
-		return $object ?: null;	
+		return $object ? (array)$object : null;	
 	}
 }
