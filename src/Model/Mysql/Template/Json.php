@@ -98,7 +98,15 @@ class Json extends Template
 		}
 		
 		$object = json_decode($string, flags: JSON_THROW_ON_ERROR);
+		if($object === null)
+		{
+			return null;
+		}
+		if(is_array($object))
+		{
+			return $object;
+		}
 			
-		return $object ? (array)$object : null;	
+		return (array)$object;	
 	}
 }
