@@ -303,7 +303,7 @@ class Router
 					* @var SplFileInfo $file
 					*/
 					return $file->isFile() && $file->getExtension() !== 'php';
-				}, basenameCallback: function($file)
+				}, filenameCallback: function($file)
 				{
 					/**
 					* @var SplFileInfo $file
