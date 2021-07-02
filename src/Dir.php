@@ -241,10 +241,17 @@ class Dir
 	 *
 	 * @param string $pathFrom
 	 * @param string $pathTo
+	 * @param bool $overwrite
+	 * @param ?callable $filenameCallback
 	 *
 	 * @return void
 	 */
-	public static function copyFiles(string $pathFrom, string $pathTo): void
+	public static function copyFiles(
+		string $pathFrom,
+		string $pathTo,
+		bool $overwrite = false,
+		?callable $filenameCallback = null,
+	): void
 	{
 		$pathFrom = self::preProcess($pathFrom);
 		$pathTo = self::preProcess($pathTo);
@@ -257,18 +264,36 @@ class Dir
 			 */
 			foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::SELF_FIRST) as $file)
 			{
+				$filename = $filenameCallback
+				? $filenameCallback($file)
+				: $file->getFilename();
+				if($filename === null)
+				{
+					continue;
+				}
+			
 				/**
 				 * @var SplFileInfo $file
 				 */
 				if($file->isDir())
 				{
-					self::create($pathTo . DIRECTORY_SEPARATOR . $iterator->getSubPathName());
+					self::create($pathTo
+						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
+						. DIRECTORY_SEPARATOR . $filename
+					);
 				}
 				else
 				{
-					copy((string)$file, $pathTo . DIRECTORY_SEPARATOR . $iterator->getSubPathName());
+					$destination = $pathTo
+						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
+						. DIRECTORY_SEPARATOR . $filename;
+						
+					if(file_exists($destination) === false
+						|| $overwrite === true)
+					{
+						copy((string)$file, $destination);
+					}
 				}
-
 			}
 		}
 	}
@@ -292,16 +317,16 @@ class Dir
 	/**
 	 * @param string $path
 	 * @param bool $skipHidden
-	 * @param null|callable $skipCallback
-	 * @param null|callable $basenameCallback Callback function for basename processing
+	 * @param ?callable $skipCallback
+	 * @param ?callable $filenameCallback Callback function for filename processing
 	 * @param int $filter
 	 *
 	 * @return array
 	 */
 	public static function getDirectoriesTree(string $path,
 		$skipHidden = true,
-		null|callable $skipCallback = null,
-		null|callable $basenameCallback = null,
+		?callable $skipCallback = null,
+		?callable $filenameCallback = null,
 		$filter = self::FILTER_FILES
 	): array
 	{
@@ -311,16 +336,16 @@ class Dir
 	/**
 	 * @param string $path
 	 * @param bool $skipHidden
-	 * @param null|callable $skipCallback
-	 * @param null|callable $basenameCallback Callback function for basename processing
+	 * @param ?callable $skipCallback
+	 * @param ?callable $filenameCallback Callback function for filename processing
 	 * @param int $filter
 	 *
 	 * @return array
 	 */
 	public static function getTree(string $path,
 		$skipHidden = true,
-		null|callable $skipCallback = null,
-		null|callable $basenameCallback = null,
+		?callable $skipCallback = null,
+		?callable $filenameCallback = null,
 		$filter = self::FILTER_NONE
 	): array
 	{
@@ -329,7 +354,7 @@ class Dir
 		foreach(new FilesystemIterator($path, FilesystemIterator::SKIP_DOTS) as $file)
 		{
 			// hidden files, eg. ".gitkeep"
-			if($skipHidden && $file->getBasename()[0] === '.')
+			if($skipHidden && $file->getFilename()[0] === '.')
 			{
 				continue;
 			}
@@ -348,27 +373,27 @@ class Dir
 				continue;
 			}
 			
-			$basename = $basenameCallback
-				? $basenameCallback($file)
-				: $file->getBasename();
-			if($basename === null)
+			$filename = $filenameCallback
+				? $filenameCallback($file)
+				: $file->getFilename();
+			if($filename === null)
 			{
 				continue;
-			}			
+			}
 			
 			if($file->isFile())
 			{
-				$files[] = $basename;
+				$files[] = $filename;
 				
 				continue;
 			}
 			
 			// dir
-			$files[$basename] = self::getTree(
+			$files[$filename] = self::getTree(
 				$file->getPathname(),
 				$skipHidden,
 				$skipCallback,
-				$basenameCallback,
+				$filenameCallback,
 				$filter
 			);
 		}
@@ -381,14 +406,14 @@ class Dir
 	/**
 	 * @param string $path
 	 * @param bool $skipHidden
-	 * @param null|callable $skipCallback
+	 * @param ?callable $skipCallback
 	 * @param int $filter
 	 *
 	 * @return array
 	 */
 	public static function getFiles(string $path,
 		$skipHidden = true,
-		null|callable $skipCallback = null,
+		?callable $skipCallback = null,
 		$filter = self::FILTER_NONE
 	): array
 	{
@@ -401,7 +426,7 @@ class Dir
 		foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
 		{
 			// hidden files, eg. ".gitkeep"
-			if($skipHidden && $file->getBasename()[0] === '.')
+			if($skipHidden && $file->getFilename()[0] === '.')
 			{
 				continue;
 			}
