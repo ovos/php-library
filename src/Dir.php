@@ -241,6 +241,7 @@ class Dir
 	 *
 	 * @param string $pathFrom
 	 * @param string $pathTo
+	 * @param bool $overwrite
 	 * @param ?callable $filenameCallback
 	 *
 	 * @return void
@@ -248,6 +249,7 @@ class Dir
 	public static function copyFiles(
 		string $pathFrom,
 		string $pathTo,
+		bool $overwrite = false,
 		?callable $filenameCallback = null,
 	): void
 	{
@@ -282,10 +284,15 @@ class Dir
 				}
 				else
 				{
-					copy((string)$file, $pathTo
+					$destination = $pathTo
 						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
-						. DIRECTORY_SEPARATOR . $filename
-					);
+						. DIRECTORY_SEPARATOR . $filename;
+						
+					if(file_exists($destination) === false
+						|| $overwrite === true)
+					{
+						copy((string)$file, $destination);
+					}
 				}
 			}
 		}
