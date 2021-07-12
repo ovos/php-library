@@ -374,12 +374,25 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param string $property
 	 * @param string $method
+	 * @param bool $prepend
 	 *
 	 * @return self
 	 */
-	public function addSetter(string $property, string $method): self
+	public function addSetter(string $property, string $method, bool $prepend = false): self
 	{
-		$this->_setters[$property] = $method;
+		if(array_key_exists($property, $this->_setters) === false)
+		{
+			$this->_setters[$property] = [];
+		}
+	
+		if($prepend)
+		{
+			array_unshift($this->_setters[$property], $method);
+		}
+		else
+		{
+			array_push($this->_setters[$property], $method);
+		}
 
 		return $this;
 	}
@@ -391,7 +404,44 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function removeSetter(string $property): self
 	{
-		unset($this->_setters[$property]);
+		if(array_key_exists($property, $this->_setters) === false) // no getters for this property
+		{
+			return $this;
+		}
+	
+		$methodIndex = array_search($this->_setters[$property], $method, true);
+		if($methodIndex === false) // method not found
+		{
+			return $this;
+		}
+		
+		unset($this->_setters[$property][$methodIndex]);
+
+		return $this;
+	}
+
+	/**
+	 * @param string $property
+	 * @param string $method
+	 * @param bool $prepend
+	 *
+	 * @return self
+	 */
+	public function addGetter(string $property, string $method, bool $prepend = false): self
+	{
+		if(array_key_exists($property, $this->_getters) === false)
+		{
+			$this->_getters[$property] = [];
+		}
+		
+		if($prepend)
+		{
+			array_unshift($this->_getters[$property], $method);
+		}
+		else
+		{
+			array_push($this->_getters[$property], $method);
+		}
 
 		return $this;
 	}
@@ -402,21 +452,20 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return self
 	 */
-	public function addGetter(string $property, string $method): self
+	public function removeGetter(string $property, string $method): self
 	{
-		$this->_getters[$property] = $method;
-
-		return $this;
-	}
-
-	/**
-	 * @param string $property
-	 *
-	 * @return self
-	 */
-	public function removeGetter(string $property): self
-	{
-		unset($this->_getters[$property]);
+		if(array_key_exists($property, $this->_getters) === false) // no getters for this property
+		{
+			return $this;
+		}
+	
+		$methodIndex = array_search($this->_getters[$property], $method, true);
+		if($methodIndex === false) // method not found
+		{
+			return $this;
+		}
+		
+		unset($this->_getters[$property][$methodIndex]);
 
 		return $this;
 	}
@@ -425,14 +474,15 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $property
 	 * @param string $getter
 	 * @param string $setter
+	 * @param bool $prepend
 	 *
 	 * @return self
 	 */
 	public function addManipulators(string $property,
-		string $getter, string $setter): self
+		string $getter, string $setter, bool $prepend = false): self
 	{
-		$this->addGetter($property, $getter);
-		$this->addSetter($property, $setter);
+		$this->addGetter($property, $getter, $prepend);
+		$this->addSetter($property, $setter, $prepend);
 
 		return $this;
 	}
@@ -453,20 +503,22 @@ abstract class Mysql extends Model implements Iterator, Countable
 		// run getter
 		if(isset($this->_getters[$property]))
 		{
-			$method = &$this->_getters[$property];
-			// check if getter method is part of a template
-			foreach($this->getTemplates() as $template)
+			foreach($this->_getters[$property] as $method)
 			{
-				if(method_exists($template, $method))
+				// check if getter method is part of a template
+				foreach($this->getTemplates() as $template)
 				{
-					$value = $template->{$method}($this, $value);
+					if(method_exists($template, $method))
+					{
+						$value = $template->{$method}($this, $value);
+					}
+				}		
+				
+				// or is it an own method
+				if(method_exists($this, $method))
+				{
+					$value = $this->{$method}($value);
 				}
-			}		
-			
-			// or is it an own method
-			if(method_exists($this, $method))
-			{
-				$value = $this->{$method}($value);
 			}
 		}
 
@@ -515,21 +567,23 @@ abstract class Mysql extends Model implements Iterator, Countable
 		// run setter
 		if(isset($this->_setters[$property]))
 		{
-			$method = &$this->_setters[$property];
-			// check if setter method is part of a template
-			foreach($this->getTemplates() as $template)
+			foreach($this->_setters[$property] as $method)
 			{
-				if(method_exists($template, $method))
+				// check if setter method is part of a template
+				foreach($this->getTemplates() as $template)
 				{
-					$value = $template->{$method}($this, $value);
+					if(method_exists($template, $method))
+					{
+						$value = $template->{$method}($this, $value);
+					}
+				}		
+				
+				// or is it an own method
+				if(method_exists($this, $method))
+				{
+					$value = $this->{$method}($value);
 				}
-			}		
-			
-			// or is it an own method
-			if(method_exists($this, $method))
-			{
-				$value = $this->{$method}($value);
-			}
+			}	
 		}
 
 		$this->__setRaw($property, $value);
