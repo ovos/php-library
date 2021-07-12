@@ -58,7 +58,7 @@ class Json extends Template
 	{
 		foreach($this->getProperties() as $property)
 		{
-			$model->addManipulators($property,'decode', 'encode');
+			$model->addManipulators($property,'decode', 'encode', true);
 		}
 	}
 	

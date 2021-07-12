@@ -58,7 +58,7 @@ class Encrypted extends Template
 	{
 		foreach($this->getProperties() as $property)
 		{
-			$model->addManipulators($property,'decrypt', 'encrypt');
+			$model->addManipulators($property,'decrypt', 'encrypt', true);
 		}
 	}
 	
