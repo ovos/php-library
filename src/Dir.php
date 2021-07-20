@@ -251,6 +251,7 @@ class Dir
 		string $pathTo,
 		bool $overwrite = false,
 		?callable $filenameCallback = null,
+		?callable $callback = null,
 	): void
 	{
 		$pathFrom = self::preProcess($pathFrom);
@@ -278,20 +279,22 @@ class Dir
 				if($file->isDir())
 				{
 					self::create($pathTo
-						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
-						. DIRECTORY_SEPARATOR . $filename
+						. DIRECTORY_SEPARATOR . $iterator->getSubPath() . $filename
 					);
 				}
 				else
 				{
 					$destination = $pathTo
-						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
-						. DIRECTORY_SEPARATOR . $filename;
+						. DIRECTORY_SEPARATOR . $iterator->getSubPath() . $filename;
 						
 					if(file_exists($destination) === false
 						|| $overwrite === true)
 					{
-						copy((string)$file, $destination);
+						if(copy((string)$file, $destination) // on successful operation
+							&& $callback)
+						{
+							$callback($file, $destination);
+						}
 					}
 				}
 			}
