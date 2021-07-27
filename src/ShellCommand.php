@@ -30,7 +30,7 @@ class ShellCommand
 	/**
 	 * @var array
 	 */
-	protected array $_output;
+	protected null|array $_output = null;
 
 	/**
 	 * @var int

@@ -255,7 +255,7 @@ abstract class Mysql extends Store
 			
 			$bindType = PDO::PARAM_STR;
 			$bindType = is_bool($value) ? PDO::PARAM_BOOL : $bindType;
-			$bindType = is_numeric($value) ? PDO::PARAM_INT : $bindType;
+			$bindType = is_integer($value) ? PDO::PARAM_INT : $bindType;
 			
 			$query->bindValue(':' . $field, $value, $bindType);
 		}
