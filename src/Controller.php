@@ -93,7 +93,7 @@ class Controller
 		{
 			if(($response instanceof Response) === false)
 			{
-				$response = new Response\Html($response->__toString());
+				$response = $this->_app->getResponse($response->__toString());
 			}
 		
 			$this->_app->setResponse($response); // for postDispatch
@@ -102,7 +102,7 @@ class Controller
 
 		return $response;
 	}
-
+	
 	/**
 	 * @param string $action
 	 * @param array $requestParams

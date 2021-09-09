@@ -21,15 +21,6 @@ use function printf;
 trait Cli
 {
 	/**
-	 */
-	public function __construct()
-	{
-		parent::__construct();
-		
-		$this->setColoredOutput(true);
-	}
-
-	/**
 	 * @param mixed $default
 	 * 
 	 * @return ?string
