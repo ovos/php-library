@@ -5,6 +5,7 @@ namespace Ovos\Controller;
 
 use Ovos\Controller;
 use Ovos\Exception;
+use Ovos\Response;
 use Ovos\Terminal;
 use function in_array;
 use function array_merge;
@@ -22,6 +23,8 @@ use function getmypid;
  */
 class Cli extends Controller
 {
+	use Controller\Traits\Cli;
+
 	/**
 	 * @var bool
 	 */
@@ -40,11 +43,6 @@ class Cli extends Controller
 	 * @var ?int
 	 */
 	protected ?int $_pid = null;
-	
-	/**
-	 * @var bool
-	 */
-	protected bool $_coloredOutput = false;
 	
 	/**
 	 * preDispatch
@@ -135,26 +133,6 @@ class Cli extends Controller
 	{
 		return $this->_httpActions;
 	}
-
-	/**
-	 * @param bool $coloredOutput
-	 * 
-	 * @return self
-	 */
-	public function setColoredOutput(bool $coloredOutput): self
-	{
-		$this->_coloredOutput = $coloredOutput;
-		
-		return $this;
-	}
-
-	/**
-	 * @return bool
-	 */
-	public function getColoredOutput(): bool
-	{
-		return $this->_coloredOutput;
-	}
 	
 	/**
 	 * Returns memory usage in MB
@@ -179,10 +157,14 @@ class Cli extends Controller
 		{
 			$message = sprintf(...$message);
 		}
-
+		
 		Terminal::output('<darkgray>[' . $this->getPid() . '] '
 			. '<purple>' . date('Y-m-d H:i:s') . ': '
-			. '<reset>' . $message . '<reset>' . PHP_EOL, $this->_coloredOutput);
+			. '<reset>' . $message . '<reset>' . PHP_EOL, 
+			markup: ($response = $this->_app->getResponse())
+				&& $response instanceof Response\Cli
+				&& $response->getColoredOutput()
+		);
 			
 		return $this;
 	}

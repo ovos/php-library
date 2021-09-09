@@ -17,6 +17,11 @@ use function Ovos\services;
 class Cli extends Html
 {
 	/**
+	 * @var bool
+	 */
+	protected bool $_coloredOutput = true;
+	
+	/**
 	 * Construct
 	 *
 	 * @param string $response
@@ -26,5 +31,25 @@ class Cli extends Html
 		parent::__construct();
 
 		$this->set($response);
+	}
+
+	/**
+	 * @param bool $coloredOutput
+	 * 
+	 * @return self
+	 */
+	public function setColoredOutput(bool $coloredOutput): self
+	{
+		$this->_coloredOutput = $coloredOutput;
+		
+		return $this;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function getColoredOutput(): bool
+	{
+		return $this->_coloredOutput;
 	}
 }
