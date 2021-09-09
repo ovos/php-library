@@ -174,16 +174,24 @@ class Application
 
 	/**
 	 * Returns response
+	 * 
+	 * @param string $response
 	 *
 	 * @return Response
 	 */
-	public function getResponse(): Response
+	public function getResponse(string $response = null): Response
 	{
 		if($this->_response === null)
 		{
-			$this->_response = new Response\Html;
+			$this->_response = $this->_request->isCli()
+				? new Response\Cli($response)
+				: new Response\Html($response);
 		}
-
+		else if($response !== null)
+		{
+			$this->_response->set($response);
+		}
+		
 		return $this->_response;
 	}
 
@@ -553,12 +561,14 @@ class Application
 				$response->success = false;
 			}
 			
-			// HTML or JSON with HTTP debug
-			if($this->getResponse() instanceof Response\Html || $this->getRequest()->isHttpDebug())
+			// HTML, CLI or JSON with HTTP debug
+			if($this->getResponse() instanceof Response\Html
+				|| $this->getResponse() instanceof Response\Cli
+				|| $this->getRequest()->isHttpDebug())
 			{
 				/** @var Response\Html $response */
 				$output = (string)$response->send();
-				
+					
 				$errorController = new \Controllers\System\Events;
 				$response = $errorController->dispatch('index', [$output]);
 			}
@@ -602,30 +612,27 @@ class Application
 			return $this;
 		}
 
-		if($response instanceof Response)
+		if($response instanceof Response\Json)
 		{
-			if($response instanceof Response\Json)
-			{
-				/**
-				 * @var Response\Json $response
-				 */
-				$this->_sendJsonResponse($response);
-			}
-			else if($response instanceof Response\Html)
-			{
-				/*** @var Response\Html $response */
-				$this->_sendHtmlResponse($response);
-			}
-			else
-			{
-				/*** @var Response $response */
-				$response->send();
-			}
+			/**
+			 * @var Response\Json $response
+			 */
+			$this->_sendJsonResponse($response);
+		}
+		else if($response instanceof Response\Html)
+		{
+			/*** @var Response\Html $response */
+			$this->_sendProfiledResponse($response);
+		}
+		else if($response instanceof Response\Cli)
+		{
+			/*** @var Response\Cli $response */
+			$this->_sendProfiledResponse($response);
 		}
 		else
 		{
-			/*** @var Response\Html $response */
-			$this->_sendHtmlResponse($response);
+			/*** @var Response $response */
+			$response->send();
 		}
 
 		return $this;
@@ -676,13 +683,13 @@ class Application
 	}
 
 	/**
-	 * Sends Html response
+	 * Sends profiled response
 	 *
-	 * @param Response\Html $response
+	 * @param Response $response
 	 *
 	 * @return self
 	 */
-	protected function _sendHtmlResponse($response): self
+	protected function _sendProfiledResponse($response): self
 	{
 		$response->send();
 
