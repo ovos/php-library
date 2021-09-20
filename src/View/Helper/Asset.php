@@ -85,16 +85,16 @@ class Asset extends Helper
 			try
 			{
 				$mTime = filemtime($filename);
+				
+				$mDate = date('Ymdhis', $mTime);
+				$item = $pool->getItem($cacheId);
+				$item->set($mDate);
+				$pool->save($item);
 			}
 			catch(ErrorException $exception)
 			{
 				services()->events->add($exception);
 			}
-			
-			$mDate = date('Ymdhis', $mTime);
-			$item = $pool->getItem($cacheId);
-			$item->set($mDate);
-			$pool->save($item);
 		}
 		
 		if($mDate !== null)		
