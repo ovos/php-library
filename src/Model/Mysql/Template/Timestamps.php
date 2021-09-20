@@ -6,6 +6,7 @@ namespace Ovos\Model\Mysql\Template;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
 use Ovos\Pdo\Expression;
+use function array_merge;
 
 /**
  * Template
@@ -16,11 +17,34 @@ use Ovos\Pdo\Expression;
 class Timestamps extends Template
 {
 	/**
+	 * @var string[]
+	 */
+	protected array $_update = [
+		'preInsert' => 'created_at',
+		'preUpdate' => 'modified_at'
+	];
+
+	/**
+	 * @param array $update
+	 */
+	public function __construct(array $update = [])
+	{
+		parent::__construct();
+		
+		$this->_update = array_merge($this->_update, $update);
+	}	
+	
+	/**
 	 * @param Mysql $model
 	 */
 	public function preInsert(Mysql $model): void
 	{
-		$model->created_at = new Expression('NOW()');
+		if($this->_update[__FUNCTION__] === null)
+		{
+			return;
+		}
+		
+		$model->{$this->_update[__FUNCTION__]} = new Expression('NOW()');
 	}
 
 	/**
@@ -28,6 +52,11 @@ class Timestamps extends Template
 	 */
 	public function preUpdate(Mysql $model): void
 	{
-		$model->modified_at = new Expression('NOW()');
+		if($this->_update[__FUNCTION__] === null)
+		{
+			return;
+		}
+		
+		$model->{$this->_update[__FUNCTION__]} = new Expression('NOW()');
 	}
 }
