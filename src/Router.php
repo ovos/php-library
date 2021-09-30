@@ -206,47 +206,57 @@ class Router
 			// continue to the last matching one
 			foreach($controllers as $name => $children)
 			{
-				if(is_string($name)
-					&& isset($params[$key + 1])
-					&& strcmp($name, $param) === 0
-					&& (in_array($params[$key + 1], $children, true) // file
-						|| array_key_exists($params[$key + 1], $children))) // dir
+				// check if we should go deeper (current param is not the last level controller, but a namespace)
+				if(is_string($name) // namespace exists on this level
+					&& isset($params[$key + 1]) // next param exists
+					&& strcmp($name, $param) === 0 // namespace and current param are the same, check inside it
+					&& (in_array($params[$key + 1], $children, true) // controlller exists in the namespace
+						|| array_key_exists($params[$key + 1], $children))) // deeper namespace exists inside the namespace
 				{
 					$controllers = $children; // loop children
 					$controllerClass.= Strings::studlyCase($param) . '\\';
 					$controller.= $param . '/';
 
-					continue 2;
+					continue 2; // go to next param
 				}
 
-				if(is_string($children)
+				// check if we are already on last level
+				if(is_string($children) // children is not an array but a controller name
 					&& strcmp($children, $param) === 0)
 				{
 					break;
 				}
 			}
-
-			$controller.= $param;
-			$request->setController($controller);
-			$controllerClass.= Strings::studlyCase($param);
-			$request->setControllerClass($controllerClass);
-
-			// cut out the controller and namespaces
-			$params = array_slice($params, $key + 1);
-
-			break;
+			
+			// all possible namespaces added, add the controller
+			if(array_key_exists($param, $controllers)) // do not set non existing controllers, use default instead
+			{
+				$controller.= $param;
+				$request->setController($controller);
+				$controllerClass.= Strings::studlyCase($param);
+				$request->setControllerClass($controllerClass);
+	
+				// cut out the controller and namespaces
+				$params = array_slice($params, $key + 1);
+			}
+			
+			break; // last processed param that could be a controller
 		}
-
-		// set action
+		
+		// there are more params left than controller namespace + name,
+		// possibly action or action method value
 		if(count($params))
 		{
 			if(is_numeric($params[0]))
 			{
-				return $params;
+				return $params; // not an action for sure
 			}
 			
 			// check if controller has such method
 			$method = Strings::camelCase($params[0]);
+			$controllerClass = $controllerClass !== null
+				? $controllerClass
+				: $request->getControllerClass(); // get default
 			$controllerClassNs = 'Controllers\\' . $controllerClass;
 			try
 			{
