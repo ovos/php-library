@@ -229,7 +229,7 @@ class Router
 			}
 			
 			// all possible namespaces added, add the controller
-			if(array_key_exists($param, $controllers)) // do not set non existing controllers, use default instead
+			if(in_array($param, $controllers, true)) // do not set non existing controllers, use default instead
 			{
 				$controller.= $param;
 				$request->setController($controller);
