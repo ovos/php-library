@@ -235,7 +235,7 @@ class Router
 				$request->setController($controller);
 				$controllerClass.= Strings::studlyCase($param);
 				$request->setControllerClass($controllerClass);
-	
+				
 				// cut out the controller and namespaces
 				$params = array_slice($params, $key + 1);
 			}
