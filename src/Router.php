@@ -196,7 +196,10 @@ class Router
 		}
 		
 		$controllers = $this->_getControllers($modules);
-		
+		/*
+		echo PHP_EOL, 'END RESULT', PHP_EOL;
+		var_dump($controllers);
+		*/
 		// after checking for locale, check for controller (with optional namespace path), and action
 		foreach($params as $key => $param)
 		{
@@ -292,7 +295,7 @@ class Router
 		
 		if($pool = services()->cache->getPerishablePool())
 		{
-			if($pool->hasItem($cacheId) && 1 == 2)
+			if($pool->hasItem($cacheId))
 			{
 				return $pool->getItem($cacheId)->get();
 			}
@@ -321,9 +324,15 @@ class Router
 					$basename = $file->getBasename('.php');
 					return Strings::snakeCase($basename);
 				});
-				//var_export($moduleControllers);
-				
-				$controllers = Arrays::deepMerge($controllers, $moduleControllers);
+				/*
+				echo PHP_EOL, '$controllers', PHP_EOL;
+				var_export($controllers);
+				echo PHP_EOL, '$moduleControllers', PHP_EOL;
+				var_export($moduleControllers);
+				*/
+				//$controllers = Arrays::deepMerge($controllers, $moduleControllers);
+				// merge all values without overwriting keys like in Arrays::deepMerge
+				$controllers = array_merge_recursive($controllers, $moduleControllers);
 				// directories (keys of array) first, ksort puts the directories last
 				// order is z-a
 				krsort($controllers, SORT_NATURAL);
