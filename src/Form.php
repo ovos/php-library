@@ -82,6 +82,18 @@ class Form implements Iterator
 	}
 
 	/**
+	 * @param ?string $id
+	 *
+	 * @return self
+	 */
+	public function setId(?string $id): self
+	{
+		$this->_id = $id;
+		
+		return $this;
+	}
+
+	/**
 	 * @return ?string
 	 */
 	public function getId(): ?string
