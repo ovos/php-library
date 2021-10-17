@@ -60,7 +60,7 @@ class Cli extends Controller
 		{
 			return;
 		}
-	
+		
 		if(in_array($this->getRequest()->getAction(), $this->_httpActions, true) === true)
 		{
 			return;
