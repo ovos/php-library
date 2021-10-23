@@ -323,7 +323,7 @@ abstract class Mysql extends Store
 	 */
 	public function fetchGrouped(PDOStatement $statement, string $class): array
 	{
-		$result = $statement->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP , $class); // group by first column
+		$result = $statement->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP, $class); // group by first column
 		return array_map(fn($row) => reset($row), $result);
 	}
 	
@@ -413,7 +413,7 @@ abstract class Mysql extends Store
 		string $referencedBy,
 		string $reference,
 		array $items,
-		string $key,	
+		string $key,
 	): array
 	{
 		foreach($items as $item)
