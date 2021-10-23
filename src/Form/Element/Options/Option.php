@@ -127,10 +127,11 @@ class Option
 		}
 		
 		$thisValue = (string)$this->getValue();
-		$selectedValues =  $this->getOptions()->getValue();
+		$selectedValues = $this->getOptions()->getValue();
 		// multiple values selected
 		if(is_array($selectedValues))
 		{
+			$selectedValues = array_map('strval', $selectedValues);
 			return in_array($thisValue, $selectedValues, true);
 		}
 		// single value selected
