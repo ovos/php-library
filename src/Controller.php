@@ -11,6 +11,7 @@ use function array_key_exists;
 use function in_array;
 use function array_column;
 use function array_keys;
+use function array_shift;
 use function class_exists;
 use function method_exists;
 use function substr;
@@ -120,25 +121,58 @@ class Controller
 		$method = new ReflectionMethod($this, $action);
 		$methodParams = $method->getParameters();
 		
-		if($count < 2)
+		if($count === 1)
 		{
 			return $this->_getCastedParams($methodParams, $requestParams);
 		}
-			
-		$namedRequestParams = Arrays::getPairs($requestParams);
+		
 		$namesOfMethodParams = array_column($methodParams, 'name');
-		$namesOfRequestParams = array_keys($namedRequestParams);
-		 // if first name matches any of the method param names, treat params as named parameters
-		$named = in_array($namesOfRequestParams[0], $namesOfMethodParams, true);
-		
-		// not named parameters
-		if($named === false)
+		// slit params into unnamed and named
+		$requestParamsUnnamed = $requestParamsNamed = [];
+		while(($requestParam = array_shift($requestParams)) !== null)
 		{
-			return $this->_getCastedParams($methodParams, $requestParams);
+			if(is_string($requestParam)
+				&& ($requestParamCamelCase = Strings::camelCase($requestParam))
+				&& in_array($requestParamCamelCase, $namesOfMethodParams, true) === true
+				&& ($requestParamValue = array_shift($requestParams)) !== null)
+			{
+				$requestParamsNamed[$requestParamCamelCase] = $requestParamValue;
+			}
+			else
+			{
+				$requestParamsUnnamed[] = $requestParam;				
+			}
 		}
 		
-		return $this->_getCastedParams($methodParams, $namedRequestParams, true);
+		// handle casting of unnamed
+		$requestParamsUnnamed = $this->_getCastedParams($methodParams, $requestParamsUnnamed);
+		// handle casting of named
+		$requestParamsNamed = $this->_getCastedParams($methodParams, $requestParamsNamed, true);
+		
+		// merge them into one array that will be passed as params, first unnamed, then named
+		return array_merge($requestParamsUnnamed, $requestParamsNamed);
 	}
+	
+	/**
+	 * @deprecated
+	 * 
+	 * @param mixed $requestParam
+	 * @param string $typeName
+	 *
+	 * @return mixed
+	 */
+	protected function _getCastedParam(
+		mixed $requestParam, string $typeName): mixed
+	{
+		if($typeName === 'int'
+			|| ($typeName === '?int' && $requestParam !== null))
+		{
+			return (int)$requestParam;
+		}
+	
+		return $requestParam;			
+	}
+	
 
 	/**
 	 * @param array $methodParams
