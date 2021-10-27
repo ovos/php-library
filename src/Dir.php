@@ -279,13 +279,15 @@ class Dir
 				if($file->isDir())
 				{
 					self::create($pathTo
-						. DIRECTORY_SEPARATOR . $iterator->getSubPath() . $filename
+						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
+						. DIRECTORY_SEPARATOR . $filename
 					);
 				}
 				else
 				{
 					$destination = $pathTo
-						. DIRECTORY_SEPARATOR . $iterator->getSubPath() . $filename;
+						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
+						. DIRECTORY_SEPARATOR . $filename;
 						
 					if(file_exists($destination) === false
 						|| $overwrite === true)

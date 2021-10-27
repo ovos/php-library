@@ -202,6 +202,38 @@ class Url
 	
 		return $this;
 	}
+		
+	/**
+	 * @param string[] $components
+	 *
+	 * @return self
+	 */
+	public function remove(...$components): self
+	{
+		foreach($components as $component)
+		{
+			$this->removeComponent($component);
+		}
+	
+		return $this;
+	}
+	
+	/**
+	 * Removes a component
+	 * 
+	 * @param int|string $component
+	 *
+	 * @return self
+	 */
+	public function removeComponent(int|string $component): self
+	{
+		if(($key = array_search($component, $this->_components, true) !== false))
+		{
+			unset($this->_components[$key]);
+		}
+
+		return $this;
+	}
 	
 	/**
 	 * @param int|string|null $component (null to remove it)
