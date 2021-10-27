@@ -56,6 +56,20 @@ class Router extends Test
 		return $firstParam === $controller->firstParam
 			&& $secondParam === $controller->secondParam;
 	}
+	
+	public function parametersMixed()
+	{
+		$firstParam = true;
+		$secondParam = false;
+	
+		$controller = new RouterTestController;
+		$controller->dispatch('test', [
+			$firstParam, 'secondParam', $secondParam
+		]);
+		
+		return $firstParam === $controller->firstParam
+			&& $secondParam === $controller->secondParam;
+	}
 }
 
 
