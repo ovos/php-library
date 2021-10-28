@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Model;
 
+use Ovos\ArrayObject;
 use Ovos\Exception;
 use Ovos\Model;
 use Ovos\Store\Mysql as Store;
@@ -37,6 +38,14 @@ use function key;
  */
 abstract class Mysql extends Model implements Iterator, Countable
 {
+	/**#@+
+	 * Export constants
+	 */
+	public const EXPORT_TYPE_STDCLASS = 0;
+	public const EXPORT_TYPE_ARRAY = 1;
+	public const EXPORT_TYPE_ARRAYOBJECT = 2;
+	/**#@-*/
+
 	/**
 	 * Return null by reference
 	 */
@@ -661,12 +670,15 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * @param array $skip fields to skip
 	 * @param bool $references include references
+	 * @param int $type
 	 *
-	 * @return stdClass
+	 * @return stdClass|array
 	 */
-	public function export(array $skip = [], bool $references = false): stdClass
+	public function export(array $skip = [],
+		bool $references = false,
+		int $type = self::EXPORT_TYPE_STDCLASS): stdClass|array|ArrayObject
 	{
-		$destination = new stdClass;
+		$export = new stdClass;
 
 		foreach($this as $property => $value)
 		{
@@ -675,9 +687,28 @@ abstract class Mysql extends Model implements Iterator, Countable
 				continue;
 			}
 			
-			$destination->$property = $this->__get($property);
+			$export->$property = $this->__get($property);
 		}
 		
+		if($references)
+		{
+			$this->_exportReferences($export, $skip, $type);
+		}
+
+		return $this->_getExportType($export, $type);
+	}
+	
+	/**
+	 * @param stdClass $export
+	 * @param array $skip fields to skip
+	 * @param int $type
+	 *
+	 * @return stdClass|array
+	 */
+	protected function _exportReferences(stdClass $export,
+		array $skip = [],
+		int $type = self::EXPORT_TYPE_STDCLASS): void
+	{
 		foreach($this->_references as $reference => $value)
 		{
 			if(in_array($reference, $skip, true) === true)
@@ -685,10 +716,47 @@ abstract class Mysql extends Model implements Iterator, Countable
 				continue;
 			}
 			
-			$destination->$reference = $this->__get($reference);
+			// passed as key => children
+			$referenceSkip = isset($skip[$reference]) ? $skip[$reference] : [];
+			
+			$exportReferences = $this->__get($reference);
+			// relation to many
+			if(is_array($exportReferences))
+			{
+				foreach($exportReferences as &$exportReference)
+				{
+					/**
+					 * @var self $exportReference
+					 */
+					$exportReference = $exportReference->export($referenceSkip, true, $type);
+				}
+			}
+			// relation to one
+			else
+			{
+				/**
+				 * @var self $exportReferences
+				 */
+				$exportReferences = $exportReferences->export($referenceSkip, true, $type);
+			}
+			
+			$export->$reference = $exportReferences;
 		}
+	}
 
-		return $destination;
+	/**
+	 * @param stdClass $object
+	 * @param int $type
+	 *
+	 * @return stdClass|array|ArrayObject
+	 */
+	protected function _getExportType(stdClass $object, int $type):  stdClass|array|ArrayObject
+	{
+		return match ($type) {
+			self::EXPORT_TYPE_STDCLASS => $object,
+			self::EXPORT_TYPE_ARRAY => (array)$object,
+			self::EXPORT_TYPE_ARRAYOBJECT => new ArrayObject((array)$object),
+		};
 	}
 
 	/**
@@ -708,11 +776,15 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * @param array $skip fields to skip
+	 * @param bool $references include references
+	 * 
 	 * @return array
 	 */
-	public function toArray(): array
+	public function toArray(array $skip = [],
+		bool $references = true): array
 	{
-		return (array)$this->export();
+		return $this->export($skip, $references, self::EXPORT_TYPE_ARRAY);
 	}
 
 	/**
