@@ -675,7 +675,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @return stdClass|array
 	 */
 	public function export(array $skip = [],
-		bool $references = false,
+		bool $references = true,
 		int $type = self::EXPORT_TYPE_STDCLASS): stdClass|array|ArrayObject
 	{
 		$export = new stdClass;
