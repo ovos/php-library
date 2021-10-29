@@ -764,7 +764,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function __debugInfo(): array
 	{
-		return (array)$this->export(references: true);
+		return $this->export(references: true, type: self::EXPORT_TYPE_ARRAY);
 	}
 
 	/**
