@@ -258,6 +258,14 @@ class View
 	}
 
 	/**
+	 * @return array
+	 */
+	public function getVars(): array
+	{
+		return $this->_vars;
+	}
+
+	/**
 	 * @return string
 	 *
 	 * @throws Exception
