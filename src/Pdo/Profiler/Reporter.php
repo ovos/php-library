@@ -5,6 +5,14 @@ namespace Ovos\Pdo\Profiler;
 
 use Ovos\Measurements;
 use SplQueue;
+use function count;
+use function array_walk;
+use function is_numeric;
+use function substr_replace;
+use function strpos;
+use function strlen;
+use function preg_replace;
+use function trim;
 
 /**
  * Reporter
@@ -31,6 +39,14 @@ class Reporter
 			->getQueries();
 	}
 
+	/**
+	 * @return int
+	 */
+	public function getCount(): int
+	{
+		return count($this->_queries);
+	}
+	
 	/**
 	 * Builds a nice and readable array report
 	 *
