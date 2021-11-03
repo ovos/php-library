@@ -80,7 +80,7 @@ class Layout extends Plugin
 	{
 		foreach($this->_layout::placeholders()->toArray() as $placeholder => $value)
 		{
-			$this->_layout->$placeholder = (string)$value; // calls __toString on widgets
+			$this->_layout->$placeholder = $value;
 		}
 
 		$response = $this->_app->getResponse();
