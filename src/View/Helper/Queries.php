@@ -17,6 +17,28 @@ use Ovos\View\Helper;
 class Queries extends Helper
 {
 	/**
+	 * @return eporter
+	 */
+	public function getReporter(): Reporter
+	{
+		static $reporter;
+		if($reporter === null)
+		{
+			$reporter = new Reporter;
+		}
+		
+		return $reporter;
+	}
+	
+	/**
+	 * @return int
+	 */
+	public function getCount(): int
+	{
+		return $this->getReporter()->getCount();
+	}
+	
+	/**
 	 * @return string
 	 */
 	public function __toString(): string
@@ -25,9 +47,8 @@ class Queries extends Helper
 		{
 			return '';
 		}
-	
-		$reporter = new Reporter;
-		$report = $reporter->getReport();
+		
+		$report = $this->getReporter()->getReport();
 		if(empty($report))
 		{
 			return '';
