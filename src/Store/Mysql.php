@@ -9,8 +9,8 @@ use Ovos\Store;
 use Ovos\Pdo\Expression;
 use PDO;
 use PDOStatement;
-use Doctrine\DBAL\DriverManager;
-use Doctrine\DBAL\Query\QueryBuilder;
+use Ovos\Store\Mysql\Query;
+use Ovos\Store\Mysql\QueryBuilder;
 use Closure;
 use function Ovos\services;
 
@@ -86,37 +86,37 @@ abstract class Mysql extends Store
 	 */
 	public function query(): QueryBuilder
 	{
-		return services()->database->getQueryBuilder($this->_sourceName);
+		return new QueryBuilder(static::TABLE);
 	}
 
 	/**
-	 * @param QueryBuilder $query
+	 * @param Query $query
 	 *
 	 * @return false|PDOStatement
 	 */
-	public function prepareQuery(QueryBuilder $query): false|PDOStatement
+	public function prepareQuery(Query $query): false|PDOStatement
 	{
-		return $this->getSource()->prepare($query->getSQL());
+		return $this->getSource()->prepare($query->getSql());
 	}
 	
 	/**
-	 * @param QueryBuilder $query
+	 * @param Query $query
 	 *
 	 * @return false|int
 	 */
-	public function executeQuery(QueryBuilder $query): false|int
+	public function executeQuery(Query $query): false|int
 	{
-		return $this->getSource()->exec($query->getSQL());
+		return $this->getSource()->exec($query->getSql());
 	}
 	
 	/**
-	 * @param QueryBuilder $query
+	 * @param Query $query
 	 *
 	 * @return false|PDOStatement
 	 */
-	public function runQuery(QueryBuilder $query): false|PDOStatement
+	public function runQuery(Query $query): false|PDOStatement
 	{
-		return $this->getSource()->query($query->getSQL());
+		return $this->getSource()->query($query->getSql());
 	}
 
 	/**
@@ -296,8 +296,7 @@ abstract class Mysql extends Store
 	): false|PDOStatement
 	{
 		$query = $this->query()
-			->select($select)
-			->from(static::TABLE);
+			->select($select);
 		
 		foreach($where as $property => $value)
 		{
@@ -352,7 +351,6 @@ abstract class Mysql extends Store
 		
 		$query = $this->query()
 			->select($groupBy . ', ' . static::TABLE . '.*')
-			->from(static::TABLE)
 			->where(sprintf($groupBy . ' IN (%s)', implode( ', ', $ids)));
 		if($queryCallback)	
 		{
@@ -386,7 +384,6 @@ abstract class Mysql extends Store
 		
 		$query = $this->query()
 			->select(static::TABLE . '.*')
-			->from(static::TABLE)
 			->where(sprintf($referencedBy . ' IN (%s)', implode( ', ', $ids)));
 		if($queryCallback)	
 		{
