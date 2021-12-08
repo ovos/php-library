@@ -32,6 +32,16 @@ class Select extends Query
 	 * @var array
 	 */
 	protected array $_orderBy = [];
+		
+	/**
+	 * @var array
+	 */
+	protected array $_groupBy = [];
+	
+	/**
+	 * @var array
+	 */
+	protected array $_having = [];	
 	
 	/**
 	 * @var ?int
@@ -51,7 +61,7 @@ class Select extends Query
 		$sql = 'SELECT ' . implode(', ', $this->_columns) . PHP_EOL;
 		$sql.= 'FROM ' . ($this->_alias === null
 			? $this->_table
-			: $this->_table . ' AS ' . $this->_alias
+			: $this->_table . ' ' . $this->_alias
 		) . PHP_EOL;
 		
 		if($this->_leftJoins !== [])
@@ -67,6 +77,16 @@ class Select extends Query
 		if($this->_conditions !== [])
 		{
 			$sql.= 'WHERE ' . implode(PHP_EOL . 'AND ', $this->_conditions) . PHP_EOL;
+		}
+		
+		if($this->_groupBy !== [])
+		{
+			$sql.= 'GROUP BY ' . implode( ' , ', $this->_groupBy) . PHP_EOL;
+		}
+		
+		if($this->_having !== [])
+		{
+			$sql.= 'HAVING ' . implode(PHP_EOL . 'AND ', $this->_having) . PHP_EOL;
 		}
 		
 		if($this->_orderBy !== [])
@@ -101,7 +121,13 @@ class Select extends Query
 		
 		return $this;
 	}
-	
+
+	/**
+	 * @param string $table
+	 * @param ?string $alias
+	 *
+	 * @return $this
+	 */
 	public function from(string $table, ?string $alias = null): self
 	{
 		$this->_table = $table;
@@ -145,6 +171,36 @@ class Select extends Query
 	public function offset(int $offset): self
 	{
 		$this->_offset = $offset;
+		
+		return $this;
+	}
+
+	/**
+	 * @param string ...$arguments
+	 *
+	 * @return $this
+	 */
+	public function groupBy(string ...$arguments): self
+	{
+		foreach($arguments as $argument)
+		{
+			$this->_groupBy[] = $argument;
+		}
+		
+		return $this;
+	}
+
+	/**
+	 * @param string ...$conditions
+	 *
+	 * @return $this
+	 */
+	public function having(string ...$conditions): self
+	{
+		foreach($conditions as $condition)
+		{
+			$this->_having[] = $condition;
+		}
 		
 		return $this;
 	}

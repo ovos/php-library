@@ -79,8 +79,8 @@ abstract class Mysql extends Store
 	}
 
 	/**
-	 * Only used for getSQL() calls, never used to query the database
-	 * or fetch results due to lack of FETCH_CLASS implementation
+	 * Only used for getSql() calls, never used to query the database
+	 * or fetch results
 	 * 
 	 * @return QueryBuilder
 	 */
@@ -357,7 +357,7 @@ abstract class Mysql extends Store
 			$queryCallback($query);
 		}
 			
-		$query = $this->getSource()->query($query->getSQL());
+		$query = $this->getSource()->query($query->getSql());
 		return $this->fetchGrouped($query, $class);
 	}
 	
@@ -390,7 +390,7 @@ abstract class Mysql extends Store
 			$queryCallback($query);
 		}
 		
-		$query = $this->getSource()->query($query->getSQL());
+		$query = $this->getSource()->query($query->getSql());
 		return $query->fetchAll(PDO::FETCH_CLASS, $class);
 	}
 	
