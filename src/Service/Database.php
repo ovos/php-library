@@ -7,9 +7,6 @@ use Ovos\ArrayObject;
 use Ovos\Pdo\Profiler\Collector;
 use Ovos\Service;
 use Ovos\Pdo\Profiler\Pdo;
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\DriverManager;
-use Doctrine\DBAL\Query\QueryBuilder;
 use function Ovos\services;
 
 /**
@@ -49,11 +46,6 @@ class Database extends Service
 	protected array $_clients;
 
 	/**
-	 * @var Connection[]
-	 */
-	protected array $_DBALs;
-
-	/**
 	 * Returns database client
 	 *
 	 * @param string $name
@@ -86,34 +78,5 @@ class Database extends Service
 		}
 
 		return $this->_clients[$name];
-	}
-	
-	/**
-	 * @param string $name
-	 * 
-	 * @return Connection
-	 * @throws \Doctrine\DBAL\Exception
-	 */
-	public function getDBAL(string $name = self::DEFAULT): Connection
-	{
-		if(!isset($this->_DBALs[$name]))
-		{
-			$this->_DBALs[$name] = DriverManager::getConnection([
-				'driver' => 'pdo_mysql',
-				'pdo' => $this->get($name),
-			]);
-		}
-		
-		return $this->_DBALs[$name];
-	}	
-	
-	/**
-	 * @param string $name
-	 * 
-	 * @return QueryBuilder
-	 */
-	public function getQueryBuilder(string $name = self::DEFAULT): QueryBuilder
-	{
-		return $this->getDBAL($name)->createQueryBuilder();
 	}
 }
