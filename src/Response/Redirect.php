@@ -29,6 +29,11 @@ class Redirect extends Response
 	protected int $_httpCode = 302;
 
 	/**
+	 * @var bool
+	 */
+	protected bool $_withQueryString = false;
+
+	/**
 	 * @param Url|string[] $urlComponents
 	 */
 	public function __construct(...$urlComponents)
@@ -76,10 +81,29 @@ class Redirect extends Response
 	}
 
 	/**
+	 * @param bool $withQueryString
+	 *
+	 * @return self
+	 */
+	public function withQueryString(bool $withQueryString = true): self
+	{
+		$this->_withQueryString = $withQueryString;
+		
+		return $this;
+	}
+
+	/**
 	 * @return string
 	 */
 	public function __toString(): string
 	{
-		return $this->_url->__toString();
+		$url = $this->_url->__toString();
+		
+		if($this->_withQueryString && $_SERVER['QUERY_STRING'] !== '')
+		{
+			$url.= '?' . $_SERVER['QUERY_STRING']; 
+		}
+		
+		return $url;
 	}
 }
