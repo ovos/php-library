@@ -17,6 +17,14 @@ composer require cache/hierarchical-cache:"1.1.0 as 0.4" cache/prefixed-cache
 * redis
 
 #### Installation
+1. Add to your .ssh/config
+```
+Host ovos.php-library
+    HostName github.com
+    PreferredAuthentications publickey
+    IdentityFile ~/.ssh/ovos.php-library
+```
+2. Add to composer.json
 ```
 "repositories": [
 {
@@ -25,7 +33,7 @@ composer require cache/hierarchical-cache:"1.1.0 as 0.4" cache/prefixed-cache
 }
 ],
 ```
-
+3.
 ```
 git require ovos/php-library
 ```
