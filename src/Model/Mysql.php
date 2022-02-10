@@ -227,7 +227,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			$this->_modified[$name] = $value;
 		}
-
+		
 		$this->_properties[$name] = $value;
 
 		return $this;
@@ -752,7 +752,8 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	protected function _getExportType(stdClass $object, int $type):  stdClass|array|ArrayObject
 	{
-		return match ($type) {
+		return match($type)
+		{
 			self::EXPORT_TYPE_STDCLASS => $object,
 			self::EXPORT_TYPE_ARRAY => (array)$object,
 			self::EXPORT_TYPE_ARRAYOBJECT => new ArrayObject((array)$object),
@@ -898,19 +899,19 @@ abstract class Mysql extends Model implements Iterator, Countable
 		$this->triggerEvents('preUpdate', 'preSave');
 		$query = $store->updateQuery($this, $updateObject);
 		$result = $query->execute();
-
+		
 		// update current object on success
 		if($result)
 		{
 			foreach($updateObject as $property => $value)
 			{
-				$this->__set($property, $value);
+				$this->__set($property, $updateObject->__get($property));
 			}
 			
 			// reset modified values
 			$this->resetModified();
 		}
-
+		
 		return $result;
 	}
 
@@ -928,7 +929,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			return false;
 		}
-
+		
 		$updateObject = self::import($this->getModifiedValues());
 		return $this->update($updateObject);
 	}
