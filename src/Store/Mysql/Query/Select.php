@@ -44,14 +44,14 @@ class Select extends Query
 	protected array $_having = [];	
 	
 	/**
-	 * @var ?int
+	 * @var mixed
 	 */
-	protected ?int $_limit = null;
+	protected mixed $_limit = null;
 
 	/**
-	 * @var ?int
+	 * @var mixed
 	 */
-	protected ?int $_offset = null;
+	protected mixed $_offset = null;
 
 	/**
 	 * @return string
@@ -152,11 +152,11 @@ class Select extends Query
 	}
 
 	/**
-	 * @param int $limit
+	 * @param mixed $limit
 	 *
 	 * @return $this
 	 */
-	public function limit(int $limit): self
+	public function limit(mixed $limit): self
 	{
 		$this->_limit = $limit;
 		
@@ -164,11 +164,11 @@ class Select extends Query
 	}
 
 	/**
-	 * @param int $offset
+	 * @param mixed $offset
 	 *
 	 * @return $this
 	 */
-	public function offset(int $offset): self
+	public function offset(mixed $offset): self
 	{
 		$this->_offset = $offset;
 		
