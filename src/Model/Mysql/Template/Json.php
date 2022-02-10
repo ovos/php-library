@@ -80,7 +80,8 @@ class Json extends Template
 			| JSON_UNESCAPED_SLASHES
 		 	| JSON_NUMERIC_CHECK
 		);
-			
+		$string = str_replace([':', ','], [': ', ', '], $string); // compatibility with MySQL format, @see https://bugs.mysql.com/bug.php?id=98135
+		
 		return $string ?: null;	
 	}
 	
@@ -106,7 +107,7 @@ class Json extends Template
 		{
 			return $object;
 		}
-			
+		
 		return (array)$object;	
 	}
 }

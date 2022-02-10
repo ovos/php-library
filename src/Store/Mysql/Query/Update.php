@@ -37,15 +37,15 @@ class Update extends Query
 	 * Example usage:
 	 * ->set(name: ':name', created_at: 'NOW()')
 	 * 
-	 * @param string ...$columns
+	 * @param mixed ...$columns
 	 *
 	 * @return $this
 	 */
-    public function set(string ...$columns): self
+    public function set(mixed ...$columns): self
 	{
 		foreach($columns as $column => $value)
 		{
-			$this->_columns[] = $column . ' = ' . $value;
+			$this->_columns[] = $column . ' = ' . (string)$value;
 		}
 		
 		return $this;

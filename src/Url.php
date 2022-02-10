@@ -293,11 +293,11 @@ class Url
 	}
 
 	/**
-	 * @param Locale|string $locale
+	 * @param null|Locale|string $locale
 	 *
 	 * @return self
 	 */
-	public function setLocale(Locale|string $locale): self
+	public function setLocale(null|Locale|string $locale): self
 	{
 		if(is_string($locale))
 		{

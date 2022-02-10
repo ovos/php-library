@@ -84,11 +84,11 @@ class QueryBuilder
 	 * Example usage:
 	 * ->set(name: ':name', created_at: 'NOW()')
 	 * 
-	 * @param string ...$columns
+	 * @param mixed ...$columns
 	 *
 	 * @return Update
 	 */
-	public function update(string ...$columns): Update
+	public function update(mixed ...$columns): Update
 	{
 		$query = new Update($this->_table);
 		$query->set(...$columns);
