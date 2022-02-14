@@ -429,6 +429,7 @@ class Application
 		}
 		
 		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $systemConfig->domain));
+		define('SYSTEM_HOST_HTTPS', 'https://' . $systemConfig->domain);
 		define('SYSTEM_PATH', $systemPath);
 		define('ROUTE_PATH', $routePath);
 		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
