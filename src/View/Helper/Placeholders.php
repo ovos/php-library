@@ -35,6 +35,19 @@ class Placeholders extends Helper
 	}
 
 	/**
+	 * @param string $placeholder
+	 *
+	 * @return void
+	 */
+	public function __unset(string $placeholder): void
+	{
+		if(isset($this->_items[$placeholder]))
+		{
+			unset($this->_items[$placeholder]);
+		}
+	}
+
+	/**
 	 * @return array
 	 */
 	public function toArray(): array
