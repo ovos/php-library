@@ -69,7 +69,7 @@ class Placeholder
 	 *
 	 * @return self
 	 */
-	public function append( null|string|bool|int $value): self
+	public function append(null|string|bool|int $value): self
 	{
 		$this->set($value, self::PLACEMENT_APPEND);
 
