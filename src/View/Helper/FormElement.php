@@ -66,6 +66,11 @@ class FormElement extends Helper
 	/**
 	 * @var ?Placeholder
 	 */
+	protected ?Placeholder $_fieldInsert = null;	
+	
+	/**
+	 * @var ?Placeholder
+	 */
 	protected ?Placeholder $_inputInsert = null;
 
 	/**
@@ -149,13 +154,13 @@ class FormElement extends Helper
 	}
 
 	/**
-	 * @param ?Placeholder $label
+	 * @param ?Placeholder $insert
 	 * 
 	 * @return self
 	 */
-	public function setLabelInsert(?Placeholder $labelInsert): self
+	public function setLabelInsert(?Placeholder $insert): self
 	{
-		$this->_labelInsert = $labelInsert;
+		$this->_labelInsert = $insert;
 		
 		return $this;
 	}
@@ -169,13 +174,33 @@ class FormElement extends Helper
 	}
 	
 	/**
-	 * @param ?Placeholder $inputInsert
+	 * @param ?Placeholder $insert
 	 * 
 	 * @return self
 	 */
-	public function setInputInsert(?Placeholder $inputInsert): self
+	public function setFieldInsert(?Placeholder $insert): self
 	{
-		$this->_inputInsert = $inputInsert;
+		$this->_fieldInsert = $insert;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ?Placeholder
+	 */
+	public function getFieldInsert(): ?Placeholder
+	{
+		return $this->_fieldInsert;
+	}
+		
+	/**
+	 * @param ?Placeholder $insert
+	 * 
+	 * @return self
+	 */
+	public function setInputInsert(?Placeholder $insert): self
+	{
+		$this->_inputInsert = $insert;
 		
 		return $this;
 	}
