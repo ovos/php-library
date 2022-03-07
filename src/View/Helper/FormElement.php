@@ -7,6 +7,7 @@ use Closure;
 use Ovos\View\Helper;
 use Ovos\Form\Element;
 use Ovos\View;
+use Ovos\View\Helper\Placeholders\Placeholder;
 use function sprintf;
 
 /**
@@ -26,7 +27,7 @@ class FormElement extends Helper
 	 * @var ?string
 	 */
 	protected ?string $_type = null;
-
+	
 	/**
 	 * @var ?string
 	 */
@@ -56,6 +57,21 @@ class FormElement extends Helper
 	 * @var ?Closure
 	 */
 	protected ?Closure $_fieldLabelCallback = null;
+
+	/**
+	 * @var ?Placeholder
+	 */
+	protected ?Placeholder $_labelInsert = null;
+	
+	/**
+	 * @var ?Placeholder
+	 */
+	protected ?Placeholder $_fieldInsert = null;	
+	
+	/**
+	 * @var ?Placeholder
+	 */
+	protected ?Placeholder $_inputInsert = null;
 
 	/**
 	 * @var array
@@ -137,6 +153,66 @@ class FormElement extends Helper
 		return $this->_type;
 	}
 
+	/**
+	 * @param ?Placeholder $insert
+	 * 
+	 * @return self
+	 */
+	public function setLabelInsert(?Placeholder $insert): self
+	{
+		$this->_labelInsert = $insert;
+		
+		return $this;
+	}
+
+	/**
+	 * @return ?Placeholder
+	 */
+	public function getLabelInsert(): ?Placeholder
+	{
+		return $this->_labelInsert;
+	}
+	
+	/**
+	 * @param ?Placeholder $insert
+	 * 
+	 * @return self
+	 */
+	public function setFieldInsert(?Placeholder $insert): self
+	{
+		$this->_fieldInsert = $insert;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ?Placeholder
+	 */
+	public function getFieldInsert(): ?Placeholder
+	{
+		return $this->_fieldInsert;
+	}
+		
+	/**
+	 * @param ?Placeholder $insert
+	 * 
+	 * @return self
+	 */
+	public function setInputInsert(?Placeholder $insert): self
+	{
+		$this->_inputInsert = $insert;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ?Placeholder
+	 */
+	public function getInputInsert(): ?Placeholder
+	{
+		return $this->_inputInsert;
+	}
+	
 	/**
 	 * @param ?string $description
 	 * 
