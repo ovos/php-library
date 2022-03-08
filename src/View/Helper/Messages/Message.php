@@ -43,20 +43,29 @@ class Message
 	protected string $_type;
 
 	/**
+	 * @var bool
+	 */
+	protected bool $_raw;
+
+	/**
 	 * @param Messages $messages
 	 * @param string $type
 	 * @param ?string $description
 	 * @param ?string $title
+	 * @param bool $raw
 	 */
 	public function __construct(Messages $messages,
 		string $type = self::TYPE_SUCCESS,
 		?string $description = null,
-		?string $title = null)
+		?string $title = null,
+		bool $raw = false,
+	)	
 	{
 		$this->setMessages($messages);
 		$this->setType($type);
 		$this->setDescription($description);
 		$this->setTitle($title);
+		$this->setIsRaw($raw);
 	}
 
 	/**
@@ -129,6 +138,26 @@ class Message
 	public function getType(): string
 	{
 		return $this->_type;
+	}
+
+	/**
+	 * @param bool $raw
+	 *
+	 * @return self
+	 */
+	public function setIsRaw(bool $raw = true): self
+	{
+		$this->_raw = $raw;
+
+		return $this;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function isRaw(): bool
+	{
+		return $this->_raw;
 	}
 
 	/**
