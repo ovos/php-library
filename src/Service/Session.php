@@ -27,6 +27,16 @@ class Session extends Service
 	protected ArrayObject $_config;
 
 	/**
+	 * @var ArrayObject
+	 */
+	protected ArrayObject $_cookiesConfig;
+	
+	/**
+	 * @var ArrayObject
+	 */
+	protected ArrayObject $_sessionConfig;
+
+	/**
 	 * @var bool
 	 */
 	protected bool $_initialized = false;
@@ -50,21 +60,28 @@ class Session extends Service
 	{
 		parent::__construct();
 
-		$this->_config = $this->_app->getConfig()->session;
-		if($this->_config === null)
+		$this->_config = $this->_app->getConfig();
+		if($this->_config->cookies === null)
+		{
+			throw new Exception('Configuration missing for cookies.');
+		}
+		$this->_cookiesConfig = $this->_config->cookies;
+		
+		if($this->_config->session === null)
 		{
 			throw new Exception('Configuration missing for session service.');
 		}
+		$this->_sessionConfig = $this->_config->session;
 		
-		if($this->_config->ini)
+		if($this->_sessionConfig->ini)
 		{
-			foreach($this->_config->ini as $ini => $value)
+			foreach($this->_sessionConfig->ini as $ini => $value)
 			{
 				ini_set('session.' . $ini, (string)$value);
 			}
 		}
 	
-		if($this->_config->autostart)
+		if($this->_sessionConfig->autostart)
 		{
 			$this->start();
 		}
@@ -76,21 +93,26 @@ class Session extends Service
 	{
 		if($this->_initialized === false)
 		{
-			session_cache_limiter($this->_config->cache_limiter);
+			session_cache_limiter($this->_sessionConfig->cache_limiter);
 
 			$cookie = session_get_cookie_params();
-			session_set_cookie_params
-			(
-				$cookie['lifetime'],
-				SYSTEM_PATH,
-				$cookie['domain'],
-				$this->_request->isSecure(),
-				true
-			);
+			session_set_cookie_params([
+				'lifetime' => $cookie['lifetime'],
+				'path' => SYSTEM_PATH,
+				'domain' => $this->_config->domain,
+				'secure' => $this->_request->isSecure(),
+				'httponly' => true,
+				'samesite' => $this->_cookiesConfig->samesite,
+			]);
 
-			if($this->_config->cookie_name)
+			if($this->_sessionConfig->cookie_name)
 			{
-				session_name($this->_config->cookie_name);
+				session_name($this->_sessionConfig->cookie_name);
+			}
+			
+			if($this->_cookiesConfig->prefix)
+			{
+				session_name($this->_cookiesConfig->prefix . session_name());
 			}
 
 			$this->_initialized = true;
@@ -135,7 +157,7 @@ class Session extends Service
 	 */
 	public function flush(): bool
 	{
-		$connection = new Connection($this->_config->connection);
+		$connection = new Connection($this->_config->session->connection);
 		$connectionStatus = $connection->connect();
 		if($connectionStatus === false)
 		{
