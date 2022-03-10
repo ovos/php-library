@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\ArrayObject;
+use Ovos\Exception;
 use Ovos\Service;
 use function count;
 
@@ -26,6 +27,11 @@ class Cookies extends Service
 	protected ArrayObject $_config;
 
 	/**
+	 * @var ArrayObject
+	 */
+	protected ArrayObject $_cookiesConfig;
+
+	/**
 	 * @var string
 	 */
 	protected string $_prefix;
@@ -44,8 +50,14 @@ class Cookies extends Service
 	{
 		parent::__construct();
 
-		$this->_config = $this->_app->getConfig()->cookies;
-		$this->_prefix = $this->_config->prefix;
+		$this->_config = $this->_app->getConfig();
+		if($this->_config->cookies === null)
+		{
+			throw new Exception('Configuration missing for cookies.');
+		}
+		$this->_cookiesConfig = $this->_config->cookies;
+		
+		$this->_prefix = $this->_cookiesConfig->prefix;
 		$this->stripPrefixes();
 	}
 
@@ -88,55 +100,44 @@ class Cookies extends Service
 	/**
 	 * @see http://php.net/setcookie
 	 *
-	 * @param mixed ...$options
+	 * @param string $name
+	 * @param string $value
+	 * @param array $options
 	 *
 	 * @return bool
 	 */
-	public function set(...$options): bool
+	public function set(string $name, string $value, array $options): bool
 	{
-		if(isset($options['name']))
-		{
-			$options['name'] = $this->getName($options['name']);
-		}
-		else if(count($options))
-		{
-			$options[0] = $this->getName($options[0]);
-		}
-
-		return setcookie(...$options);
+		$name = $this->getName($name);
+		$options['domain'] = $this->_config->domain;
+		$options['samesite'] = $this->_cookiesConfig->samesite;
+		
+		return setcookie($name, $value, $options);
 	}
 
 	/**
 	 * @see http://php.net/setcookie
 	 *
+	 * @param string $name
+	 * @param string $value
 	 * @param array $options
 	 *
 	 * @return bool
 	 */
-	public function setIfMissing(...$options): bool
+	public function setIfMissing(string $name, string $value, array $options): bool
 	{
-		if(isset($options['name']))
+		if($this->get($name))
 		{
-			if($this->get($options['name']))
-			{
-				return true;
-			}
-		}
-		else if(count($options))
-		{
-			if($this->get($options[0]))
-			{
-				return true;
-			}
+			return true;
 		}
 
-		return $this->set(...$options);
+		return $this->set($name, $value, $options);
 	}
 
 	/**
 	 * @param string $name
 	 *
-	 * @return string|null
+	 * @return ?string
 	 */
 	public function get($name): ?string
 	{
@@ -160,7 +161,11 @@ class Cookies extends Service
 			return false;
 		}
 
-		setcookie($this->getName($name), '', -1, SYSTEM_PATH);
+		setcookie($this->getName($name), '', [
+			'expires' => -1,
+			'path' => SYSTEM_PATH,
+			'domain' => $this->_config->domain,
+		]);
 		unset($_COOKIE[$name]);
 
 		return true;
