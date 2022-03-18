@@ -36,7 +36,7 @@ class QueryBuilder extends Test
 			->offset(20);
 		
 		return $query->getSql() === 'SELECT t.id, t.name, t.created_at'
-			. PHP_EOL . 'FROM tests AS t'
+			. PHP_EOL . 'FROM tests t'
 			. PHP_EOL . 'LEFT JOIN tests_groups tr ON tr.id_test = t.id'
 			. PHP_EOL . 'WHERE t.finished_at IS NOT NULL'
 			. PHP_EOL . 'AND tr.active = true'
