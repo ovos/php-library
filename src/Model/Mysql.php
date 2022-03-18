@@ -980,7 +980,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 			DELETE FROM ' . self::getTable() . '
 			WHERE ' . $this->getPrimaryKeysConditions()
 		);
-		$this->_bindPrimaryKeys($query);
+		$this->bindPrimaryKeys($query);
 
 		return $query->execute();
 	}

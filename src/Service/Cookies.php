@@ -109,6 +109,7 @@ class Cookies extends Service
 	public function set(string $name, string $value, array $options): bool
 	{
 		$name = $this->getName($name);
+		$options['path'] = SYSTEM_PATH;
 		$options['domain'] = $this->_config->domain;
 		$options['samesite'] = $this->_cookiesConfig->samesite;
 		
@@ -160,10 +161,10 @@ class Cookies extends Service
 		{
 			return false;
 		}
-
+		
 		setcookie($this->getName($name), '', [
 			'expires' => -1,
-			'path' => SYSTEM_PATH,
+			'path' => SYSTEM_PATH,	
 			'domain' => $this->_config->domain,
 		]);
 		unset($_COOKIE[$name]);

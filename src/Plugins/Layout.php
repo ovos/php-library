@@ -33,6 +33,13 @@ class Layout extends Plugin
 	protected View $_layout;
 
 	/**
+	 * Automatically create these placeholders
+	 * 
+	 * @var array
+	 */
+	protected array $_placeholders = [];
+
+	/**
 	 * @param string $layout
 	 */
 	public function __construct(string $layout)
@@ -48,6 +55,12 @@ class Layout extends Plugin
 
 		$this->_layout = new View\Layout($layout);
 		$this->_layout::placeholders()->clear();
+		
+		// automatically create these placeholders
+		foreach($this->_placeholders as $placeholder)
+		{
+			$this->_layout->placeholders()->{$placeholder};
+		}
 	}
 
 	/**
