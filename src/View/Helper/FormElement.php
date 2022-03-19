@@ -314,6 +314,19 @@ class FormElement extends Helper
 	}
 
 	/**
+	 * @param string $attribute
+	 * @param int|string $value
+	 *
+	 * @return self
+	 */
+	public function setAttribute(string $attribute, int|string $value): self
+	{
+		$this->_attributes[$attribute] = $value;
+		
+		return $this;
+	}
+
+	/**
 	 * @param array $attributes
 	 * 
 	 * @return self
