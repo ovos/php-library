@@ -88,4 +88,63 @@ abstract class Query
 	{
 		return $this->where(...$conditions);
 	}
+	
+
+	/**
+	 * @param string $field
+	 * @param array $values
+	 *
+	 * @return $this
+	 */
+	public function whereIn(string $field, array $values): self
+	{
+		if(count($values) === 0)
+		{
+			return $this;
+		}
+		
+		$this->_conditions[] = $field . ' IN (' . implode(', ', $values) . ')';
+		
+		return $this;
+	}	
+
+	/**
+	 * @param string $field
+	 * @param array $values
+	 *
+	 * @return $this
+	 */
+	public function andWhereIn(string $field, array $values): self
+	{
+		return $this->whereIn($field, $values);
+	}	
+	
+	/**
+	 * @param string $field
+	 * @param array $values
+	 *
+	 * @return $this
+	 */
+	public function whereNotIn(string $field, array $values): self
+	{
+		if(count($values) === 0)
+		{
+			return $this;
+		}
+		
+		$this->_conditions[] = $field . ' NOT IN (' . implode(', ', $values) . ')';
+		
+		return $this;
+	}	
+
+	/**
+	 * @param string $field
+	 * @param array $values
+	 *
+	 * @return $this
+	 */
+	public function andWhereNotIn(string $field, array $values): self
+	{
+		return $this->whereNotIn($field, $values);
+	}
 }

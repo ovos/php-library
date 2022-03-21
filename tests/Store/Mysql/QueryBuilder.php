@@ -31,6 +31,9 @@ class QueryBuilder extends Test
 			->leftJoin('tests_groups tr ON tr.id_test = t.id')
 			->where('t.finished_at IS NOT NULL')
 			->andWhere('tr.active = true')
+			->andWhereIn('t.status', [1, 2])
+			->andWhereIn('t.status', []) // this should be ignored
+			->andWhereNotIn('t.status', [3])
 			->orderBy('t.started_at DESC')
 			->limit(10)
 			->offset(20);
@@ -40,6 +43,8 @@ class QueryBuilder extends Test
 			. PHP_EOL . 'LEFT JOIN tests_groups tr ON tr.id_test = t.id'
 			. PHP_EOL . 'WHERE t.finished_at IS NOT NULL'
 			. PHP_EOL . 'AND tr.active = true'
+			. PHP_EOL . 'AND t.status IN (1, 2)'
+			. PHP_EOL . 'AND t.status NOT IN (3)'
 			. PHP_EOL . 'ORDER BY t.started_at DESC'
 			. PHP_EOL . 'LIMIT 10'
 			. PHP_EOL . 'OFFSET 20'
