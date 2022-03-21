@@ -88,7 +88,6 @@ abstract class Query
 	{
 		return $this->where(...$conditions);
 	}
-	
 
 	/**
 	 * @param string $field
@@ -103,7 +102,8 @@ abstract class Query
 			return $this;
 		}
 		
-		$this->_conditions[] = $field . ' IN (' . implode(', ', $values) . ')';
+		$this->_conditions[] = $field
+			. ' IN (' . implode(', ', $values) . ')';
 		
 		return $this;
 	}	
@@ -132,7 +132,8 @@ abstract class Query
 			return $this;
 		}
 		
-		$this->_conditions[] = $field . ' NOT IN (' . implode(', ', $values) . ')';
+		$this->_conditions[] = $field
+			. ' NOT IN (' . implode(', ', $values) . ')';
 		
 		return $this;
 	}	
