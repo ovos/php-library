@@ -194,7 +194,10 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function setProperties(array $properties): self
 	{
-		$this->_properties = $properties;
+		foreach($properties as $name => $value)
+		{
+			$this->setProperty($name, $value);
+		}
 
 		return $this;
 	}
