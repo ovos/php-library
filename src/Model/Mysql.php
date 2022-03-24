@@ -188,6 +188,8 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * Should be used when setting multiple values at once, while skipping the setters
+	 * 
 	 * @param array $properties
 	 *
 	 * @return self
@@ -211,6 +213,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * Should be used to modify a single value, while skipping the setters
+	 * (the change will be recorded as modification) 
+	 * 
 	 * @param string $name
 	 * @param mixed $value
 	 *
@@ -637,8 +642,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 			unset($this->_updateObject->$property);
 		}
 	}
-
+	
 	/**
+	 * Should be used to recreate the model instance from stdClass
+	 * All values will be marked as modified, hence the resulting object can be used to perform an update
+	 * If you wish to restore a persisted instance with no modifications (for example from session), use restore() instead 
+	 * 
 	 * @param object $source
 	 * @param array $skip fields to skip
 	 *
@@ -660,6 +669,27 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 	
 	/**
+	 * Should be used to recreate the model instance after storing it for example in session 
+	 * 
+	 * @param object $source
+	 * @param array $skip fields to skip
+	 *
+	 * @return self
+	 */
+	public static function restore(object $source, array $skip = []): self
+	{
+		$destination = self::import($source, $skip);
+		$destination->resetModified();
+		$destination->exists(true);
+
+		return $destination;
+	}	
+	
+	/**
+	 * Should be used to set multiple values on the object
+	 * The values will be let through the setters
+	 * This method is the optimal way of setting multiple changes on the object from an array
+	 * 
 	 * @param array $values
 	 */
 	public function fromArray(array $values): void
@@ -671,6 +701,8 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * Exports the object for storage in session or database
+	 * 
 	 * @param array $skip fields to skip
 	 * @param bool $references include references
 	 * @param int $type
@@ -853,7 +885,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		
 		// reset modified values
 		$this->resetModified();
-		$this->_exists = true;
+		$this->exists(true);
 
 		return $result;
 	}
@@ -999,10 +1031,17 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * @param ?bool $exists
+	 *
 	 * @return bool
 	 */
-	public function exists(): bool
+	public function exists(?bool $exists = null): bool
 	{
+		if($exists !== null)
+		{
+			$this->_exists = $exists;
+		}
+		
 		return $this->_exists;
 	}
 
