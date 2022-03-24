@@ -281,31 +281,103 @@ abstract class Mysql extends Store
 	{
 		return $model->insert();
 	}
-	
+
 	/**
 	 * @param array $where
 	 * @param string $select
-	 * @param array $options
+	 * @param ?string $alias
+	 * @param array $whereIn
+	 * @param array $whereNotIn
+	 * @param mixed $limit
+	 * @param mixed $offset
+	 * @param array $groupBy
+	 * @param array $having
+	 * @param array $orderBy
+	 * @param array $leftJoin
+	 * @param array $innerJoin
 	 *
 	 * @return false|PDOStatement
 	 */
 	public function executeFind(
 		array $where = [],
 		string $select = '*',
-		array $options = [],
+		array $options = [], // bc
+		?string $alias = null,
+		array $whereIn = [],
+		array $whereNotIn = [],
+		mixed $limit = null,
+		mixed $offset = null,
+		array $groupBy = [],
+		array $having = [],
+		array $orderBy = [],
+		array $leftJoin = [],
+		array $innerJoin = [],	
 	): false|PDOStatement
 	{
+		if($options) // bc
+		{
+			$options['orderBy'] = isset($options['order']) ? $options['order'] : [];
+			$options['groupBy'] = isset($options['group']) ? $options['group'] : [];
+			
+			extract($options, EXTR_SKIP);
+		}
+		
 		$query = $this->query()
 			->select($select);
+			
+		if($alias !== null)
+		{
+			$query->alias($alias);
+		}
 		
 		foreach($where as $property => $value)
 		{
 			$query->andWhere($property . ' = ?');
 		}
 		
-		if(isset($options['order']))
+		foreach($whereIn as $property => $values)
 		{
-			$query->orderBy(...$options['order']);
+			$query->andWhereIn($property, $values);
+		}
+				
+		foreach($whereNotIn as $property => $values)
+		{
+			$query->andWhereIn($property, $values);
+		}
+		
+		if($limit !== null)
+		{
+			$query->limit($limit);
+		}
+		
+		if($limit !== null)
+		{
+			$query->offset($limit);
+		}		
+		
+		if($groupBy)
+		{
+			$query->groupBy(...$groupBy);
+		}
+		
+		if($having)
+		{
+			$query->having(...$having);
+		}
+				
+		if($orderBy)
+		{
+			$query->orderBy(...$orderBy);
+		}
+		
+		if($leftJoin)
+		{
+			$query->leftJoin(...$leftJoin);
+		}
+				
+		if($innerJoin)
+		{
+			$query->innerJoin(...$innerJoin);
 		}
 		
 		$query = $this->prepareQuery($query);
