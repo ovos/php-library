@@ -188,6 +188,11 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * Should be used when initializing multiple properties at once.
+	 * The change will not trigger setters
+	 * and will not be recorded as modification.
+	 * Used for restoring model's state.
+	 * 
 	 * @param array $properties
 	 *
 	 * @return self
@@ -211,12 +216,48 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * Should be used to initialize a single property.
+	 * The change will not trigger setters
+	 * and will not be recorded as modification.
+	 * Used for restoring model's state.
+	 * 
 	 * @param string $name
 	 * @param mixed $value
 	 *
 	 * @return self
 	 */
 	public function setProperty(string $name, mixed $value): self
+	{
+		$this->_properties[$name] = $value;
+
+		return $this;
+	}
+	
+	/**
+	 * @param string $name
+	 *
+	 * @return mixed
+	 */
+	public function getProperty($name): mixed
+	{
+		if(array_key_exists($name, $this->_properties) === false)
+		{
+			return null;
+		}
+
+		return $this->_properties[$name];
+	}
+	
+	/**
+	 * Should be used to modify a single property, while skipping the setters
+	 * The change will be recorded as modification
+	 * 
+	 * @param string $name
+	 * @param mixed $value
+	 *
+	 * @return self
+	 */
+	public function modifyProperty(string $name, mixed $value): self
 	{
 		if(
 			// property does not exist
@@ -231,26 +272,35 @@ abstract class Mysql extends Model implements Iterator, Countable
 			$this->_modified[$name] = $value;
 		}
 		
-		$this->_properties[$name] = $value;
+		$this->setProperty($name, $value);
+		
+		// record the change on update object
+		if($this->_updateObject !== null)
+		{
+			$this->_updateObject->$name = $value;
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * Should be used to modify multiple properties at once, while skipping the setters
+	 * The change will be recorded as modification.
+	 * 
+	 * @param array $properties
+	 *
+	 * @return self
+	 */
+	public function modifyProperties(array $properties): self
+	{
+		foreach($properties as $name => $value)
+		{
+			$this->modifyProperty($name, $value);
+		}
 
 		return $this;
 	}
-
-	/**
-	 * @param string $name
-	 *
-	 * @return mixed
-	 */
-	public function getProperty($name): mixed
-	{
-		if(!isset($this->_properties[$name]))
-		{
-			return null;
-		}
-
-		return $this->_properties[$name];
-	}
-
+	
 	/**
 	 * @param string $name
 	 * @param mixed $value
@@ -271,12 +321,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function &getReference(string $name): mixed
 	{
-		if(isset($this->_references[$name]))
+		if(array_key_exists($name, $this->_references) === false)
 		{
-			return $this->_references[$name];
+			return $this->null;
 		}
 
-		return $this->null;
+		return $this->_references[$name];
 	}
 	
 	/**
@@ -286,7 +336,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function hasReference(string $name): bool
 	{
-		return isset($this->_references[$name]);
+		return array_key_exists($name, $this->_references);
 	}
 	
 	/**
@@ -500,22 +550,41 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 	
 	/**
+	 * Value = property or reference
+	 * 
+	 * @param string $name
+	 *
+	 * @return mixed
+	 */
+	public function __get(string $name): mixed
+	{
+		return $this->getValue($name);
+	}
+
+	/**
+	 * Value = property or reference
+	 * 
 	 * @param string $property
 	 *
 	 * @return mixed
 	 */
-	public function __get(string $property): mixed
+	public function getValue(string $name): mixed
 	{
-		$value = $this->__getRaw($property);
+		if($value = $this->getReference($name))
+		{
+			return $value;
+		}
+		
+		$value = $this->getProperty($name);
 		if($value === null)
 		{
 			return null;
 		}
 			
 		// run getter
-		if(isset($this->_getters[$property]))
+		if(isset($this->_getters[$name]))
 		{
-			foreach($this->_getters[$property] as $method)
+			foreach($this->_getters[$name] as $method)
 			{
 				// check if getter method is part of a template
 				foreach($this->getTemplates() as $template)
@@ -536,50 +605,52 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 		return $value;
 	}
-
-	/**
-	 * @param string $property
-	 *
-	 * @return mixed
-	 */
-	public function __getRaw(string $property): mixed
-	{
-		if(array_key_exists($property, $this->_references))
-		{
-			return $this->_references[$property];
-		}
 	
-		if(array_key_exists($property, $this->_properties))
-		{
-			return $this->_properties[$property];
-		}
-
-		return null;
-	}
-
 	/**
-	 * @param string $property
+	 * @param string $name
 	 *
 	 * @return bool
 	 */
-	public function __isset(string $property): bool
+	public function __isset(string $name): bool
 	{
-		return array_key_exists($property, $this->_properties)
-			|| array_key_exists($property, $this->_references);
+		return array_key_exists($name, $this->_properties)
+			|| array_key_exists($name, $this->_references);
 	}
 
 	/**
 	 * Called also by PDO on FETCH_CLASS
 	 * 
-	 * @param string $property
+	 * @param string $name
 	 * @param mixed $value
 	 */
-	public function __set(string $property, mixed $value): void
+	public function __set(string $name, mixed $value): void
 	{
-		// run setter
-		if(isset($this->_setters[$property]))
+		$this->setValue($name, $value);
+	}
+
+	/**
+	 * Should be used to change value on the object
+	 * 
+	 * @param string $name
+	 * @param mixed $value
+	 *
+	 * @return $this
+	 */
+	public function setValue(string $name, mixed $value): self
+	{
+		// modify a reference
+		if($reference = $this->getReference($name))
 		{
-			foreach($this->_setters[$property] as $method)
+			$reference = $value;
+			
+			return $this;
+		}
+		
+		// modify a property
+		// run setters
+		if(isset($this->_setters[$name]))
+		{
+			foreach($this->_setters[$name] as $method)
 			{
 				// check if setter method is part of a template
 				foreach($this->getTemplates() as $template)
@@ -597,85 +668,132 @@ abstract class Mysql extends Model implements Iterator, Countable
 				}
 			}	
 		}
-
-		$this->__setRaw($property, $value);
-	}
-
-	/**
-	 * @param string $property
-	 * @param mixed $value
-	 */
-	public function __setRaw(string $property, mixed $value): void
-	{
-		$this->setProperty($property, $value);
-
-		// set also on update object
-		if($this->_updateObject !== null)
-		{
-			$this->_updateObject->$property = $value;
-		}
-	}
-
-	/**
-	 * @param string $property
-	 */
-	public function __unset(string $property): void
-	{
-		if(array_key_exists($property, $this->_properties))
-		{
-			unset($this->_properties[$property]);
-		}
 		
-		if(array_key_exists($property, $this->_references))
-		{
-			unset($this->_references[$property]);
-		}
-
-		// set also on update object
-		if($this->_updateObject !== null)
-		{
-			unset($this->_updateObject->$property);
-		}
+		$this->modifyProperty($name, $value);
+		
+		return $this;
 	}
 
 	/**
+	 * @param string $name
+	 */
+	public function __unset(string $name): void
+	{
+		if(array_key_exists($name, $this->_properties))
+		{
+			unset($this->_properties[$name]);
+			
+			// record the change on update object
+			if($this->_updateObject !== null)
+			{
+				unset($this->_updateObject->$name);
+			}
+		}
+		else if(array_key_exists($name, $this->_references))
+		{
+			unset($this->_references[$name]);
+		}
+	}
+	
+	/**
+	 * Should be used to recreate the model instance from stdClass
+	 * All values will be marked as modified, hence the resulting object can be used to perform an update
+	 * If you wish to restore a persisted instance with no modifications (for example from session),
+	 * set $restore to true or use restore() instead
+	 * Warning: references are not reinstantiated, because there is no information about object's class 
+	 * 
 	 * @param object $source
 	 * @param array $skip fields to skip
+	 * @param bool $restore
 	 *
 	 * @return self
 	 */
-	public static function import(object $source, array $skip = []): self
+	public static function import(
+		object $source,
+		array $skip = [],
+		bool $restore = false
+	): self
 	{
 		$destination = new static; // late static binding
-		foreach($source as $property => $value)
+		foreach($source as $name => $value)
 		{
-			if(in_array($property, $skip, true) === true)
+			if(in_array($name, $skip, true) === true)
 			{
 				continue;
 			}
-			$destination->$property = $value;
+			
+			if($restore)
+			{
+				$destination->setProperty($name, $value);
+			}
+			else
+			{
+				$destination->$name = $value;
+			}
+		}
+		
+		if($restore)
+		{
+			$destination->exists(true); // needed by save()
 		}
 
 		return $destination;
 	}
 	
 	/**
+	 * Should be used to recreate the model instance after storing it for example in session 
+	 * 
+	 * @param object $source
+	 * @param array $skip fields to skip
+	 *
+	 * @return self
+	 */
+	public static function restore(object $source, array $skip = []): self
+	{
+		$destination = self::import($source, $skip, true);
+
+		return $destination;
+	}	
+	
+	/**
+	 * Should be used to set multiple values on the object
+	 * The values will be let through the setters
+	 * This method is the optimal way of setting multiple changes on the object from an array
+	 * 
 	 * @param array $values
 	 */
 	public function fromArray(array $values): void
 	{
-		foreach($values as $property => $value)
+		foreach($values as $name => $value)
 		{
-			$this->$property = $value;
+			$this->$name = $value;
 		}
 	}
 
 	/**
+	 * Alias of export, but references are not exported by default
+	 * 
 	 * @param array $skip fields to skip
 	 * @param bool $references include references
 	 * @param int $type
 	 *
-	 * @return stdClass|array
+	 * @return stdClass|array|ArrayObject
+	 */
+	public function getValues(array $skip = [],
+		bool $references = false,
+		int $type = self::EXPORT_TYPE_STDCLASS): stdClass|array|ArrayObject
+	{
+		return $this->export($skip, $references, $type);
+	}
+
+	/**
+	 * Exports the object for storage in session or database
+	 * 
+	 * @param array $skip fields to skip
+	 * @param bool $references include references
+	 * @param int $type
+	 *
+	 * @return stdClass|array|ArrayObject
 	 */
 	public function export(array $skip = [],
 		bool $references = true,
@@ -683,14 +801,14 @@ abstract class Mysql extends Model implements Iterator, Countable
 	{
 		$export = new stdClass;
 
-		foreach($this as $property => $value)
+		foreach($this as $name => $value)
 		{
-			if(in_array($property, $skip, true) === true)
+			if(in_array($name, $skip, true) === true)
 			{
 				continue;
 			}
 			
-			$export->$property = $this->__get($property);
+			$export->$name = $this->getValue($name);
 		}
 		
 		if($references)
@@ -853,7 +971,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		
 		// reset modified values
 		$this->resetModified();
-		$this->_exists = true;
+		$this->exists(true);
 
 		return $result;
 	}
@@ -960,7 +1078,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 			$updatedModel = $query->fetchObject();
 			foreach($updatedModel as $property => $value)
 			{
-				$this->__setRaw($property, $value);
+				$this->modifyProperty($property, $value);
 			}
 
 			// reset modified values
@@ -999,10 +1117,17 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
+	 * @param ?bool $exists
+	 *
 	 * @return bool
 	 */
-	public function exists(): bool
+	public function exists(?bool $exists = null): bool
 	{
+		if($exists !== null)
+		{
+			$this->_exists = $exists;
+		}
+		
 		return $this->_exists;
 	}
 
@@ -1059,26 +1184,6 @@ abstract class Mysql extends Model implements Iterator, Countable
 	}
 
 	/**
-	 * @param ?array $filter
-	 *
-	 * @return stdClass
-	 */
-	public function getValues(?array $filter = null): stdClass
-	{
-		$values = new stdClass;
-
-		foreach($this as $property => $value)
-		{
-			if($filter === null || in_array($property, $filter, true) === true)
-			{
-				$values->{$property} = $this->__get($property);
-			}
-		}
-
-		return $values;
-	}
-
-	/**
 	 * @return stdClass
 	 */
 	public function getModifiedValues(): stdClass
@@ -1092,7 +1197,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 				continue;
 			}
 
-			$values->{$property} = $this->__get($property);
+			$values->{$property} = $this->getValue($property);
 		}
 
 		return $values;
