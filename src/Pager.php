@@ -14,23 +14,33 @@ class Pager
 	/**
 	 * @var int
 	 */
-	protected int $_page;
-
+	protected int $_count;
+	
 	/**
 	 * @var int
 	 */
-	protected int $_count;
-
+	protected int $_firstPage = 1;
+	
+	/**
+	 * @var int
+	 */
+	protected int $_page;
+	
 	/**
 	 * @var int
 	 */
 	protected int $_perPage;
-
+	
 	/**
 	 * @var int
 	 */
 	protected int $_pages;
-
+	
+	/**
+	 * @var int
+	 */
+	protected int $_pageRange = 10;
+	
 	/**
 	 * @param int $page
 	 * @param int $count
@@ -41,7 +51,7 @@ class Pager
 		$this->_count = $count;
 		$this->_perPage = $perPage;
 		$this->_pages = (int)ceil($count / $perPage);
-		$this->_page = ($page <= 0 || $page > $this->_pages) ? 1 : $page;
+		$this->_page = ($page <= 0 || $page > $this->_pages) ? $this->_firstPage : $page;
 	}
 
 	/**
@@ -67,6 +77,40 @@ class Pager
 	{
 		return $this->_pages;
 	}
+	
+	/**
+	 * @return array
+	 */
+	public function getPagesInRange(): array
+	{
+		$delta = ceil($this->_pageRange / 2);
+
+		if($this->_page - $delta > $this->_pages - $this->_pageRange)
+		{
+			$lowerBound = $this->_pages - $this->_pageRange + 1;
+			$upperBound = $this->_pages;
+		}
+		else
+		{
+			if($this->_page - $delta < 0)
+			{
+				$delta = $this->_page;
+			}
+
+			$offset = $this->_page - $delta;
+			$lowerBound = $offset + 1;
+			$upperBound = $offset + $this->_pageRange;
+		}	
+	
+		$pages = [];
+
+		for($page = $lowerBound; $page <= $upperBound; $page++)
+		{
+			$pages[$page] = $page;
+		}
+	
+		return $pages;
+	}
 
 	/**
 	 * @return int
@@ -79,7 +123,7 @@ class Pager
 	/**
 	 * @return bool
 	 */
-	public function hasNext(): bool
+	public function hasNextPage(): bool
 	{
 		return $this->_page < $this->_pages;
 	}
@@ -87,7 +131,7 @@ class Pager
 	/**
 	 * @return int
 	 */
-	public function getNext(): int
+	public function getNextPage(): int
 	{
 		return $this->_page + 1;
 	}
@@ -95,7 +139,7 @@ class Pager
 	/**
 	 * @return bool
 	 */
-	public function hasPrevious(): bool
+	public function hasPreviousPage(): bool
 	{
 		return $this->_page > 1;
 	}
@@ -103,9 +147,61 @@ class Pager
 	/**
 	 * @return int
 	 */
-	public function getPrevious(): int
+	public function getPreviousPage(): int
 	{
 		return $this->_page - 1;
+	}
+	
+	/**
+	 * @param int $pageRange
+	 *
+	 * @return $this
+	 */
+	public function setPageRange(int $pageRange): self
+	{
+		$this->_pageRange = $pageRange;
+		
+		return $this;
+	}
+
+	/**
+	 * @return int
+	 */
+	public function getPageRange(): int
+	{
+		return $this->_pageRange;
+	}
+	
+	/**
+	 * @return int
+	 */
+	public function getFirstPage(): int
+	{
+		return $this->_firstPage;
+	}	
+		
+	/**
+	 * @return int
+	 */
+	public function getLastPage(): int
+	{
+		return $this->getPages();
+	}	
+	
+	/**
+	 * @return bool
+	 */
+	public function isFirstPage(): bool
+	{
+		return $this->_page === $this->_firstPage;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function isLastPage(): bool
+	{
+		return $this->_page === $this->_pages;
 	}
 
 	/**
@@ -115,7 +211,7 @@ class Pager
 	{
 		return $this->_perPage * $this->_page - $this->_perPage;
 	}
-
+	
 	/**
 	 * @return int
 	 */
