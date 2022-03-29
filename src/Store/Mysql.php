@@ -286,6 +286,7 @@ abstract class Mysql extends Store
 	 * @param array $where
 	 * @param string $select
 	 * @param ?string $alias
+	 * @param array $orWhere
 	 * @param array $whereIn
 	 * @param array $whereNotIn
 	 * @param mixed $limit
@@ -303,6 +304,7 @@ abstract class Mysql extends Store
 		string $select = '*',
 		array $options = [], // bc
 		?string $alias = null,
+		array $orWhere = [],
 		array $whereIn = [],
 		array $whereNotIn = [],
 		mixed $limit = null,
@@ -322,6 +324,8 @@ abstract class Mysql extends Store
 			extract($options, EXTR_SKIP);
 		}
 		
+		$values = array_values($where);
+		
 		$query = $this->query()
 			->select($select);
 			
@@ -335,6 +339,17 @@ abstract class Mysql extends Store
 			$query->andWhere($property . ' = ?');
 		}
 		
+		$orConditions = [];
+		foreach($orWhere as $property => $value)
+		{
+			$orConditions[] = $property . ' = ?';
+			array_push($values, $value);
+		}
+		if($orConditions)
+		{
+			$query->andWhere(implode(' OR ', $orConditions));
+		}
+		
 		foreach($whereIn as $property => $values)
 		{
 			$query->andWhereIn($property, $values);
@@ -342,7 +357,7 @@ abstract class Mysql extends Store
 				
 		foreach($whereNotIn as $property => $values)
 		{
-			$query->andWhereIn($property, $values);
+			$query->andWhereNotIn($property, $values);
 		}
 		
 		if($limit !== null)
@@ -381,7 +396,7 @@ abstract class Mysql extends Store
 		}
 		
 		$query = $this->prepareQuery($query);
-		$query->execute(array_values($where));
+		$query->execute($values);
 		
 		return $query;
 	}
