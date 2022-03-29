@@ -6,6 +6,7 @@ namespace Ovos\View\Helper;
 use Closure;
 use Ovos\View\Helper;
 use Ovos\Form\Element;
+use Ovos\Form\Element\Options\Option;
 use Ovos\View;
 use Ovos\View\Helper\Placeholders\Placeholder;
 use function sprintf;
@@ -84,14 +85,19 @@ class FormElement extends Helper
 	protected ?Closure $_attributesCallback = null;
 
 	/**
-	 * @var ?string
-	 */
-	protected ?string $_optionWrap = null;
-
-	/**
 	 * @var array
 	 */
 	protected array $_options = [];
+	
+	/**
+	 * @var ?string
+	 */
+	protected ?string $_optionLabelWrap = null;
+	
+	/**
+	 * @var ?Closure
+	 */
+	protected ?Closure $_optionLabelCallback = null;
 
 	/**
 	 * @param Element $element
@@ -312,6 +318,41 @@ class FormElement extends Helper
 	{
 		return $this->_fieldClassCallback;
 	}
+	
+	/**
+	 * @param ?Closure $fieldLabelCallback
+	 * 
+	 * @return self
+	 */
+	public function setFieldLabelCallback(?Closure $fieldLabelCallback): self
+	{
+		$this->_fieldLabelCallback = $fieldLabelCallback;
+		
+		return $this;
+	}
+
+	/**
+	 * @return ?Closure
+	 */
+	public function getFieldLabelCallback(): ?Closure
+	{
+		return $this->_fieldLabelCallback;
+	}
+	
+	/**
+	 * @param Option $option
+	 * 
+	 * @return string
+	 */
+	public function fieldLabelCallback(Option $option): string
+	{
+		if($this->_fieldLabelCallback === null)
+		{
+			return $option->getLabel();
+		}
+	
+		return ($this->_fieldLabelCallback)($option);
+	}	
 
 	/**
 	 * @param string $attribute
@@ -365,42 +406,6 @@ class FormElement extends Helper
 	{
 		return $this->_attributesCallback;
 	}
-
-	/**
-	 * @param ?string $optionWrap
-	 * 
-	 * @return self
-	 */
-	public function setOptionWrap(?string $optionWrap): self
-	{
-		$this->_optionWrap = $optionWrap;
-		
-		return $this;
-	}
-
-	/**
-	 * @return ?string
-	 */
-	public function getOptionWrap(): null|string
-	{
-		return $this->_optionWrap;
-	}
-
-	/**
-	 * @param string $label
-	 * 
-	 * @return string
-	 */
-	public function optionWrap(string $label): string
-	{
-		if($this->_optionWrap === null)
-		{
-			return $label;
-		}
-	
-		return sprintf($this->_optionWrap, $label);
-	}
-
 	/**
 	 * @param string $key
 	 * @param mixed $value
@@ -425,23 +430,110 @@ class FormElement extends Helper
 	}
 	
 	/**
-	 * @param ?Closure $fieldLabelCallback
+	 * @deprecated
+	 * @see setOptionLabelWrap 
+	 * 
+	 * @param ?string $optionWrap
 	 * 
 	 * @return self
 	 */
-	public function setFieldLabelCallback(?Closure $fieldLabelCallback): self
+	public function setOptionWrap(?string $optionWrap): self
 	{
-		$this->_fieldLabelCallback = $fieldLabelCallback;
+		return $this->setOptionLabelWrap($optionWrap);
+	}
+	
+	/**
+	 * @param ?string $optionLabelWrap
+	 * 
+	 * @return self
+	 */
+	public function setOptionLabelWrap(?string $optionLabelWrap): self
+	{
+		$this->_optionLabelWrap = $optionLabelWrap;
 		
 		return $this;
 	}
 
 	/**
+	 * @deprecated
+	 * @see getOptionLabelWrap
+	 * 
+	 * @return ?string
+	 */
+	public function getOptionWrap(): null|string
+	{
+		return $this->getOptionLabelWrap();
+	}
+
+	/**
+	 * @return ?string
+	 */
+	public function getOptionLabelWrap(): null|string
+	{
+		return $this->_optionLabelWrap;
+	}
+
+	/**
+	 * @deprecated
+	 * @see optionLabelWrap
+	 * 
+	 * @param string $label
+	 * 
+	 * @return string
+	 */
+	public function optionWrap(string $label): string
+	{
+		return $this->optionLabelWrap($label);
+	}
+	
+	/**
+	 * @param string $label
+	 * 
+	 * @return string
+	 */
+	public function optionLabelWrap(string $label): string
+	{
+		if($this->_optionLabelWrap === null)
+		{
+			return $label;
+		}
+	
+		return sprintf($this->_optionLabelWrap, $label);
+	}
+	
+	/**
+	 * @param ?Closure $optionLabelCallback
+	 * 
+	 * @return self
+	 */
+	public function setOptionLabelCallback(?Closure $optionLabelCallback): self
+	{
+		$this->_optionLabelCallback = $optionLabelCallback;
+		
+		return $this;
+	}
+	
+	/**
 	 * @return ?Closure
 	 */
-	public function getFieldLabelCallback(): ?Closure
+	public function getOptionLabelCallback(): ?Closure
 	{
-		return $this->_fieldLabelCallback;
+		return $this->_optionLabelCallback;
+	}
+	
+	/**
+	 * @param string $label
+	 * 
+	 * @return string
+	 */
+	public function optionLabelCallback(string $label): string
+	{
+		if($this->_optionLabelCallback === null)
+		{
+			return $label;
+		}
+	
+		return ($this->_optionLabelCallback)($label);
 	}
 	
 	/**
