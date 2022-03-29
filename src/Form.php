@@ -82,6 +82,21 @@ class Form implements Iterator
 	}
 
 	/**
+	 * @return $this
+	 */
+	public function reset(): self
+	{
+		$this->_values = [];
+		
+		foreach($this->_elements as $element)
+		{
+			$element->reset();
+		}
+		
+		return $this;
+	}
+
+	/**
 	 * @param ?string $id
 	 *
 	 * @return self
