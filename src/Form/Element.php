@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Form;
 
+use Ovos\Exception;
 use Ovos\Form;
 use function count;
 use function is_array;
@@ -107,6 +108,11 @@ class Element
 	 */
 	public function getForm(): Form
 	{
+		if($this->_form === null)
+		{
+			throw new Exception('The element is not yet assigned to a form.');	
+		}
+	
 		return $this->_form;
 	}
 
@@ -117,7 +123,7 @@ class Element
 	 */
 	public function setValue($value): self
 	{
-		$this->_value = null; // clear cache of getValue()
+		$this->reset(); // clear cache of getValue()
 		$this->getForm()->setValue($this->_id, $value);
 
 		return $this;
@@ -153,6 +159,16 @@ class Element
 		}
 
 		return $this->_value;
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function reset(): self
+	{
+		$this->_value = null;
+		
+		return $this;
 	}
 
 	/**
