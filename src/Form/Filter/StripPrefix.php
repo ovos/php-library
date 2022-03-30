@@ -4,6 +4,9 @@ declare(strict_types=1);
 namespace Ovos\Form\Filter;
 
 use Ovos\Form\Filter;
+use function strlen;
+use function strpos;
+use function substr;
 
 /**
  * StripPrefix
@@ -14,12 +17,12 @@ use Ovos\Form\Filter;
 class StripPrefix extends Filter
 {
 	/**
-	 * @var string
+	 * @var ?string
 	 */
-	protected $_prefix;
+	protected ?string $_prefix;
 
 	/**
-	 * @param string $prefix
+	 * @param ?string $prefix
 	 *
 	 * @return self
 	 */
@@ -31,7 +34,7 @@ class StripPrefix extends Filter
 	}
 
 	/**
-	 * @return string
+	 * @return ?string
 	 */
 	public function getPrefix(): ?string
 	{
@@ -39,7 +42,7 @@ class StripPrefix extends Filter
 	}
 
 	/**
-	 * @param string $prefix
+	 * @param ?string $prefix
 	 */
 	public function __construct(?string $prefix)
 	{
@@ -63,6 +66,6 @@ class StripPrefix extends Filter
 			return $value;
 		}
 
-		return substr($value, \strlen($this->_prefix));
+		return substr($value, strlen($this->_prefix));
 	}
 }

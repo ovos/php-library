@@ -16,7 +16,7 @@ class Trim extends Filter
 	/**
 	 * @var string
 	 */
-	protected $_characterMask;
+	protected string $_characterMask;
 
 	/**
 	 * @param string $characterMask
