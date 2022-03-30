@@ -347,7 +347,7 @@ abstract class Mysql extends Store
 		}
 		if($orConditions)
 		{
-			$query->andWhere(implode(' OR ', $orConditions));
+			$query->andWhere('(' . implode(' OR ', $orConditions) . ')');
 		}
 		
 		foreach($whereIn as $property => $values)
