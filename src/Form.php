@@ -82,6 +82,21 @@ class Form implements Iterator
 	}
 
 	/**
+	 * @return $this
+	 */
+	public function reset(): self
+	{
+		$this->_values = [];
+		
+		foreach($this->_elements as $element)
+		{
+			$element->reset();
+		}
+		
+		return $this;
+	}
+
+	/**
 	 * @param ?string $id
 	 *
 	 * @return self
@@ -158,11 +173,11 @@ class Form implements Iterator
 
 	/**
 	 * @param string $id
-	 * @param null|string|int|float|array $value
+	 * @param null|string|bool|int|float|array $value
 	 * 
 	 * @return self
 	 */
-	public function setValue(string $id, null|string|int|float|array $value): self
+	public function setValue(string $id, null|string|bool|int|float|array $value): self
 	{
 		$this->_values[$id] = $value;
 	
@@ -174,9 +189,9 @@ class Form implements Iterator
 	 * 
 	 * @param string $id
 	 *
-	 * @return null|string|int|float|array
+	 * @return null|string|bool|int|float|array
 	 */
-	public function getValue(string $id): null|string|int|float|array
+	public function getValue(string $id): null|string|bool|int|float|array
 	{
 		if(isset($this->_values[$id]))
 		{
@@ -235,11 +250,11 @@ class Form implements Iterator
 
 	/**
 	 * @param string $id
-	 * @param null|string|int|float|array $default
+	 * @param null|string|bool|int|float|array $default
 	 * 
 	 * @return self
 	 */
-	public function setDefault(string $id, null|string|int|float|array $default): self
+	public function setDefault(string $id, null|string|bool|int|float|array $default): self
 	{
 		$this->_defaults[$id] = $default;
 	

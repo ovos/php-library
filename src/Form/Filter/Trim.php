@@ -16,7 +16,7 @@ class Trim extends Filter
 	/**
 	 * @var string
 	 */
-	protected $_characterMask;
+	protected string $_characterMask;
 
 	/**
 	 * @param string $characterMask
@@ -47,11 +47,11 @@ class Trim extends Filter
 	}
 
 	/**
-	 * @param null|mixed $value
+	 * @param mixed $value
 	 *
 	 * @return mixed
 	 */
-	public function filter(mixed $value): mixed
+	public function filter(mixed $value): string
 	{
 		return trim($value, $this->getCharacterMask());
 	}

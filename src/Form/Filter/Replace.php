@@ -16,12 +16,12 @@ class Replace extends Filter
 	/**
 	 * @var string
 	 */
-	protected $_pattern;
+	protected string $_pattern;
 
 	/**
-	 * @var string
+	 * @var ?string
 	 */
-	protected $_replacement;
+	protected ?string $_replacement = null;
 
 	/**
 	 * @param string $pattern
@@ -44,7 +44,7 @@ class Replace extends Filter
 	}
 
 	/**
-	 * @param string $replacement
+	 * @param ?string $replacement
 	 *
 	 * @return self
 	 */
@@ -56,7 +56,7 @@ class Replace extends Filter
 	}
 
 	/**
-	 * @return string
+	 * @return ?string
 	 */
 	public function getReplacement(): ?string
 	{
@@ -65,7 +65,7 @@ class Replace extends Filter
 
 	/**
 	 * @param string $pattern
-	 * @param string $replacement
+	 * @param ?string $replacement
 	 */
 	public function __construct(string $pattern, ?string $replacement = null)
 	{
@@ -74,11 +74,11 @@ class Replace extends Filter
 	}
 
 	/**
-	 * @param null|mixed $value
+	 * @param mixed $value
 	 *
 	 * @return mixed
 	 */
-	public function filter(mixed $value): mixed
+	public function filter(mixed $value): string
 	{
 		return preg_replace($this->_pattern, $this->_replacement, $value);
 	}

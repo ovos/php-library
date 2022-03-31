@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Form\Validator;
 
+use Ovos\Form\Element;
 use Ovos\Form\Error;
 use Ovos\Form\Validator;
 
@@ -52,6 +53,22 @@ class SameAs extends Validator
 		
 		return $this;
 	}
+	
+	/**
+	 * @return string
+	 */
+	public function getId(): string
+	{
+		return $this->_id;
+	}
+	
+	/**
+	 * @return Element
+	 */
+	public function getComparedElement(): Element
+	{
+		return $this->getElement()->getForm()->getElement($this->_id);
+	}
 
 	/**
 	 * @param null|mixed $value
@@ -60,7 +77,7 @@ class SameAs extends Validator
 	 */
 	public function isValid(mixed $value): bool
 	{
-		$element = $this->getElement()->getForm()->getElement($this->_id);
+		$element = $this->getComparedElement();
 		$valid = $element->getValue() === $value;
 		if($valid === false)
 		{
