@@ -12,7 +12,7 @@ namespace Ovos\Form;
 abstract class Filter
 {
 	/**
-	 * @param null|mixed $value
+	 * @param mixed $value
 	 *
 	 * @return mixed
 	 */

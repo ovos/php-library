@@ -50,18 +50,18 @@ class StripPrefix extends Filter
 	}
 
 	/**
-	 * @param null|mixed $value
+	 * @param mixed $value
 	 *
 	 * @return mixed
 	 */
-	public function filter(mixed $value): mixed
+	public function filter(mixed $value): string
 	{
 		if($this->_prefix === null)
 		{
 			return $value;
 		}
 
-		if(strpos($value, $this->_prefix) !== 0)
+		if(str_starts_with($value, $this->_prefix) === false)
 		{
 			return $value;
 		}
