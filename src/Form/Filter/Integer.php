@@ -14,11 +14,11 @@ use Ovos\Form\Filter;
 class Integer extends Filter
 {
 	/**
-	 * @param null|mixed $value
+	 * @param mixed $value
 	 *
 	 * @return mixed
 	 */
-	public function filter(mixed $value): mixed
+	public function filter(mixed $value): int
 	{
 		return (int)$value;
 	}

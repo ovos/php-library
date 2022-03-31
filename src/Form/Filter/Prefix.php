@@ -16,14 +16,14 @@ class Prefix extends Filter
 	/**
 	 * @var string
 	 */
-	protected $_prefix;
+	protected string $_prefix;
 
 	/**
 	 * @param string $prefix
 	 *
 	 * @return self
 	 */
-	public function setPrefix(?string $prefix): self
+	public function setPrefix(string $prefix): self
 	{
 		$this->_prefix = $prefix;
 
@@ -33,7 +33,7 @@ class Prefix extends Filter
 	/**
 	 * @return string
 	 */
-	public function getPrefix(): ?string
+	public function getPrefix(): string
 	{
 		return $this->_prefix;
 	}
@@ -41,24 +41,19 @@ class Prefix extends Filter
 	/**
 	 * @param string $prefix
 	 */
-	public function __construct($prefix)
+	public function __construct(string $prefix)
 	{
 		$this->setPrefix($prefix);
 	}
 
 	/**
-	 * @param null|mixed $value
+	 * @param mixed $value
 	 *
 	 * @return mixed
 	 */
-	public function filter(mixed $value): mixed
+	public function filter(mixed $value): string
 	{
-		if($this->_prefix === null)
-		{
-			return $value;
-		}
-
-		if(strpos($value, $this->_prefix) === 0)
+		if(str_starts_with($value, $this->_prefix) === false)
 		{
 			return $value;
 		}

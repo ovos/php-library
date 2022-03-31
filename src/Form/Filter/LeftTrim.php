@@ -14,11 +14,11 @@ use Ovos\Form\Filter;
 class LeftTrim extends Trim
 {
 	/**
-	 * @param null|mixed $value
+	 * @param mixed $value
 	 *
 	 * @return mixed
 	 */
-	public function filter(mixed $value): mixed
+	public function filter(mixed $value): string
 	{
 		return ltrim($value, $this->getCharacterMask());
 	}
