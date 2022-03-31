@@ -27,9 +27,9 @@ class Element
 	protected Form $_form;
 
 	/**
-	 * @var null|string|int|float|array
+	 * @var null|string|bool|int|float|array
 	 */
-	protected null|string|int|float|array $_value = null;
+	protected null|string|bool|int|float|array $_value = null;
 
 	/**
 	 * @var ?string
@@ -117,11 +117,11 @@ class Element
 	}
 
 	/**
-	 * @param null|string|int|float|array $value
+	 * @param null|string|bool|int|float|array $value
 	 *
 	 * @return self
 	 */
-	public function setValue($value): self
+	public function setValue(null|string|bool|int|float|array $value): self
 	{
 		$this->reset(); // clear cache of getValue()
 		$this->getForm()->setValue($this->_id, $value);
@@ -130,9 +130,9 @@ class Element
 	}
 
 	/*
-	 * @return null|string|int|float|array
+	 * @return null|string|bool|int|float|array
 	 */
-	public function getValue(): null|string|int|float|array
+	public function getValue(): null|string|bool|int|float|array
 	{
 		if($this->_value === null)
 		{
@@ -192,11 +192,11 @@ class Element
 	}
 
 	/**
-	 * @param null|string|int|float|array $default
+	 * @param null|string|bool|int|float|array $default
 	 *
 	 * @return self
 	 */
-	public function setDefault($default): self
+	public function setDefault(null|string|bool|int|float|array $default): self
 	{
 		$this->getForm()->setDefault($this->_id, $default);
 
@@ -206,9 +206,9 @@ class Element
 	/**
 	 * @param mixed $value
 	 * 
-	 * @return int|string
+	 * @return mixed
 	 */
-	public function filterValue(mixed $value)
+	public function filterValue(mixed $value): mixed
 	{
 		foreach($this->_filters as $filter)
 		{
