@@ -985,6 +985,18 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function insertUnique(string $property, callable $generator, int $attemptsMax): bool
 	{
+		return $this->saveUnique($property, $generator, $attemptsMax);
+	}
+
+	/**
+	 * @param string $property
+	 * @param callable $generator
+	 * @param int $attemptsMax
+	 *
+	 * @return bool
+	 */
+	public function saveUnique(string $property, callable $generator, int $attemptsMax): bool
+	{
 		$attempt = 1;
 		$lastValue = null;
 		while(true)
@@ -993,7 +1005,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 			{
 				$lastValue = $generator($attempt, $lastValue);
 				$this->__set($property, $lastValue);
-				return $this->insert();
+				return $this->save();
 			}
 			catch(\Exception $exception)
 			{
@@ -1178,7 +1190,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	{
 		foreach($this->_primaryKeys as $primaryKey)
 		{
-			$statement->bindParam(':' . $primaryKey, $this->_properties[$primaryKey],
+			$statement->bindValue(':' . $primaryKey, $this->_properties[$primaryKey],
 				PDO::PARAM_STR);
 		}
 	}
