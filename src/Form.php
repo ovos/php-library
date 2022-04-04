@@ -165,8 +165,8 @@ class Form implements Iterator
 		{
 			$values = $values[$this->_id];
 		}
-
-		$this->_values = $values;
+		
+		$this->_values = array_merge($this->_values, $values);
 
 		return $this;
 	}
@@ -180,7 +180,7 @@ class Form implements Iterator
 	public function setValue(string $id, null|string|bool|int|float|array $value): self
 	{
 		$this->_values[$id] = $value;
-	
+		
 		return $this;
 	}
 	
@@ -242,8 +242,8 @@ class Form implements Iterator
 		{
 			$defaults = $defaults[$this->_id];
 		}
-
-		$this->_defaults = $defaults;
+		
+		$this->_defaults = array_merge($this->_defaults, $defaults);
 
 		return $this;
 	}	
