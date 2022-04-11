@@ -100,7 +100,7 @@ class Reporter
 			// Replace values
 			foreach($parameters as $parameter => $value)
 			{
-				$token = is_numeric($parameter) ? '?' : $parameter;
+				$token = is_numeric($parameter) ? '?' : ':' . $parameter;
 				$tokenPosition = strpos($sql, $token);
 				if($tokenPosition !== false)
 				{
