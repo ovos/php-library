@@ -123,6 +123,8 @@ class PdoStatement extends \PDOStatement
 	 */
 	protected function _storeParameter(string $name, $value)
 	{
+		$name = ltrim($name, ':');
+		
 		$this->_parameters[$name] = $value;
 	}
 }

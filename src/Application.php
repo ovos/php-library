@@ -246,9 +246,19 @@ class Application
 	 *
 	 * @return Environment
 	 */
-	public function getEnvironment(): string
+	public function getEnvironment(): Environment
 	{
 		return $this->_environment;
+	}
+
+	/**
+	 * Returns current environment as string
+	 *
+	 * @return string
+	 */
+	public function getEnv(): string
+	{
+		return $this->_environment->getEnv();
 	}
 
 	/**
