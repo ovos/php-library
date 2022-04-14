@@ -24,7 +24,7 @@ class QueryBuilder extends Test
 		$this->_queryBuilder = new BaseQueryBuilder('tests'); 
 	}
 
-	public function select()
+	public function select(): bool
 	{
 		$query = $this->_queryBuilder->select('t.id, t.name, t.created_at')
 			->alias('t')
@@ -51,7 +51,7 @@ class QueryBuilder extends Test
 			. PHP_EOL;
 	}
 	
-	public function update()
+	public function update(): bool
 	{
 		$query = $this->_queryBuilder->update(name: 'name', modified_at: 'NOW()')
 			->where('finished_at IS NULL');
@@ -62,7 +62,7 @@ class QueryBuilder extends Test
 			. PHP_EOL;
 	}
 	
-	public function insert()
+	public function insert(): bool
 	{
 		$query = $this->_queryBuilder->insert(name: ':name', created_at: 'NOW()');
 		
@@ -72,7 +72,7 @@ class QueryBuilder extends Test
 			. PHP_EOL;
 	}
 	
-	public function delete()
+	public function delete(): bool
 	{
 		$query = $this->_queryBuilder->delete('id = :id');
 		
