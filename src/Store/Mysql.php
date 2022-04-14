@@ -318,8 +318,8 @@ abstract class Mysql extends Store
 	{
 		if($options) // bc
 		{
-			$options['orderBy'] = isset($options['order']) ? $options['order'] : [];
-			$options['groupBy'] = isset($options['group']) ? $options['group'] : [];
+			$options['orderBy'] = $options['order'] ?? 0;
+			$options['groupBy'] = $options['group'] ?? [];
 			
 			extract($options, EXTR_SKIP);
 		}
@@ -343,21 +343,22 @@ abstract class Mysql extends Store
 		foreach($orWhere as $property => $value)
 		{
 			$orConditions[] = $property . ' = ?';
-			array_push($values, $value);
+			$values[] = $value;
 		}
+
 		if($orConditions)
 		{
 			$query->andWhere('(' . implode(' OR ', $orConditions) . ')');
 		}
 		
-		foreach($whereIn as $property => $values)
+		foreach($whereIn as $property => $whereValues)
 		{
-			$query->andWhereIn($property, $values);
+			$query->andWhereIn($property, $whereValues);
 		}
-				
-		foreach($whereNotIn as $property => $values)
+		
+		foreach($whereNotIn as $property => $whereValues)
 		{
-			$query->andWhereNotIn($property, $values);
+			$query->andWhereNotIn($property, $whereValues);
 		}
 		
 		if($limit !== null)
