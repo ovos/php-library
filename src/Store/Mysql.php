@@ -350,14 +350,14 @@ abstract class Mysql extends Store
 			$query->andWhere('(' . implode(' OR ', $orConditions) . ')');
 		}
 		
-		foreach($whereIn as $property => $values)
+		foreach($whereIn as $property => $whereValues)
 		{
-			$query->andWhereIn($property, $values);
+			$query->andWhereIn($property, $whereValues);
 		}
-				
-		foreach($whereNotIn as $property => $values)
+		
+		foreach($whereNotIn as $property => $whereValues)
 		{
-			$query->andWhereNotIn($property, $values);
+			$query->andWhereNotIn($property, $whereValues);
 		}
 		
 		if($limit !== null)
