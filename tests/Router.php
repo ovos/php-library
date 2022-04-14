@@ -14,7 +14,7 @@ use Ovos\Controller;
  */
 class Router extends Test
 {
-	public function parameters()
+	public function parameters(): bool
 	{
 		$firstParam = true;
 		$secondParam = false;
@@ -28,7 +28,7 @@ class Router extends Test
 			&& $secondParam === $controller->secondParam;
 	}
 	
-	public function parametersNamed()
+	public function parametersNamed(): bool
 	{
 		$firstParam = true;
 		$secondParam = false;
@@ -43,7 +43,7 @@ class Router extends Test
 			&& $secondParam === $controller->secondParam;
 	}	
 	
-	public function parametersNamedSkipOptional()
+	public function parametersNamedSkipOptional(): bool
 	{
 		$firstParam = false;
 		$secondParam = false;
@@ -57,7 +57,7 @@ class Router extends Test
 			&& $secondParam === $controller->secondParam;
 	}
 	
-	public function parametersMixed()
+	public function parametersMixed(): bool
 	{
 		$firstParam = true;
 		$secondParam = false;
