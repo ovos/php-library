@@ -313,7 +313,7 @@ abstract class Mysql extends Store
 		array $having = [],
 		array $orderBy = [],
 		array $leftJoin = [],
-		array $innerJoin = [],	
+		array $innerJoin = [],
 	): false|PDOStatement
 	{
 		if($options) // bc
@@ -554,5 +554,17 @@ abstract class Mysql extends Store
 		}
 		
 		return $referenced;
+	}
+
+	/**
+	 * Removed all characters which can break AGAINST (... IN BOOLEAN MODE) queries
+	 * 
+	 * @param string $query
+	 *
+	 * @return string
+	 */
+	public function sanitizeForBooleanQuery(string $query): string
+	{
+		return preg_replace('~[^\w ]~u', '', $query);
 	}
 }
