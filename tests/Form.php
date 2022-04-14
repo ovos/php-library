@@ -14,7 +14,7 @@ use Ovos\Form as BaseForm;
  */
 class Form extends Test
 {
-	public function subformId()
+	public function subformId(): bool
 	{
 		$form = new BaseForm('form');
 		$subform = new BaseForm('subform');
@@ -24,7 +24,7 @@ class Form extends Test
 	}
 	
 	/*
-	public function secondTest()
+	public function secondTest(): bool
 	{
 		return true;
 	}
