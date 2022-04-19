@@ -467,12 +467,9 @@ class Application
 			
 			if($module->translations)
 			{
-				$this->getRequest()
-					->getLocale()
-					->getTranslator()
-					->addTranslationPath(BASE_DIR
-						. $module->path . DIRECTORY_SEPARATOR 
-						. 'translations' . DIRECTORY_SEPARATOR);
+				Translator::addTranslationsPath(BASE_DIR
+					. $module->path . DIRECTORY_SEPARATOR 
+					. 'translations' . DIRECTORY_SEPARATOR);
 			}
 			
 			if($module->views)

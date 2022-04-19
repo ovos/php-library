@@ -11,20 +11,15 @@ namespace Ovos;
 class Locales
 {
 	/**
-	 * @var Locale
-	 */
-	protected static Locale $_default;
-
-	/**
 	 * @var array
 	 */
 	protected static array $_instances;
 
 	/**
-	 * @var array
+	 * @var ?array
 	 */
-	protected static null|array $_all = null;
-
+	protected static ?array $_all = null;
+	
 	/**
 	 *
 	 * @return ArrayObject
@@ -32,7 +27,7 @@ class Locales
 	public static function getConfig(): ArrayObject
 	{
 		$locales = app()->getConfig()->system->locales;
-		return $locales ? $locales : new ArrayObject;
+		return $locales ?: new ArrayObject;
 	}
 
 	/**
@@ -56,33 +51,15 @@ class Locales
 		if(($config = $configs->offsetGet($urlName)) === null
 			|| $config->symbol === null)
 		{
-			return new Locale;
+			return new Locale($urlName);
 		}
 	
 		$localeClassNs = 'Locales\\' . $config->symbol;
 		$locale = class_exists($localeClassNs) ?
-			new $localeClassNs
-			: new Locale;
+			new $localeClassNs($urlName)
+			: new Locale($urlName);
 		
-		$locale->setUrlName($urlName);
-		$locale->setSymbol($config->symbol);
-		
-		if($config->language)
-		{
-			$locale->setLanguage($config->language);
-		}
-		if($config->country)
-		{
-			$locale->setCountry($config->country);
-		}
-		if($config->name)
-		{
-			$locale->setName($config->name);
-		}
-		if($config->default)
-		{
-			$locale->setDefault($config->default);
-		}
+		$locale->fromConfig($config);
 
 		return $locale;
 	}
