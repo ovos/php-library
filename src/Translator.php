@@ -14,6 +14,12 @@ use MessageFormatter;
  */
 class Translator
 {
+	/**#@+
+	 * Translation constants
+	 */
+	public const TRANSLATION_EXT = '.mo';
+	/**#@-*/
+
 	/**
 	 * @var Locale
 	 */
@@ -23,37 +29,42 @@ class Translator
 	 * @var Translation[]
 	 */
 	protected array $_translations = [];
-
+	
+	/**
+	 * @var array
+	 */
+	protected static array $_translationsPaths = [];
+	
 	/**
 	 * @param Locale $locale
 	 */
 	public function __construct(Locale $locale)
 	{
 		$this->_locale = $locale;
+		
+		$this->refreshTranslations();
 	}
-
+	
 	/**
-	 * @param string|Translation $translation
-	 *
 	 * @return self
 	 */
-	public function addTranslation(string|Translation $translation): self
+	public function refreshTranslations(): self
 	{
-		$this->_translations[$translation->getPath()] = $translation;
-
+		foreach(self::$_translationsPaths as $translationsPath)
+		{
+			$translationPath = $translationsPath
+				. $this->_locale->getLanguage()
+				. self::TRANSLATION_EXT;
+				
+			if(array_key_exists($translationPath,
+				$this->_translations) === false)
+			{
+				$this->_translations[$translationPath]
+					= new Translation($translationPath);
+			}
+		}
+		
 		return $this;
-	}
-
-	/**
-	 * @param string $path
-	 *
-	 * @return self
-	 */
-	public function addTranslationPath(string $path): self
-	{
-		return $this->addTranslation(
-			new Translation($path . $this->_locale->getLanguage() . '.mo')
-		);
 	}
 
 	/**
@@ -132,5 +143,23 @@ class Translator
 		
 		$formatter = new MessageFormatter($this->_locale->getLanguage(), $translation);
 		return $formatter->format($params);
+	}
+	
+	/**
+	 * @param string $path
+	 *
+	 * @return void
+	 */
+	public static function addTranslationsPath(string $path): void
+	{
+		self::$_translationsPaths[$path] = $path;
+	}
+	
+	/**
+	 * @return array
+	 */
+	public static function getTranslationsPaths(): array
+	{
+		return self::$_translationsPaths;
 	}
 }

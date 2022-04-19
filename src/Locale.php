@@ -18,6 +18,11 @@ use function is_numeric;
 class Locale
 {
 	/**
+	 * @var ?ArrayObject
+	 */
+	protected ?ArrayObject $_config = null;
+	
+	/**
 	 * Default system locale (url name)
 	 */
 	public const DEFAULT = 'en';
@@ -25,44 +30,118 @@ class Locale
 	/**
 	 * @var string
 	 */
-	protected string $_urlName;
+	public string $urlName;
 
 	/**
 	 * @var string
 	 */
-	protected string $_symbol;
+	public string $symbol;
 	
 	/**
 	 * @var string
 	 */
-	protected string $_language;
+	public string $language;
 	
 	/**
 	 * @var string
 	 */
-	protected string $_country;
+	public string $country;
 
 	/**
 	 * @var string
 	 */
-	protected string $_name;
+	public string $name;
 	
 	/**
 	 * @var bool
 	 */
-	protected bool $_default = false;
+	public bool $default = false;
+			
+	/**
+	 * @var bool
+	 */
+	public bool $locked = false;
 
 	/**
 	 * @var null|Translator
 	 */
 	protected null|Translator $_translator = null;
+	
+	/**
+	 */
+	public function __construct(string $urlName, ?ArrayObject $config = null)
+	{
+		$this->setUrlName($urlName);
+		
+		if($config !== null)
+		{
+			$this->fromConfig($config);
+		}
+	}
+	
+	/**
+	 * @param ArrayObject $config
+	 *
+	 * @return $this
+	 * @throws Exception
+	 */
+	public function fromConfig(ArrayObject $config): self
+	{
+		$this->setConfig($config);
+		
+		if($config->offsetExists('symbol') === false)
+		{
+			throw new Exception('"symbol" property is mandatory for locale.');
+		}
+		
+		$this->setSymbol($config->symbol);
+		
+		if($config->language)
+		{
+			$this->setLanguage($config->language);
+		}
+		if($config->country)
+		{
+			$this->setCountry($config->country);
+		}
+		if($config->name)
+		{
+			$this->setName($config->name);
+		}
+		if($config->default)
+		{
+			$this->setDefault($config->default);
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ArrayObject
+	 */
+	public function getConfig(): ArrayObject
+	{
+		return $this->_config;
+	}
+	
+	/**
+	 * @param ArrayObject $config
+	 *
+	 * @return self
+	 */
+	public function setConfig(ArrayObject $config): self
+	{
+		$this->_config = $config;
 
+		return $this;
+	}
+	
 	/**
 	 * @return string
 	 */
 	public function getUrlName(): string
 	{
-		return $this->_urlName;
+		return $this->urlName;
 	}
 
 	/**
@@ -72,7 +151,7 @@ class Locale
 	 */
 	public function setUrlName(string $urlName): self
 	{
-		$this->_urlName = $urlName;
+		$this->urlName = $urlName;
 
 		return $this;
 	}
@@ -82,7 +161,7 @@ class Locale
 	 */
 	public function getSymbol(): string
 	{
-		return $this->_symbol;
+		return $this->symbol;
 	}
 
 	/**
@@ -92,7 +171,7 @@ class Locale
 	 */
 	public function setSymbol(string $symbol): self
 	{
-		$this->_symbol = $symbol;
+		$this->symbol = $symbol;
 
 		return $this;
 	}
@@ -102,7 +181,7 @@ class Locale
 	 */
 	public function getLanguage(): string
 	{
-		return $this->_language;
+		return $this->language;
 	}
 
 	/**
@@ -112,7 +191,7 @@ class Locale
 	 */
 	public function setLanguage(string $language): self
 	{
-		$this->_language = $language;
+		$this->language = $language;
 		
 		return $this;
 	}
@@ -122,7 +201,7 @@ class Locale
 	 */
 	public function getCountry(): string
 	{
-		return $this->_country;
+		return $this->country;
 	}
 
 	/**
@@ -132,7 +211,7 @@ class Locale
 	 */
 	public function setCountry(string $country): self
 	{
-		$this->_country = $country;
+		$this->country = $country;
 		
 		return $this;
 	}
@@ -142,7 +221,7 @@ class Locale
 	 */
 	public function getName(): string
 	{
-		return $this->_name;
+		return $this->name;
 	}
 
 	/**
@@ -152,7 +231,7 @@ class Locale
 	 */
 	public function setName(string $name): self
 	{
-		$this->_name = $name;
+		$this->name = $name;
 
 		return $this;
 	}
@@ -164,7 +243,7 @@ class Locale
 	 */
 	public function setDefault(bool $default): self
 	{
-		$this->_default = $default;
+		$this->default = $default;
 
 		return $this;
 	}
@@ -174,9 +253,64 @@ class Locale
 	 */
 	public function isDefault(): bool
 	{
-		return $this->_default;
+		return $this->default;
+	}
+	
+	/**
+	 * @param bool $locked
+	 *
+	 * @return self
+	 */
+	public function setLocked(bool $locked): self
+	{
+		$this->locked = $locked;
+
+		return $this;
 	}
 
+	/**
+	 * @return bool
+	 */
+	public function isLocked(): bool
+	{
+		return $this->locked;
+	}
+
+	/**
+	 * @param Request $request
+	 * 
+	 * @return bool
+	 */
+	public function isLockedForRequest(Request $request): bool
+	{
+		if($this->_config === null)
+		{
+			return $this->locked;
+		}
+			
+		$controllers = $this->_config->offsetGet('controllers');
+		if($controllers === null)
+		{
+			return $this->locked;
+		}
+		
+		// lock list of controllers exist, check if this controller is within this list
+		$currentController = $request->getControllerClass();
+			
+		$locked = true;
+		foreach($controllers as $controller)
+		{
+			// if controller matches (begins with the same name)
+			if(str_starts_with($currentController, $controller))
+			{
+				$locked = false;
+				break;
+			}
+		}
+		
+		return $locked;
+	}
+	
 	/**
 	 * @return Translator
 	 */
@@ -195,7 +329,7 @@ class Locale
 	 * 
 	 * @return array
 	 */
-	public function getCountries($top = []): array
+	public function getCountries(array $top = []): array
 	{
 		$countries = [];
 		
@@ -239,12 +373,13 @@ class Locale
 	public function __debugInfo(): array
 	{
 		return [
-			'url_name' => $this->_urlName,
-			'symbol' => $this->_symbol,
-			'language' => $this->_language,
-			'country' => $this->_country,
-			'name' => $this->_name,
-			'default' => $this->_default,
+			'url_name' => $this->urlName,
+			'symbol' => $this->symbol,
+			'language' => $this->language,
+			'country' => $this->country,
+			'name' => $this->name,
+			'default' => $this->default,
+			'locked' => $this->locked,
 		];
 	}
 }

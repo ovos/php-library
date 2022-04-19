@@ -6,6 +6,10 @@ namespace Ovos\Translator;
 use PhpMyAdmin\MoTranslator\Translator; // https://github.com/phpmyadmin/motranslator/issues/30
 use Ovos\ArrayObject;
 use Ovos\Strings;
+use function file_exists;
+use function filemtime;
+use function substr;
+use function strlen;
 use function Ovos\services;
 
 /**
@@ -27,7 +31,7 @@ class CachedAdapter extends Translator
 		}
 
 		$mTime = filemtime($filename);
-		$path = substr($filename, \strlen(BASE_DIR));
+		$path = substr($filename, strlen(BASE_DIR));
 		$cacheId = Strings::slugify($path);
 
 		if($pool = services()->cache->getPool())
