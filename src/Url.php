@@ -41,7 +41,7 @@ class Url
 	/**
 	 * Construct
 	 *
-	 * @param string[] $components
+	 * @param string|int[] $components
 	 */
 	public function __construct(...$components)
 	{
@@ -227,7 +227,7 @@ class Url
 	 */
 	public function removeComponent(int|string $component): self
 	{
-		if(($key = array_search($component, $this->_components, true) !== false))
+		if(($key = array_search($component, $this->_components, true)) !== false)
 		{
 			unset($this->_components[$key]);
 		}
@@ -310,7 +310,7 @@ class Url
 	}
 
 	/**
-	 * @return null|Locale
+	 * @return ?Locale
 	 */
 	public function getLocale(): ?Locale
 	{
@@ -350,7 +350,7 @@ class Url
 	public function getUrl(bool $relative = false): string
 	{
 		$components = $this->getComponents();
-
+		
 		$locale = $this->_locale;
 		if($locale === null)
 		{
