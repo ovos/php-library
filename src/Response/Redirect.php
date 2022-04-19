@@ -50,7 +50,7 @@ class Redirect extends Response
 		{
 			$urlComponents[] = '/';
 		}
-
+		
 		$this->_url = new Url(...$urlComponents);
 	}
 

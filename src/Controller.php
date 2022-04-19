@@ -241,18 +241,6 @@ class Controller
 	{
 		return $this->_params;
 	}
-
-	/**
-	 * @param string $path
-	 *
-	 * @return self
-	 */
-	public function addTranslationPath(string $path): self
-	{
-		$this->_request->getLocale()->getTranslator()->addTranslationPath($path);
-
-		return $this;
-	}
 	
 	/**
 	 * preDispatch
@@ -352,10 +340,9 @@ class Controller
 		{
 			return $plugins;
 		}
-			
-		// without \Controllers\ namespace
-		$currentController = substr(static::class,
-			strpos(static::class, '\\') + 1);
+		
+		// name of the class without Controllers\ namespace
+		$currentController = $this->_request->getControllerClass();
 		
 		foreach($groups as $group)
 		{
@@ -363,6 +350,19 @@ class Controller
 		}
 		
 		return $plugins;
+	}
+	
+	/**
+	 * @deprecated
+	 * 
+	 * Name of the class without \Controllers\ namespace
+	 * 
+	 * @return string
+	 */
+	public function getName(): string
+	{
+		return substr(static::class,
+			strpos(static::class, '\\') + 1);
 	}
 	
 	/**

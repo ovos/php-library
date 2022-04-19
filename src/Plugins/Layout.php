@@ -7,6 +7,7 @@ use Ovos\Application;
 use Ovos\Controller\Plugin;
 use Ovos\Response;
 use Ovos\View;
+use function get_class;
 use function Ovos\app;
 
 /**
@@ -98,7 +99,7 @@ class Layout extends Plugin
 
 		$response = $this->_app->getResponse();
 		if($response instanceof Response
-			&& \get_class($response) === Response\Html::class)
+			&& get_class($response) === Response\Html::class)
 		{
 			/** @var Response\Html $response */
 			$this->_layout->{self::CONTENT_PLACEHOLDER} = $response->get();
