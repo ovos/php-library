@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\View\Helper\Messages;
 
 use Ovos\View\Helper\Messages;
+use Ovos\View;
 
 /**
  * Message
@@ -21,11 +22,6 @@ class Message
 	public const TYPE_WARNING = 'warning';
 	public const TYPE_ERROR = 'error';
 	/**#@-*/
-
-	/**
-	 * @var Messages
-	 */
-	protected Messages $_messages;
 
 	/**
 	 * @var ?string
@@ -54,30 +50,17 @@ class Message
 	 * @param ?string $title
 	 * @param bool $raw
 	 */
-	public function __construct(Messages $messages,
+	public function __construct(
 		string $type = self::TYPE_SUCCESS,
 		?string $description = null,
 		?string $title = null,
 		bool $raw = false,
 	)	
 	{
-		$this->setMessages($messages);
 		$this->setType($type);
 		$this->setDescription($description);
 		$this->setTitle($title);
 		$this->setIsRaw($raw);
-	}
-
-	/**
-	 * @param Messages $messages
-	 * 
-	 * @return self
-	 */
-	public function setMessages(Messages $messages): self
-	{
-		$this->_messages = $messages;
-		
-		return $this;
 	}
 
 	/**
@@ -197,6 +180,6 @@ class Message
 	 */
 	public function __toString(): string
 	{
-		return $this->_messages->__toString();
+		return View::messages()->__toString();
 	}
 }
