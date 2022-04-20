@@ -13,6 +13,18 @@ use function filter_var;
  */
 class Request
 {
+	/**#@+
+	 * Methods
+	 * 
+	 * @var string
+	 */
+	public const METHOD_GET = 'GET';
+	public const METHOD_POST = 'POST';
+	public const METHOD_PUT = 'PUT';
+	public const METHOD_DELETE = 'DELETE';
+	public const METHOD_HEAD = 'HEAD';
+	/**#@-*/
+	
 	/**
 	 * @var null|Url
 	 */
@@ -324,9 +336,49 @@ class Request
 	/**
 	 * @return bool
 	 */
+	public function isMethod(string $method): bool
+	{
+		return $this->getServer('REQUEST_METHOD') === $method;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function isGet(): bool
+	{
+		return $this->isMethod(self::METHOD_GET);
+	}
+	
+	/**
+	 * @return bool
+	 */
 	public function isPost(): bool
 	{
-		return $this->getServer('REQUEST_METHOD') === 'POST';
+		return $this->isMethod(self::METHOD_POST);
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function isPut(): bool
+	{
+		return $this->isMethod(self::METHOD_PUT);
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function isDelete(): bool
+	{
+		return $this->isMethod(self::METHOD_DELETE);
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function isHead(): bool
+	{
+		return $this->isMethod(self::METHOD_HEAD);
 	}
 
 	/**
