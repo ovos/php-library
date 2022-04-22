@@ -28,12 +28,12 @@ class Translator
 	protected Locale $_locale;
 	
 	/**
-	 * Default locale instance to use for the response
+	 * Current locale instance to use for this response
 	 * It's possible to use all locales and translate in many languages during the single request
 	 * 
 	 * @var ?Locale
 	 */
-	protected static ?Locale $_defaultLocale = null;
+	protected static ?Locale $_currentLocale = null;
 
 	/**
 	 * @var Translation[]
@@ -60,22 +60,22 @@ class Translator
 	 *
 	 * @return void
 	 */
-	public static function setDefaultLocale(Locale $locale): void
+	public static function setCurrentLocale(Locale $locale): void
 	{
-		self::$_defaultLocale = $locale;
+		self::$_currentLocale = $locale;
 	}
 	
 	/**
 	 * @return Locale
 	 */
-	public static function getDefaultLocale(): Locale
+	public static function getCurrentLocale(): Locale
 	{
-		if(self::$_defaultLocale === null)
+		if(self::$_currentLocale === null)
 		{
-			throw new Exception('Default has to be set on Translator.');
+			self::$_currentLocale = Locales::getDefault();
 		}
 	
-		return self::$_defaultLocale;
+		return self::$_currentLocale;
 	}
 	
 	/**
