@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
+use Ovos\Service\Disabled;
 use Ovos\Service\Session;
 use Ovos\View;
 use Ovos\View\Helper;
 use Ovos\View\Helper\Messages\Message;
+use Countable;
 use function Ovos\services;
 use function count;
 
@@ -16,7 +18,7 @@ use function count;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Messages extends Helper
+class Messages extends Helper implements Countable
 {
 	/**
 	 * @var string
@@ -24,9 +26,9 @@ class Messages extends Helper
 	public const SESSION_NAMESPACE = 'messages';
 
 	/**
-	 * @var Session
+	 * @var Session|Disabled
 	 */
-	protected Session $_session;
+	protected Session|Disabled $_session;
 	
 	/**
 	 * Internal namespace
@@ -120,7 +122,7 @@ class Messages extends Helper
 		?string $title = null
 	): Message
 	{
-		$message = new Message($this, $type, $description, $title);
+		$message = new Message($type, $description, $title);
 		$this->getItems()[] = $message;
 
 		return $message;
@@ -212,15 +214,24 @@ class Messages extends Helper
 	 */
 	public function __toString(): string
 	{
-		if(count($this->getItems()) === 0)
+		if($this->count() === 0)
 		{
 			return '';
 		}
 
 		$view = new View('helpers/messages.phtml');
+		$view->messages = $this->toArray();
 		return $view->render();
 	}
-
+	
+	/**
+	 * @return int
+	 */
+	public function count(): int
+	{
+		return count($this->getItems());
+	}
+	
 	/**
 	 * Returns messages and empties the list
 	 * 

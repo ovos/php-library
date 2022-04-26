@@ -19,7 +19,7 @@ trait Translatable
 	 */
 	public function _(string $phrase, ...$params): string
 	{
-		return $this->_app->getRequest()->getLocale()->getTranslator()->translate(
+		return Translator::getCurrentLocale()->getTranslator()->translate(
 			$phrase, ...$params);
 	}
 
@@ -33,7 +33,7 @@ trait Translatable
 	 */
 	public function _n(string $phraseSingular, string $phrasePlural, int $n, ...$params): string
 	{
-		return $this->_app->getRequest()->getLocale()->getTranslator()->translatePlural(
+		return Translator::getCurrentLocale()->getTranslator()->translatePlural(
 			$phraseSingular, $phrasePlural, $n, ...$params);
 	}
 }
