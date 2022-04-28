@@ -82,14 +82,16 @@ class Controller
 	public function dispatch(string $action, array $requestParams = []): ?Response
 	{
 		$this->setDispatchedAction($action);
-
-		$this->preDispatch();
+		
+		$actionParams = $this->getActionParams($action, $requestParams);
+		
+		$this->preDispatch($actionParams);
 		if($this->isDispatched())
 		{
 			return null;
 		}
 		
-		$response = $this->$action(...$this->getActionParams($action, $requestParams));
+		$response = $this->$action(...$actionParams);
 		if($response)
 		{
 			if(($response instanceof Response) === false)
@@ -172,7 +174,6 @@ class Controller
 	
 		return $requestParam;			
 	}
-	
 
 	/**
 	 * @param array $methodParams
@@ -244,8 +245,10 @@ class Controller
 	
 	/**
 	 * preDispatch
+	 * 
+	 * @param array $actionParams
 	 */
-	public function preDispatch(): void
+	public function preDispatch(array $actionParams): void
 	{
 		$this->preDispatchPlugins();
 	}
