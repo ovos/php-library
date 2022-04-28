@@ -46,10 +46,12 @@ class Cli extends Controller
 	
 	/**
 	 * preDispatch
+	 * 
+	 * @param $actionParams
 	 */
-	public function preDispatch(): void
+	public function preDispatch(array $actionParams): void
 	{
-		parent::preDispatch();
+		$this->preDispatchPlugins();
 	
 		if($this->getRequest()->isCli() === true)
 		{
