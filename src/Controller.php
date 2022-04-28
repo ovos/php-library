@@ -246,7 +246,7 @@ class Controller
 	/**
 	 * preDispatch
 	 * 
-	 * @param $actionParams
+	 * @param array $actionParams
 	 */
 	public function preDispatch(array $actionParams): void
 	{

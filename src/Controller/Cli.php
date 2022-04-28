@@ -47,7 +47,7 @@ class Cli extends Controller
 	/**
 	 * preDispatch
 	 * 
-	 * @param $actionParams
+	 * @param array $actionParams
 	 */
 	public function preDispatch(array $actionParams): void
 	{
