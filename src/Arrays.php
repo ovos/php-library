@@ -26,7 +26,7 @@ class Arrays
 	 * @return mixed
 	 */
 	public static function deepToArrayObject(array $array,
-		string $className = 'ArrayObject',
+		string $className = ArrayObject::class,
 		int $flags = ArrayObject::ARRAY_AS_PROPS): mixed
 	{
 		foreach($array as $key => $value)
