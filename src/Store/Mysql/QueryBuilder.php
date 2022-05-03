@@ -68,13 +68,17 @@ class QueryBuilder
 	}
 
 	/**
-	 * @param ...$fields
+	 * @param string ...$fields
 	 *
 	 * @return Select
 	 */
 	public function select(string ...$fields): Select
 	{
 		$query = new Select($this->_table);
+		if(empty($fields))
+		{
+			$fields = ['*'];
+		}
 		$query->select(...$fields);
 		
 		return $query;
