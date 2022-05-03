@@ -88,21 +88,21 @@ class PasswordStrength extends Validator
 		
 		// digits
 		if($this->_digits
-			&& preg_match("~[0-9]~", $value) === false)
+			&& preg_match("~[0-9]~", $value) === 0)
 		{
 			$valid = false;
 		}
 		
 		// uppercase
 		if($this->_uppercase
-			&& preg_match("~[A-Z]~", $value) === false)
+			&& preg_match("~[A-Z]~", $value) === 0)
 		{
 			$valid = false;
 		}		
 		
 		// special
 		if($this->_special
-			&& preg_match("~[^\w]~", $value) === false)
+			&& preg_match("~[^\w]~", $value) === 0)
 		{
 			$valid = false;
 		}
@@ -114,7 +114,7 @@ class PasswordStrength extends Validator
 			));
 			$this->addError($error);
 		}
-	
+		
 		return $valid;
 	}
 }
