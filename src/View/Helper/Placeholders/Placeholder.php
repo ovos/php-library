@@ -29,7 +29,7 @@ class Placeholder
 	/**
 	 * @var array
 	 */
-	protected array $_unique = [];
+	protected array $_scripts = [];
 
 	/**
 	 * @param null|string|bool|int $value
@@ -41,16 +41,8 @@ class Placeholder
 	public function set(
 		null|string|bool|int $value,
 		string $placement = self::PLACEMENT_REPLACE,
-		bool $unique = false,
 	): self
 	{
-		// if uniqness is required, check if the value was not already set on this placeholder
-		if($this->_unique
-			&& array_search($value, $this->_unique, true))
-		{
-			return $this;
-		}
-	
 		switch($placement)
 		{
 			case self::PLACEMENT_REPLACE:
@@ -63,28 +55,20 @@ class Placeholder
 				$this->_value.= $value;
 				break;
 		}
-		
-		// if uniqness is required, store this value for future comparisons
-		if($this->_unique)
-		{
-			$this->_unique[] = $value;
-		}
 
 		return $this;
 	}
 
 	/**
 	 * @param null|string|bool|int $value
-	 * @param bool $unique
 	 *
 	 * @return self
 	 */
 	public function prepend(
-		null|string|bool|int $value,
-		bool $unique = false,
+		null|string|bool|int $value
 	): self
 	{
-		$this->set($value, self::PLACEMENT_PREPEND, $unique);
+		$this->set($value, self::PLACEMENT_PREPEND);
 
 		return $this;
 	}
@@ -95,11 +79,10 @@ class Placeholder
 	 * @return self
 	 */
 	public function append(
-		null|string|bool|int $value,
-		bool $unique = false,
+		null|string|bool|int $value
 	): self
 	{
-		$this->set($value, self::PLACEMENT_APPEND, $unique);
+		$this->set($value, self::PLACEMENT_APPEND);
 
 		return $this;
 	}
@@ -113,14 +96,35 @@ class Placeholder
 
 	/**
 	 * @param string $placement
-	 * @param bool $unique
 	 */
 	public function captureEnd(
-		string $placement = self::PLACEMENT_PREPEND,
-		bool $unique = false,
+		string $placement = self::PLACEMENT_PREPEND
 	): void
 	{
-		$this->set(ob_get_clean(), $placement, $unique);
+		$this->set(ob_get_clean(), $placement);
+	}
+
+	/**
+	 * @param string $script
+	 * @param string $placement
+	 * 
+	 * @return $this
+	 */
+	public function includeScript(
+		string $script,
+		string $placement = self::PLACEMENT_PREPEND,
+		string $template = '<script type="text/javascript" src="%s"></script>',
+	): self
+	{
+		if(array_search($script, $this->_scripts) !== false)
+		{
+			return $this;
+		}
+		
+		$this->set(sprintf($template, $script), $placement);
+		$this->_scripts[] = $script;
+		
+		return $this;
 	}
 
 	/**
