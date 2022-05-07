@@ -166,7 +166,7 @@ class Json extends Response
 				$this->_response->error = $exception;
 			}
 
-			if(!$silent)
+			if($silent === false)
 			{
 				services()->events->log($exception);
 			}
