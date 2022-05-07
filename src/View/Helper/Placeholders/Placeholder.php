@@ -98,7 +98,7 @@ class Placeholder
 	 * @param string $placement
 	 */
 	public function captureEnd(
-		string $placement = self::PLACEMENT_PREPEND
+		string $placement = self::PLACEMENT_APPEND
 	): void
 	{
 		$this->set(ob_get_clean(), $placement);
@@ -112,8 +112,8 @@ class Placeholder
 	 */
 	public function includeScript(
 		string $script,
-		string $placement = self::PLACEMENT_PREPEND,
-		string $template = '<script type="text/javascript" src="%s"></script>',
+		string $placement = self::PLACEMENT_APPEND,
+		string $template = '<script type="text/javascript" src="%s"></script>' . PHP_EOL,
 	): self
 	{
 		if(array_search($script, $this->_scripts) !== false)
