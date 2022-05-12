@@ -161,11 +161,13 @@ class Router
 		// set params on $request object
 		foreach($params as $param)
 		{
-			if($param === 'true')
+			if($param === 'true'
+				|| $param === 'yes')
 			{
 				$param = true;
 			}
-			else if($param === 'false')
+			else if($param === 'false'
+				|| $param === 'no')
 			{
 				$param = false;
 			}
