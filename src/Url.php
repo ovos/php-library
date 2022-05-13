@@ -49,9 +49,8 @@ class Url
 		if($componentsCount)
 		{
 			$urlComponents = [];
-			foreach($components as &$component)
+			foreach($components as $component)
 			{
-				$component = (string)$component; // for ints
 				$urlComponents[] = self::getUrlComponents($component);
 			}
 			unset($component);
@@ -67,12 +66,17 @@ class Url
 	}
 
 	/**
-	 * @param string $url
+	 * @param bool|int|float|string $url
 	 *
 	 * @return array
 	 */
-	public static function getUrlComponents(string $url): array
+	public static function getUrlComponents(bool|int|float|string $url): array
 	{
+		if(is_string($url) === false)
+		{
+			return [$url];
+		}
+	
 		$position = strpos($url, '/');
 		if($position === false)
 		{
@@ -100,6 +104,18 @@ class Url
 		{
 			return $url;
 		}
+		
+		foreach($components as &$component)
+		{
+			if(is_int($component) || is_float($component))
+			{
+				$component = (string)$component;
+			}
+			else if(is_bool($component))
+			{
+				$component = $component ? 'true' : 'false';
+			}
+		}		
 
 		return $url . implode('/', $components) . '/';
 	}

@@ -185,7 +185,7 @@ class Events extends Service implements Countable, Iterator
 	/**
 	 * @return int|mixed|null|string
 	 */
-	public function key()
+	public function key(): mixed
 	{
 		return key($this->_events);
 	}

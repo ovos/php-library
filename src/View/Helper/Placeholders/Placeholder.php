@@ -25,15 +25,22 @@ class Placeholder
 	 * @var null|string|bool|int
 	 */
 	protected null|string|bool|int $_value = null;
+	
+	/**
+	 * @var array
+	 */
+	protected array $_scripts = [];
 
 	/**
 	 * @param null|string|bool|int $value
 	 * @param string $placement
+	 * @param bool $unique
 	 *
 	 * @return self
 	 */
-	public function set(null|string|bool|int $value,
-		string $placement = self::PLACEMENT_REPLACE
+	public function set(
+		null|string|bool|int $value,
+		string $placement = self::PLACEMENT_REPLACE,
 	): self
 	{
 		switch($placement)
@@ -57,7 +64,9 @@ class Placeholder
 	 *
 	 * @return self
 	 */
-	public function prepend(null|string|bool|int $value): self
+	public function prepend(
+		null|string|bool|int $value
+	): self
 	{
 		$this->set($value, self::PLACEMENT_PREPEND);
 
@@ -69,7 +78,9 @@ class Placeholder
 	 *
 	 * @return self
 	 */
-	public function append(null|string|bool|int $value): self
+	public function append(
+		null|string|bool|int $value
+	): self
 	{
 		$this->set($value, self::PLACEMENT_APPEND);
 
@@ -86,9 +97,34 @@ class Placeholder
 	/**
 	 * @param string $placement
 	 */
-	public function captureEnd(string $placement = self::PLACEMENT_PREPEND): void
+	public function captureEnd(
+		string $placement = self::PLACEMENT_APPEND
+	): void
 	{
 		$this->set(ob_get_clean(), $placement);
+	}
+
+	/**
+	 * @param string $script
+	 * @param string $placement
+	 * 
+	 * @return $this
+	 */
+	public function includeScript(
+		string $script,
+		string $placement = self::PLACEMENT_APPEND,
+		string $template = '<script type="text/javascript" src="%s"></script>' . PHP_EOL,
+	): self
+	{
+		if(array_search($script, $this->_scripts) !== false)
+		{
+			return $this;
+		}
+		
+		$this->set(sprintf($template, $script), $placement);
+		$this->_scripts[] = $script;
+		
+		return $this;
 	}
 
 	/**
