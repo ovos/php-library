@@ -29,7 +29,7 @@ class StripTags extends Filter
 	/**
 	 * @param array $allowedTags
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setAllowedTags(array $allowedTags): self
 	{

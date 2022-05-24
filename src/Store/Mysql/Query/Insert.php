@@ -31,7 +31,7 @@ class Insert extends Query
 	 * 
 	 * @param string ...$columns
 	 *
-	 * @return $this
+	 * @return self
 	 */
     public function columns(string ...$columns): self
 	{

@@ -82,7 +82,7 @@ class Locale
 	/**
 	 * @param ArrayObject $config
 	 *
-	 * @return $this
+	 * @return self
 	 * @throws Exception
 	 */
 	public function fromConfig(ArrayObject $config): self

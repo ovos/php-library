@@ -634,7 +634,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @param string $name
 	 * @param mixed $value
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setValue(string $name, mixed $value): self
 	{

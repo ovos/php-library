@@ -31,21 +31,20 @@ class Loader
 
 	/**
 	 * @param string $file
-	 * @param string $cacheId
+	 * @param ?string $cacheId
 	 *
 	 * @return null|Environment
 	 */
 	public function load(string $file,
-		string $cacheId = null
+		?string $cacheId = null
 	): ?Environment
 	{
 		$cacheId = ($cacheId ?? basename($file));
 		
-		$pool = $this->_memoryService->getPool();
-		if($pool->hasItem($cacheId))
+		$store = $this->_memoryService->getStore();
+		if(($value = $store->get($cacheId)))
 		{
-			$item = $pool->getItem($cacheId);
-			return $item->get();
+			return $value;
 		}
 
 		$config = Parser::parse($file);
@@ -55,10 +54,7 @@ class Loader
 		}
 		
 		$env = new Environment($config);
-
-		$item = $pool->getItem($cacheId);
-		$item->set($env);
-		$pool->save($item);
+		$store->set($cacheId, $env);
 
 		return $env;
 	}

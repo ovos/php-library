@@ -37,7 +37,7 @@ abstract class Query
 	/**
 	 * @param string $table
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setTable(string $table): self
 	{
@@ -67,7 +67,7 @@ abstract class Query
 	/**
 	 * @param string ...$conditions
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function where(string ...$conditions): self
 	{
@@ -82,7 +82,7 @@ abstract class Query
 	/**
 	 * @param string ...$conditions
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function andWhere(string ...$conditions): self
 	{
@@ -93,7 +93,7 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function whereIn(string $field, array $values): self
 	{
@@ -112,7 +112,7 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function andWhereIn(string $field, array $values): self
 	{
@@ -123,7 +123,7 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function whereNotIn(string $field, array $values): self
 	{
@@ -142,7 +142,7 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function andWhereNotIn(string $field, array $values): self
 	{
