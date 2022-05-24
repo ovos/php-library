@@ -59,10 +59,10 @@ class Loader
 		$pool->setFolder(self::CACHE_DIR);
 		*/
 		
-		$pool = $this->_memoryService->getPool();
-		if($pool->hasItem($cacheId))
+		$store = $this->_memoryService->getStore();
+		if($store->hasItem($cacheId))
 		{
-			$item = $pool->getItem($cacheId);
+			$item = $store->getItem($cacheId);
 			$itemValue = $item->get();
 			if($itemValue->mtime === $mTime)
 			{
@@ -83,14 +83,14 @@ class Loader
 
 		$config = $config[$rootSection];
 		$configObject = Arrays::deepToArrayObject($config, 'Ovos\ArrayObject');
-
+		
 		$cacheObject = new ArrayObject;
 		$cacheObject->mtime = $mTime;
 		$cacheObject->config = $configObject;
 
-		$item = $pool->getItem($cacheId);
+		$item = $store->getItem($cacheId);
 		$item->set($cacheObject);
-		$pool->save($item);
+		$store->save($item);
 
 		return $configObject;
 	}

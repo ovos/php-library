@@ -155,7 +155,7 @@ class Pager
 	/**
 	 * @param int $pageRange
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setPageRange(int $pageRange): self
 	{

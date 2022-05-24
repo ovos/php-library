@@ -108,7 +108,7 @@ class Placeholder
 	 * @param string $script
 	 * @param string $placement
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function includeScript(
 		string $script,
