@@ -295,12 +295,10 @@ class Router
 	{
 		$cacheId = self::CACHE_ID_CONTROLLERS;
 		
-		if($pool = services()->cache->getPerishablePool())
+		$store = services()->cache->getPerishableStore();
+		if($item = $store->get($cacheId))
 		{
-			if($pool->hasItem($cacheId))
-			{
-				return $pool->getItem($cacheId)->get();
-			}
+			return $item;		
 		}
 		
 		$controllers = [];
@@ -341,11 +339,7 @@ class Router
 			}
 		}
 		
-		if($pool = services()->cache->getPerishablePool())
-		{
-			$item = $pool->getItem($cacheId)->set($controllers);
-			$pool->save($item);
-		}
+		$store->set($cacheId, $controllers);
 
 		return $controllers;
 	}
