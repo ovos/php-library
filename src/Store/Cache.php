@@ -57,9 +57,12 @@ class Cache extends Store
 			return null;
 		}
 		
-		return is_object($value) ?
-			self::PREFIX_SERIALIZE . serialize($value)
-			: (string)$value;
+		if(is_array($value) || is_object($value))
+		{
+			self::PREFIX_SERIALIZE . serialize($value);
+		}
+		
+		return (string)$value;
 	}
 	
 	/**

@@ -93,7 +93,7 @@ class Translator
 				$this->_translations) === false)
 			{
 				$this->_translations[$translationPath]
-					= new Translation($translationPath);
+					= new Translation($locale, $translationPath);
 			}
 		}
 		
@@ -132,6 +132,8 @@ class Translator
 	}
 
 	/**
+	 * https://stackoverflow.com/questions/12184978/poedit-doesnt-recognize-n-plurals
+	 * 
 	 * @param string $phraseSingular
 	 * @param string $phrasePlural
 	 * @param int $n
@@ -146,16 +148,20 @@ class Translator
 		foreach($this->_translations as $translationAdapter)
 		{
 			$result = $translationAdapter->translatePlural($phraseSingular, $phrasePlural, $n);
-
+			
 			// inheritance of translations (each consecutive translation overwrites the former)
 			if($result !== ''
-				&& ($translation !== null
-					&& $result !== $translation
+				&& ($result !== $translation
 					&& $result !== $phraseSingular
 					&& $result !== $phrasePlural))
 			{
 				$translation = $result;
 			}
+		}
+		
+		if($translation === null) // missing in .po file
+		{
+			return '<!-- missing -->';
 		}
 
 		return $this->_getTranslation($translation, ...$params);

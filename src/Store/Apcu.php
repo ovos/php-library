@@ -6,7 +6,6 @@ namespace Ovos\Store;
 use Ovos\ArrayObject;
 use Ovos\Arrays;
 use Ovos\Exception;
-
 use APCUIterator;
 
 /**
@@ -80,23 +79,6 @@ class Apcu extends Cache
 	}
 	
 	/**
-	 * @param array $values
-	 * @param int $ttl
-	 *
-	 * @return bool
-	 */
-	public function setMultiple(array $values, int $ttl = 0): bool
-	{
-		$values = Arrays::prefixKeys($this->_prefix, $values);
-		foreach($values as &$value)
-		{
-			$value = $this->compress($this->serialize($value));
-		}
-	
-		return apcu_store($values, ttl: $ttl);
-	}
-	
-	/**
 	 * @param string $key
 	 *
 	 * @return mixed
@@ -113,29 +95,6 @@ class Apcu extends Cache
 	}
 	
 	/**
-	 * @param array $keys
-	 *
-	 * @return mixed
-	 */
-	public function getMultiple(array $keys): mixed
-	{
-		$keys = Arrays::prefixValues($this->_prefix, $keys);
-	
-		$values = apcu_fetch($keys);
-		if($values === false)
-		{
-			return false;
-		}
-		
-		foreach($values as &$value)
-		{
-			$value = $this->unserialize($this->decompress($value));
-		}
-		
-		return $values;
-	}
-	
-	/**
 	 * @param string|APCUIterator $key
 	 *
 	 * @return bool
@@ -148,18 +107,6 @@ class Apcu extends Cache
 		}
 	
 		return apcu_delete($key);
-	}
-	
-	/**
-	 * @param array $keys
-	 *
-	 * @return array
-	 */
-	public function deleteMultiple(array $keys): array
-	{
-		$keys = Arrays::prefixValues($this->_prefix, $keys);
-		
-		return apcu_delete($keys);
 	}
 	
 	/**
