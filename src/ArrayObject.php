@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use ArrayObject as BaseArrayObject;
+
 use function count;
 
 /**

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace Ovos;
+
 use function mb_strrpos;
 use function mb_strlen;
 use function mb_substr;

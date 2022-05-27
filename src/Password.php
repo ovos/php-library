@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Password\Hash;
+
 use function strlen;
 use function count;
 use function array_rand;

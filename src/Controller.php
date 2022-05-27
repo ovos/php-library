@@ -6,11 +6,11 @@ namespace Ovos;
 use Ovos\Controller\Plugin;
 use Ovos\Exception\RuntimeException;
 use ReflectionMethod;
+
 use function count;
 use function array_key_exists;
 use function in_array;
 use function array_column;
-use function array_keys;
 use function array_shift;
 use function class_exists;
 use function method_exists;
