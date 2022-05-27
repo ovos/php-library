@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Ovos\Translator;
 
+use Ovos\Translator\StringReader\Exception;
+
 use function is_readable;
 use function strcmp;
 
@@ -51,7 +53,7 @@ final class MoParser
 	/**
 	 * Parse error code (null if no error).
 	 *
-	 * @var int
+	 * @var ?int
 	 */
 	protected ?int $_error = null;
 	
@@ -79,6 +81,14 @@ final class MoParser
 	public function getTranslations(): array
 	{
 		return $this->_translations ?? $this->parse();
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function hasError(): bool
+	{
+		return $this->_error !== null;
 	}
 	
 	/**
@@ -130,14 +140,14 @@ final class MoParser
 			}
 
 			/* parse header */
-			$total = $stream->readint($unpack, 8);
-			$originals = $stream->readint($unpack, 12);
-			$translations = $stream->readint($unpack, 16);
+			$total = $stream->readInt($unpack, 8);
+			$originals = $stream->readInt($unpack, 12);
+			$translations = $stream->readInt($unpack, 16);
 
 			/* get original and translations tables */
 			$totalTimesTwo = ($total * 2);
-			$tableOriginals = $stream->readintarray($unpack, $originals, $totalTimesTwo);
-			$tableTranslations = $stream->readintarray($unpack, $translations, $totalTimesTwo);
+			$tableOriginals = $stream->readIntArray($unpack, $originals, $totalTimesTwo);
+			$tableTranslations = $stream->readIntArray($unpack, $translations, $totalTimesTwo);
 
 			/* read all strings to the cache */
 			for($i = 0; $i < $total; ++$i)
@@ -152,7 +162,7 @@ final class MoParser
 			}
 			
 		}
-		catch(ReaderException $exception)
+		catch(Exception $exception)
 		{
 			$this->_error = self::ERROR_READING;
 

@@ -81,14 +81,14 @@ class Apcu extends Cache
 	/**
 	 * @param string $key
 	 *
-	 * @return mixed
+	 * @return null|mixed
 	 */
 	public function get(string $key): mixed
 	{
 		$value = apcu_fetch($this->_prefix . $key);
 		if($value === false)
 		{
-			return false;
+			return null;
 		}
 		
 		return $this->unserialize($this->decompress($value));

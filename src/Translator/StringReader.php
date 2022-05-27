@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Translator;
 
+use Ovos\Translator\StringReader\Exception;
+
 use function file_get_contents;
 use function strlen;
 use function substr;
@@ -39,7 +41,7 @@ class StringReader
 	 */
 	public function __construct(string $filename)
 	{
-		$this->_string = (string) file_get_contents($filename);
+		$this->_string = (string)file_get_contents($filename);
 		$this->_length = strlen($this->_string);
 	}
 
@@ -55,7 +57,7 @@ class StringReader
 	{
 		if($pos + $bytes > $this->_length)
 		{
-			throw new ReaderException('Not enough bytes!');
+			throw new Exception('Not enough bytes!');
 		}
 
 		return substr($this->_string, $pos, $bytes);

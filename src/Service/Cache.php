@@ -81,7 +81,7 @@ class Cache extends Service
 	{
 		if($this->_persistentStore === null)
 		{
-			$store = new Redis($this->_config->persistent);
+			$store = new Redis($this->_config);
 			if($store->connect() === false)
 			{
 				return null;

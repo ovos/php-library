@@ -93,7 +93,7 @@ class Translator
 				$this->_translations) === false)
 			{
 				$this->_translations[$translationPath]
-					= new Translation($locale, $translationPath);
+					= new Translation($this->_locale, $translationPath);
 			}
 		}
 		

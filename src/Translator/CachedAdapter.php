@@ -6,12 +6,12 @@ namespace Ovos\Translator;
 use Ovos\ArrayObject;
 use Ovos\Locale;
 use Ovos\Strings;
-use Ovos\Translator;
+
+use function Ovos\services;
 use function file_exists;
 use function filemtime;
 use function substr;
 use function strlen;
-use function Ovos\services;
 
 /**
  * CachedTranslator
@@ -32,6 +32,7 @@ class CachedAdapter
 	protected array $_translations = [];
 	
 	/**
+	 * @param Locale $locale
 	 * @param string $filename
 	 */
 	public function __construct(Locale $locale, string $filename)
@@ -48,7 +49,7 @@ class CachedAdapter
 		$cacheId = Strings::slugify($path);
 
 		$store = services()->cache->getStore();
-		if(($item = $store->get($cacheId))
+		if($store && ($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)
 		{
 			$this->setTranslations($item->translations);
@@ -56,32 +57,15 @@ class CachedAdapter
 		
 		$parser = new MoParser($filename);
 		$this->setTranslations($parser->getTranslations());
-
-		$item = new ArrayObject;
-		$item->mtime = $mTime;
-		$item->translations = $this->getTranslations();
 		
-		$store->set($cacheId, $item);
-	}
-	
-	/**
-	 * @param string $locale
-	 * 
-	 * @return self
-	 */
-	public function setLocale(string $locale): self
-	{
-		$this->_locale = $locale;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return string
-	 */
-	public function getLocale(): string
-	{
-		return $this->_locale;
+		if($store)
+		{
+			$item = new ArrayObject;
+			$item->mtime = $mTime;
+			$item->translations = $this->getTranslations();
+			
+			$store->set($cacheId, $item);
+		}
 	}
 	
 	/**
@@ -119,7 +103,7 @@ class CachedAdapter
 	{
 		$key = implode(chr(4), [$msgctxt, $msgid]);
 		$ret = $this->gettext($key);
-		if(strpos($ret, chr(4)) !== false)
+		if(str_contains($ret, chr(4)))
 		{
 			return $msgid;
 		}
@@ -138,23 +122,19 @@ class CachedAdapter
 	 */
 	public function ngettext(string $msgid, string $msgidPlural, int $number): string
 	{
-		// this should contains all strings separated by NULLs
+		// this should contain all strings separated by NULLs
 		$key = implode(chr(0), [$msgid, $msgidPlural]);
 		if($this->exists($key))
 		{
 			return $number !== 1 ? $msgidPlural : $msgid;
 		}
 
-		$result = $this->get($key);
+		$result = $this->gettext($key);
 
 		// find out the appropriate form
-		$select = $this->getPlural($number, $this->_locale->symbol);
+		$select = $this->getPlural($number);
 
 		$list = explode(chr(0), $result);
-		if($list === false)
-		{
-			return '';
-		}
 		if(isset($list[$select]) === false)
 		{
 			return $list[0];
@@ -177,13 +157,104 @@ class CachedAdapter
 	{
 		$key = implode(chr(4), [$msgctxt, $msgid]);
 		$ret = $this->ngettext($key, $msgidPlural, $number);
-		if(strpos($ret, chr(4)) !== false)
+		if(str_contains($ret, chr(4)))
 		{
 			return $msgid;
 		}
 
 		return $ret;
 	}	
+	
+	/**
+	 * @see Zend_Translate_Plural
+	 * Alternative is to parse and eval "Plural-Forms:" header in .mo file
+	 * 
+	 * Returns the plural definition to use
+	 * 
+	 * @param int $number
+	 *
+	 * @return int
+	 */
+	public function getPlural(int $number): int
+	{
+		$language = $this->_locale->language;
+	
+		if($this->_locale->symbol === 'pt_BR') // exception for Brasil
+		{
+			$language = 'xbr';
+		}
+		
+		return match ($language)
+		{
+			'az', 'bo', 'dz', 'id', 'ja', 'jv', 'ka', 'km', 'kn', 'ko', 'ms', 'th', 'tr', 'vi', 'zh' => 0,
+			'af', 'bn', 'bg', 'ca', 'da', 'de', 'el', 'en', 'eo', 'es', 'et', 'eu', 'fa', 'fi', 'fo', 'fur', 'fy', 'gl', 'gu', 'ha', 'he', 'hu', 'is', 'it', 'ku', 'lb', 'ml', 'mn', 'mr', 'nah', 'nb', 'ne', 'nl', 'nn', 'no', 'om', 'or', 'pa', 'pap', 'ps', 'pt', 'so', 'sq', 'sv', 'sw', 'ta', 'te', 'tk', 'ur', 'zu' => ($number === 1)
+				? 0 : 1,
+			'am', 'bh', 'fil', 'fr', 'gun', 'hi', 'ln', 'mg', 'nso', 'xbr', 'ti', 'wa' => (($number === 0) || ($number === 1))
+				? 0 : 1,
+			'be', 'bs', 'hr', 'ru', 'sr', 'uk' => (($number % 10 === 1) && ($number % 100 !== 11))
+				? 0
+				: ((($number % 10 >= 2) && ($number % 10 <= 4) && (($number % 100 < 10) || ($number % 100 >= 20)))
+					? 1 : 2),
+			'cs', 'sk' => ($number === 1) ? 0
+				: ((($number >= 2) && ($number <= 4)) ? 1 : 2),
+			'ga' => ($number === 1) ? 0 : (($number === 2) ? 1 : 2),
+			'lt' => (($number % 10 === 1) && ($number % 100 !== 11))
+				? 0
+				: ((($number % 10 >= 2) && (($number % 100 < 10) || ($number % 100 >= 20)))
+					? 1 : 2),
+			'sl' => ($number % 100 === 1) ? 0
+				: (($number % 100 === 2) ? 1
+					: ((($number % 100 === 3) || ($number % 100 === 4)) ? 2
+						: 3)),
+			'mk' => ($number % 10 === 1) ? 0 : 1,
+			'mt' => ($number === 1)
+				? 0
+				: ((($number === 0) || (($number % 100 > 1) && ($number % 100 < 11)))
+					? 1
+					: ((($number % 100 > 10) && ($number % 100 < 20)) ? 2 : 3)),
+			'lv' => ($number === 0) ? 0
+				: ((($number % 10 === 1) && ($number % 100 !== 11)) ? 1 : 2),
+			'pl' => ($number === 1)
+				? 0
+				: ((($number % 10 >= 2) && ($number % 10 <= 4) && (($number % 100 < 12) || ($number % 100 > 14)))
+					? 1 : 2),
+			'cy' => ($number === 1) ? 0
+				: (($number === 2) ? 1
+					: ((($number === 8) || ($number === 11)) ? 2 : 3)),
+			'ro' => ($number === 1)
+				? 0
+				: ((($number === 0) || (($number % 100 > 0) && ($number % 100 < 20)))
+					? 1 : 2),
+			'ar' => ($number === 0)
+				? 0
+				: (($number === 1)
+					? 1
+					: (($number === 2) ? 2
+						: ((($number >= 3) && ($number <= 10)) ? 3
+							: ((($number >= 11) && ($number <= 99)) ? 4 : 5)))),
+			default => 0,
+		};
+	}
+	
+	/**
+	 * @param Locale $locale
+	 * 
+	 * @return self
+	 */
+	public function setLocale(Locale $locale): self
+	{
+		$this->_locale = $locale;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return Locale
+	 */
+	public function getLocale(): Locale
+	{
+		return $this->_locale;
+	}
 	
 	/**
 	 * @param array $translations
@@ -203,160 +274,5 @@ class CachedAdapter
 	public function getTranslations(): array
 	{
 		return $this->_translations;
-	}
-	
-	/**
-	 * @see Zend_Translate_Plural
-	 * Alternative is to parse and eval "Plural-Forms:" header in .mo file
-	 * 
-	 * Returns the plural definition to use
-	 * 
-	 * @param int $number
-	 * @param string $locale
-	 *
-	 * @return int
-	 */
-	public static function getPlural(int $number, string $locale): int
-	{
-		if($locale === 'pt_BR') // exception for Brasil
-		{
-			$language = 'xbr';
-		}
-		else
-		{
-			$language = strstr($locale, '_', true);
-		}
-		
-		switch($language)
-		{
-			case 'az':
-			case 'bo':
-			case 'dz':
-			case 'id':
-			case 'ja':
-			case 'jv':
-			case 'ka':
-			case 'km':
-			case 'kn':
-			case 'ko':
-			case 'ms':
-			case 'th':
-			case 'tr':
-			case 'vi':
-			case 'zh':
-				return 0;
-				break;
-
-			case 'af':
-			case 'bn':
-			case 'bg':
-			case 'ca':
-			case 'da':
-			case 'de':
-			case 'el':
-			case 'en':
-			case 'eo':
-			case 'es':
-			case 'et':
-			case 'eu':
-			case 'fa':
-			case 'fi':
-			case 'fo':
-			case 'fur':
-			case 'fy':
-			case 'gl':
-			case 'gu':
-			case 'ha':
-			case 'he':
-			case 'hu':
-			case 'is':
-			case 'it':
-			case 'ku':
-			case 'lb':
-			case 'ml':
-			case 'mn':
-			case 'mr':
-			case 'nah':
-			case 'nb':
-			case 'ne':
-			case 'nl':
-			case 'nn':
-			case 'no':
-			case 'om':
-			case 'or':
-			case 'pa':
-			case 'pap':
-			case 'ps':
-			case 'pt':
-			case 'so':
-			case 'sq':
-			case 'sv':
-			case 'sw':
-			case 'ta':
-			case 'te':
-			case 'tk':
-			case 'ur':
-			case 'zu':
-				return ($number == 1) ? 0 : 1;
-
-			case 'am':
-			case 'bh':
-			case 'fil':
-			case 'fr':
-			case 'gun':
-			case 'hi':
-			case 'ln':
-			case 'mg':
-			case 'nso':
-			case 'xbr':
-			case 'ti':
-			case 'wa':
-				return (($number == 0) || ($number == 1)) ? 0 : 1;
-
-			case 'be':
-			case 'bs':
-			case 'hr':
-			case 'ru':
-			case 'sr':
-			case 'uk':
-				return (($number % 10 == 1) && ($number % 100 != 11)) ? 0 : ((($number % 10 >= 2) && ($number % 10 <= 4) && (($number % 100 < 10) || ($number % 100 >= 20))) ? 1 : 2);
-
-			case 'cs':
-			case 'sk':
-				return ($number == 1) ? 0 : ((($number >= 2) && ($number <= 4)) ? 1 : 2);
-
-			case 'ga':
-				return ($number == 1) ? 0 : (($number == 2) ? 1 : 2);
-
-			case 'lt':
-				return (($number % 10 == 1) && ($number % 100 != 11)) ? 0 : ((($number % 10 >= 2) && (($number % 100 < 10) || ($number % 100 >= 20))) ? 1 : 2);
-
-			case 'sl':
-				return ($number % 100 == 1) ? 0 : (($number % 100 == 2) ? 1 : ((($number % 100 == 3) || ($number % 100 == 4)) ? 2 : 3));
-
-			case 'mk':
-				return ($number % 10 == 1) ? 0 : 1;
-
-			case 'mt':
-				return ($number == 1) ? 0 : ((($number == 0) || (($number % 100 > 1) && ($number % 100 < 11))) ? 1 : ((($number % 100 > 10) && ($number % 100 < 20)) ? 2 : 3));
-
-			case 'lv':
-				return ($number == 0) ? 0 : ((($number % 10 == 1) && ($number % 100 != 11)) ? 1 : 2);
-
-			case 'pl':
-				return ($number == 1) ? 0 : ((($number % 10 >= 2) && ($number % 10 <= 4) && (($number % 100 < 12) || ($number % 100 > 14))) ? 1 : 2);
-
-			case 'cy':
-				return ($number == 1) ? 0 : (($number == 2) ? 1 : ((($number == 8) || ($number == 11)) ? 2 : 3));
-
-			case 'ro':
-				return ($number == 1) ? 0 : ((($number == 0) || (($number % 100 > 0) && ($number % 100 < 20))) ? 1 : 2);
-
-			case 'ar':
-				return ($number == 0) ? 0 : (($number == 1) ? 1 : (($number == 2) ? 2 : ((($number >= 3) && ($number <= 10)) ? 3 : ((($number >= 11) && ($number <= 99)) ? 4 : 5))));
-
-			default:
-				return 0;
-		}
 	}
 }
