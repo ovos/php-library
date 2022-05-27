@@ -82,13 +82,13 @@ class Redis extends Cache
 	/**
 	 * @param string $key
 	 *
-	 * @return false|string
+	 * @return null|mixed
 	 */
-	public function get(string $key): false|string
+	public function get(string $key): mixed
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return null;			
 		}
 	
 		$key = $this->_prefix . $key;
@@ -96,7 +96,7 @@ class Redis extends Cache
 		$value = $client->get($key);
 		if($value === false)
 		{
-			return false;
+			return null;
 		}
 	
 		return $this->unserialize($this->decompress($value));
@@ -119,7 +119,7 @@ class Redis extends Cache
 		$key = $this->_prefix . $key;	
 	
 		$value = $this->compress($this->serialize($value));
-	
+		
 		$result = $client->set($key, $value);
 		
 		// set expire if needed
@@ -129,5 +129,18 @@ class Redis extends Cache
 		}
 	
 		return $result;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function clear(): bool
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;			
+		}
+	
+		return $client->flushDb();
 	}
 }

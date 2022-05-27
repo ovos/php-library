@@ -61,11 +61,11 @@ class Translation
 	}
 	
 	/**
-	 * @param string $locale
+	 * @param Locale $locale
 	 * 
 	 * @return self
 	 */
-	public function setLocale(string $locale): self
+	public function setLocale(Locale $locale): self
 	{
 		$this->_locale = $locale;
 		
@@ -73,9 +73,9 @@ class Translation
 	}
 	
 	/**
-	 * @return string
+	 * @return Locale
 	 */
-	public function getLocale(): string
+	public function getLocale(): Locale
 	{
 		return $this->_locale;
 	}
