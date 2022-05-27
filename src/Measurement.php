@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use stdClass;
+
 use function microtime;
 use function memory_get_usage;
 

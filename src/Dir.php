@@ -7,7 +7,7 @@ use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
-use function strlen;
+
 use function count;
 use function krsort;
 use function substr;

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace Ovos;
+
 use function log;
 use function count;
 use function round;

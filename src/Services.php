@@ -12,7 +12,6 @@ use Ovos\Service\Session;
 use Ovos\Service\Cookies;
 use Ovos\Service\Cache;
 use Ovos\Service\Database;
-use function Ovos\config;
 
 /**
  * Services

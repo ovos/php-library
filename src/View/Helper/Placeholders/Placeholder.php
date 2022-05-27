@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace Ovos\View\Helper\Placeholders;
+
 use function ob_start;
 use function ob_get_clean;
 

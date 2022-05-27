@@ -4,10 +4,8 @@ declare(strict_types=1);
 namespace Ovos;
 
 use ArrayObject;
-use function func_num_args;
-use function func_get_args;
+
 use function is_array;
-use function call_user_func_array;
 use function count;
 
 /**
@@ -41,27 +39,29 @@ class Arrays
 
 		return new $className($array, $flags);
 	}
-
-	// code from php at moechofe dot com (array_merge comment on php.net)
+	
 	/*
 	 * arrayDeepMerge
+	 * @see code from php at moechofe dot com (array_merge comment on php.net)
 	 *
 	 * array arrayDeepMerge ( array array1 [, array array2 [, array ...]] )
 	 *
 	 * Like array_merge
 	 *
-	 *  arrayDeepMerge() merges the elements of one or more arrays together so
+	 * arrayDeepMerge() merges the elements of one or more arrays together so
 	 * that the values of one are appended to the end of the previous one. It
 	 * returns the resulting array.
-	 *  If the input arrays have the same string keys, then the later value for
+	 * 
+	 * If the input arrays have the same string keys, then the later value for
 	 * that key will overwrite the previous one. If, however, the arrays contain
 	 * numeric keys, the later value will not overwrite the original value, but
 	 * will be appended.
-	 *  If only one array is given and the array is numerically indexed, the keys
+	 * 
+	 * If only one array is given and the array is numerically indexed, the keys
 	 * get reindexed in a continuous way.
 	 *
 	 * Different from array_merge
-	 *  If string keys have arrays for values, these arrays will merge recursively.
+	 * If string keys have arrays for values, these arrays will merge recursively.
 	 */
 	public static function deepMerge(...$arrays)
 	{
@@ -110,7 +110,7 @@ class Arrays
 				return $arrays[2];
 				
 			default:
-				$arrays[1] = $selfCallable($args[0], $args[1]);
+				$arrays[1] = $selfCallable($arrays[0], $arrays[1]);
 				array_shift($arrays);
 
 				return $selfCallable(...$arrays);
@@ -123,6 +123,8 @@ class Arrays
 	 * Group values in pairs
 	 * 
 	 * name => value
+	 * 
+	 * @param array $values
 	 *
 	 * @return array
 	 */
@@ -154,7 +156,7 @@ class Arrays
 	 * @param array $array
 	 * @return array
 	 */
-	public static function flatten(array $array)
+	public static function flatten(array $array): array
 	{
 		$flat = [];
 		foreach($array as $key => $value)

@@ -5,6 +5,7 @@ namespace Ovos;
 
 use ResourceBundle;
 use Collator;
+
 use function array_reverse;
 use function array_key_exists;
 use function is_numeric;
