@@ -4,6 +4,7 @@ namespace Ovos\Pdo\Profiler;
 
 use Ovos\Pdo\Profiler\Exception\ProfilerException;
 use Ovos\Measurement;
+use PDO;
 use PDOException;
 
 /**
@@ -20,67 +21,54 @@ class PdoStatement extends \PDOStatement
 	 * @var array
 	 */
 	protected array $_parameters = [];
-
+	
 	/**
 	 * Catches parameter value, passes arguments to PDO
-	 * @see PDOStatement::bindParam
-	 *
-	 * @param mixed $parameter
-	 * @param mixed $variable
-	 * @param int $dataType
-	 * @param null $length
-	 * @param null $driverOptions
-	 *
-	 * @return bool
+	 * @see https://www.php.net/manual/en/pdostatement.bindparam.php
+	 * @inheritDoc
 	 */
-	public function bindParam($parameter, &$variable, $dataType = PDO::PARAM_STR, $length = null, $driverOptions = null): bool
+	public function bindParam(string|int $param,
+		mixed &$var,
+		int $type = PDO::PARAM_STR,
+		int $maxLength = 0,
+		mixed $driverOptions = null
+	): bool
 	{
-		$this->_storeParameter($parameter, $variable);
+		$this->_storeParameter($param, $var);
 
-		return parent::bindParam($parameter, $variable, $dataType, $length, $driverOptions);
+		return parent::bindParam($param, $var, $type, $maxLength, $driverOptions);
 	}
 
 	/**
 	 * Catches value, passes arguments to PDO
-	 *
-	 * @see PDOStatement::bindValue
-	 *
-	 * @param mixed $parameter
-	 * @param mixed $value
-	 * @param int $dataType
-	 *
-	 * @return bool
+	 * @see https://www.php.net/manual/en/pdostatement.bindvalue.php
+	 * @inheritDoc
 	 */
-	public function bindValue($parameter, $value, $dataType = PDO::PARAM_STR): bool
+	public function bindValue(string|int $param,
+		mixed $value,
+		int $type = PDO::PARAM_STR
+	): bool
 	{
-		$this->_storeParameter($parameter, $value);
+		$this->_storeParameter($param, $value);
 
-		return parent::bindValue($parameter, $value, $dataType);
+		return parent::bindValue($param, $value, $type);
 	}
 
 	/**
 	 * Measures time while executing statement, returns result
-	 *
-	 * @throws ProfilerException if query string is empty
-	 * @throws PDOException on query failure
-	 * @see PDOStatement::execute
-	 *
-	 * @param null $inputParameters
-	 *
-	 * @return bool
-	 *
-	 * @throws ProfilerException
+	 * @see https://www.php.net/manual/en/pdostatement.execute.php
+	 * @inheritDoc
 	 */
-	public function execute($inputParameters = null): bool
+	public function execute(?array $params = null): bool
 	{
 		if(empty($this->queryString))
 		{
 			throw new ProfilerException('Whoops, looks like an empty query got executed');
 		}
-
-		if(!empty($inputParameters))
+		
+		if($params !== null)
 		{
-			foreach($inputParameters as $parameter => $value)
+			foreach($params as $parameter => $value)
 			{
 				$this->_storeParameter($parameter, $value);
 			}
@@ -92,7 +80,7 @@ class PdoStatement extends \PDOStatement
 		
 		try
 		{
-			$data = parent::execute($inputParameters);
+			$data = parent::execute($params);
 		}
 		catch(PDOException $exception)
 		{
@@ -121,7 +109,7 @@ class PdoStatement extends \PDOStatement
 	 * @param string $name
 	 * @param mixed $value
 	 */
-	protected function _storeParameter(string $name, $value)
+	protected function _storeParameter(string $name, mixed $value): void
 	{
 		$name = ltrim($name, ':');
 		

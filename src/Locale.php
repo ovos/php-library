@@ -5,6 +5,7 @@ namespace Ovos;
 
 use ResourceBundle;
 use Collator;
+
 use function array_reverse;
 use function array_key_exists;
 use function is_numeric;
@@ -82,7 +83,7 @@ class Locale
 	/**
 	 * @param ArrayObject $config
 	 *
-	 * @return $this
+	 * @return self
 	 * @throws Exception
 	 */
 	public function fromConfig(ArrayObject $config): self

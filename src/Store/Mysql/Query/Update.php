@@ -39,7 +39,7 @@ class Update extends Query
 	 * 
 	 * @param mixed ...$columns
 	 *
-	 * @return $this
+	 * @return self
 	 */
     public function set(mixed ...$columns): self
 	{

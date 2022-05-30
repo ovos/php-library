@@ -162,7 +162,7 @@ class Element
 	}
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function reset(): self
 	{

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Exception\NotFoundException;
+
 use function preg_match;
 use function class_exists;
 use function is_subclass_of;

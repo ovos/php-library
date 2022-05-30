@@ -4,8 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\Service;
-use Cache\Prefixed\PrefixedCachePool;
-use Cache\Adapter\Apcu\ApcuCachePool;
+use Ovos\Store\Apcu;
 
 /**
  * Memory
@@ -21,9 +20,9 @@ class Memory extends Service
 	public const SYMBOL = 'memory';
 
 	/**
-	 * @var null|PrefixedCachePool
+	 * @var ?Apcu
 	 */
-	protected null|PrefixedCachePool $_pool = null;
+	protected ?Apcu $_store = null;
 	
 	/**
 	 * @return string
@@ -34,16 +33,15 @@ class Memory extends Service
 	}
 
 	/**
-	 * @return PrefixedCachePool
+	 * @return Apcu
 	 */
-	public function getPool(): PrefixedCachePool
+	public function getStore(): Apcu
 	{
-		if($this->_pool === null)
+		if($this->_store === null)
 		{
-			$this->_pool = new PrefixedCachePool(
-				new ApcuCachePool, str_replace([':', DIRECTORY_SEPARATOR], '', BASE_DIR) . '_');
+			$this->_store = new Apcu(str_replace([':', DIRECTORY_SEPARATOR], '', BASE_DIR) . '_');
 		}
 
-		return $this->_pool;
+		return $this->_store;
 	}
 }

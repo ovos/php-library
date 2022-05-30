@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Cocur\Slugify\Slugify;
+
 use function str_starts_with;
 use function str_contains;
 use function ucwords;

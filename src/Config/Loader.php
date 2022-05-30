@@ -59,15 +59,11 @@ class Loader
 		$pool->setFolder(self::CACHE_DIR);
 		*/
 		
-		$pool = $this->_memoryService->getPool();
-		if($pool->hasItem($cacheId))
+		$store = $this->_memoryService->getStore();
+		if(($item = $store->get($cacheId))
+			&& $item->mtime === $mTime)
 		{
-			$item = $pool->getItem($cacheId);
-			$itemValue = $item->get();
-			if($itemValue->mtime === $mTime)
-			{
-				return $itemValue->config;
-			}
+			return $item->config;
 		}
 
 		$config = Parser::parse($file, $environment);
@@ -83,14 +79,11 @@ class Loader
 
 		$config = $config[$rootSection];
 		$configObject = Arrays::deepToArrayObject($config, 'Ovos\ArrayObject');
-
-		$cacheObject = new ArrayObject;
-		$cacheObject->mtime = $mTime;
-		$cacheObject->config = $configObject;
-
-		$item = $pool->getItem($cacheId);
-		$item->set($cacheObject);
-		$pool->save($item);
+		
+		$item = new ArrayObject;
+		$item->mtime = $mTime;
+		$item->config = $configObject;
+		$store->set($cacheId, $item);
 
 		return $configObject;
 	}

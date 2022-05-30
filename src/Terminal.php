@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Terminal\Formatter;
-use function Ovos\app;
+
 use function stream_get_line;
 use function fwrite;
 

@@ -5,9 +5,8 @@ namespace Ovos\Service;
 
 use Ovos\ArrayObject;
 use Ovos\Service;
-use Cache\Prefixed\PrefixedCachePool;
-use Cache\Adapter\Apcu\ApcuCachePool;
-use Ovos\Cache\Adapter\Redis\RedisCachePool;
+use Ovos\Store\Apcu;
+use Ovos\Store\Redis;
 use function Ovos\services;
 
 /**
@@ -29,19 +28,21 @@ class Cache extends Service
 	protected ArrayObject $_config;
 
 	/**
-	 * @var null|RedisCachePool
+	 * @var ?Redis
 	 */
-	protected null|RedisCachePool $_persistentPool = null;
+	protected ?Redis $_persistentStore = null;
 
 	/**
-	 * @var null|PrefixedCachePool
+	 * @var ?Apcu
 	 */
-	protected null|PrefixedCachePool $_perishablePool = null;
+	protected ?Apcu $_perishableStore = null;
 
 	/**
 	 * @var array
 	 */
-	protected array $_dependsOn = [Events::SYMBOL];
+	protected array $_dependsOn = [
+		Events::SYMBOL,
+	];
 
 	/**
 	 */
@@ -64,45 +65,44 @@ class Cache extends Service
 	/**
 	 * @param bool $persistent
 	 * 
-	 * @return null|RedisCachePool|PrefixedCachePool
+	 * @return null|Redis|Apcu
 	 */
-	public function getPool($persistent = true): null|RedisCachePool|PrefixedCachePool
+	public function getStore(bool $persistent = true): null|Redis|Apcu
 	{
 		return $persistent ?
-			$this->getPersistentPool()
-			: $this->getPerishablePool();
+			$this->getPersistentStore()
+			: $this->getPerishableStore();
 	}
 
 	/**
-	 * @return ?RedisCachePool
+	 * @return ?Redis
 	 */
-	public function getPersistentPool(): ?RedisCachePool
+	public function getPersistentStore(): ?Redis
 	{
-		if($this->_persistentPool === null)
+		if($this->_persistentStore === null)
 		{
-			$client = new \Ovos\Cache\Redis($this->_config->persistent);
-			if($client->connect() === false)
+			$store = new Redis($this->_config);
+			if($store->connect() === false)
 			{
 				return null;
 			}
 
-			$this->_persistentPool = $client->getCachePool();
+			$this->_persistentStore = $store;
 		}
 
-		return $this->_persistentPool;
+		return $this->_persistentStore;
 	}
 	
 	/**
-	 * @return PrefixedCachePool
+	 * @return Apcu
 	 */
-	public function getPerishablePool(): PrefixedCachePool
+	public function getPerishableStore(): Apcu
 	{
-		if($this->_perishablePool === null)
+		if($this->_perishableStore === null)
 		{
-			$this->_perishablePool = new PrefixedCachePool(
-				new ApcuCachePool, $this->_config->perishable->prefix);
+			$this->_perishableStore = Apcu::fromConfig($this->_config);
 		}
 
-		return $this->_perishablePool;
+		return $this->_perishableStore;
 	}
 }

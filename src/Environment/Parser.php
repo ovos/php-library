@@ -15,7 +15,7 @@ class Parser
 {
 	/**
 	 * @param string $file
-	 * @return null|array
+	 * @return ?array
 	 */
 	public static function parse(string $file): ?array
 	{

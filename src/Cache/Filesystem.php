@@ -11,7 +11,9 @@ use function Ovos\services;
 
 /**
  * Cache
+ * Deprecated, kept for future reference
  *
+ * @deprecated
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
