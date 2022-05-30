@@ -164,7 +164,12 @@ class Session extends Service
 			return false;
 		}
 		
-		return $connection->getClient()->flushDB(); // always true
+		if($client = $connection->getClient())
+		{
+			return $client->flushDB();
+		}
+		
+		return false;
 	}
 
 	/**
