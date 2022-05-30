@@ -65,8 +65,6 @@ class Arrays
 	 */
 	public static function deepMerge(...$arrays)
 	{
-		$selfCallable = [__CLASS__, __METHOD__];
-	
 		switch(count($arrays))
 		{
 			case 0:
@@ -91,7 +89,7 @@ class Arrays
 
 					if($isKey0 && $isKey1 && is_array($arrays[0][$key]) && is_array($arrays[1][$key]))
 					{
-						$args[2][$key] = $selfCallable($arrays[0][$key], $arrays[1][$key]);
+						$arrays[2][$key] = (__METHOD__)($arrays[0][$key], $arrays[1][$key]);
 					}
 					else if($isKey0 && $isKey1)
 					{
@@ -109,11 +107,11 @@ class Arrays
 
 				return $arrays[2];
 				
-			default:
-				$arrays[1] = $selfCallable($arrays[0], $arrays[1]);
+			default: // merge first two and repeat until there are just two left
+				$arrays[1] = (__METHOD__)($arrays[0], $arrays[1]);
 				array_shift($arrays);
 
-				return $selfCallable(...$arrays);
+				return (__METHOD__)(...$arrays);
 
 			break;
 		}
