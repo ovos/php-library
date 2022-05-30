@@ -72,34 +72,23 @@ class Asset extends Helper
 		$mDate = null;
 		
 		// fetch mtime from memory
-		$pool = $this->_memoryService->getPool();
+		$store = $this->_memoryService->getStore();
 		$cacheId = str_replace('/', '', $this->_asset);
-		if($pool->hasItem($cacheId))
-		{
-			$item = $pool->getItem($cacheId);
-			$mDate = $item->get();
-		}
-		
-		if($mDate === null)
-		{
-			try
-			{
-				$mTime = filemtime($filename);
-				
-				$mDate = date('Ymdhis', $mTime);
-				$item = $pool->getItem($cacheId);
-				$item->set($mDate);
-				$pool->save($item);
-			}
-			catch(ErrorException $exception)
-			{
-				services()->events->add($exception);
-			}
-		}
-		
-		if($mDate !== null)		
+		if($mDate = $store->get($cacheId))
 		{
 			return $this->_asset . '?' . $mDate;
+		}
+
+		try
+		{
+			$mTime = filemtime($filename);
+			
+			$mDate = date('Ymdhis', $mTime);
+			$store->set($cacheId, $mDate);
+		}
+		catch(ErrorException $exception)
+		{
+			services()->events->add($exception);
 		}
 		
 		return $this->_asset;

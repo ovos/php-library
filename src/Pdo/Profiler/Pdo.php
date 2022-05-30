@@ -17,20 +17,10 @@ class Pdo extends \PDO
 {
 	/**
 	 * Measures time while executing query, returns result
-	 *
-	 * @throws ProfilerException if query string is empty
-	 * @throws PDOException on query failure
-	 * @see PDO::query
-	 *
-	 * @param string $query
-	 * @param ?int $fetchMode
-	 * @param mixed ...$fetchModeArgs
-	 *
-	 * @return PDOStatement|false
-	 *
-	 * @throws ProfilerException
+	 * @see https://www.php.net/manual/en/pdo.query
+	 * @inheritDoc
 	 */
-	public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs)
+	public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): false|PDOStatement
 	{
 		$args = func_get_args();
 
@@ -61,21 +51,13 @@ class Pdo extends \PDO
 
 		return $data;
 	}
-
+	
 	/**
 	 * Measures time while executing query, returns number of affected rows
-	 *
-	 * @throws ProfilerException if query string is empty
-	 * @throws PDOException on query failure
-	 * @see PDO::query
-	 *
-	 * @param string $query
-	 *
-	 * @return int
-	 *
-	 * @throws ProfilerException
+	 * @see https://www.php.net/manual/en/pdo.exec.php
+	 * @inheritDoc
 	 */
-	public function exec(string $query): int
+	public function exec(string $statement): int|false
 	{
 		// Execute query and measure time & memory usage
 		$measurement = new Measurement;
@@ -83,7 +65,7 @@ class Pdo extends \PDO
 		
 		try
 		{
-			$affectedRows = parent::exec($query);
+			$affectedRows = parent::exec($statement);
 		}
 		catch(PDOException $exception)
 		{
@@ -92,7 +74,7 @@ class Pdo extends \PDO
 			
 			// pass query to collector
 			Collector::getInstance()
-				->setQuery($query, [], $measurement);
+				->setQuery($statement, [], $measurement);
 
 			throw $exception;
 		}
@@ -101,7 +83,7 @@ class Pdo extends \PDO
 
 		// Pass query  to collector
 		Collector::getInstance()
-			->setQuery($query, [], $measurement);
+			->setQuery($statement, [], $measurement);
 
 		return $affectedRows;
 	}

@@ -23,9 +23,9 @@ class Connection
 	/**
 	 * Redis object
 	 *
-	 * @var null|BaseRedis
+	 * @var ?BaseRedis
 	 */
-	protected null|BaseRedis $_client = null;
+	protected ?BaseRedis $_client = null;
 
 	/**
 	 * @param ArrayObject $config
@@ -91,7 +91,7 @@ class Connection
 	}
 
 	/**
-	 * @return null|BaseRedis
+	 * @return ?BaseRedis
 	 */
 	public function getClient(): ?BaseRedis
 	{

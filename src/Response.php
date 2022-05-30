@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use function ob_get_level;
 use function header;
 use function http_response_code;
 

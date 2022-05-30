@@ -3,14 +3,14 @@ declare(strict_types=1);
 
 namespace Ovos\Translator;
 
-use PhpMyAdmin\MoTranslator\Translator; // https://github.com/phpmyadmin/motranslator/issues/30
 use Ovos\ArrayObject;
 use Ovos\Strings;
+
+use function Ovos\services;
 use function file_exists;
 use function filemtime;
 use function substr;
 use function strlen;
-use function Ovos\services;
 
 /**
  * CachedTranslator
@@ -18,13 +18,26 @@ use function Ovos\services;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class CachedAdapter extends Translator
+class CachedAdapter
 {
 	/**
-	 * @param string $filename
+	 * @var Translation
 	 */
-	public function __construct(string $filename)
+	protected Translation $_translation;
+	
+	/**
+	 * @var array
+	 */
+	protected array $_translations = [];
+	
+	/**
+	 * @param Translation $translation
+	 */
+	public function __construct(Translation $translation)
 	{
+		$this->_translation = $translation;
+	
+		$filename = $translation->getPath();
 		if(file_exists($filename) === false)
 		{
 			return;
@@ -34,29 +47,140 @@ class CachedAdapter extends Translator
 		$path = substr($filename, strlen(BASE_DIR));
 		$cacheId = Strings::slugify($path);
 
-		if($pool = services()->cache->getPool())
+		$store = services()->cache->getStore();
+		if($store && ($item = $store->get($cacheId))
+			&& $item->mtime === $mTime)
 		{
-			if($pool->hasItem($cacheId))
-			{
-				$cache = $pool->getItem($cacheId)->get();
-				if($cache->mtime === $mTime)
-				{
-					$this->setTranslations($cache->translations);
+			$this->setTranslations($item->translations);
+		}
+		
+		$parser = new MoParser($filename);
+		$this->setTranslations($parser->getTranslations());
+		
+		if($store)
+		{
+			$item = new ArrayObject;
+			$item->mtime = $mTime;
+			$item->translations = $this->getTranslations();
+			
+			$store->set($cacheId, $item);
+		}
+	}
+	
+	/**
+	 * Translates a string
+	 *
+	 * @param string $msgid String to be translated
+	 *
+	 * @return string translated string (or original, if not found)
+	 */
+	public function gettext(string $msgid): string
+	{
+		return $this->exists($msgid)
+			? $this->_translations[$msgid] : $msgid;
+	}
 
-					return;
-				}
-			}
+	/**
+	 * Check if a string is translated
+	 *
+	 * @param string $msgid String to be checked
+	 */
+	public function exists(string $msgid): bool
+	{
+		return array_key_exists($msgid, $this->_translations);
+	}
+	
+	/**
+	 * Translate with context
+	 *
+	 * @param string $msgctxt Context
+	 * @param string $msgid   String to be translated
+	 *
+	 * @return string translated plural form
+	 */
+	public function pgettext(string $msgctxt, string $msgid): string
+	{
+		$key = implode(chr(4), [$msgctxt, $msgid]);
+		$ret = $this->gettext($key);
+		if(str_contains($ret, chr(4)))
+		{
+			return $msgid;
 		}
 
-		parent::__construct($filename);
-
-		if($pool = services()->cache->getPool())
+		return $ret;
+	}
+	
+	/**
+	 * Plural version of gettext
+	 *
+	 * @param string $msgid       Single form
+	 * @param string $msgidPlural Plural form
+	 * @param int    $number      Number of objects
+	 *
+	 * @return string translated plural form
+	 */
+	public function ngettext(string $msgid, string $msgidPlural, int $number): string
+	{
+		// this should contain all strings separated by NULLs
+		$key = implode(chr(0), [$msgid, $msgidPlural]);
+		if($this->exists($key))
 		{
-			$cache = new ArrayObject;
-			$cache->mtime = $mTime;
-			$cache->translations = $this->getTranslations();
-			$item = $pool->getItem($cacheId)->set($cache);
-			$pool->save($item);
+			return $number !== 1 ? $msgidPlural : $msgid;
 		}
+
+		$result = $this->gettext($key);
+		
+		// find out the appropriate form
+		$select = $this->_translation->getTranslator()->getPlural($number);
+
+		$list = explode(chr(0), $result);
+		if(isset($list[$select]) === false)
+		{
+			return $list[0];
+		}
+
+		return $list[$select];
+	}
+
+	/**
+	 * Plural version of pgettext.
+	 *
+	 * @param string $msgctxt     Context
+	 * @param string $msgid       Single form
+	 * @param string $msgidPlural Plural form
+	 * @param int    $number      Number of objects
+	 *
+	 * @return string translated plural form
+	 */
+	public function npgettext(string $msgctxt, string $msgid, string $msgidPlural, int $number): string
+	{
+		$key = implode(chr(4), [$msgctxt, $msgid]);
+		$ret = $this->ngettext($key, $msgidPlural, $number);
+		if(str_contains($ret, chr(4)))
+		{
+			return $msgid;
+		}
+
+		return $ret;
+	}
+	
+	/**
+	 * @param array $translations
+	 *
+	 * @return $this
+	 */
+	public function setTranslations(array $translations): self
+	{
+		$this->_translations = $translations;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return array
+	 */
+	public function getTranslations(): array
+	{
+		return $this->_translations;
 	}
 }

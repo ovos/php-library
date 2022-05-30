@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace Ovos\View\Helper\Placeholders;
+
 use function ob_start;
 use function ob_get_clean;
 
@@ -108,7 +109,7 @@ class Placeholder
 	 * @param string $script
 	 * @param string $placement
 	 * 
-	 * @return $this
+	 * @return self
 	 */
 	public function includeScript(
 		string $script,

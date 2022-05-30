@@ -82,7 +82,7 @@ class Form implements Iterator
 	}
 
 	/**
-	 * @return $this
+	 * @return self
 	 */
 	public function reset(): self
 	{

@@ -3,9 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Translator;
 
-use Ovos\Cache;
+use Ovos\Locale;
 use Ovos\Translator;
-use Ovos\Translator\CachedAdapter;
 
 /**
  * Translation
@@ -16,20 +15,27 @@ use Ovos\Translator\CachedAdapter;
 class Translation
 {
 	/**
+	 * @var Translator
+	 */
+	protected Translator $_translator;
+	
+	/**
 	 * @var string
 	 */
 	protected string $_path;
 
 	/**
-	 * @var null|CachedAdapter
+	 * @var ?CachedAdapter
 	 */
-	protected null|CachedAdapter $_adapter = null;
-
+	protected ?CachedAdapter $_adapter = null;
+	
 	/**
+	 * @param Translator $translator
 	 * @param string $path
 	 */
-	public function __construct(string $path)
+	public function __construct(Translator $translator, string $path)
 	{
+		$this->setTranslator($translator);
 		$this->setPath($path);
 	}
 	
@@ -51,6 +57,26 @@ class Translation
 	public function getPath(): string
 	{
 		return $this->_path;
+	}
+	
+	/**
+	 * @param Translator $translator
+	 * 
+	 * @return self
+	 */
+	public function setTranslator(Translator $translator): self
+	{
+		$this->_translator = $translator;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return Translator
+	 */
+	public function getTranslator(): Translator
+	{
+		return $this->_translator;
 	}
 
 	/**
@@ -82,7 +108,7 @@ class Translation
 	{
 		if($this->_adapter === null)
 		{
-			$this->_adapter = new CachedAdapter($this->_path);
+			$this->_adapter = new CachedAdapter($this);
 		}
 
 		return $this->_adapter;

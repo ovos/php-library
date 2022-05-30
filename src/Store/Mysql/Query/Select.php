@@ -110,7 +110,7 @@ class Select extends Query
 	/**
 	 * @param string ...$fields
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function select(string ...$fields): self
 	{
@@ -126,7 +126,7 @@ class Select extends Query
 	 * @param string $table
 	 * @param ?string $alias
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function from(string $table, ?string $alias = null): self
 	{
@@ -142,7 +142,7 @@ class Select extends Query
 	/**
 	 * @param string $alias
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function alias(string $alias): self
 	{
@@ -154,7 +154,7 @@ class Select extends Query
 	/**
 	 * @param mixed $limit
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function limit(mixed $limit): self
 	{
@@ -166,7 +166,7 @@ class Select extends Query
 	/**
 	 * @param mixed $offset
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function offset(mixed $offset): self
 	{
@@ -178,7 +178,7 @@ class Select extends Query
 	/**
 	 * @param string ...$arguments
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function groupBy(string ...$arguments): self
 	{
@@ -193,7 +193,7 @@ class Select extends Query
 	/**
 	 * @param string ...$conditions
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function having(string ...$conditions): self
 	{
@@ -208,7 +208,7 @@ class Select extends Query
 	/**
 	 * @param string ...$arguments
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function orderBy(string ...$arguments): self
 	{
@@ -223,7 +223,7 @@ class Select extends Query
 	/**
 	 * @param string ...$joins
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function innerJoin(string ...$joins): self
 	{
@@ -240,7 +240,7 @@ class Select extends Query
 	/**
 	 * @param string ...$joins
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function leftJoin(string ...$joins): self
 	{
