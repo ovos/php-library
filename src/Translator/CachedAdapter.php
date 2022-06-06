@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Translator;
 
+use Models\User;
 use Ovos\ArrayObject;
 use Ovos\Strings;
 
@@ -167,7 +168,7 @@ class CachedAdapter
 	/**
 	 * @param array $translations
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setTranslations(array $translations): self
 	{

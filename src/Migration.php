@@ -110,7 +110,16 @@ abstract class Migration
 			return false;
 		}
 		
-		return $this->source()->exec($sql);
+		$source = $this->source();
+		
+		$source->beginTransaction();
+		$result = $source->exec($sql);
+		if($source->inTransaction()) // e.g. CREATE TABLE does not start a transaction in MySQL
+		{
+			$source->commit();
+		}
+		
+		return $result;
 	}
 
 	/**
