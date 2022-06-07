@@ -37,7 +37,7 @@ class Environment
 	/**
 	 * @param array $config
 	 */
-	public function __construct(array $config)
+	public function __construct(array $config = [])
 	{
 		$this->_config = $config;
 		if(isset($this->_config[self::ENV_KEY]))
