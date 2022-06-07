@@ -191,7 +191,7 @@ class Form implements Iterator
 	 *
 	 * @return null|string|bool|int|float|array
 	 */
-	public function getValue(string $id): null|string|bool|int|float|array
+	public function getRawValue(string $id): null|string|bool|int|float|array
 	{
 		if(isset($this->_values[$id]))
 		{
@@ -205,21 +205,35 @@ class Form implements Iterator
 
 		return null;
 	}
+	
+	/**
+	 * Raw input value
+	 * 
+	 * @param string $id
+	 *
+	 * @return null|string|bool|int|float|array
+	 */
+	public function getValue(string $id): null|string|bool|int|float|array
+	{
+		return $this->__get($id)->getValue();
+	}
 
 	/**
 	 * Raw input values
 	 * 
 	 * @return array
 	 */
-	public function getValues(): array
+	public function getRawValues(): array
 	{
 		return $this->_values;
 	}
 	
 	/**
+	 * Validated and filtered values
+	 * 
 	 * @return array
 	 */
-	public function getValuesFiltered(): array
+	public function getValues(): array
 	{
 		$values = [];
 		
@@ -229,6 +243,16 @@ class Form implements Iterator
 		}
 	
 		return $values;
+	}
+	
+	/**
+	 * @deprecated
+	 * 
+	 * @return array
+	 */
+	public function getValuesFiltered(): array
+	{
+		return $this->getValues();
 	}
 	
 	/**
