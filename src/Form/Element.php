@@ -136,7 +136,7 @@ class Element
 	{
 		if($this->_value === null)
 		{
-			$value = $this->_form->getValue($this->_id);
+			$value = $this->_form->getRawValue($this->_id);
 			if($value === null)
 			{
 				return null;
