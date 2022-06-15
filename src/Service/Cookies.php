@@ -53,7 +53,7 @@ class Cookies extends Service
 		$this->_config = $this->_app->getConfig();
 		if($this->_config->cookies === null)
 		{
-			throw new Exception('Configuration missing for cookies.');
+			throw new Exception('"cookies" config section is missing.');
 		}
 		$this->_cookiesConfig = $this->_config->cookies;
 		
