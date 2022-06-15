@@ -17,7 +17,7 @@ use Ovos\View\Helper;
 class Queries extends Helper
 {
 	/**
-	 * @return eporter
+	 * @return Reporter
 	 */
 	public function getReporter(): Reporter
 	{

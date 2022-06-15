@@ -63,13 +63,13 @@ class Session extends Service
 		$this->_config = $this->_app->getConfig();
 		if($this->_config->cookies === null)
 		{
-			throw new Exception('Configuration missing for cookies.');
+			throw new Exception('"cookies" config section is missing.');
 		}
 		$this->_cookiesConfig = $this->_config->cookies;
 		
 		if($this->_config->session === null)
 		{
-			throw new Exception('Configuration missing for session service.');
+			throw new Exception('"session" config section is missing.');
 		}
 		$this->_sessionConfig = $this->_config->session;
 		
