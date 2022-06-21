@@ -39,6 +39,11 @@ class Layout extends Plugin
 	 * @var array
 	 */
 	protected array $_placeholders = [];
+	
+	/**
+	 * @var bool
+	 */
+	protected static bool $_isRendered = false;
 
 	/**
 	 * @param string $layout
@@ -92,6 +97,12 @@ class Layout extends Plugin
 	 */
 	public function postDispatch(): void
 	{
+		if(self::$_isRendered) // do not render twice, this can happen in events controller when an exception is displayed
+		{
+			return;
+		}
+		self::$_isRendered = true;
+		
 		foreach($this->_layout::placeholders()->toArray() as $placeholder => $value)
 		{
 			$this->_layout->$placeholder = $value;
@@ -105,5 +116,11 @@ class Layout extends Plugin
 			$this->_layout->{self::CONTENT_PLACEHOLDER} = $response->get();
 			$response->set($this->_layout->__toString());
 		}
+
+	}
+	
+	public function isRendered(): bool
+	{
+		self::$_isRendered;
 	}
 }
