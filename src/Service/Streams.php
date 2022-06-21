@@ -76,7 +76,9 @@ class Streams extends Service
 	}
 	
 	/**
-	 * @return self
+	 * @param array $defaultContext
+	 *
+	 * @return $this
 	 */
 	public function setDefaultContext(array $defaultContext): self
 	{
