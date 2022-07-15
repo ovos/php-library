@@ -8,7 +8,17 @@ use Ovos\Config\Loader as ConfigLoader;
 use Ovos\Service\Memory;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
+
 use function define;
+use function sprintf;
+use function strpos;
+use function array_merge;
+use function is_array;
+use function count;
+use function implode;
+use function set_include_path;
+use function get_include_path;
+use function error_get_last;
 
 /**
  * Application
@@ -19,9 +29,9 @@ use function define;
 class Application
 {
 	/**
-	 * @var null|Application
+	 * @var ?Application
 	 */
-	public static null|Application $instance = null;
+	public static ?Application $instance = null;
 
 	/**#@+
 	 * Interface constants
@@ -45,9 +55,9 @@ class Application
 	protected string $_interface = self::INT_HTTP;
 
 	/**
-	 * @var null|ArrayObject
+	 * @var ?ArrayObject
 	 */
-	protected null|ArrayObject $_config = null;
+	protected ?ArrayObject $_config = null;
 
 	/**
 	 * @var ArrayObject[]
@@ -55,30 +65,30 @@ class Application
 	protected $_configs = [];
 
 	/**
-	 * @var null|ArrayObject
+	 * @var ?ArrayObject
 	 */
-	protected null|ArrayObject $_bootstrap = null;	
+	protected ?ArrayObject $_bootstrap = null;	
 
 	/**
 	 * Request
 	 *
-	 * @var null|Request
+	 * @var ?Request
 	 */
-	protected null|Request $_request = null;
+	protected ?Request $_request = null;
 
 	/**
 	 * Response
 	 *
-	 * @var null|Response
+	 * @var ?Response
 	 */
-	protected null|Response $_response = null;
+	protected ?Response $_response = null;
 
 	/**
 	 * Router
 	 *
-	 * @var null|Router
+	 * @var ?Router
 	 */
-	protected null|Router $_router = null;
+	protected ?Router $_router = null;
 
 	/**
 	 * Construct
@@ -305,7 +315,7 @@ class Application
 	 * Returns the config object (with optional array access)
 	 *
 	 * @param ?string $configFile
-	 * @param null|Environment $environment
+	 * @param ?Environment $environment
 	 *
 	 * @return ArrayObject
 	 */
@@ -399,7 +409,7 @@ class Application
 	}
 
 	/**
-	 * @return null|ArrayObject
+	 * @return ?ArrayObject
 	 */
 	public function getBootstrap(): ?ArrayObject
 	{
@@ -556,7 +566,7 @@ class Application
 						$errors[] = $event->__toString();
 					}
 					/** @var Response\Json $response */
-					if(isset($response->errors) && \is_array($response->errors))
+					if(isset($response->errors) && is_array($response->errors))
 					{
 						$response->errors = array_merge($response->errors, $errors);
 					}
@@ -596,7 +606,7 @@ class Application
 		{
 			$servicesClass = strpos($servicesClass, '\\') === 0
 				? $servicesClass : 'Ovos\\' . $servicesClass;		
-		
+			
 			/**
 			 * @var Services $servicesClass
 			 */
