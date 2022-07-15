@@ -71,7 +71,16 @@ class Dir extends Test
 			0 => 'file1.txt',
 		];
 		
-		return $tree === BaseDir::getTree($copy);
+		$result = $tree === BaseDir::getTree($copy);
+		
+		// DEBUG
+		if($result === false)
+		{
+			echo 'DEBUG ', __METHOD__;
+			var_dump(BaseDir::getTree($copy));
+		}
+		
+		return $result;
 	}	
 	
 	public function getFiles(): bool
