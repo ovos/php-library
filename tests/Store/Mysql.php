@@ -51,7 +51,7 @@ class Mysql extends Test
 				PRIMARY KEY (id),
 				INDEX created_at (created_at ASC),
 				INDEX modified_at (modified_at ASC),
-				INDEX active (active ASC) VISIBLE
+				INDEX active (active ASC)
 			)	
 			ENGINE = InnoDB;		
 		');
