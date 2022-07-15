@@ -33,11 +33,21 @@ class Streams extends Helper
 	}
 
 	/**
+	 * @return bool
+	 */
+	public function isRegistered(): bool
+	{
+		return services()->isRegistered(Service::SYMBOL);
+	}
+
+	/**
 	 * @return array
 	 */
 	public function getRequests(): array
 	{
-		return services()->streams->getRequests();
+		return $this->isRegistered()
+			? $this->get()->getRequests()
+			: [];
 	}
 
 	/**

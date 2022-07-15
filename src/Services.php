@@ -40,9 +40,9 @@ class Services
 	/**
 	 * @param string $symbol
 	 *
-	 * @return null|Service
+	 * @return ?Service
 	 */
-	public function get(string $symbol): null|Service
+	public function get(string $symbol): ?Service
 	{
 		if(isset(self::$_items[$symbol]))
 		{
@@ -61,9 +61,9 @@ class Services
 	/**
 	 * @param string $symbol
 	 *
-	 * @return null|Service
+	 * @return ?Service
 	 */
-	public function __get(string $symbol): null|Service
+	public function __get(string $symbol): ?Service
 	{
 		return $this->get($symbol);
 	}
@@ -80,7 +80,7 @@ class Services
 		{
 			$symbol = $service->getSymbol();
 		}
-
+		
 		self::$_items[$symbol] = $service;
 
 		return $this;
