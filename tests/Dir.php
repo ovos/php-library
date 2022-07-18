@@ -57,18 +57,18 @@ class Dir extends Test
 	{
 		$copy = $this->_dir . 'copy';
 		$tree = [
-			'dir2' => [
-				0 => 'file1.txt',
-			],
 			'dir1' => [
 				'dir1' => [
 					0 => 'file1.txt',
 				],
-				1 => 'file2.txt',
+				0 => 'file1.txt',
+				1 => 'file2.txt',				
+			],
+			'dir2' => [
 				0 => 'file1.txt',
 			],
-			1 => 'file2.txt',
 			0 => 'file1.txt',
+			1 => 'file2.txt',
 		];
 		
 		$result = $tree === BaseDir::getTree($copy);
@@ -76,7 +76,7 @@ class Dir extends Test
 		// DEBUG
 		if($result === false)
 		{
-			echo 'DEBUG ', __METHOD__;
+			echo 'DEBUG ', __METHOD__, PHP_EOL;
 			var_dump(BaseDir::getTree($copy));
 		}
 		

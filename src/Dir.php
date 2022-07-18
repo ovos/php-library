@@ -354,6 +354,7 @@ class Dir
 		$filter = self::FILTER_NONE
 	): array
 	{
+		$dirs = [];
 		$files = [];
 		
 		foreach(new FilesystemIterator($path, FilesystemIterator::SKIP_DOTS) as $file)
@@ -394,7 +395,7 @@ class Dir
 			}
 			
 			// dir
-			$files[$filename] = self::getTree(
+			$dirs[$filename] = self::getTree(
 				$file->getPathname(),
 				$skipHidden,
 				$skipCallback,
@@ -402,10 +403,14 @@ class Dir
 				$filter
 			);
 		}
-		// directories first
-		krsort($files, SORT_NATURAL);
+			
+		// the order depends on filesystem
+		// sort names of files
+		sort($files, SORT_NATURAL);
+		// sort names of directories
+		ksort($dirs, SORT_NATURAL);
 		
-		return $files;
+		return $dirs + $files;
 	}
 
 	/**
