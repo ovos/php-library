@@ -115,7 +115,8 @@ class Cookies extends Service
 		$options['secure'] = $this->_request->isSecure();
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
 		// SameSite=None works only with Secure
-		if($options['samesite'] === 'None' || $options['samesite'] === null)
+		if($options['secure'] === false
+			&& ($options['samesite'] === 'None' || $options['samesite'] === null))
 		{
 			$options['samesite'] = 'Lax';
 		}
