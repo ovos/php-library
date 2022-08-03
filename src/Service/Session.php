@@ -106,10 +106,11 @@ class Session extends Service
 			];
 			// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
 			// SameSite=None works only with Secure
-			if($options['samesite'] === 'None' || $options['samesite'] === null)
+			if($options['secure'] === false
+				&& ($options['samesite'] === 'None' || $options['samesite'] === null))
 			{
 				$options['samesite'] = 'Lax';
-			}					
+			}	
 			session_set_cookie_params($options);
 			
 			if($this->_sessionConfig->cookie_name)
