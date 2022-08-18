@@ -153,15 +153,11 @@ class Session extends Service
 	}
 
 	/**
-	 * @see https://www.php.net/session_regenerate_id
-	 * 
 	 * @param bool $deleteOldSession
-	 * 
-	 * @return bool
 	 */
-	public function regenerateId(bool $deleteOldSession = true): bool
+	public function regenerateId(bool $deleteOldSession = true): void
 	{
-		return session_regenerate_id($deleteOldSession);
+		session_regenerate_id($deleteOldSession);
 	}
 
 	/**
