@@ -11,7 +11,16 @@ use Countable;
 use Iterator;
 use ErrorException;
 use Throwable;
+
 use function Ovos\services;
+use function count;
+use function set_error_handler;
+use function set_exception_handler;
+use function error_reporting;
+use function reset;
+use function current;
+use function next;
+use function key;
 
 /**
  * Events
@@ -55,7 +64,7 @@ class Events extends Service implements Countable, Iterator
 	 */
 	public function count(): int
 	{
-		return \count($this->_events);
+		return count($this->_events);
 	}
 
 	/**
