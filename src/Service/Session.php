@@ -96,15 +96,23 @@ class Session extends Service
 			session_cache_limiter($this->_sessionConfig->cache_limiter);
 
 			$cookie = session_get_cookie_params();
-			session_set_cookie_params([
+			$options = [
 				'lifetime' => $cookie['lifetime'],
 				'path' => SYSTEM_PATH,
 				'domain' => $this->_config->domain,
 				'secure' => $this->_request->isSecure(),
 				'httponly' => true,
 				'samesite' => $this->_cookiesConfig->samesite,
-			]);
-
+			];
+			// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+			// SameSite=None works only with Secure
+			if($options['secure'] === false
+				&& ($options['samesite'] === 'None' || $options['samesite'] === null))
+			{
+				$options['samesite'] = 'Lax';
+			}	
+			session_set_cookie_params($options);
+			
 			if($this->_sessionConfig->cookie_name)
 			{
 				session_name($this->_sessionConfig->cookie_name);
@@ -145,11 +153,15 @@ class Session extends Service
 	}
 
 	/**
+	 * @see https://www.php.net/session_regenerate_id
+	 * 
 	 * @param bool $deleteOldSession
+	 * 
+	 * @return bool
 	 */
-	public function regenerateId(bool $deleteOldSession = true): void
+	public function regenerateId(bool $deleteOldSession = true): bool
 	{
-		session_regenerate_id($deleteOldSession);
+		return session_regenerate_id($deleteOldSession);
 	}
 
 	/**
