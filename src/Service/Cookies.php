@@ -112,6 +112,14 @@ class Cookies extends Service
 		$options['path'] = SYSTEM_PATH;
 		$options['domain'] = $this->_config->domain;
 		$options['samesite'] = $this->_cookiesConfig->samesite;
+		$options['secure'] = $this->_request->isSecure();
+		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+		// SameSite=None works only with Secure
+		if($options['secure'] === false
+			&& ($options['samesite'] === 'None' || $options['samesite'] === null))
+		{
+			$options['samesite'] = 'Lax';
+		}
 		
 		return setcookie($name, $value, $options);
 	}

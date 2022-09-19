@@ -5,7 +5,9 @@ namespace Ovos;
 
 use Ovos\Form\Element;
 use Ovos\View\Helper;
+use Throwable;
 
+use function Ovos\services;
 use function call_user_func_array;
 use function method_exists;
 use function ob_start;
@@ -242,9 +244,22 @@ class View
 		$this->setMultiple($variables);
 
 		ob_start();
-		include $viewScriptFile;
-
-		return ob_get_clean();
+		
+		try
+		{
+			include $viewScriptFile;
+			
+			return ob_get_clean();
+		}
+		catch(Throwable $throwable)
+		{
+			services()->events->add($throwable);
+			
+			// do not render buggy html
+			// and prevent previous output buffers to be outputted
+			ob_end_clean();
+			return '';
+		}
 	}
 	
 	/**
