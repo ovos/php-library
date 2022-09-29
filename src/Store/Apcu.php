@@ -46,7 +46,7 @@ class Apcu extends Cache
 			throw new Exception('"cache: prefix" is a required config value.');
 		}
 	
-		$instance = new self;
+		$instance = new self($config->prefix);
 		$instance->setConfig($config->perishable);
 		
 		return $instance;
