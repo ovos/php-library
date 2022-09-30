@@ -5,6 +5,7 @@ namespace Ovos;
 
 use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Config\Loader as ConfigLoader;
+use Ovos\Response\Redirect;
 use Ovos\Service\Memory;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
@@ -114,6 +115,7 @@ class Application
 			->_initShutdownHandler()
 			->_initBootstrap()
 			->_initConstants()
+			->_initProtocol()
 			->_initModules()
 			->_initServices();
 	}
@@ -455,6 +457,32 @@ class Application
 		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
 		define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
 
+		return $this;
+	}
+	
+	/**
+	 * Initializes protocol (http or https)
+	 * Redirects to correct protocol if needed
+	 *
+	 * @return self
+	 */
+	protected function _initProtocol(): self
+	{
+		if($this->isInterfaceHttp() === false)
+		{
+			return $this;
+		}
+		
+		if($_SERVER['REQUEST_SCHEME'] !== $this->getConfig()->system->protocol) // REQUEST_SCHEME available since Apache 2.4.16
+		{
+			$this->setResponse((new Redirect())
+				->withHost()
+				->withQueryString()
+			);
+			
+			exit; // response is handled in handleShutdown()
+		}
+		
 		return $this;
 	}
 
