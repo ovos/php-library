@@ -5,6 +5,7 @@ namespace Ovos;
 
 use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Config\Loader as ConfigLoader;
+use Ovos\Response\Redirect;
 use Ovos\Service\Memory;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
@@ -70,6 +71,11 @@ class Application
 	protected ?ArrayObject $_bootstrap = null;	
 
 	/**
+	 * @var ?string
+	 */
+	protected ?string $_domain = null;	
+
+	/**
 	 * Request
 	 *
 	 * @var ?Request
@@ -113,7 +119,9 @@ class Application
 			->_initEnvironment()
 			->_initShutdownHandler()
 			->_initBootstrap()
+			->_initDomain()
 			->_initConstants()
+			->_initProtocol()
 			->_initModules()
 			->_initServices();
 	}
@@ -351,7 +359,7 @@ class Application
 	}
 
 	/**
-	 * Initializes the bootstrap
+	 * Initializes the current bootstrap
 	 *
 	 * @return self
 	 */
@@ -381,7 +389,8 @@ class Application
 		// check from second bootstrap
 		while($bootstrap = $iterator->current())
 		{
-			if(strpos($_SERVER['REQUEST_URI'], $systemConfig->path . $bootstrap->path) === 0)
+			if(str_starts_with($_SERVER['REQUEST_URI'], 
+				$systemConfig->path . $bootstrap->path))
 			{
 				$this->setBoostrap($bootstrap);
 			}
@@ -394,7 +403,8 @@ class Application
 
 	/**
 	 * @param ArrayObject $bootstrap
-	 * @return Application
+	 * 
+	 * @return self
 	 */
 	public function setBoostrap(ArrayObject $bootstrap): self
 	{
@@ -415,7 +425,85 @@ class Application
 	{
 		return $this->_bootstrap;
 	}
+	
+	/**
+	 * Initializes the current domain
+	 *
+	 * @return self
+	 */
+	protected function _initDomain(): self
+	{
+		$systemConfig = $this->getConfig()->system;
+		/** @var ArrayObject $domain */
+		$domain = $systemConfig->domain; // if there is just one
+		/** @var ArrayObject $domains */
+		$domains = $systemConfig->domains; // if there are many
+		
+		if($domain !== null
+			&& $domains === null)
+		{
+			$this->setDomain($domain);
+			
+			return $this;
+		}
+		
+		if($domain !== null
+			&& $domains !== null)
+		{
+			// merge into a single array object
+			$domains = $domains->getArrayCopy();
+			array_unshift($domains, $domain);
+			$domains = new ArrayObject($domains);
+		}
+		
+		$iterator = $domains->getIterator();
+		$this->setDomain($iterator->current());
+		
+		if(count($domains) === 1)
+		{
+			return $this;
+		}
+		
+		if(!isset($_SERVER['HTTP_HOST']))
+		{
+			return $this;
+		}
+		
+		// check from second domain
+		while($current = $iterator->current())
+		{
+			if(str_contains($_SERVER['HTTP_HOST'], $current)) // in theory str_starts_with should be sufficient,
+			// but we allow the case of misconfigured domains (e.g. www.domain.com instead of domain.com)
+			{
+				$this->setDomain($current);
+			}
+			
+			$iterator->next();
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * @param string $domain
+	 * 
+	 * @return self
+	 */
+	public function setDomain(string $domain): self
+	{
+		$this->_domain = $domain;
+		
+		return $this;
+	}
 
+	/**
+	 * @return ?string
+	 */
+	public function getDomain(): ?string
+	{
+		return $this->_domain;
+	}	
+	
 	/**
 	 * Initializes constants
 	 *
@@ -425,6 +513,7 @@ class Application
 	{
 		$systemConfig = $this->getConfig()->system;
 		$bootstrap = $this->getBootstrap();
+		$domain = $this->getDomain();
 		
 		$systemPath = $systemConfig->path;
 		$routePath = $systemPath;
@@ -448,13 +537,39 @@ class Application
 			}
 		}
 		
-		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $systemConfig->domain));
-		define('SYSTEM_HOST_HTTPS', 'https://' . $systemConfig->domain);
+		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $domain));
+		define('SYSTEM_HOST_HTTPS', 'https://' . $domain);
 		define('SYSTEM_PATH', $systemPath);
 		define('ROUTE_PATH', $routePath);
 		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
 		define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
 
+		return $this;
+	}
+	
+	/**
+	 * Initializes protocol (http or https)
+	 * Redirects to correct protocol if needed
+	 *
+	 * @return self
+	 */
+	protected function _initProtocol(): self
+	{
+		if($this->isInterfaceHttp() === false)
+		{
+			return $this;
+		}
+		
+		if($_SERVER['REQUEST_SCHEME'] !== $this->getConfig()->system->protocol) // REQUEST_SCHEME available since Apache 2.4.16
+		{
+			$this->setResponse((new Redirect())
+				->withHost()
+				->withQueryString()
+			);
+			
+			exit; // response is handled in handleShutdown()
+		}
+		
 		return $this;
 	}
 
