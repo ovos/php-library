@@ -110,7 +110,7 @@ class Cookies extends Service
 	{
 		$name = $this->getName($name);
 		$options['path'] = SYSTEM_PATH;
-		$options['domain'] = $this->_config->domain;
+		$options['domain'] = $this->_app->getDomain(); // if we pass null here, then the domain will be set to the current domain
 		$options['samesite'] = $this->_cookiesConfig->samesite;
 		$options['secure'] = $this->_request->isSecure();
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
@@ -173,7 +173,7 @@ class Cookies extends Service
 		setcookie($this->getName($name), '', [
 			'expires' => -1,
 			'path' => SYSTEM_PATH,	
-			'domain' => $this->_config->domain,
+			'domain' => $this->_app->getDomain(),
 		]);
 		unset($_COOKIE[$name]);
 

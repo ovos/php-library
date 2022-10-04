@@ -99,7 +99,7 @@ class Session extends Service
 			$options = [
 				'lifetime' => $cookie['lifetime'],
 				'path' => SYSTEM_PATH,
-				'domain' => $this->_config->domain,
+				'domain' => $this->_app->getDomain(), // if we pass null here, then the domain will be set to the current domain
 				'secure' => $this->_request->isSecure(),
 				'httponly' => true,
 				'samesite' => $this->_cookiesConfig->samesite,
@@ -110,7 +110,7 @@ class Session extends Service
 				&& ($options['samesite'] === 'None' || $options['samesite'] === null))
 			{
 				$options['samesite'] = 'Lax';
-			}	
+			}
 			session_set_cookie_params($options);
 			
 			if($this->_sessionConfig->cookie_name)
