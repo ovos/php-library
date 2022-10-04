@@ -31,6 +31,11 @@ class Redirect extends Response
 	/**
 	 * @var bool
 	 */
+	protected bool $_withHost = false;
+
+	/**
+	 * @var bool
+	 */
 	protected bool $_withQueryString = false;
 
 	/**
@@ -81,6 +86,18 @@ class Redirect extends Response
 	}
 
 	/**
+	 * @param bool $withHost
+	 *
+	 * @return self
+	 */
+	public function withHost(bool $withHost = true): self
+	{
+		$this->_withHost = $withHost;
+		
+		return $this;
+	}
+
+	/**
 	 * @param bool $withQueryString
 	 *
 	 * @return self
@@ -98,6 +115,11 @@ class Redirect extends Response
 	public function __toString(): string
 	{
 		$url = $this->_url->__toString();
+		
+		if($this->_withHost)
+		{
+			$url = SYSTEM_HOST . $url;
+		}
 		
 		if($this->_withQueryString && $_SERVER['QUERY_STRING'] !== '')
 		{
