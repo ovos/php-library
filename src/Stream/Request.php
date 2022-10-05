@@ -90,14 +90,6 @@ class Request
 	}
 	
 	/**
-	 * @return mixed
-	 */
-	public function getJsonResponse(): mixed
-	{
-		return json_decode($this->_response, flags: JSON_THROW_ON_ERROR);
-	}
-
-	/**
 	 * @param string $method
 	 *
 	 * @return self
@@ -151,6 +143,14 @@ class Request
 	public function getResponse(): ?string
 	{
 		return $this->_response;
+	}
+	
+	/**
+	 * @return mixed
+	 */
+	public function getJsonResponse(): mixed
+	{
+		return json_decode($this->_response, flags: JSON_THROW_ON_ERROR);
 	}
 		
 	/**
