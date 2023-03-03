@@ -83,6 +83,7 @@ class Request
 		$stream = fopen($this->_url, 'r', false, $context);
 		$this->_responseMetaData = stream_get_meta_data($stream);
 		$this->_response = stream_get_contents($stream);
+		fclose($stream);
 		
 		$this->getMeasurement()->stop();
 		
