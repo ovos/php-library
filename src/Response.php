@@ -77,7 +77,7 @@ class Response
 	 *
 	 * @return self
 	 */
-	public function setHeader(string $name, $value, bool $replace = false): self
+	public function setHeader(string $name, mixed $value, bool $replace = false): self
 	{
 		$this->_headers[$name] = [
 			'value' => $value,
