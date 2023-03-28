@@ -83,20 +83,13 @@ class Request
 		$stream = fopen($this->_url, 'r', false, $context);
 		$this->_responseMetaData = stream_get_meta_data($stream);
 		$this->_response = stream_get_contents($stream);
+		fclose($stream);
 		
 		$this->getMeasurement()->stop();
 		
 		return $this;
 	}
 	
-	/**
-	 * @return mixed
-	 */
-	public function getJsonResponse(): mixed
-	{
-		return json_decode($this->_response, flags: JSON_THROW_ON_ERROR);
-	}
-
 	/**
 	 * @param string $method
 	 *
@@ -151,6 +144,14 @@ class Request
 	public function getResponse(): ?string
 	{
 		return $this->_response;
+	}
+	
+	/**
+	 * @return mixed
+	 */
+	public function getJsonResponse(): mixed
+	{
+		return json_decode($this->_response, flags: JSON_THROW_ON_ERROR);
 	}
 		
 	/**
