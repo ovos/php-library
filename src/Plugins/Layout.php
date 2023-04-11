@@ -102,7 +102,7 @@ class Layout extends Plugin
 			&& get_class($response) === Response\Html::class)
 		{
 			/** @var Response\Html $response */
-			$this->_layout->{self::CONTENT_PLACEHOLDER} = $response->get();
+			$this->_layout->{self::CONTENT_PLACEHOLDER}.= $response->get();
 			$response->set($this->_layout->__toString());
 		}
 	}

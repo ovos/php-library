@@ -380,7 +380,7 @@ class Url
 		}
 
 		return self::getUrlFromComponents($components,
-			$relative ?? $this->_relative);
+			$relative || $this->_relative);
 	}
 
 	/**
