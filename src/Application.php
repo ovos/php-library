@@ -542,6 +542,7 @@ class Application
 		define('SYSTEM_PATH', $systemPath);
 		define('ROUTE_PATH', $routePath);
 		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
+		define('LOGS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'logs' .  DIRECTORY_SEPARATOR);
 		define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
 
 		return $this;
