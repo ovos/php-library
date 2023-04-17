@@ -33,7 +33,7 @@ class Loader
 	 * @param string $file
 	 * @param ?string $cacheId
 	 *
-	 * @return null|Environment
+	 * @return ?Environment
 	 */
 	public function load(string $file,
 		?string $cacheId = null
