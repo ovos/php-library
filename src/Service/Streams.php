@@ -8,6 +8,7 @@ use Ovos\ArrayObject;
 use Ovos\Exception;
 use Ovos\Arrays;
 use Ovos\Stream\Request;
+use Ovos\Stream\Request\Factory;
 
 /**
  * Streams
@@ -30,7 +31,7 @@ class Streams extends Service
 	/**
 	 * @var array
 	 */
-	protected array $_defaultContext = [];	
+	protected array $_defaultContextOptions = [];	
 	
 	/**
 	 * @var Request[]
@@ -43,7 +44,7 @@ class Streams extends Service
 	public function getSymbol(): string
 	{
 		return self::SYMBOL;
-	}	
+	}
 	
 	/**
 	 */
@@ -57,9 +58,8 @@ class Streams extends Service
 			throw new Exception('"streams" config section is missing.');
 		}
 		
-		$this->_defaultContext = [
+		$this->_defaultContextOptions = [
 			'http' => [
-				'method' => Request::METHOD_GET,
 				'timeout' => $this->_config->timeout ?: 15,
 			],
 		];
@@ -71,18 +71,18 @@ class Streams extends Service
 				$this->_config->password,
 			));
 			
-			$this->_defaultContext['http']['header'] = 'Authorization: Basic ' . $auth;
+			$this->_defaultContextOptions['http']['header'] = 'Authorization: Basic ' . $auth;
 		}
 	}
 	
 	/**
-	 * @param array $defaultContext
+	 * @param array $defaultContextOptions
 	 *
 	 * @return $this
 	 */
-	public function setDefaultContext(array $defaultContext): self
+	public function setDefaultContextOptions(array $defaultContextOptions): self
 	{
-		$this->_defaultContext = $defaultContext;
+		$this->_defaultContextOptions = $defaultContextOptions;
 		
 		return $this;
 	}
@@ -90,25 +90,58 @@ class Streams extends Service
 	/**
 	 * @return array
 	 */
-	public function getDefaultContext(): array
+	public function getDefaultContextOptions(): array
 	{
-		return $this->_defaultContext;
+		return $this->_defaultContextOptions;
 	}
 	
 	/**
 	 * @param string $url
-	 * @param array $context
+	 * @param array $contextOptions
 	 *
 	 * @return mixed
+	 * 
+	 * @throws ErrorException (from fopen)
 	 */
-	public function request(string $url, array $context = []): mixed
+	public function request(string $url, array $contextOptions = []): mixed
 	{
-		$requestContext = stream_context_create(Arrays::deepMerge($this->_defaultContext, $context));
-		$request = new Request($this->_config->url . $url);
-		$object = $request->invoke($requestContext)->getJsonResponse();
+		$requestUrl = ($this->_config->base_url ?? $this->_config->url) . $url; // -> url for BC
+		$request = (new Request($requestUrl, $this->_defaultContextOptions))
+			->setContextOptions($contextOptions);
+		$object = $request->invoke()->getJsonResponse();
 		$this->_requests[] = $request;
 		
 		return $object;
+	}
+	
+	/**
+	 * Pass a request created with factory() method
+	 * 
+	 * @param Request $request
+	 *
+	 * @return mixed
+	 * 
+	 * @throws ErrorException (from fopen)
+	 */
+	public function invoke(Request $request): mixed
+	{
+		$object = $request->invoke()->getJsonResponse();
+		$this->_requests[] = $request;
+		
+		return $object;
+	}
+	
+	/**
+	 * @param string $baseUrl
+	 * @param array $defaultContextOptions
+	 *
+	 * @return Factory
+	 */
+	public function factory(string $baseUrl,
+		array $defaultContextOptions = []): Factory
+	{
+		return (new Factory($baseUrl, $this->_defaultContextOptions))
+			->setDefaultContextOptions($defaultContextOptions);
 	}
 	
 	/**
