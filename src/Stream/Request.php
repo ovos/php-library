@@ -23,18 +23,26 @@ class Request
 	/**#@-*/
 	
 	/**
+	 * Global URL, for cases when the project uses only a single API, thus Ovos\Stream\Request\Factory is not needed
+	 * 
 	 * @var string
 	 */
 	protected string $_url;
 
 	/**
+	 * Global context for all requests
+	 * 
 	 * @var array
 	 */
-	protected array $_context = [
+	protected array $_contextOptions = [
 		'http' => [
 			'method' => self::METHOD_GET,
 		]
 	];
+	/**
+	 * @var ?array
+	 */
+	protected ?array $_content = null;
 
 	/**
 	 * @var ?string
@@ -57,17 +65,17 @@ class Request
 	/**
 	 */
 	public function __construct(string $url,
-		array $context = [],
+		array $contextOptions = [],
 	)
 	{
 		$this->_url = $url;
-		$this->setContext($context);
+		$this->setContextOptions($contextOptions);
 		
 		$this->_measurement = new Measurement;
 	}
 	
 	/**
-	 * @param mixed $context
+	 * @param ?resource $context
 	 *
 	 * @return self
 	 */
@@ -77,10 +85,16 @@ class Request
 		
 		if($context === null)
 		{
-			$context = stream_context_create($this->_context);
+			$context = $this->createContext();
 		}
 		
-		$stream = fopen($this->_url, 'r', false, $context);
+		$url = $this->_url;
+		if($this->getMethod() === self::METHOD_GET
+			&& $content = $this->getContent())
+		{
+			$url.= '?' . http_build_query($content);
+		}
+		$stream = fopen($url, 'r', false, $context);
 		$this->_responseMetaData = stream_get_meta_data($stream);
 		$this->_response = stream_get_contents($stream);
 		fclose($stream);
@@ -91,13 +105,35 @@ class Request
 	}
 	
 	/**
+	 * @return ?resource
+	 */
+	public function createContext(
+	): mixed
+	{
+		$contextOptions = $this->_contextOptions;
+		
+		if($this->_content !== null && !isset($options['http']['content']))
+		{
+			$contextOptions['http']['content'] = $this->_content;
+		}
+		
+		if(isset($options['http']['content'])
+			&& $method === Request::METHOD_POST)
+		{
+			$contextOptions['http']['header'][] = 'Content-Type: application/x-www-form-urlencoded';
+		}
+		
+		return stream_context_create($contextOptions);
+	}	
+	
+	/**
 	 * @param string $method
 	 *
 	 * @return self
 	 */
 	public function setMethod(string $method): self
 	{
-		$this->_context['http']['method'] = $method;
+		$this->_contextOptions['http']['method'] = $method;
 
 		return $this;
 	}
@@ -107,8 +143,20 @@ class Request
 	 */
 	public function getMethod(): ?string
 	{
-		return $this->_context['http']['method'];
+		return $this->_contextOptions['http']['method'];
 	}
+	
+	/**
+	 * @param string $url
+	 *
+	 * @return self
+	 */
+	public function setUrl(string $url)
+	{
+		$this->_url = $url;
+		
+		return $this;
+	}	
 	
 	/**
 	 * @return string
@@ -119,13 +167,13 @@ class Request
 	}
 
 	/**
-	 * @param array $context
+	 * @param array $contextOptions
 	 *
 	 * @return self
 	 */
-	public function setContext(array $context): self
+	public function setContextOptions(array $contextOptions): self
 	{
-		$this->_context = Arrays::deepMerge($this->_context, $context);
+		$this->_contextOptions = Arrays::deepMerge($this->_contextOptions, $contextOptions);
 
 		return $this;
 	}
@@ -133,9 +181,29 @@ class Request
 	/**
 	 * @return array
 	 */
-	public function getContext(): array
+	public function getContextOptions(): array
 	{
-		return $this->_context;
+		return $this->_contextOptions;
+	}
+	
+	/**
+	 * @param ?array $content
+	 *
+	 * @return self
+	 */
+	public function setContent(?array $content): self
+	{
+		$this->_content = $content;
+
+		return $this;
+	}
+
+	/**
+	 * @return ?array
+	 */
+	public function getContent(): ?array
+	{
+		return $this->_content;
 	}
 	
 	/**
