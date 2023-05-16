@@ -593,7 +593,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 					{
 						$value = $template->{$method}($this, $value);
 					}
-				}		
+				}
 				
 				// or is it an own method
 				if(method_exists($this, $method))

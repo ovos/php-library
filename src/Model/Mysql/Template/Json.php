@@ -7,6 +7,7 @@ use Ovos\ArrayObject;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
 use Ovos\Pdo\Expression;
+use PDO;
 
 /**
  * Json
@@ -16,6 +17,22 @@ use Ovos\Pdo\Expression;
  */
 class Json extends Template
 {
+	/**#@+
+	 * Types
+	 * 
+	 * @var string
+	 */
+	public const TYPE_ARRAY = 'array';
+	public const TYPE_OBJECT = 'object';
+	/**#@-*/
+
+	/**
+	 * Type of stored object
+	 * 
+	 * @var string
+	 */
+	protected string $_type;
+	
 	/**
 	 * @var array
 	 */
@@ -24,11 +41,12 @@ class Json extends Template
 	/**
 	 * @param array $properties
 	 */
-	public function __construct(array $properties = [])
+	public function __construct(array $properties = [], $type = self::TYPE_ARRAY)
 	{
 		parent::__construct();
 	
-		$this->setProperties($properties);
+		$this->_properties = $properties;
+		$this->_type = $type;
 	}
 
 	/**
@@ -42,13 +60,33 @@ class Json extends Template
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
 	public function getProperties(): array
 	{
 		return $this->_properties;
+	}
+	
+	/**
+	 * @param string $type
+	 * 
+	 * @return self
+	 */
+	public function setType(string $type): self
+	{
+		$this->_type = $type;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return string
+	 */
+	public function getType(): string
+	{
+		return $this->_type;
 	}
 
 	/**
@@ -80,7 +118,10 @@ class Json extends Template
 			| JSON_UNESCAPED_SLASHES
 		 	| JSON_NUMERIC_CHECK
 		);
-		$string = str_replace([':', ','], [': ', ', '], $string); // compatibility with MySQL format, @see https://bugs.mysql.com/bug.php?id=98135
+		
+		// compatibility with MySQL format, @see https://bugs.mysql.com/bug.php?id=98135
+		$query = $model->source()->query('SELECT CAST(\'' . $string . '\' as JSON)', PDO::FETCH_COLUMN, 0);
+		$string = $query->fetch();
 		
 		return $string ?: null;	
 	}
@@ -99,15 +140,22 @@ class Json extends Template
 		}
 		
 		$object = json_decode($string, flags: JSON_THROW_ON_ERROR);
+		
 		if($object === null)
 		{
 			return null;
 		}
-		if(is_array($object))
+		if($this->_type === self::TYPE_ARRAY
+			&& is_array($object))
 		{
 			return $object;
 		}
 		
-		return (array)$object;	
+		if($this->_type === self::TYPE_ARRAY)
+		{
+			return (array)$object;
+		}
+		
+		return $object;
 	}
 }
