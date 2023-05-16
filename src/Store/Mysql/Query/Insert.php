@@ -14,6 +14,8 @@ use Ovos\Store\Mysql\Query;
 class Insert extends Query
 {
 	/**
+	 * Meant to be used with prepared statements, that is why string values are not enclosed in quotes
+	 * 
 	 * @return string
 	 */
 	public function getSql(): string
@@ -33,7 +35,7 @@ class Insert extends Query
 	 *
 	 * @return self
 	 */
-    public function columns(string ...$columns): self
+    public function columns(mixed ...$columns): self
 	{
 		$this->_columns = $columns;
 		
