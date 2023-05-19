@@ -91,6 +91,11 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * @var array
 	 */
 	protected array $_getters = [];
+	
+	/**
+	 * @var array
+	 */
+	protected array $_gettersCache = [];
 
 	/**
 	 * @var array
@@ -199,9 +204,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function setProperties(array $properties): self
 	{
-		foreach($properties as $name => $value)
+		foreach($properties as $property => $value)
 		{
-			$this->setProperty($name, $value);
+			$this->setProperty($property, $value);
 		}
 
 		return $this;
@@ -221,63 +226,63 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * and will not be recorded as modification.
 	 * Used for restoring model's state.
 	 * 
-	 * @param string $name
+	 * @param string $property
 	 * @param mixed $value
 	 *
 	 * @return self
 	 */
-	public function setProperty(string $name, mixed $value): self
+	public function setProperty(string $property, mixed $value): self
 	{
-		$this->_properties[$name] = $value;
+		$this->_properties[$property] = $value;
 
 		return $this;
 	}
 	
 	/**
-	 * @param string $name
+	 * @param string $property
 	 *
 	 * @return mixed
 	 */
-	public function getProperty($name): mixed
+	public function getProperty($property): mixed
 	{
-		if(array_key_exists($name, $this->_properties) === false)
+		if(array_key_exists($property, $this->_properties) === false)
 		{
 			return null;
 		}
 
-		return $this->_properties[$name];
+		return $this->_properties[$property];
 	}
 	
 	/**
 	 * Should be used to modify a single property, while skipping the setters
 	 * The change will be recorded as modification
 	 * 
-	 * @param string $name
+	 * @param string $property
 	 * @param mixed $value
 	 *
 	 * @return self
 	 */
-	public function modifyProperty(string $name, mixed $value): self
+	public function modifyProperty(string $property, mixed $value): self
 	{
 		if(
 			// property does not exist
-			array_key_exists($name, $this->_properties) === false
+			array_key_exists($property, $this->_properties) === false
 			// property exists and the value was modified 
 			|| (
-				array_key_exists($name, $this->_properties)
-				&& array_key_exists($name, $this->_modified) === false
-				&& $this->_properties[$name] !== $value)
+				array_key_exists($property, $this->_properties)
+				&& array_key_exists($property, $this->_modified) === false
+				&& $this->_properties[$property] !== $value)
 			)
 		{
-			$this->_modified[$name] = $value;
+			$this->_modified[$property] = $value;
 		}
 		
-		$this->setProperty($name, $value);
+		$this->setProperty($property, $value);
 		
 		// record the change on update object
 		if($this->_updateObject !== null)
 		{
-			$this->_updateObject->$name = $value;
+			$this->_updateObject->modifyProperty($property, $value);
 		}
 		
 		return $this;
@@ -293,66 +298,66 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function modifyProperties(array $properties): self
 	{
-		foreach($properties as $name => $value)
+		foreach($properties as $property => $value)
 		{
-			$this->modifyProperty($name, $value);
+			$this->modifyProperty($property, $value);
 		}
 
 		return $this;
 	}
 	
 	/**
-	 * @param string $name
+	 * @param string $property
 	 * @param mixed $value
 	 *
 	 * @return self
 	 */
-	public function setReference(string $name, mixed $value): self
+	public function setReference(string $property, mixed $value): self
 	{
-		$this->_references[$name] = $value;
+		$this->_references[$property] = $value;
 
 		return $this;
 	}
 
 	/**
-	 * @param string $name
+	 * @param string $property
 	 *
 	 * @return mixed
 	 */
-	public function &getReference(string $name): mixed
+	public function &getReference(string $property): mixed
 	{
-		if(array_key_exists($name, $this->_references) === false)
+		if(array_key_exists($property, $this->_references) === false)
 		{
 			return $this->null;
 		}
 
-		return $this->_references[$name];
+		return $this->_references[$property];
 	}
 	
 	/**
-	 * @param string $name
+	 * @param string $property
 	 *
 	 * @return bool
 	 */
-	public function hasReference(string $name): bool
+	public function hasReference(string $property): bool
 	{
-		return array_key_exists($name, $this->_references);
+		return array_key_exists($property, $this->_references);
 	}
 	
 	/**
-	 * @param string $name
+	 * @param string $property
 	 * @param mixed $value
 	 *
 	 * @return self
 	 */
-	public function reference(string $name, mixed $value = null): self
+	public function reference(string $property, mixed $value = null): self
 	{
 		if($value === null)
 		{
-			return $this->getReference($name);
+			return $this->getReference($property);
 		}
 		
-		return $this->setReference($name, $value);
+		return $this->setReference($property, $value);
 	}
 
 	/**
@@ -435,12 +440,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 	/**
 	 * @param string $property
-	 * @param string $method
+	 * @param callable $callback
 	 * @param bool $prepend
 	 *
 	 * @return self
 	 */
-	public function addSetter(string $property, string $method, bool $prepend = false): self
+	public function addSetter(string $property, callable $callback, bool $prepend = false): self
 	{
 		if(array_key_exists($property, $this->_setters) === false)
 		{
@@ -449,11 +454,11 @@ abstract class Mysql extends Model implements Iterator, Countable
 	
 		if($prepend)
 		{
-			array_unshift($this->_setters[$property], $method);
+			array_unshift($this->_setters[$property], $callback);
 		}
 		else
 		{
-			array_push($this->_setters[$property], $method);
+			array_push($this->_setters[$property], $callback);
 		}
 
 		return $this;
@@ -461,35 +466,41 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 	/**
 	 * @param string $property
+	 * @param callable $callback
 	 *
 	 * @return self
 	 */
-	public function removeSetter(string $property): self
+	public function removeSetter(string $property, callable $callback): self
 	{
-		if(array_key_exists($property, $this->_setters) === false) // no getters for this property
-		{
-			return $this;
-		}
-	
-		$methodIndex = array_search($this->_setters[$property], $method, true);
-		if($methodIndex === false) // method not found
+		if(array_key_exists($property, $this->_setters) === false) // no setters for this property
 		{
 			return $this;
 		}
 		
-		unset($this->_setters[$property][$methodIndex]);
-
+		is_callable($callback, true, $callableName);
+		foreach($this->_setters[$property] as $key => $setter)
+		{
+			is_callable($setter, true, $setterName);
+			
+			if($callableName === $setterName)
+			{
+				unset($this->_setters[$property][$key]);
+				
+				return $this;
+			}
+		}
+		
 		return $this;
 	}
 
 	/**
 	 * @param string $property
-	 * @param string $method
+	 * @param callable $callback
 	 * @param bool $prepend
 	 *
 	 * @return self
 	 */
-	public function addGetter(string $property, string $method, bool $prepend = false): self
+	public function addGetter(string $property, callable $callback, bool $prepend = false): self
 	{
 		if(array_key_exists($property, $this->_getters) === false)
 		{
@@ -498,11 +509,11 @@ abstract class Mysql extends Model implements Iterator, Countable
 		
 		if($prepend)
 		{
-			array_unshift($this->_getters[$property], $method);
+			array_unshift($this->_getters[$property], $callback);
 		}
 		else
 		{
-			array_push($this->_getters[$property], $method);
+			array_push($this->_getters[$property], $callback);
 		}
 
 		return $this;
@@ -510,38 +521,43 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 	/**
 	 * @param string $property
-	 * @param string $method
+	 * @param callable $callback
 	 *
 	 * @return self
 	 */
-	public function removeGetter(string $property, string $method): self
+	public function removeGetter(string $property, callable $callback): self
 	{
 		if(array_key_exists($property, $this->_getters) === false) // no getters for this property
 		{
 			return $this;
 		}
-	
-		$methodIndex = array_search($this->_getters[$property], $method, true);
-		if($methodIndex === false) // method not found
+		
+		is_callable($callback, true, $callableName);
+		foreach($this->_getters[$property] as $key => $getter)
 		{
-			return $this;
+			is_callable($getter, true, $getterName);
+			
+			if($callableName === $getterName)
+			{
+				unset($this->_getters[$property][$key]);
+				
+				return $this;
+			}
 		}
 		
-		unset($this->_getters[$property][$methodIndex]);
-
 		return $this;
 	}
 	
 	/**
 	 * @param string $property
-	 * @param string $getter
-	 * @param string $setter
+	 * @param callable $getter
+	 * @param callable $setter
 	 * @param bool $prepend
 	 *
 	 * @return self
 	 */
 	public function addManipulators(string $property,
-		string $getter, string $setter, bool $prepend = false): self
+		callable $getter, callable $setter, bool $prepend = false): self
 	{
 		$this->addGetter($property, $getter, $prepend);
 		$this->addSetter($property, $setter, $prepend);
@@ -552,13 +568,13 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * Value = property or reference
 	 * 
-	 * @param string $name
+	 * @param string $property
 	 *
 	 * @return mixed
 	 */
-	public function __get(string $name): mixed
+	public function __get(string $property): mixed
 	{
-		return $this->getValue($name);
+		return $this->getValue($property);
 	}
 
 	/**
@@ -568,78 +584,72 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 *
 	 * @return mixed
 	 */
-	public function getValue(string $name): mixed
+	public function getValue(string $property): mixed
 	{
-		if($value = $this->getReference($name))
+		if($value = $this->getReference($property))
 		{
 			return $value;
 		}
 		
-		$value = $this->getProperty($name);
+		$value = $this->getProperty($property);
 		if($value === null)
 		{
 			return null;
 		}
 			
 		// run getter
-		if(isset($this->_getters[$name]))
+		if(isset($this->_getters[$property]))
 		{
-			foreach($this->_getters[$name] as $method)
+			if(array_key_exists($property, $this->_gettersCache))
 			{
-				// check if getter method is part of a template
-				foreach($this->getTemplates() as $template)
-				{
-					if(method_exists($template, $method))
-					{
-						$value = $template->{$method}($this, $value);
-					}
-				}
-				
-				// or is it an own method
-				if(method_exists($this, $method))
-				{
-					$value = $this->{$method}($value);
-				}
+				return $this->_gettersCache[$property];
+			}
+			
+			foreach($this->_getters[$property] as $callback)
+			{
+				$value = $callback($value, $property, $this);
 			}
 		}
-
+		
+		$this->_gettersCache[$property] = $value;
+		
 		return $value;
 	}
 	
 	/**
-	 * @param string $name
+	 * @param string $property
 	 *
 	 * @return bool
 	 */
-	public function __isset(string $name): bool
+	public function __isset(string $property): bool
 	{
-		return array_key_exists($name, $this->_properties)
-			|| array_key_exists($name, $this->_references);
+		return array_key_exists($property, $this->_properties)
+			|| array_key_exists($property, $this->_references);
 	}
 
 	/**
 	 * Called also by PDO on FETCH_CLASS
 	 * 
-	 * @param string $name
+	 * @param string $property
 	 * @param mixed $value
 	 */
-	public function __set(string $name, mixed $value): void
+	public function __set(string $property, mixed $value): void
 	{
-		$this->setValue($name, $value);
+		$this->setValue($property, $value);
 	}
 
 	/**
 	 * Should be used to change value on the object
 	 * 
-	 * @param string $name
+	 * @param string $property
 	 * @param mixed $value
 	 *
 	 * @return self
 	 */
-	public function setValue(string $name, mixed $value): self
+	public function setValue(string $property, mixed $value): self
 	{
 		// modify a reference
-		if($reference = $this->getReference($name))
+		if($reference = $this->getReference($property))
 		{
 			$reference = $value;
 			
@@ -648,50 +658,39 @@ abstract class Mysql extends Model implements Iterator, Countable
 		
 		// modify a property
 		// run setters
-		if(isset($this->_setters[$name]))
+		if(isset($this->_setters[$property]))
 		{
-			foreach($this->_setters[$name] as $method)
+			unset($this->_gettersCache[$property]);
+			
+			foreach($this->_setters[$property] as $callback)
 			{
-				// check if setter method is part of a template
-				foreach($this->getTemplates() as $template)
-				{
-					if(method_exists($template, $method))
-					{
-						$value = $template->{$method}($this, $value);
-					}
-				}		
-				
-				// or is it an own method
-				if(method_exists($this, $method))
-				{
-					$value = $this->{$method}($value);
-				}
+				$value = $callback($value, $property, $this);
 			}	
 		}
 		
-		$this->modifyProperty($name, $value);
+		$this->modifyProperty($property, $value);
 		
 		return $this;
 	}
 
 	/**
-	 * @param string $name
+	 * @param string $property
 	 */
-	public function __unset(string $name): void
+	public function __unset(string $property): void
 	{
-		if(array_key_exists($name, $this->_properties))
+		if(array_key_exists($property, $this->_properties))
 		{
-			unset($this->_properties[$name]);
+			unset($this->_properties[$property]);
 			
 			// record the change on update object
 			if($this->_updateObject !== null)
 			{
-				unset($this->_updateObject->$name);
+				$this->_updateObject->__unset($property);
 			}
 		}
-		else if(array_key_exists($name, $this->_references))
+		else if(array_key_exists($property, $this->_references))
 		{
-			unset($this->_references[$name]);
+			unset($this->_references[$property]);
 		}
 	}
 	
@@ -715,20 +714,20 @@ abstract class Mysql extends Model implements Iterator, Countable
 	): self
 	{
 		$destination = new static; // late static binding
-		foreach($source as $name => $value)
+		foreach($source as $property => $value)
 		{
-			if(in_array($name, $skip, true) === true)
+			if(in_array($property, $skip, true) === true)
 			{
 				continue;
 			}
 			
 			if($restore)
 			{
-				$destination->setProperty($name, $value);
+				$destination->setProperty($property, $value);
 			}
 			else
 			{
-				$destination->$name = $value;
+				$destination->$property = $value;
 			}
 		}
 		
@@ -764,9 +763,9 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public function fromArray(array $values): void
 	{
-		foreach($values as $name => $value)
+		foreach($values as $property => $value)
 		{
-			$this->$name = $value;
+			$this->$property = $value;
 		}
 	}
 
@@ -801,14 +800,14 @@ abstract class Mysql extends Model implements Iterator, Countable
 	{
 		$export = new stdClass;
 
-		foreach($this as $name => $value)
+		foreach($this as $property => $value)
 		{
-			if(in_array($name, $skip, true) === true)
+			if(in_array($property, $skip, true) === true)
 			{
 				continue;
 			}
 			
-			$export->$name = $this->getValue($name);
+			$export->$property = $this->getValue($property);
 		}
 		
 		if($references)
@@ -1017,7 +1016,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 			}
 		}
 	}
-
+	
 	/**
 	 * @param self $updateObject
 	 *
@@ -1038,11 +1037,15 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			foreach($updateObject as $property => $value)
 			{
-				$this->__set($property, $updateObject->__get($property));
+				$this->setProperty($property, $value);
+				//$this->__set($property, $updateObject->__get($property));
 			}
 			
 			// reset modified values
 			$this->resetModified();
+			
+			// reset getters cache
+			$this->_gettersCache = [];
 		}
 		
 		return $result;
@@ -1095,6 +1098,8 @@ abstract class Mysql extends Model implements Iterator, Countable
 
 			// reset modified values
 			$this->resetModified();
+			// reset getters cache
+			$this->_gettersCache = [];
 		}
 
 		return $result;

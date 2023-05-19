@@ -4,10 +4,12 @@ declare(strict_types=1);
 namespace Ovos\Model\Mysql\Template;
 
 use Ovos\ArrayObject;
+use Ovos\Exception;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
 use Ovos\Pdo\Expression;
 use PDO;
+use stdClass;
 
 /**
  * Json
@@ -25,18 +27,18 @@ class Json extends Template
 	public const TYPE_ARRAY = 'array';
 	public const TYPE_OBJECT = 'object';
 	/**#@-*/
-
+	
+	/**
+	 * @var array
+	 */
+	protected array $_properties = [];
+	
 	/**
 	 * Type of stored object
 	 * 
 	 * @var string
 	 */
 	protected string $_type;
-	
-	/**
-	 * @var array
-	 */
-	protected array $_properties = [];
 
 	/**
 	 * @param array $properties
@@ -96,21 +98,31 @@ class Json extends Template
 	{
 		foreach($this->getProperties() as $property)
 		{
-			$model->addManipulators($property,'decode', 'encode', true);
+			$model->addManipulators($property,
+				[$this, 'decode'],
+				[$this, 'encode'],
+				true
+			);
 		}
 	}
 	
 	/**
-	 * @param Mysql $model
 	 * @param mixed $object
+	 * @param string $property
+	 * @param Mysql $model
 	 * 
 	 * @return ?string
 	 */
-	public function encode(Mysql $model, mixed $object): ?string
+	public function encode(mixed $object, string $property, Mysql $model): ?string
 	{
 		if($object === null)
 		{
 			return null;
+		}
+		
+		if(is_string($object))
+		{
+			throw new Exception('Cannot encode a string.');
 		}
 	
 		$string = json_encode($object, JSON_THROW_ON_ERROR
@@ -127,19 +139,23 @@ class Json extends Template
 	}
 	
 	/**
-	 * @param Mysql $model
 	 * @param string $string
+	 * @param string $property
+	 * @param Mysql $model
 	 * 
-	 * @return ?array
+	 * @return null|array|stdClass
 	 */
-	public function decode(Mysql $model, string $string): mixed
+	public function decode(string $string, string $property, Mysql $model): mixed
 	{
 		if($string === null)
 		{
 			return null;
 		}
 		
-		$object = json_decode($string, flags: JSON_THROW_ON_ERROR);
+		$object = json_decode($string,
+			associative: $this->_type === self::TYPE_ARRAY,
+			flags: JSON_THROW_ON_ERROR
+		);
 		
 		if($object === null)
 		{
