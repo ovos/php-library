@@ -596,7 +596,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			return null;
 		}
-			
+		
 		// run getter
 		if(isset($this->_getters[$property]))
 		{
@@ -1060,12 +1060,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			return $this->insert();
 		}
-	
+		
 		if($this->isModified() === false)
 		{
 			return false;
 		}
-		
+		//var_dump($this->getModifiedValues());
 		$updateObject = self::import($this->getModifiedValues());
 		return $this->update($updateObject);
 	}

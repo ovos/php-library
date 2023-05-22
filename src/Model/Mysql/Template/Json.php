@@ -131,6 +131,9 @@ class Json extends Template
 		 	| JSON_NUMERIC_CHECK
 		);
 		
+		// https://stackoverflow.com/questions/74481967/mysql-valid-json-causes-missing-a-comma-or-after-an-object-member
+		$string = str_replace('\\', '\\\\', $string);
+		
 		// compatibility with MySQL format, @see https://bugs.mysql.com/bug.php?id=98135
 		$query = $model->source()->query('SELECT CAST(\'' . $string . '\' as JSON)', PDO::FETCH_COLUMN, 0);
 		$string = $query->fetch();
