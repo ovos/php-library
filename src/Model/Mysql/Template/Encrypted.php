@@ -20,6 +20,11 @@ class Encrypted extends Template
 	 * @var array
 	 */
 	protected array $_properties = [];
+	
+	/**
+	 * @var array
+	 */
+	protected array $_cache = [];
 
 	/**
 	 * @param array $properties
@@ -58,7 +63,11 @@ class Encrypted extends Template
 	{
 		foreach($this->getProperties() as $property)
 		{
-			$model->addManipulators($property,'decrypt', 'encrypt', true);
+			$model->addManipulators($property,
+				[$this, 'decrypt'],
+				[$this, 'encrypt'], 
+				true
+			);
 		}
 	}
 	
@@ -68,15 +77,16 @@ class Encrypted extends Template
 	public function getEncryptionConfig(): ?ArrayObject
 	{
 		return $this->_config->database->encryption;
-	}	
+	}
 	
 	/**
-	 * @param Mysql $model
 	 * @param string $string
-	 * 
+	 * @param string $property
+	 * @param Mysql $model
+	 *
 	 * @return ?string
 	 */
-	public function encrypt(Mysql $model, string $string): ?string
+	public function encrypt(string $string, string $property, Mysql $model): ?string
 	{
 		if($string === null)
 		{
@@ -109,12 +119,13 @@ class Encrypted extends Template
 	}
 	
 	/**
-	 * @param Mysql $model
 	 * @param string $string
-	 * 
+	 * @param string $property
+	 * @param Mysql $model
+	 *
 	 * @return ?string
 	 */
-	public function decrypt(Mysql $model, string $string): ?string
+	public function decrypt(string $string, string $property, Mysql $model): ?string
 	{
 		if($string === null)
 		{
@@ -131,7 +142,7 @@ class Encrypted extends Template
 			$config->key . $model->cipher_key, 
 			OPENSSL_RAW_DATA,
 			$model->cipher_iv);
-			
-		return $string ?: null;	
+		
+		return $string ?: null;
 	}
 }
