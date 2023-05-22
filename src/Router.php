@@ -296,7 +296,7 @@ class Router
 		$cacheId = self::CACHE_ID_CONTROLLERS;
 		
 		$store = services()->cache->getPerishableStore();
-		if($item = $store->get($cacheId))
+		if($store && ($item = $store->get($cacheId)))
 		{
 			return $item;
 		}
@@ -339,7 +339,10 @@ class Router
 			}
 		}
 		
-		$store->set($cacheId, $controllers);
+		if($store)
+		{
+			$store->set($cacheId, $controllers);
+		}
 
 		return $controllers;
 	}

@@ -48,7 +48,7 @@ class CachedAdapter
 		$path = substr($filename, strlen(BASE_DIR));
 		$cacheId = Strings::slugify($path);
 
-		$store = services()->cache->getStore();
+		$store = services()->cache->getPerishableStore();
 		if($store && ($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)
 		{
