@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 namespace Tests\Store;
 
-use Ovos\Pdo\Profiler\Reporter;
-use Ovos\Store\Mysql as Store;
 use Ovos\Test;
+use Ovos\Store\Mysql as Store;
+use Ovos\Pdo\Profiler\Reporter;
 use PDO;
 
 /**
@@ -16,32 +16,14 @@ use PDO;
  */
 class Mysql extends Test
 {
-	/**
-	 * @var Store
-	 */
-	protected Store $_store;
-
-	/**
-	 * @var PDO 
-	 */
-	protected PDO $_source;
-
-	public function __construct()
-	{
-		$this->_store = new class() extends Store 
-		{
-			/**
-			 * @inheritdoc 
-			 */
-			public const TABLE = 'tests';
-		};
-		
-		$this->_source = $this->_store->getSource();
-	}
-	
 	public function reporter(): bool
 	{
-		$this->_source->exec('
+		$store = (new class() extends Store
+		{
+			public const TABLE = 'tests';
+		});	
+	
+		$store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				name VARCHAR(128) NULL,
@@ -56,7 +38,7 @@ class Mysql extends Test
 			ENGINE = InnoDB;		
 		');
 		
-		$this->_source->exec('
+		$store->source()->exec('
 			INSERT INTO tests
 			VALUES
 				(1, "Test 1", NOW(), null, 1),
@@ -64,8 +46,8 @@ class Mysql extends Test
 				(3, "Test 3", NOW(), null, 0);
 		');
 		
-		$this->_store->executeFind(whereIn: ['active' => [1]]);
-		$this->_source->exec('DROP TABLE IF EXISTS tests');
+		$store->executeFind(whereIn: ['active' => [1]]);
+		$store->source()->exec('DROP TABLE IF EXISTS tests');
 		
 		$reporter = new Reporter;
 		return count($reporter->getReport()) > 0;

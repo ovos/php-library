@@ -55,11 +55,11 @@ class QueryBuilder
 	 * Example usage:
 	 * ->columns(name: ':name', created_at: 'NOW()')
 	 * 
-	 * @param string ...$columns
+	 * @param mixed ...$columns
 	 *
 	 * @return Update
 	 */
-	public function insert(string ...$columns): Insert
+	public function insert(mixed ...$columns): Insert
 	{
 		$query = new Insert($this->_table);
 		$query->columns(...$columns);
