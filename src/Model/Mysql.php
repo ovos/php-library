@@ -710,7 +710,8 @@ abstract class Mysql extends Model implements Iterator, Countable
 	public static function import(
 		object $source,
 		array $skip = [],
-		bool $restore = false
+		bool $restore = false,
+		bool $exists = false,
 	): self
 	{
 		$destination = new static; // late static binding
@@ -731,7 +732,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 			}
 		}
 		
-		if($restore)
+		if($exists)
 		{
 			$destination->exists(true); // needed by save()
 		}
@@ -749,7 +750,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 */
 	public static function restore(object $source, array $skip = []): self
 	{
-		$destination = self::import($source, $skip, true);
+		$destination = self::import($source, $skip, true, true);
 
 		return $destination;
 	}	
