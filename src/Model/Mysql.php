@@ -12,6 +12,7 @@ use Ovos\Pdo\Expression;
 use stdClass;
 use Iterator;
 use Countable;
+use JsonSerializable;
 use PDO;
 use PDOStatement;
 use ReflectionClass;
@@ -36,7 +37,7 @@ use function key;
  * @property string $created_at
  * @property string $modified_at
  */
-abstract class Mysql extends Model implements Iterator, Countable
+abstract class Mysql extends Model implements Iterator, Countable, JsonSerializable
 {
 	/**#@+
 	 * Export constants
@@ -762,12 +763,14 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * 
 	 * @param array $values
 	 */
-	public function fromArray(array $values): void
+	public function fromArray(array $values): self
 	{
 		foreach($values as $property => $value)
 		{
 			$this->$property = $value;
 		}
+		
+		return $this;
 	}
 
 	/**
@@ -887,6 +890,14 @@ abstract class Mysql extends Model implements Iterator, Countable
 	public function __debugInfo(): array
 	{
 		return $this->export(references: true, type: self::EXPORT_TYPE_ARRAY);
+	}
+	
+	/**
+	 * @return stdClass
+	 */
+	public function jsonSerialize(): stdClass
+	{
+		return $this->export(references: true, type: self::EXPORT_TYPE_STDCLASS);
 	}
 
 	/**
