@@ -9,21 +9,26 @@ use Ovos\Pdo\Profiler\Reporter;
 use PDO;
 
 /**
- * QueryBuilder
+ * Mysql
  *
  * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Mysql extends Test
 {
-	public function reporter(): bool
+	/**
+	 * @var object
+	 */
+	protected object $_store;
+
+	public function __construct()
 	{
-		$store = (new class() extends Store
+		$this->_store = (new class() extends Store
 		{
 			public const TABLE = 'tests';
-		});	
-	
-		$store->source()->exec('
+		});
+		
+		$this->_store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				name VARCHAR(128) NULL,
@@ -37,8 +42,11 @@ class Mysql extends Test
 			)	
 			ENGINE = InnoDB;		
 		');
-		
-		$store->source()->exec('
+	}
+
+	public function reporter(): bool
+	{
+		$this->_store->source()->exec('
 			INSERT INTO tests
 			VALUES
 				(1, "Test 1", NOW(), null, 1),
@@ -46,10 +54,17 @@ class Mysql extends Test
 				(3, "Test 3", NOW(), null, 0);
 		');
 		
-		$store->executeFind(whereIn: ['active' => [1]]);
-		$store->source()->exec('DROP TABLE IF EXISTS tests');
+		$this->_store->executeFind(whereIn: ['active' => [1]]);
 		
 		$reporter = new Reporter;
 		return count($reporter->getReport()) > 0;
+	}
+	
+	/**
+	 * Called by runner after the test method was called
+	 */
+	public function cleanUp()
+	{
+		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
 	}
 }
