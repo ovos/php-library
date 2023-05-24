@@ -12,6 +12,7 @@ use Ovos\Pdo\Expression;
 use stdClass;
 use Iterator;
 use Countable;
+use JsonSerializable;
 use PDO;
 use PDOStatement;
 use ReflectionClass;
@@ -36,7 +37,7 @@ use function key;
  * @property string $created_at
  * @property string $modified_at
  */
-abstract class Mysql extends Model implements Iterator, Countable
+abstract class Mysql extends Model implements Iterator, Countable, JsonSerializable
 {
 	/**#@+
 	 * Export constants
@@ -596,7 +597,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			return null;
 		}
-			
+		
 		// run getter
 		if(isset($this->_getters[$property]))
 		{
@@ -701,17 +702,18 @@ abstract class Mysql extends Model implements Iterator, Countable
 	 * set $restore to true or use restore() instead
 	 * Warning: references are not reinstantiated, because there is no information about object's class 
 	 * 
-	 * @param object $source
+	 * @param object|iterable $source
 	 * @param array $skip fields to skip
 	 * @param bool $restore
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public static function import(
-		object $source,
+		object|iterable $source,
 		array $skip = [],
-		bool $restore = false
-	): self
+		bool $restore = false,
+		bool $exists = false,
+	): static
 	{
 		$destination = new static; // late static binding
 		foreach($source as $property => $value)
@@ -731,7 +733,7 @@ abstract class Mysql extends Model implements Iterator, Countable
 			}
 		}
 		
-		if($restore)
+		if($exists)
 		{
 			$destination->exists(true); // needed by save()
 		}
@@ -742,31 +744,37 @@ abstract class Mysql extends Model implements Iterator, Countable
 	/**
 	 * Should be used to recreate the model instance after storing it for example in session 
 	 * 
-	 * @param object $source
+	 * @param object|iterable $source
 	 * @param array $skip fields to skip
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public static function restore(object $source, array $skip = []): self
+	public static function restore(
+		object|iterable $source,
+		array $skip = []
+	): static
 	{
-		$destination = self::import($source, $skip, true);
+		$destination = self::import($source, $skip, true, true);
 
 		return $destination;
-	}	
+	}
 	
 	/**
+	 * Fills an instance with values
 	 * Should be used to set multiple values on the object
 	 * The values will be let through the setters
 	 * This method is the optimal way of setting multiple changes on the object from an array
 	 * 
 	 * @param array $values
 	 */
-	public function fromArray(array $values): void
+	public function fromArray(array $values): self
 	{
 		foreach($values as $property => $value)
 		{
 			$this->$property = $value;
 		}
+		
+		return $this;
 	}
 
 	/**
@@ -886,6 +894,14 @@ abstract class Mysql extends Model implements Iterator, Countable
 	public function __debugInfo(): array
 	{
 		return $this->export(references: true, type: self::EXPORT_TYPE_ARRAY);
+	}
+	
+	/**
+	 * @return stdClass
+	 */
+	public function jsonSerialize(): stdClass
+	{
+		return $this->export(references: true, type: self::EXPORT_TYPE_STDCLASS);
 	}
 
 	/**
@@ -1060,12 +1076,12 @@ abstract class Mysql extends Model implements Iterator, Countable
 		{
 			return $this->insert();
 		}
-	
+		
 		if($this->isModified() === false)
 		{
 			return false;
 		}
-		
+		//var_dump($this->getModifiedValues());
 		$updateObject = self::import($this->getModifiedValues());
 		return $this->update($updateObject);
 	}
