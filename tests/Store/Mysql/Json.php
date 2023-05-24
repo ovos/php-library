@@ -18,9 +18,46 @@ use stdClass;
 class Json extends Test
 {
 	/**
-	 * @var PDO 
+	 * @var object
 	 */
-	protected PDO $_source;
+	protected object $_store;
+	
+	/**
+	 * @var object
+	 */
+	protected object $_model; 
+
+	public function __construct()
+	{
+		$this->_store = (new class() extends Store
+		{
+			public const TABLE = 'tests';
+		});
+		$this->_model = new class() extends Model
+		{
+			public static $store;
+			
+			public static function getStoreClass(): string
+			{
+				return self::$store::class;
+			}
+			
+			public function setUp(): void
+			{
+				$this->addTemplate(new Template\Json(['object'], Template\Json::TYPE_OBJECT));
+			}
+		};
+		$this->_model::$store = $this->_store;
+	
+		$this->_store->source()->exec('
+			CREATE TABLE IF NOT EXISTS tests (
+				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+				object JSON NOT NULL,
+				PRIMARY KEY (id)
+			)	
+			ENGINE = InnoDB;		
+		');
+	}
 	
 	/**
 	 * https://bugs.mysql.com/bug.php?id=98135
@@ -29,48 +66,25 @@ class Json extends Test
 	 */
 	public function mysqlBug(): bool
 	{
-		$store = (new class() extends Store
-		{
-			public const TABLE = 'tests';
-		});
-		$model = new class() extends Model
-		{
-			public static $store;
-			
-			public static function getStoreClass(): string
-			{
-				return self::$store::class;
-			}
-		
-			public function setUp(): void
-			{
-				$this->addTemplate(new Template\Json(['object'], Template\Json::TYPE_OBJECT));
-			}
-		};
-		$model::$store = $store;	
-	
-		$store->source()->exec('
-			CREATE TABLE IF NOT EXISTS tests (
-				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-				object JSON NOT NULL,
-				PRIMARY KEY (id)
-			)	
-			ENGINE = InnoDB;		
-		');
-		
 		$url = 'https://test.com';
 		$object = new stdClass;
 		$object->url = $url;
 		$object->array = [1, 2, 3];
 		
-		$modelInstance = new $model;
+		$modelInstance = new $this->_model;
 		$modelInstance->object = $object;
 		$modelInstance->save();
 		$modelInstance->refresh();
 		$modelInstance->object = $object;
 		
-		$store->source()->exec('DROP TABLE IF EXISTS tests');
-		
 		return $modelInstance->isModified() === false;
+	}
+	
+	/**
+	 * Called by runner after the test method was called
+	 */
+	public function cleanUp()
+	{
+		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
 	}
 }
