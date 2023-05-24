@@ -1081,7 +1081,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			return false;
 		}
-		//var_dump($this->getModifiedValues());
+		
 		$updateObject = self::import($this->getModifiedValues());
 		return $this->update($updateObject);
 	}

@@ -3,12 +3,14 @@ declare(strict_types=1);
 
 namespace Ovos\Test;
 
+use Ovos\Exception;
 use Ovos\Measurement;
 use Ovos\Test;
 use Ovos\ArrayObject;
 use Ovos\Exception\NotFoundException;
 use ReflectionClass;
 use ReflectionMethod;
+use Throwable;
 
 /**
  * Runner
@@ -71,7 +73,28 @@ class Runner
 			throw new NotFoundException('A class has to extend a "Ovos\Test" class.');
 		}
 		
-		$this->result = (bool) $this->method->invoke($test);
+		$throwable = null;
+		try
+		{
+			$this->result = (bool) $this->method->invoke($test);
+		}
+		catch(Throwable $throwable)
+		{
+		}
+		
+		// clean up
+		if($this->class->hasMethod('cleanUp'))
+		{
+			$cleanUp = $this->class->getMethod('cleanUp');
+			$cleanUp->invoke($test);
+		}
+		
+		// throw after clean up
+		if($throwable)
+		{
+			throw $throwable;
+		}
+		
 		$this->measurement->stop();
 
 		return $this->result;
