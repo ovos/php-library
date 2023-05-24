@@ -702,18 +702,18 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * set $restore to true or use restore() instead
 	 * Warning: references are not reinstantiated, because there is no information about object's class 
 	 * 
-	 * @param object $source
+	 * @param object|iterable $source
 	 * @param array $skip fields to skip
 	 * @param bool $restore
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public static function import(
-		object $source,
+		object|iterable $source,
 		array $skip = [],
 		bool $restore = false,
 		bool $exists = false,
-	): self
+	): static
 	{
 		$destination = new static; // late static binding
 		foreach($source as $property => $value)
@@ -744,19 +744,23 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * Should be used to recreate the model instance after storing it for example in session 
 	 * 
-	 * @param object $source
+	 * @param object|iterable $source
 	 * @param array $skip fields to skip
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public static function restore(object $source, array $skip = []): self
+	public static function restore(
+		object|iterable $source,
+		array $skip = []
+	): static
 	{
 		$destination = self::import($source, $skip, true, true);
 
 		return $destination;
-	}	
+	}
 	
 	/**
+	 * Fills an instance with values
 	 * Should be used to set multiple values on the object
 	 * The values will be let through the setters
 	 * This method is the optimal way of setting multiple changes on the object from an array
