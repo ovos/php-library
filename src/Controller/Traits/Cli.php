@@ -67,7 +67,7 @@ trait Cli
 		}
 		krsort($files); // newest on top
 		
-		return $files;
+		return array_values($files);
 	}
 	
 	/**
