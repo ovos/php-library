@@ -302,7 +302,7 @@ abstract class Mysql extends Store
 	public function executeFind(
 		array $where = [],
 		string $select = '*',
-		array $options = [], // bc
+		array $options = [],
 		?string $alias = null,
 		array $orWhere = [],
 		array $whereIn = [],
@@ -316,12 +316,20 @@ abstract class Mysql extends Store
 		array $innerJoin = [],
 	): false|PDOStatement
 	{
-		if($options) // bc
+		if($options)
 		{
-			$options['orderBy'] = $options['order'] ?? 0;
-			$options['groupBy'] = $options['group'] ?? [];
+			if(isset($options['order'])) // bc
+			{
+				$options['orderBy'] = $options['order'];
+				unset($options['order']);
+			}
+			if(isset($options['group'])) // bc
+			{
+				$options['groupBy'] = $options['group'];
+				unset($options['group']);
+			}
 			
-			extract($options, EXTR_SKIP);
+			extract($options, EXTR_IF_EXISTS);
 		}
 		
 		$values = array_values($where);
@@ -380,7 +388,7 @@ abstract class Mysql extends Store
 		{
 			$query->having(...$having);
 		}
-				
+		
 		if($orderBy)
 		{
 			$query->orderBy(...$orderBy);
