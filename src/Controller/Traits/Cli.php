@@ -62,11 +62,12 @@ trait Cli
 			{
 				continue;
 			}
-
-			$files[] = $file;
+			
+			$files[$file->getMTime()] = $file;
 		}
+		krsort($files); // newest on top
 		
-		return $files;
+		return array_values($files);
 	}
 	
 	/**
