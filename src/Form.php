@@ -239,7 +239,7 @@ class Form implements Iterator
 		
 		foreach($this->_elements as $element)
 		{
-			$values[$element->getId()] = $element->getValue();
+			$values[$element->getId(withFormId: false)] = $element->getValue();
 		}
 	
 		return $values;
