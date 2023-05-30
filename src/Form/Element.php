@@ -64,12 +64,15 @@ class Element
 	}
 
 	/**
+	 * @param bool $withFormId
+	 * 
 	 * @return string
 	 */
-	public function getId(): string
+	public function getId(bool $withFormId = true): string
 	{
 		$id = $this->_id;
-		if($formId = $this->_form->getId())
+		if($withFormId
+			&& $formId = $this->_form->getId())
 		{
 			$id = $formId . '_' . $id;
 		}

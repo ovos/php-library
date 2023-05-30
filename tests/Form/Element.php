@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Tests\Form;
 
 use Ovos\Test;
+use Ovos\Form;
 use Ovos\Form\Element as BaseElement;
 
 /**
@@ -14,15 +15,22 @@ use Ovos\Form\Element as BaseElement;
  */
 class Element extends Test
 {
-	/*
-	public function firstTest()
+	public function value(): bool
 	{
-		return true;
+		$form = new Form('form');
+		$form->setId('test');
+		$form->element->setValue('value');
+		
+		return $form->getValues()['element'] === 'value';
 	}
 	
-	public function secondTest()
+	public function subformValue(): bool
 	{
-		return false;
+		$parentForm = new Form('parent');
+		$form = new Form('sub');
+		$form->setForm($parentForm);
+		$form->element->setValue('value');
+		
+		return $form->getValues()['element'] === 'value';
 	}
-	*/
 }
