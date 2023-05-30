@@ -464,7 +464,7 @@ class Application
 			return $this;
 		}
 		
-		if(!isset($_SERVER['HTTP_HOST']))
+		if(!isset($_SERVER['SERVER_NAME']))
 		{
 			return $this;
 		}
@@ -472,7 +472,7 @@ class Application
 		// check from second domain
 		while($current = $iterator->current())
 		{
-			if(str_contains($_SERVER['HTTP_HOST'], $current)) // in theory str_starts_with should be sufficient,
+			if(str_contains($_SERVER['SERVER_NAME'], $current)) // in theory str_starts_with should be sufficient,
 			// but we allow the case of misconfigured domains (e.g. www.domain.com instead of domain.com)
 			{
 				$this->setDomain($current);
@@ -537,8 +537,14 @@ class Application
 			}
 		}
 		
-		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $domain));
-		define('SYSTEM_HOST_HTTPS', 'https://' . $domain);
+		$domainWithPort = $domain;
+		if($systemConfig->port)
+		{
+			$domainWithPort.= ':' . $systemConfig->port;
+		}
+		
+		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $domainWithPort));
+		define('SYSTEM_HOST_HTTPS', 'https://' . $domainWithPort);
 		define('SYSTEM_PATH', $systemPath);
 		define('ROUTE_PATH', $routePath);
 		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
