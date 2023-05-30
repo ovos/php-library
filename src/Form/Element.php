@@ -68,6 +68,14 @@ class Element
 	 */
 	public function getId(): string
 	{
+		return $this->_id;
+	}
+
+	/**
+	 * @return string
+	 */
+	public function getFormId(): string
+	{
 		$id = $this->_id;
 		if($formId = $this->_form->getId())
 		{
