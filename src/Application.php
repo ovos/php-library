@@ -537,8 +537,14 @@ class Application
 			}
 		}
 		
-		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $domain));
-		define('SYSTEM_HOST_HTTPS', 'https://' . $domain);
+		$domainWithPort = $domain;
+		if($systemConfig->port)
+		{
+			$domainWithPort.= ':' . $systemConfig->port;
+		}
+		
+		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $domainWithPort));
+		define('SYSTEM_HOST_HTTPS', 'https://' . $domainWithPort);
 		define('SYSTEM_PATH', $systemPath);
 		define('ROUTE_PATH', $routePath);
 		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
