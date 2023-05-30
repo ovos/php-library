@@ -8,26 +8,26 @@ use Ovos\Form\Error;
 use Ovos\Form\Validator;
 
 /**
- * SameAs
+ * IfChecked
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class SameAs extends Validator
+class IfChecked extends Validator
 {
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_DIFFERENT = 'different';
+	public const ERROR_NOT_CHECKED = 'not_checked';
 	/**#@-*/
-	
+
 	/**
 	 * @var string[]
 	 */
 	protected array $_messages =
 	[
-		self::ERROR_DIFFERENT => '"%s" should be the same as "%s".',
-	];	
+		self::ERROR_NOT_CHECKED => '"{0}" has to be completed first.',
+	];
 
 	/**
 	 * @var string
@@ -77,11 +77,14 @@ class SameAs extends Validator
 	 */
 	public function isValid(mixed $value): bool
 	{
-		$valid = $this->getComparedElement()->getValue() === $value;
+		$elementComparedChecked = $this->getComparedElement()->getValue() === 1;
+		$elementChecked = $this->getElement()->getValue() === 1;
+		
+		$valid = $elementChecked === true && $elementComparedChecked === true;
 		if($valid === false)
 		{
-			$error = new Error(self::ERROR_DIFFERENT, sprintf(
-				$this->getMessage(self::ERROR_DIFFERENT), 
+			$error = new Error(self::ERROR_NOT_CHECKED, sprintf(
+				$this->getMessage(self::ERROR_NOT_CHECKED), 
 				$this->getComparedElement()->getLabel(),
 				$this->getElement()->getLabel()
 			));

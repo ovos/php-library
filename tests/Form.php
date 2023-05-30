@@ -16,17 +16,10 @@ class Form extends Test
 {
 	public function subformId(): bool
 	{
-		$form = new BaseForm('form');
-		$subform = new BaseForm('subform');
-		$subform->setForm($form);
+		$parentForm = new BaseForm('parent');
+		$form = new BaseForm('sub');
+		$form->setForm($parentForm);
 		
-		return $subform->getId() === 'form_subform';
+		return $form->getId() === 'parent_sub';
 	}
-	
-	/*
-	public function secondTest(): bool
-	{
-		return true;
-	}
-	*/
 }
