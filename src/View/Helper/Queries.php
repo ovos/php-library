@@ -55,7 +55,7 @@ class Queries extends Helper
 		}
 
 		$view = new View('helpers/queries.phtml');
-		$view->queries = Arrays::deepToArrayObject($report);
+		$view->queries = $report;
 
 		return $view->__toString();
 	}
