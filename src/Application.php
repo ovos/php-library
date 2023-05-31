@@ -887,6 +887,16 @@ function locale(): Locale
 }
 
 /**
+ * @param string $message
+ * 
+ * @return Console
+ */
+function console(...$messages): Console
+{
+	return Console::getInstance()->setMessages(...$messages);
+}
+
+/**
  * @return Services
  */
 function services(): Services
