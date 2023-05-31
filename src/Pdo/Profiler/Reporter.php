@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Pdo\Profiler;
 
+use Ovos\ArrayObject;
 use Ovos\Measurements;
 use SplQueue;
 use function count;
@@ -50,7 +51,7 @@ class Reporter
 	/**
 	 * Builds a nice and readable array report
 	 *
-	 * @return null|array
+	 * @return ?ArrayObject[]
 	 */
 	public function getReport(): ?array
 	{
@@ -62,13 +63,13 @@ class Reporter
 		$report = [];
 		foreach($this->_queries as $key => $query)
 		{
-			$report[] =
+			$report[] = new ArrayObject(
 			[
 				'sql' => $this->_parseSql($query['sql'], $query['parameters']),
 				'parameters' => $query['parameters'],
 				'time' => $query['measurement']->getTotalTime(),
 				'memory' => $query['measurement']->getTotalMemory(),
-			];
+			]);
 		}
 
 		return $report;
