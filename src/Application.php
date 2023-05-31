@@ -800,13 +800,12 @@ class Application
 				$response->queries = $report;
 			}
 		}
-
+		
 		if($this->getRequest()->isHttpDebug())
 		{
 			$response->setOptions(JSON_PRETTY_PRINT);
 		}
 		$response->send();
-
 		
 		if($profilers->enabled
 			&& $this->isInterfaceCli()
