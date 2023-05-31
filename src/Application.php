@@ -800,13 +800,12 @@ class Application
 				$response->queries = $report;
 			}
 		}
-
+		
 		if($this->getRequest()->isHttpDebug())
 		{
 			$response->setOptions(JSON_PRETTY_PRINT);
 		}
 		$response->send();
-
 		
 		if($profilers->enabled
 			&& $this->isInterfaceCli()
@@ -884,6 +883,16 @@ function request(): Request
 function locale(): Locale
 {
 	return app()->getRequest()->getLocale();
+}
+
+/**
+ * @param string $message
+ * 
+ * @return Console
+ */
+function console(...$messages): Console
+{
+	return Console::getInstance()->setMessages(...$messages);
 }
 
 /**
