@@ -39,16 +39,28 @@ class Json extends Template
 	 * @var string
 	 */
 	protected string $_type;
+		
+	/**
+	 * Class of stored object
+	 * 
+	 * @var ?string
+	 */
+	protected ?string $_class = null;
 
 	/**
 	 * @param array $properties
 	 */
-	public function __construct(array $properties = [], $type = self::TYPE_ARRAY)
+	public function __construct(
+		array $properties = [],
+		$type = self::TYPE_ARRAY,
+		$class = null
+	)
 	{
 		parent::__construct();
 	
 		$this->_properties = $properties;
 		$this->_type = $type;
+		$this->_class = $class;
 	}
 
 	/**
@@ -89,6 +101,26 @@ class Json extends Template
 	public function getType(): string
 	{
 		return $this->_type;
+	}
+	
+	/**
+	 * @param string $class
+	 * 
+	 * @return self
+	 */
+	public function setClass(string $class): self
+	{
+		$this->_class = $class;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return string
+	 */
+	public function getClass(): string
+	{
+		return $this->_class;
 	}
 
 	/**
@@ -173,6 +205,12 @@ class Json extends Template
 		if($this->_type === self::TYPE_ARRAY)
 		{
 			return (array)$object;
+		}
+		
+		// restore class of object
+		if($this->_class !== null)
+		{
+			$object = $this->_class::import($object, exists: true);
 		}
 		
 		return $object;
