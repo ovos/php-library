@@ -9,6 +9,7 @@ use Ovos\Response\Redirect;
 use Ovos\Service\Memory;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
+use Throwable;
 
 use function define;
 use function sprintf;
@@ -193,11 +194,11 @@ class Application
 	/**
 	 * Returns response
 	 * 
-	 * @param string $response
+	 * @param ?string $response
 	 *
 	 * @return Response
 	 */
-	public function getResponse(string $response = null): Response
+	public function getResponse(?string $response = null): Response
 	{
 		if($this->_response === null)
 		{
@@ -710,12 +711,26 @@ class Application
 				$output = (string)$response->send();
 					
 				$errorController = new \Controllers\System\Events;
-				$response = $errorController->dispatch('index', [$output]);
+				try
+				{
+					$response = $errorController->dispatch('index', [$output]);
+				}
+				catch(Throwable $throwable)
+				{
+					services()->events->log($throwable);
+				}
 			}
 		}
 
 		// send the response
-		$this->_sendResponse($response);
+		try
+		{
+			$this->_sendResponse($response);
+		}
+		catch(Throwable $throwable)
+		{
+			services()->events->log($throwable);
+		}
 	}
 
 	/**
@@ -745,7 +760,7 @@ class Application
 	 *
 	 * @return self
 	 */
-	protected function _sendResponse($response): self
+	protected function _sendResponse(Response $response): self
 	{
 		if($response->isSent())
 		{
