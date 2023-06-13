@@ -24,7 +24,7 @@ class Element
 	/**
 	 * @var Form
 	 */
-	protected ?Form $_form = null;
+	protected Form $_form;
 
 	/**
 	 * @var null|string|bool|int|float|array
@@ -81,15 +81,12 @@ class Element
 	}
 
 	/**
-	 * @param bool $withFormId
-	 * 
 	 * @return string
 	 */
-	public function getName(bool $withFormId = true): string
+	public function getName(): string
 	{
 		$name = $this->_id;
-		if($withFormId
-			&& $formId = $this->_form->getId())
+		if($formId = $this->_form->getId())
 		{
 			$name = $formId . '[' . $name . ']';
 		}
@@ -98,11 +95,11 @@ class Element
 	}
 
 	/**
-	 * @param ?Form $form
+	 * @param Form $form
 	 *
 	 * @return self
 	 */
-	public function setForm(?Form $form): self
+	public function setForm(Form $form): self
 	{
 		$this->_form = $form;
 
@@ -110,9 +107,9 @@ class Element
 	}
 
 	/**
-	 * @return ?Form
+	 * @return Form
 	 */
-	public function getForm(): ?Form
+	public function getForm(): Form
 	{
 		if($this->_form === null)
 		{

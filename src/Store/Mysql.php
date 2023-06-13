@@ -77,7 +77,7 @@ abstract class Mysql extends Store
 
 		return static::TABLE;
 	}
-	
+
 	/**
 	 * Only used for getSql() calls, never used to query the database
 	 * or fetch results
@@ -88,7 +88,7 @@ abstract class Mysql extends Store
 	{
 		return new QueryBuilder(static::TABLE);
 	}
-	
+
 	/**
 	 * @param Query $query
 	 *
@@ -118,7 +118,7 @@ abstract class Mysql extends Store
 	{
 		return $this->getSource()->query($query->getSql());
 	}
-	
+
 	/**
 	 * @return bool
 	 */
