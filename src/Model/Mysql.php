@@ -124,6 +124,15 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @var ?self
 	 */
 	protected ?self $_updateObject = null;
+	
+	/**
+	 * Prevent properties from being set on this object
+	 * Useful when we do not wish binary fields to be loaded into model
+	 * (e.g. binary value like POINT in MySQL)
+	 * 
+	 * @var array 
+	 */
+	protected array $_prevent = [];
 
 	/**
 	 * @param array|null $properties
@@ -649,6 +658,12 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 */
 	public function setValue(string $property, mixed $value): self
 	{
+		// prevent from setting unwanted values (e.g. binary like POINT in MySQL)
+		if(array_search($property, $this->_prevent, true) !== false)
+		{
+			return $this;
+		}
+	
 		// modify a reference
 		if($reference = $this->getReference($property))
 		{
@@ -1259,6 +1274,26 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->getSource()->errorInfo()[2]; // element [2] is null when there is no error
 	}
+	
+	/**
+	 * @param string $property
+	 * 
+	 * @return self
+	 */
+	public function prevent(string $property): self
+	{
+		$this->_prevent[$property] = true;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return array
+	 */
+	public function getPrevent(): array
+	{
+		return $this->_prevent;
+	}	
 
 	/**
 	 */
