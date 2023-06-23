@@ -659,7 +659,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function setValue(string $property, mixed $value): self
 	{
 		// prevent from setting unwanted values (e.g. binary like POINT in MySQL)
-		if(array_search($property, $this->_prevent, true) !== false)
+		if($this->isPrevented($property))
 		{
 			return $this;
 		}
@@ -1278,13 +1278,11 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * @param string $property
 	 * 
-	 * @return self
+	 * @return bool
 	 */
-	public function prevent(string $property): self
+	public function isPrevented(string $property): bool
 	{
-		$this->_prevent[$property] = true;
-		
-		return $this;
+		return array_search($property, $this->_prevent, true) !== false;
 	}
 	
 	/**
