@@ -126,13 +126,13 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	protected ?self $_updateObject = null;
 	
 	/**
-	 * Prevent properties from being set on this object
+	 * Skip properties from being set on this object
 	 * Useful when we do not wish binary fields to be loaded into model
 	 * (e.g. binary value like POINT in MySQL)
 	 * 
 	 * @var array 
 	 */
-	protected array $_prevent = [];
+	protected array $_skip = [];
 
 	/**
 	 * @param array|null $properties
@@ -658,11 +658,13 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 */
 	public function setValue(string $property, mixed $value): self
 	{
-		// prevent from setting unwanted values (e.g. binary like POINT in MySQL)
-		if($this->isPrevented($property))
+		// skip setting unwanted values (e.g. binary like POINT in MySQL)
+		/*
+		if($this->isSkipped($property))
 		{
 			return $this;
 		}
+		*/
 	
 		// modify a reference
 		if($reference = $this->getReference($property))
@@ -916,7 +918,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 */
 	public function jsonSerialize(): stdClass
 	{
-		return $this->export(references: true, type: self::EXPORT_TYPE_STDCLASS);
+		return $this->export(skip: $this->_skip, references: true, type: self::EXPORT_TYPE_STDCLASS);
 	}
 
 	/**
@@ -1280,17 +1282,18 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * 
 	 * @return bool
 	 */
-	public function isPrevented(string $property): bool
+	public function isSkipped(string $property): bool
 	{
-		return array_search($property, $this->_prevent, true) !== false;
+		return in_array($property, $this->_skip, true) === true;
+		//return array_search($property, $this->_skip, true) !== false;
 	}
 	
 	/**
 	 * @return array
 	 */
-	public function getPrevent(): array
+	public function getSkip(): array
 	{
-		return $this->_prevent;
+		return $this->_skip;
 	}	
 
 	/**
