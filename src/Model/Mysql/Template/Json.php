@@ -10,7 +10,6 @@ use Ovos\Model\Mysql\Template;
 use Ovos\Pdo\Expression;
 use PDO;
 use stdClass;
-use Closure;
 
 /**
  * Json
@@ -46,15 +45,15 @@ class Json extends Template
 	 * 
 	 * @var ?string
 	 */
-	protected null|string|Closure $_class = null;
+	protected ?string $_class = null;
 
 	/**
 	 * @param array $properties
 	 */
 	public function __construct(
 		array $properties = [],
-		string $type = self::TYPE_ARRAY,
-		null|string|Closure $class = null
+		$type = self::TYPE_ARRAY,
+		$class = null
 	)
 	{
 		parent::__construct();
@@ -105,11 +104,11 @@ class Json extends Template
 	}
 	
 	/**
-	 * @param null|string|Closure $class
+	 * @param string $class
 	 * 
 	 * @return self
 	 */
-	public function setClass(null|string|Closure $class): self
+	public function setClass(string $class): self
 	{
 		$this->_class = $class;
 		
@@ -117,9 +116,9 @@ class Json extends Template
 	}
 	
 	/**
-	 * @return null|string|Closure
+	 * @return string
 	 */
-	public function getClass(): null|string|Closure
+	public function getClass(): string
 	{
 		return $this->_class;
 	}
@@ -211,11 +210,7 @@ class Json extends Template
 		// restore class of object
 		if($this->_class !== null)
 		{
-			$class = $this->_class instanceof Closure
-				? call_user_func($this->_class)
-				: $this->_class;
-			
-			$object = $class::import($object, exists: true);
+			$object = $this->_class::import($object, exists: true);
 		}
 		
 		return $object;

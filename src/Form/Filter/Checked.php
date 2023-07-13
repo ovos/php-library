@@ -25,11 +25,6 @@ class Checked extends Filter
 			return 1;
 		}
 		
-		if(is_int($value) && $value === 1)
-		{
-			return 1;
-		}
-		
 		return 0;
 	}
 }
