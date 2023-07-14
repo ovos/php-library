@@ -9,8 +9,21 @@ use Ovos\Exception;
 use Ovos\Logger as LoggerTrait;
 use Ovos\Service;
 use Throwable;
+
 use function Ovos\app;
 use function Ovos\config;
+use function is_array;
+use function is_numeric;
+use function is_string;
+use function count;
+use function sprintf;
+use function date;
+use function implode;
+use function json_encode;
+use function preg_match;
+use function get_class;
+use function method_exists;
+use function mb_strlen;
 
 /**
  * Logger
@@ -82,7 +95,7 @@ class Logger extends Service
 	 */
 	public function log(...$event): self
 	{
-		$count = \count($event);
+		$count = count($event);
 		if($count === 0)
 		{
 			return $this;
@@ -90,7 +103,7 @@ class Logger extends Service
 		
 		$extras = [];
 		// $message, sprintf arguments
-		if(\is_string($event[0])) // support string messages
+		if(is_string($event[0])) // support string messages
 		{
 			$message = $event[0];
 			if($count > 1)
@@ -224,7 +237,7 @@ class Logger extends Service
 			$previous = false;
 			do
 			{
-				$className = \get_class($event);
+				$className = get_class($event);
 				if($previous) $className = "\nPrevious " . $className;
 				$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
 				$output.= $className . ': ' . $event->getMessage() . PHP_EOL . $event->getTraceAsString();
@@ -235,7 +248,7 @@ class Logger extends Service
 		}
 		else
 		{
-			$name = $event instanceof Error ? $event->getName() : \get_class($event);
+			$name = $event instanceof Error ? $event->getName() : get_class($event);
 			$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
 			$output.= $name . ': ' . $event->getMessage() . PHP_EOL . $event->getTraceAsString();
 		}

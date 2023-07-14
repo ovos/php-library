@@ -154,26 +154,6 @@ class Controller
 		// merge them into one array that will be passed as params, first unnamed, then named
 		return array_merge($requestParamsUnnamed, $requestParamsNamed);
 	}
-	
-	/**
-	 * @deprecated
-	 * 
-	 * @param mixed $requestParam
-	 * @param string $typeName
-	 *
-	 * @return mixed
-	 */
-	protected function _getCastedParam(
-		mixed $requestParam, string $typeName): mixed
-	{
-		if($typeName === 'int'
-			|| ($typeName === '?int' && $requestParam !== null))
-		{
-			return (int)$requestParam;
-		}
-	
-		return $requestParam;			
-	}
 
 	/**
 	 * @param array $methodParams
@@ -192,10 +172,19 @@ class Controller
 				&& ($type = $methodParam->getType()))
 			{
 				$typeName = $type->getName();
+				
+				// int
 				if($typeName === 'int'
 					|| ($typeName === '?int' && $requestParams[$valueKey] !== null))
 				{
 					$requestParams[$valueKey] = (int)$requestParams[$valueKey];
+				}
+				
+				// float
+				if($typeName === 'float'
+					|| ($typeName === '?float' && $requestParams[$valueKey] !== null))
+				{
+					$requestParams[$valueKey] = (float)$requestParams[$valueKey];
 				}
 			}
 		}

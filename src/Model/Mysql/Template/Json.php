@@ -10,6 +10,7 @@ use Ovos\Model\Mysql\Template;
 use Ovos\Pdo\Expression;
 use PDO;
 use stdClass;
+use Closure;
 
 /**
  * Json
@@ -39,16 +40,28 @@ class Json extends Template
 	 * @var string
 	 */
 	protected string $_type;
+		
+	/**
+	 * Class of stored object
+	 * 
+	 * @var ?string
+	 */
+	protected null|string|Closure $_class = null;
 
 	/**
 	 * @param array $properties
 	 */
-	public function __construct(array $properties = [], $type = self::TYPE_ARRAY)
+	public function __construct(
+		array $properties = [],
+		string $type = self::TYPE_ARRAY,
+		null|string|Closure $class = null
+	)
 	{
 		parent::__construct();
 	
 		$this->_properties = $properties;
 		$this->_type = $type;
+		$this->_class = $class;
 	}
 
 	/**
@@ -89,6 +102,26 @@ class Json extends Template
 	public function getType(): string
 	{
 		return $this->_type;
+	}
+	
+	/**
+	 * @param null|string|Closure $class
+	 * 
+	 * @return self
+	 */
+	public function setClass(null|string|Closure $class): self
+	{
+		$this->_class = $class;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return null|string|Closure
+	 */
+	public function getClass(): null|string|Closure
+	{
+		return $this->_class;
 	}
 
 	/**
@@ -173,6 +206,16 @@ class Json extends Template
 		if($this->_type === self::TYPE_ARRAY)
 		{
 			return (array)$object;
+		}
+		
+		// restore class of object
+		if($this->_class !== null)
+		{
+			$class = $this->_class instanceof Closure
+				? call_user_func($this->_class)
+				: $this->_class;
+			
+			$object = $class::import($object, exists: true);
 		}
 		
 		return $object;
