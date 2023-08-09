@@ -39,8 +39,8 @@ class Mysql extends Test
 				INDEX created_at (created_at ASC),
 				INDEX modified_at (modified_at ASC),
 				INDEX active (active ASC)
-			)	
-			ENGINE = InnoDB;		
+			)
+			ENGINE = InnoDB;
 		');
 	}
 

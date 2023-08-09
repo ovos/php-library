@@ -54,8 +54,8 @@ class Json extends Test
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				object JSON NOT NULL,
 				PRIMARY KEY (id)
-			)	
-			ENGINE = InnoDB;		
+			)
+			ENGINE = InnoDB;	
 		');
 	}
 	
