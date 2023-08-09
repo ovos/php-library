@@ -167,7 +167,7 @@ class Form implements Iterator
 		}
 		
 		$this->_values = array_merge($this->_values, $values);
-
+		
 		return $this;
 	}
 
