@@ -307,6 +307,10 @@ abstract class Mysql extends Store
 		array $orWhere = [],
 		array $whereIn = [],
 		array $whereNotIn = [],
+		array $isNull = [],
+		array $isNotNull = [],
+		array $like = [],
+		array $notLike = [],
 		mixed $limit = null,
 		mixed $offset = null,
 		array $groupBy = [],
@@ -332,7 +336,7 @@ abstract class Mysql extends Store
 			extract($options, EXTR_IF_EXISTS);
 		}
 		
-		$values = array_values($where);
+		$values = array_values($where) ;
 		
 		$query = $this->query()
 			->select($select);
@@ -353,7 +357,6 @@ abstract class Mysql extends Store
 			$orConditions[] = $property . ' = ?';
 			$values[] = $value;
 		}
-
 		if($orConditions)
 		{
 			$query->andWhere('(' . implode(' OR ', $orConditions) . ')');
@@ -363,10 +366,29 @@ abstract class Mysql extends Store
 		{
 			$query->andWhereIn($property, $whereValues);
 		}
-		
 		foreach($whereNotIn as $property => $whereValues)
 		{
 			$query->andWhereNotIn($property, $whereValues);
+		}
+		
+				foreach($like as $property => $value)
+		{
+			$query->andWhere($property . ' LIKE ?');
+			$values[] = $value;
+		}
+		foreach($notLike as $property => $value)
+		{
+			$query->andWhere($property . ' NOT LIKE ?');
+			$values[] = $value;
+		}
+		
+				foreach($isNull as $property)
+		{
+			$query->andWhere($property . ' IS NULL');
+		}
+		foreach($isNotNull as $property)
+		{
+			$query->andWhere($property . ' IS NOT NULL');
 		}
 		
 		if($limit !== null)
