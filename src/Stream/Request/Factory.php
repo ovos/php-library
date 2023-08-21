@@ -43,7 +43,7 @@ class Factory
 	 *
 	 * @return Request
 	 */
-	public function create(string $url, array $contextOptions = []): Request
+	public function create(string $url  = '', array $contextOptions = []): Request
 	{
 		$requestUrl = $this->_baseUrl . $url;
 		$requestContextOptions = Arrays::deepMerge($this->_defaultContextOptions, $contextOptions);
