@@ -169,8 +169,12 @@ class Json extends Template
 		 	| JSON_NUMERIC_CHECK
 		);
 		
+		// escape backslashes
 		// https://stackoverflow.com/questions/74481967/mysql-valid-json-causes-missing-a-comma-or-after-an-object-member
 		$string = str_replace('\\', '\\\\', $string);
+				// single APOS character causes SQL error, for example, so it needs to be escaped:
+		// SELECT CAST('{"name":"\\"Harry's Gastrotainment Harald Schindlegger\\" e.U."}' as JSON);
+		$string = str_replace('\'', '\\\'', $string);
 		
 		// compatibility with MySQL format, @see https://bugs.mysql.com/bug.php?id=98135
 		$query = $model->source()->query('SELECT CAST(\'' . $string . '\' as JSON)', PDO::FETCH_COLUMN, 0);
