@@ -5,6 +5,7 @@ namespace Ovos\View\Helper;
 
 use Ovos\View\Helper;
 use function array_unshift;
+use function array_reverse;
 use function implode;
 
 /**
@@ -122,7 +123,7 @@ class Title extends Helper
 		$items = $this->_items;
 		array_unshift($items, $this->_title ? $this->_title : $this->_defaultTitle);
 
-		return implode($this->_separator, $items);
+		return implode($this->_separator, array_reverse($items));
 	}
 
 	/**
