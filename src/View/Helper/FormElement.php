@@ -28,7 +28,7 @@ class FormElement extends Helper
 	 * @var ?string
 	 */
 	protected ?string $_type = null;
-	
+
 	/**
 	 * @var ?string
 	 */
@@ -63,11 +63,11 @@ class FormElement extends Helper
 	 * @var ?Placeholder
 	 */
 	protected ?Placeholder $_labelInsert = null;
-	
+
 	/**
 	 * @var ?Placeholder
 	 */
-	protected ?Placeholder $_fieldInsert = null;	
+	protected ?Placeholder $_fieldInsert = null;
 	
 	/**
 	 * @var ?Placeholder
@@ -78,7 +78,7 @@ class FormElement extends Helper
 	 * @var array
 	 */
 	protected array $_attributes = [];
-	
+
 	/**
 	 * @var Closure
 	 */
@@ -88,11 +88,16 @@ class FormElement extends Helper
 	 * @var array
 	 */
 	protected array $_options = [];
-	
+
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_optionLabelWrap = null;
+
+	/**
+	 * @var ?Closure
+	 */
+	protected ?Closure $_optionCallback = null;
 	
 	/**
 	 * @var ?Closure
@@ -534,6 +539,43 @@ class FormElement extends Helper
 		}
 	
 		return ($this->_optionLabelCallback)($label);
+	}
+		
+	/**
+	 * Universal callback, which allows to call any FormElement method
+	 * 
+	 * @param ?Closure $optionCallback
+	 * 
+	 * @return self
+	 */
+	public function setOptionCallback(?Closure $optionCallback): self
+	{
+		$this->_optionCallback = $optionCallback;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ?Closure
+	 */
+	public function getOptionCallback(): ?Closure
+	{
+		return $this->_optionCallback;
+	}
+	
+	/**
+	 * @param Option $option
+	 * 
+	 * @return self
+	 */
+	public function optionCallback(Option $option): self
+	{
+		if($this->_optionCallback !== null)
+		{
+			($this->_optionCallback)($this, $option);
+		}
+		
+		return $this;
 	}
 	
 	/**
