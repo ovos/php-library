@@ -14,6 +14,8 @@ use DateTime;
 class Date
 {
 	/**
+	 * Returns seconds duration string in hours:minutes:seconds
+	 * 
 	 * @param int $seconds
 	 * 
 	 * @return string
