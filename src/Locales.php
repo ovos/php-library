@@ -42,11 +42,20 @@ class Locales
 
 	/**
 	 * @param string $urlName
+	 * @param ?ArrayObject $config
 	 *
 	 * @return Locale
 	 */
-	public static function create(string $urlName): Locale
+	public static function create(
+		string $urlName,
+		?ArrayObject $config = null,
+	): Locale
 	{
+		if($config !== null)
+		{
+			return new Locale($urlName, $config);
+		}
+	
 		$configs = self::getConfig();
 		if(($config = $configs->offsetGet($urlName)) === null
 			|| $config->symbol === null)
@@ -66,14 +75,18 @@ class Locales
 
 	/**
 	 * @param string $urlName
+	 * @param ?ArrayObject $config
 	 *
 	 * @return Locale
 	 */
-	public static function get(string $urlName): Locale
+	public static function get(
+		string $urlName,
+		?ArrayObject $config = null,
+	): Locale
 	{
 		if(!isset(self::$_instances[$urlName]))
 		{
-			self::$_instances[$urlName] = self::create($urlName);
+			self::$_instances[$urlName] = self::create($urlName, $config);
 		}
 
 		return self::$_instances[$urlName];
@@ -110,7 +123,15 @@ class Locales
 				return $locale;
 			}
 		}
-
-		return self::get(Locale::DEFAULT);
+		
+		// we have to provide a config to the locale object,
+		// `symbol` is required and `default` prevents from prepending locale to URLs
+		return self::get(
+		Locale::DEFAULT_URL_NAME, 
+			ArrayObject::factory([
+				'symbol' => Locale::DEFAULT_SYMBOL,
+				'default' => true
+			]),
+		);
 	}
 }

@@ -7,6 +7,7 @@ use Ovos\ArrayObject;
 use Ovos\Service;
 use Ovos\Store\Apcu;
 use Ovos\Store\Redis;
+use Ovos\Store\Redisearch;
 use function Ovos\services;
 
 /**
@@ -75,13 +76,15 @@ class Cache extends Service
 	}
 
 	/**
-	 * @return ?Redis
+	 * @return null|Redis|Redisearch
 	 */
-	public function getPersistentStore(): ?Redis
+	public function getPersistentStore(): null|Redis|Redisearch
 	{
 		if($this->_persistentStore === null)
 		{
-			$store = new Redis($this->_config);
+			$store = $this->_config->persistent->tags
+				? new Redisearch($this->_config)
+				: new Redis($this->_config);
 			if($store->connect() === false)
 			{
 				return null;
