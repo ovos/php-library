@@ -21,6 +21,12 @@ class Apcu extends Cache
 	 */
 	protected ?string $_prefix = null;
 
+	/**#@+
+	 * Separators
+	 */
+	public const SEPARATOR_PREFIX = ':';
+	/**#@-*/
+
 	/**
 	 * @param ?string $prefix
 	 */
@@ -66,6 +72,17 @@ class Apcu extends Cache
 	
 	/**
 	 * @param string $key
+	 * @param ?string $prefix
+	 *
+	 * @return string
+	 */
+	public function prefix(string $key, ?string $prefix = null): string
+	{
+		return $prefix ?: $this->_prefix . self::SEPARATOR_PREFIX . $key;
+	}	
+	
+	/**
+	 * @param string $key
 	 * @param mixed $value
 	 * @param int $ttl
 	 *
@@ -75,7 +92,7 @@ class Apcu extends Cache
 	{
 		$value = $this->compress($this->serialize($value));
 	
-		return apcu_store($this->_prefix . $key, $value, $ttl);
+		return apcu_store($this->prefix($key), $value, $ttl);
 	}
 	
 	/**
@@ -85,7 +102,7 @@ class Apcu extends Cache
 	 */
 	public function get(string $key): mixed
 	{
-		$value = apcu_fetch($this->_prefix . $key);
+		$value = apcu_fetch($this->prefix($key));
 		if($value === false)
 		{
 			return null;
@@ -103,7 +120,7 @@ class Apcu extends Cache
 	{
 		if(is_string($key))
 		{
-			$key = $this->_prefix . $key;
+			$key = $this->prefix($key);
 		}
 	
 		return apcu_delete($key);

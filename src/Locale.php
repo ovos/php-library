@@ -23,11 +23,13 @@ class Locale
 	 */
 	protected ?ArrayObject $_config = null;
 	
-	/**
-	 * Default system locale (url name)
+	/**#@+
+	 * Default values of the default system locale
 	 */
-	public const DEFAULT = 'en';
-
+	public const DEFAULT_URL_NAME = 'en';
+	public const DEFAULT_SYMBOL = 'en_US';
+	/**#@-*/
+	
 	/**
 	 * @var string
 	 */
