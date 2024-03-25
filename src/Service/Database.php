@@ -6,7 +6,9 @@ namespace Ovos\Service;
 use Ovos\ArrayObject;
 use Ovos\Pdo\Profiler\Collector;
 use Ovos\Service;
-use Ovos\Pdo\Profiler\Pdo;
+use Ovos\Pdo\Profiler\Pdo as OvosPdo;
+use PDO;
+
 use function Ovos\services;
 
 /**
@@ -41,7 +43,7 @@ class Database extends Service
 	protected ArrayObject $_config;
 
 	/**
-	 * @var PDO[]
+	 * @var OvosPdo[]
 	 */
 	protected array $_clients;
 
@@ -50,19 +52,19 @@ class Database extends Service
 	 *
 	 * @param string $name
 	 *
-	 * @return PDO
+	 * @return OvosPdo
 	 */
-	public function get(string $name = self::DEFAULT): PDO
+	public function get(string $name = self::DEFAULT): OvosPdo
 	{
 		if(!isset($this->_clients[$name]))
 		{
 			$database = &$this->_clients[$name];
 			$config = $this->_app->getConfig()->offsetGet($name);
 			$dsn = sprintf('%s:dbname=%s;host=%s;charset=utf8', $config->type, $config->name, $config->host);
-			$database = new PDO($dsn, $config->username, $config->password, [
+			$database = new OvosPdo($dsn, $config->username, $config->password, [
 				PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_OBJ,
 				PDO::ATTR_EMULATE_PREPARES => false,
-				PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+				PDO::ATTR_ERRMODE => Pdo::ERRMODE_EXCEPTION,
 			]);
 
 			/** @var ArrayObject $configProfilers */

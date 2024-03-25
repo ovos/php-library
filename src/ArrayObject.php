@@ -20,26 +20,26 @@ class ArrayObject extends BaseArrayObject
 	 * @param int $flags
 	 * @param string $iteratorClass
 	 */
-	public function __construct($array = [],
-		$flags = self::ARRAY_AS_PROPS,
-		$iteratorClass = 'ArrayIterator')
+	public function __construct(array $array = [],
+		int $flags = self::ARRAY_AS_PROPS,
+		string $iteratorClass = 'ArrayIterator')
 	{
 		parent::__construct($array, $flags, $iteratorClass);
 	}
 
 	/**
-	 * @param string $offset
+	 * @param mixed $key
 	 * 
 	 * @return mixed
 	 */
-	public function offsetGet($offset): mixed
+	public function offsetGet(mixed $key): mixed
 	{
-		if($this->offsetExists($offset) === false)
+		if($this->offsetExists($key) === false)
 		{
 			return null;
 		}
 		
-		return parent::offsetGet($offset);
+		return parent::offsetGet($key);
 	}
 
 	/**

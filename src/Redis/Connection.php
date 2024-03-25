@@ -30,7 +30,7 @@ class Connection
 	/**
 	 * @param ArrayObject $config
 	 */
-	public function __construct($config)
+	public function __construct(ArrayObject $config)
 	{
 		$this->setConfig($config);
 	}
