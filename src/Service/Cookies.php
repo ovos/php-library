@@ -6,7 +6,8 @@ namespace Ovos\Service;
 use Ovos\ArrayObject;
 use Ovos\Exception;
 use Ovos\Service;
-use function count;
+
+use function strlen;
 
 /**
  * Cookies
@@ -73,10 +74,10 @@ class Cookies extends Service
 
 		foreach($_COOKIE as $name => $value)
 		{
-			if(0 === strpos($name, $this->_prefix))
+			if(str_starts_with($name, $this->_prefix))
 			{
 				unset($_COOKIE[$name]);
-				$name = substr($name, \strlen($this->_prefix));
+				$name = substr($name, strlen($this->_prefix));
 				$_COOKIE[$name] = $value;
 			}
 		}

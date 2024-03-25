@@ -70,7 +70,7 @@ class Events extends Service implements Countable, Iterator
 	/**
 	 * Sets up error handlers
 	 */
-	protected function initErrorHandlers()
+	protected function initErrorHandlers(): void
 	{
 		set_error_handler(array($this, 'handleError'), E_ALL | E_STRICT);
 		set_exception_handler(array($this, 'handleException'));
@@ -151,7 +151,7 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @return self
 	 */
-	public function add($event): self
+	public function add(mixed $event): self
 	{
 		// save the event to display it later
 		$this->_events[] = $event;
@@ -192,9 +192,9 @@ class Events extends Service implements Countable, Iterator
 	}
 
 	/**
-	 * @return int|mixed|null|string
+	 * @return int|string|null
 	 */
-	public function key(): mixed
+	public function key(): int|string|null
 	{
 		return key($this->_events);
 	}
@@ -206,6 +206,6 @@ class Events extends Service implements Countable, Iterator
 	{
 		$key = $this->key();
 
-		return ($key !== null && $key !== false);
+		return $key !== null;
 	}
 }

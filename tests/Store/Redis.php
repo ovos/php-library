@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Cache;
+namespace Tests\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Store\Redis as RedisStore;
@@ -54,7 +54,7 @@ class Redis extends Test
 		
 		$this->_store->set('array', $array);
 		$array = $this->_store->get('array');
-			
+		
 		return $array['stored'] === true;
 	}
 	
@@ -69,7 +69,7 @@ class Redis extends Test
 		$this->_store->set('array', $array);
 		$this->_store->clear();
 		$result = $this->_store->get('array');
-			
+		
 		return $result === null;
 	}
 }

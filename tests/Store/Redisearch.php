@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Cache;
+namespace Tests\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Store\Redisearch as RedisStore;
@@ -47,7 +47,7 @@ class Redisearch extends Test
 	public function storeArray(): bool
 	{
 		$this->_connect();
-		$this->_store->rebuild();
+		$this->_store->indexRebuild();
 		
 		$array = [
 			'stored' => true
@@ -55,27 +55,27 @@ class Redisearch extends Test
 		
 		$this->_store->set('array', $array);
 		$array = $this->_store->get('array');
-			
+		
 		return $array['stored'] === true;
 	}
 	
 	public function invalidateTags(): bool
 	{
 		$this->_connect();
-		$this->_store->rebuild();
+		$this->_store->indexRebuild();
 		
 		$this->_store->set('array', 'test', tags: ['tag1', 'tag2']);
 		$this->_store->invalidateTags(['tag1']);
 		
 		$result = $this->_store->get('array');
-			
+		
 		return $result === null;
 	}
 	
 	public function clear(): bool
 	{
 		$this->_connect();
-		$this->_store->rebuild();
+		$this->_store->indexRebuild();
 		
 		$array = [
 			'stored' => true
@@ -84,7 +84,7 @@ class Redisearch extends Test
 		$this->_store->set('array', $array);
 		$this->_store->clear();
 		$result = $this->_store->get('array');
-			
+		
 		return $result === null;
 	}
 }
