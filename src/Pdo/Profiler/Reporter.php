@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Pdo\Profiler;
 
 use Ovos\ArrayObject;
-use Ovos\Measurements;
 use SplQueue;
+
 use function count;
 use function array_walk;
 use function is_numeric;

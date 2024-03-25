@@ -9,7 +9,6 @@ use RecursiveIteratorIterator;
 use SplFileInfo;
 
 use function count;
-use function krsort;
 use function substr;
 use function file_exists;
 use function umask;

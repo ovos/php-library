@@ -64,7 +64,7 @@ class Application
 	/**
 	 * @var ArrayObject[]
 	 */
-	protected $_configs = [];
+	protected array $_configs = [];
 
 	/**
 	 * @var ?ArrayObject
@@ -100,10 +100,10 @@ class Application
 	/**
 	 * Construct
 	 *
-	 * @param string $interface (optional)
+	 * @param ?string $interface (optional)
 	 * @see self::INT_*
 	 */
-	public function __construct(string $interface = null)
+	public function __construct(?string $interface = null)
 	{
 		if($interface !== null)
 		{
@@ -287,7 +287,7 @@ class Application
 	 *
 	 * @return self
 	 */
-	public function setInterface($interface): self
+	public function setInterface(string $interface): self
 	{
 		$this->_interface = $interface;
 
@@ -673,9 +673,10 @@ class Application
 
 		// get the response to be sent
 		$response = $this->getResponse();
-
+		
+		$hasEvents = services()->events->count() > 0;
 		// handle erroneous response
-		if(services()->events->count())
+		if($hasEvents)
 		{
 			/// JSON
 			if($this->getResponse() instanceof Response\Json)
@@ -731,6 +732,11 @@ class Application
 		{
 			services()->events->log($throwable);
 		}
+		
+		if($hasEvents)
+		{
+			exit(1); // exit with error status for github actions
+		}
 	}
 
 	/**
@@ -741,7 +747,7 @@ class Application
 		$servicesClass = $this->getConfig()->system->services->container;
 		if($servicesClass !== null)
 		{
-			$servicesClass = strpos($servicesClass, '\\') === 0
+			$servicesClass = str_starts_with($servicesClass, '\\')
 				? $servicesClass : 'Ovos\\' . $servicesClass;		
 			
 			/**
@@ -800,7 +806,7 @@ class Application
 	 *
 	 * @return self
 	 */
-	protected function _sendJsonResponse($response): self
+	protected function _sendJsonResponse(Response\Json $response): self
 	{
 		$profilers = $this->getConfig()->system->profilers;
 		
@@ -843,7 +849,7 @@ class Application
 	 *
 	 * @return self
 	 */
-	protected function _sendProfiledResponse($response): self
+	protected function _sendProfiledResponse(Response $response): self
 	{
 		$response->send();
 
@@ -901,8 +907,8 @@ function locale(): Locale
 }
 
 /**
- * @param string $message
- * 
+ * @param ...$messages
+ *
  * @return Console
  */
 function console(...$messages): Console

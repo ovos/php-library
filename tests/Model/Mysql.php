@@ -37,7 +37,7 @@ class Mysql extends Test
 		});
 		$this->_model = new class() extends Model
 		{
-			public static $store;
+			public static object $store;
 			
 			public static function getStoreClass(): string
 			{

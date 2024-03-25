@@ -17,12 +17,6 @@ use Redis as BaseRedis;
 class Redis extends Cache
 {
 	/**
-	 * Compress prefix
-	 */
-	public const COMPRESS_PREFIX = ":\x1f\x8b";
-	public const SERIALIZE_PREFIX = "\x01\xe4";
-
-	/**
 	 * Redis connection
 	 *
 	 * @var ?Connection
@@ -33,6 +27,23 @@ class Redis extends Cache
 	 * @var ?string 
 	 */
 	protected ?string $_prefix = null;
+	
+	/**
+	 * @var string
+	 */
+	protected string $_hash = 'cache';
+	
+	/**#@+
+	 * Separators
+	 */
+	public const SEPARATOR_PREFIX = ':';
+	/**#@-*/
+	
+	/**#@+
+	 * Keys
+	 */
+	public const KEY_DATA = 'data';
+	/**#@-*/	
 	
 	/**
 	 * @param ArrayObject $config
@@ -63,6 +74,17 @@ class Redis extends Cache
 	}
 	
 	/**
+	 * @param string $key
+	 * @param ?string $prefix
+	 *
+	 * @return string
+	 */
+	public function prefix(string $key, ?string $prefix = null): string
+	{
+		return ($prefix ?: $this->_prefix) . self::SEPARATOR_PREFIX . $key;
+	}	
+	
+	/**
 	 * @return bool
 	 */
 	public function connect(): bool
@@ -80,6 +102,14 @@ class Redis extends Cache
 	}
 	
 	/**
+	 * @return string
+	 */
+	public function getHashName(): string
+	{
+		return $this->prefix($this->_hash);
+	}
+	
+	/**
 	 * @param string $key
 	 *
 	 * @return null|mixed
@@ -90,16 +120,34 @@ class Redis extends Cache
 		{
 			return null;			
 		}
-	
-		$key = $this->_prefix . $key;
-	
-		$value = $client->get($key);
+		
+		$value = $client->hGet(
+			$this->prefix($key, $this->getHashName()),
+			self::KEY_DATA,
+		);
 		if($value === false)
 		{
 			return null;
 		}
 	
 		return $this->unserialize($this->decompress($value));
+	}
+	
+	/**
+	 * @param string $key
+	 *
+	 * @return null|bool
+	 */
+	public function delete(string $key): null|bool
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return null;			
+		}
+		
+		return $client->unlink(
+			$this->prefix($key, $this->getHashName()),
+		) > 0;
 	}
 	
 	/**
@@ -115,12 +163,13 @@ class Redis extends Cache
 		{
 			return false;			
 		}
-	
-		$key = $this->_prefix . $key;	
-	
+		
 		$value = $this->compress($this->serialize($value));
 		
-		$result = $client->set($key, $value);
+		$result = $client->hSet(
+			$this->prefix($key, $this->getHashName()), 
+			self::KEY_DATA, $value,
+		);
 		
 		// set expire if needed
 		if($ttl > 0)
@@ -128,19 +177,45 @@ class Redis extends Cache
 			$client->expire($key, $ttl);
 		}
 	
-		return $result;
+		return $result !== false;
 	}
 	
 	/**
-	 * @return bool
+	 * @return bool|int
 	 */
-	public function clear(): bool
+	public function clear(): bool|int
 	{
 		if(($client = $this->getClient()) === null)
 		{
 			return false;			
 		}
+		
+		// clear all keys with our prefix
+		$iterator = null;
+		$count = 0;
+		do
+		{
+			$keys = $client->scan($iterator,
+				$this->prefix('*', $this->getHashName())
+			);
 	
-		return $client->flushDb();
+			// Redis may return empty results, so protect against that
+			if($keys === false)
+			{
+				continue;
+			}
+			
+			foreach($keys as $key)
+			{
+				$keysUnlinked = $client->unlink($key);
+				if($keysUnlinked !== false)
+				{
+					$count+= $keysUnlinked;
+				}
+			}
+		}
+		while($iterator > 0);
+		
+		return $count;
 	}
 }
