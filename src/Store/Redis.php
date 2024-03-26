@@ -44,6 +44,14 @@ class Redis extends Cache
 	 */
 	public const KEY_DATA = 'data';
 	/**#@-*/	
+		
+	/**#@+
+	 * Statuses
+	 * Used for rawCommand, which returns strings instead of boolean values when OPT_REPLY_LITERAL is enabled
+	 * @see https://github.com/phpredis/phpredis/issues/1550
+	 */
+	public const STATUS_OK = 'OK';
+	/**#@-*/	
 	
 	/**
 	 * @param ArrayObject $config
@@ -118,7 +126,7 @@ class Redis extends Cache
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return null;			
+			return null;	
 		}
 		
 		$value = $client->hGet(
@@ -142,7 +150,7 @@ class Redis extends Cache
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return null;			
+			return null;	
 		}
 		
 		return $client->unlink(
@@ -161,7 +169,7 @@ class Redis extends Cache
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return false;	
 		}
 		
 		$value = $this->compress($this->serialize($value));
@@ -187,7 +195,7 @@ class Redis extends Cache
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return false;	
 		}
 		
 		// clear all keys with our prefix
