@@ -60,29 +60,37 @@ class Connection
 	 */
 	public function connect(): bool
 	{
+		$port = (int)($this->_config->port ?? 6379);
 		$timeout = (int)($this->_config->timeout ?? 1); // in seconds
 		$readTimeout = (int)($this->_config->read_timeout ?? $timeout);
-		$port = (int)($this->_config->port ?? 6379);
+		
 
+		$this->_client = new BaseRedis; // supports options since phpredis 6 (TODO in future)
 		$connectionOptions = [
 			BaseRedis::OPT_READ_TIMEOUT => $readTimeout,
 			BaseRedis::OPT_SERIALIZER => BaseRedis::SERIALIZER_NONE,
+			BaseRedis::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
 		];
-
-		$this->_client = new BaseRedis;
+		
 		// connect
 		// suspend connection errors with @ since it triggers a warning when it cannot connect...
 		$connectionStatus = @$this->_client->connect
 		(
 			$this->_config->host,
-			$this->_config->port,
-			$this->_config->timeout
+			$port,
+			$timeout,
 		);
 
 		if($connectionStatus === false)
 		{
 			$this->_client = null;
 			services()->events->log('Could not connect to redis server "%s"', $this->_config->host);
+		}
+
+		// set options
+		foreach($connectionOptions as $connectionOption => $connectionOptionValue)
+		{
+			$this->_client->setOption($connectionOption, $connectionOptionValue);
 		}
 
 		$this->_client->select($this->_config->database);

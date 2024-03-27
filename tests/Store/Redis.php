@@ -49,7 +49,7 @@ class Redis extends Test
 		$this->_connect();
 		
 		$array = [
-			'stored' => true
+			'stored' => true,
 		];
 		
 		$this->_store->set('array', $array);
@@ -63,7 +63,7 @@ class Redis extends Test
 		$this->_connect();
 		
 		$array = [
-			'stored' => true
+			'stored' => true,
 		];
 		
 		$this->_store->set('array', $array);

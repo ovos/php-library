@@ -29,18 +29,18 @@ class Redisearch extends Redis
 		string $key,
 		mixed $value,
 		int $ttl = 0,
-		array $tags = [],		
+		array $tags = [],	
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return false;
 		}
 		
 		$value = $this->compress($this->serialize($value));
 		
 		$result = $client->hSet(
-			$this->prefix($key, $this->getHashName()), 
+			$this->prefix($key, $this->getHashName()),
 			self::KEY_DATA, $value,
 			self::KEY_TAGS, implode(', ', $tags),
 		);
@@ -63,7 +63,7 @@ class Redisearch extends Redis
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return false;
 		}
 		
 		if(count($tags) === 0)
@@ -80,7 +80,7 @@ class Redisearch extends Redis
 			$this->indexCreate($hashName);
 		}
 		
-		$results = $client->rawCommand('FT.SEARCH', 
+		$results = $client->rawCommand('FT.SEARCH',
 			$hashName,
 			sprintf('@tags:{%s}', implode('|', $tags))
 		);
@@ -119,9 +119,9 @@ class Redisearch extends Redis
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return false;
 		}
-	
+		
 		$keysUnlinked = parent::clear();
 		if($keysUnlinked === false)
 		{
@@ -138,7 +138,7 @@ class Redisearch extends Redis
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return false;
 		}
 		
 		$hashName = $this->getHashName();
@@ -149,7 +149,7 @@ class Redisearch extends Redis
 			// drop the index
 			$this->indexDrop($hashName);
 		}
-
+		
 		// create index again
 		return $this->indexCreate($hashName);
 	}
@@ -163,9 +163,9 @@ class Redisearch extends Redis
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return false;
 		}
-	
+		
 		// check if index exists
 		$indices = $client->rawCommand('FT._LIST');
 		return in_array($hashName, $indices, true);
@@ -180,11 +180,12 @@ class Redisearch extends Redis
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
-		}	
-	
+			return false;
+		}
+		
 		// throws exception if index does not exist
-		return $client->rawCommand('FT.DROPINDEX', $hashName , 'DD');
+		return $client->rawCommand('FT.DROPINDEX', $hashName, 'DD')
+			=== self::STATUS_OK;
 	}
 	
 	/**
@@ -196,9 +197,9 @@ class Redisearch extends Redis
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;			
+			return false;
 		}
-	
+		
 		// create index again
 		return $client->rawCommand('FT.CREATE', ...[
 			$hashName,
@@ -210,6 +211,6 @@ class Redisearch extends Redis
 			'SCHEMA',
 			self::KEY_TAGS,
 			'TAG',
-		]);
+		]) === self::STATUS_OK;
 	}
 }
