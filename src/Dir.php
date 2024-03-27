@@ -46,19 +46,23 @@ class Dir
 	 * Creates a directory structure
 	 *
 	 * @param string $path
-	 * @param integer (octal) $mode
+	 * @param int $mode (octal)
 	 * @param bool $preProcess
 	 *
 	 * @return bool
 	 */
-	public static function create(string $path, int $mode = 0777, bool $preProcess = true): bool
+	public static function create(
+		string $path,
+		int $mode = 0777,
+		bool $preProcess = true,
+	): bool
 	{
 		if($preProcess)
 		{
 			$path = self::preProcess($path);
 		}
 
-		if(is_dir($path) || empty($path))
+		if(empty($path) || is_dir($path))
 		{
 			return true;
 		}
@@ -66,7 +70,7 @@ class Dir
 		$nextDir = substr($path, 0, strrpos($path, DIRECTORY_SEPARATOR));
 		if(self::create($nextDir, $mode))
 		{
-			if(!file_exists($path))
+			if(file_exists($path) === false)
 			{
 				$umask = umask(0);
 				$result = mkdir($path, $mode);
@@ -111,40 +115,49 @@ class Dir
 	 *
 	 * @return void
 	 */
-	public static function remove(string $path, bool $remove = true, ?string $match = null): void
+	public static function remove(
+		string $path,
+		bool $remove = true,
+		?string $match = null,
+	): void
 	{
-		if(is_dir($path))
+		if(is_dir($path) === false)
 		{
-			$directoryIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
+			return;
+		}
+			
+		$directoryIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
+		/**
+		 * @var RecursiveDirectoryIterator $iterator
+		 */
+		foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+		{
 			/**
-			 * @var RecursiveDirectoryIterator $iterator
+			 * @var SplFileInfo $file
 			 */
-			foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+			if($match !== null && !preg_match($match, $file->getFilename()))
 			{
-				/**
-				 * @var SplFileInfo $file
-				 */
-				if($match !== null && !preg_match($match, $file->getFilename()))
-				{
-					continue;
-				}
-
-				if(str_contains($file->getPathname(), '.svn'))
-				{
-					continue;
-				}
-
-				if($file->isFile())
-				{
-					unlink($file->getPathname());
-				}
-				else
-				{
-					rmdir($file->getPathname());
-				}
+				continue;
 			}
 
-			if($remove) rmdir($path);
+			if(str_contains($file->getPathname(), '.svn'))
+			{
+				continue;
+			}
+
+			if($file->isFile())
+			{
+				unlink($file->getPathname());
+			}
+			else
+			{
+				rmdir($file->getPathname());
+			}
+		}
+
+		if($remove)
+		{
+			rmdir($path);
 		}
 	}
 
@@ -242,6 +255,7 @@ class Dir
 	 * @param string $pathTo
 	 * @param bool $overwrite
 	 * @param ?callable $filenameCallback
+	 * @param ?callable $callback
 	 *
 	 * @return void
 	 */
@@ -288,11 +302,13 @@ class Dir
 						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
 						. DIRECTORY_SEPARATOR . $filename;
 						
-					if(file_exists($destination) === false
-						|| $overwrite === true)
+					if($overwrite === true
+						|| file_exists($destination) === false
+					)	
 					{
-						if(copy((string)$file, $destination) // on successful operation
-							&& $callback)
+						if($callback
+							&& copy((string)$file, $destination) // on successful operation
+						)
 						{
 							$callback($file, $destination);
 						}
@@ -307,7 +323,7 @@ class Dir
 	 *
 	 * @param string $path
 	 *
-	 * @return bool|null
+	 * @return ?bool
 	 */
 	public static function isEmpty(string $path): ?bool
 	{
@@ -327,11 +343,12 @@ class Dir
 	 *
 	 * @return array
 	 */
-	public static function getDirectoriesTree(string $path,
-		$skipHidden = true,
+	public static function getDirectoriesTree(
+		string $path,
+		bool $skipHidden = true,
 		?callable $skipCallback = null,
 		?callable $filenameCallback = null,
-		$filter = self::FILTER_FILES
+		int $filter = self::FILTER_FILES,
 	): array
 	{
 		return self::getTree(...func_get_args());
@@ -346,11 +363,12 @@ class Dir
 	 *
 	 * @return array
 	 */
-	public static function getTree(string $path,
-		$skipHidden = true,
+	public static function getTree(
+		string $path,
+		bool $skipHidden = true,
 		?callable $skipCallback = null,
 		?callable $filenameCallback = null,
-		$filter = self::FILTER_NONE
+		int $filter = self::FILTER_NONE,
 	): array
 	{
 		$dirs = [];
@@ -420,10 +438,11 @@ class Dir
 	 *
 	 * @return array
 	 */
-	public static function getFiles(string $path,
-		$skipHidden = true,
+	public static function getFiles(
+		string $path,
+		bool $skipHidden = true,
 		?callable $skipCallback = null,
-		$filter = self::FILTER_NONE
+		int $filter = self::FILTER_NONE,
 	): array
 	{
 		$files = [];
