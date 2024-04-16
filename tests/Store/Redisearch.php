@@ -30,6 +30,13 @@ class Redisearch extends Test
 	public function __construct()
 	{
 		$this->_config = config()->cache;
+		
+		// disable when redisearch is disabled in the config
+		if($this->_config->persistent->tags !== true)
+		{
+			$this->reason = '"tags" is set to false in cache config.';
+			$this->setIsDisabled(true);
+		}
 	}
 	
 	protected function _connect(): bool

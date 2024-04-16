@@ -80,7 +80,7 @@ class Session extends Service
 				ini_set('session.' . $ini, (string)$value);
 			}
 		}
-	
+		
 		if($this->_sessionConfig->autostart)
 		{
 			$this->start();
@@ -94,7 +94,7 @@ class Session extends Service
 		if($this->_initialized === false)
 		{
 			session_cache_limiter($this->_sessionConfig->cache_limiter);
-
+			
 			$cookie = session_get_cookie_params();
 			$options = [
 				'lifetime' => $cookie['lifetime'],
@@ -122,7 +122,7 @@ class Session extends Service
 			{
 				session_name($this->_cookiesConfig->prefix . session_name());
 			}
-
+			
 			$this->_initialized = true;
 		}
 	}
@@ -133,7 +133,7 @@ class Session extends Service
 		{
 			return;
 		}
-
+		
 		$this->_initialize();
 		if(session_start() === false)
 		{
@@ -148,7 +148,7 @@ class Session extends Service
 		{
 			return;
 		}
-
+		
 		session_write_close();
 	}
 

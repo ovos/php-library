@@ -51,6 +51,16 @@ class Geolocation extends Template
 	/**
 	 * @param Mysql $model
 	 */
+	public function setUp(Mysql $model): void
+	{
+		$model->setJsonSerializeFilter([
+			$this->_target, // binary POINT, breaks json_encode
+		]);
+	}	
+	
+	/**
+	 * @param Mysql $model
+	 */
 	public function preSave(Mysql $model): void
 	{
 		// sometimes it's always true, because MySQL keeps it in a different format (precision)
