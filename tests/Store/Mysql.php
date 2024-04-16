@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Tests\Store;
 
 use Ovos\Test;
+use Ovos\Test\Internal;
 use Ovos\Store\Mysql as Store;
 use Ovos\Pdo\Profiler\Reporter;
 use PDO;
@@ -63,6 +64,7 @@ class Mysql extends Test
 	/**
 	 * Called by runner after the test method was called
 	 */
+	#[Internal] 
 	public function cleanUp()
 	{
 		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
