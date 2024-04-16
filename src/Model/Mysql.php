@@ -47,6 +47,13 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public const EXPORT_TYPE_ARRAY = 1;
 	public const EXPORT_TYPE_ARRAYOBJECT = 2;
 	/**#@-*/
+	
+	/**#@+
+	 * Filter constants
+	 */
+	public const FILTER_MODE_IN = 0;
+	public const FILTER_MODE_OUT = 1;
+	/**#@-*/
 
 	/**
 	 * Return null by reference
@@ -127,14 +134,20 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	protected ?self $_updateObject = null;
 	
 	/**
-	 * Skip properties from being set on this object
-	 * Useful when we do not wish binary fields to be loaded into model
-	 * (e.g. binary value like POINT in MySQL)
+	 * Filter in or out properties in jsonSerialize
 	 * 
-	 * @var array 
+	 * Useful in case of:
+	 * - we do not wish json serialize binary fields (e.g. binary value like POINT in MySQL)
+	 * 
+	 * @var ?array 
 	 */
-	protected array $_skip = [];
-
+	protected ?array $_jsonSerializeFilter = null;
+	
+	/**
+	 * @var int
+	 */
+	protected int $_jsonSerializeFilterMode = self::FILTER_MODE_OUT;
+	
 	/**
 	 * @param array|null $properties
 	 */
@@ -201,6 +214,30 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function getAutoIncrementKey(): ?string
 	{
 		return $this->_autoIncrementKey;
+	}
+	
+	/**
+	 * @param array $filter
+	 *
+	 * @return self
+	 */
+	public function setJsonSerializeFilter(array $filter): self
+	{
+		$this->_jsonSerializeFilter = $filter;
+		
+		return $this;
+	}
+	
+	/**
+	 * @param array $filterMode
+	 *
+	 * @return self
+	 */
+	public function setJsonSerializeFilterMode(int $filterMode): self
+	{
+		$this->_jsonSerializeFilterMode = $filterMode;
+		
+		return $this;
 	}
 
 	/**
@@ -659,14 +696,6 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 */
 	public function setValue(string $property, mixed $value): self
 	{
-		// skip setting unwanted values (e.g. binary like POINT in MySQL)
-		/*
-		if($this->isSkipped($property))
-		{
-			return $this;
-		}
-		*/
-	
 		// modify a reference
 		if($reference = $this->getReference($property))
 		{
@@ -721,14 +750,17 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * Warning: references are not reinstantiated, because there is no information about object's class 
 	 * 
 	 * @param object|iterable $source
-	 * @param array $skip fields to skip
+	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
+	 * @param int $filterMode filter mode
 	 * @param bool $restore
+	 * @param bool $exists
 	 *
 	 * @return static
 	 */
 	public static function import(
 		object|iterable $source,
-		array $skip = [],
+		?array $filter = null,
+		int $filterMode = self::FILTER_MODE_OUT,
 		bool $restore = false,
 		bool $exists = false,
 	): static
@@ -736,7 +768,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		$destination = new static; // late static binding
 		foreach($source as $property => $value)
 		{
-			if(in_array($property, $skip, true) === true)
+			if($filter !== null
+				&& in_array($property, $filter, true)
+				=== ($filterMode === self::FILTER_MODE_OUT))
 			{
 				continue;
 			}
@@ -763,16 +797,24 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * Should be used to recreate the model instance after storing it for example in session 
 	 * 
 	 * @param object|iterable $source
-	 * @param array $skip fields to skip
+	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
+	 * @param int $filterMode filter mode
 	 *
 	 * @return static
 	 */
 	public static function restore(
 		object|iterable $source,
-		array $skip = []
+		?array $filter = null,
+		int $filterMode = self::FILTER_MODE_IN,
 	): static
 	{
-		$destination = self::import($source, $skip, true, true);
+		$destination = self::import(
+			source: $source,
+			filter: $filter, 
+			filterMode: $filterMode,
+			restore: true,
+			exists: true,
+		);
 
 		return $destination;
 	}
@@ -794,41 +836,59 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		return $this;
 	}
-
+	
 	/**
 	 * Alias of export, but references are not exported by default
-	 * 
-	 * @param array $skip fields to skip
+	 *
+	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
+	 * @param int $filterMode filter mode
 	 * @param bool $references include references
 	 * @param int $type
 	 *
 	 * @return stdClass|array|ArrayObject
 	 */
-	public function getValues(array $skip = [],
+	public function getValues(
+		?array $filter = null,
+		int $filterMode = self::FILTER_MODE_IN,
 		bool $references = false,
-		int $type = self::EXPORT_TYPE_STDCLASS): stdClass|array|ArrayObject
+		int $type = self::EXPORT_TYPE_STDCLASS,
+	): stdClass|array|ArrayObject
 	{
-		return $this->export($skip, $references, $type);
+		return $this->export(
+			filter: $filter,
+			filterMode: $filterMode,
+			references: $references,
+			type: $type,
+		);
 	}
 
 	/**
 	 * Exports the object for storage in session or database
 	 * 
-	 * @param array $skip fields to skip
+	 * Supports filtering, useful in case of:
+	 * - we wish to protect some sensitive values, for example when retuning a JSON object in a response
+	 * 
+	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
+	 * @param int $filterMode filter mode
 	 * @param bool $references include references
 	 * @param int $type
 	 *
 	 * @return stdClass|array|ArrayObject
 	 */
-	public function export(array $skip = [],
+	public function export(
+		?array $filter = null,
+		int $filterMode = self::FILTER_MODE_IN,
 		bool $references = true,
-		int $type = self::EXPORT_TYPE_STDCLASS): stdClass|array|ArrayObject
+		int $type = self::EXPORT_TYPE_STDCLASS,
+	): stdClass|array|ArrayObject
 	{
 		$export = new stdClass;
 
 		foreach($this as $property => $value)
 		{
-			if(in_array($property, $skip, true) === true)
+			if($filter !== null
+				&& in_array($property, $filter, true)
+				=== ($filterMode === self::FILTER_MODE_OUT))
 			{
 				continue;
 			}
@@ -838,7 +898,12 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		if($references)
 		{
-			$this->_exportReferences($export, $skip, $type);
+			$this->_exportReferences(
+				export: $export,
+				filter: $filter, 
+				filterMode: $filterMode,
+				type: $type,
+			);
 		}
 
 		return $this->_getExportType($export, $type);
@@ -846,24 +911,30 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	
 	/**
 	 * @param stdClass $export
-	 * @param array $skip fields to skip
+	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
+	 * @param int $filterMode filter mode
 	 * @param int $type
 	 *
 	 * @return stdClass|array
 	 */
 	protected function _exportReferences(stdClass $export,
-		array $skip = [],
-		int $type = self::EXPORT_TYPE_STDCLASS): void
+		?array $filter = null,
+		int $filterMode = self::FILTER_MODE_IN,
+		int $type = self::EXPORT_TYPE_STDCLASS,
+	): void
 	{
 		foreach($this->_references as $reference => $value)
 		{
-			if(in_array($reference, $skip, true) === true)
+			if($filter !== null
+				&& in_array($reference, $filter, true)
+				=== ($filterMode === self::FILTER_MODE_OUT))
 			{
 				continue;
 			}
 			
 			// passed as key => children
-			$referenceSkip = isset($skip[$reference]) ? $skip[$reference] : [];
+			$filterReference = $filter !== null && isset($filter[$reference])
+				? $filter[$reference] : null;
 			
 			$exportReferences = $this->__get($reference);
 			// relation to many
@@ -874,8 +945,14 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 					/**
 					 * @var self $exportReference
 					 */
-					$exportReference = $exportReference->export($referenceSkip, true, $type);
+					$exportReference = $exportReference->export(
+						filter: $filterReference,
+						filterMode: $filterMode,
+						references: true,
+						type: $type,
+					);
 				}
+				unset($exportReference);
 			}
 			// relation to one
 			else
@@ -883,11 +960,37 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 				/**
 				 * @var self $exportReferences
 				 */
-				$exportReferences = $exportReferences->export($referenceSkip, true, $type);
+				$exportReferences = $exportReferences->export(
+					filter: $filterReference,
+					filterMode: $filterMode,
+					references: true,
+					type: $type,
+				);
 			}
 			
 			$export->$reference = $exportReferences;
 		}
+	}
+	
+	/**
+	 * @param array $filter fields to preserve or skip (depending on the filter mode)
+	 * @param int $filterMode filter mode
+	 * @param bool $references include references
+	 * 
+	 * @return array
+	 */
+	public function toArray(
+		?array $filter = null,
+		int $filterMode = self::FILTER_MODE_IN,
+		bool $references = true,
+	): array
+	{
+		return $this->export(
+			filter: $filter,
+			filterMode: $filterMode,
+			references: true,
+			type: self::EXPORT_TYPE_ARRAY,
+		);
 	}
 
 	/**
@@ -911,7 +1014,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 */
 	public function __debugInfo(): array
 	{
-		return $this->export(references: true, type: self::EXPORT_TYPE_ARRAY);
+		return $this->export(
+			references: true,
+			type: self::EXPORT_TYPE_ARRAY,
+		);
 	}
 	
 	/**
@@ -919,7 +1025,12 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 */
 	public function jsonSerialize(): stdClass
 	{
-		return $this->export(skip: $this->_skip, references: true, type: self::EXPORT_TYPE_STDCLASS);
+		return $this->export(
+			filter: $this->_jsonSerializeFilter, 
+			filterMode: $this->_jsonSerializeFilterMode, 
+			references: true,
+			type: self::EXPORT_TYPE_STDCLASS,
+		);
 	}
 
 	/**
@@ -928,18 +1039,6 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function count(): int
 	{
 		return count($this->_properties);
-	}
-
-	/**
-	 * @param array $skip fields to skip
-	 * @param bool $references include references
-	 * 
-	 * @return array
-	 */
-	public function toArray(array $skip = [],
-		bool $references = true): array
-	{
-		return $this->export($skip, $references, self::EXPORT_TYPE_ARRAY);
 	}
 
 	/**
@@ -1278,25 +1377,6 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		return $this->getSource()->errorInfo()[2]; // element [2] is null when there is no error
 	}
 	
-	/**
-	 * @param string $property
-	 * 
-	 * @return bool
-	 */
-	public function isSkipped(string $property): bool
-	{
-		return in_array($property, $this->_skip, true) === true;
-		//return array_search($property, $this->_skip, true) !== false;
-	}
-	
-	/**
-	 * @return array
-	 */
-	public function getSkip(): array
-	{
-		return $this->_skip;
-	}	
-
 	/**
 	 */
 	public function setUp(): void

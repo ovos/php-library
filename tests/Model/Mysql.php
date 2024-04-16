@@ -6,6 +6,7 @@ namespace Tests\Model;
 use Ovos\Exception;
 use Ovos\Pdo\Expression;
 use Ovos\Test;
+use Ovos\Test\Internal;
 use Ovos\Model\Mysql as Model;
 use Ovos\Store\Mysql as Store;
 use Ovos\Model\Mysql\Template;
@@ -113,6 +114,57 @@ class Mysql extends Test
 		
 		return count(array_diff($export, $compare)) === 0;
 	}
+		
+	public function filterIn(): bool
+	{
+		$this->_store->source()->exec('
+			INSERT INTO tests
+			VALUES
+				(1, "Test 1", null, null, 1);
+		');
+		
+		$query = $this->_store->executeFind(where: ['id' => 1]);
+		/** @var Model $model */
+		$model = $query->fetchObject($this->_model::class);
+		$export = $model->export(
+			type: Model::EXPORT_TYPE_ARRAY,
+			filter: ['name'],
+			filterMode: Model::FILTER_MODE_IN,
+		);
+		
+		$compare = [
+			'name' => 'Test 1',
+		];
+		
+		return count(array_diff($export, $compare)) === 0;
+	}
+			
+	public function filterOut(): bool
+	{
+		$this->_store->source()->exec('
+			INSERT INTO tests
+			VALUES
+				(1, "Test 1", null, null, 1);
+		');
+		
+		$query = $this->_store->executeFind(where: ['id' => 1]);
+		/** @var Model $model */
+		$model = $query->fetchObject($this->_model::class);
+		$export = $model->export(
+			type: Model::EXPORT_TYPE_ARRAY,
+			filter: ['name'],
+			filterMode: Model::FILTER_MODE_OUT,
+		);
+		
+		$compare = [
+			'id' => 1,
+			'object' => null,
+			'modified_at' => null,
+			'active' => 1,
+		];
+		
+		return count(array_diff($export, $compare)) === 0;
+	}
 	
 	public function import(): bool
 	{
@@ -140,6 +192,7 @@ class Mysql extends Test
 	/**
 	 * Called by runner after the test method was called
 	 */
+	#[Internal]
 	public function cleanUp()
 	{
 		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');

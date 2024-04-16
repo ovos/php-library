@@ -61,12 +61,12 @@ class Dir
 		{
 			$path = self::preProcess($path);
 		}
-
+		
 		if(empty($path) || is_dir($path))
 		{
 			return true;
 		}
-
+		
 		$nextDir = substr($path, 0, strrpos($path, DIRECTORY_SEPARATOR));
 		if(self::create($nextDir, $mode))
 		{
@@ -80,7 +80,7 @@ class Dir
 
 			return true;
 		}
-
+		
 		return false;
 	}
 
@@ -102,7 +102,7 @@ class Dir
 		{
 			$path = ltrim($path, DIRECTORY_SEPARATOR);
 		}
-
+		
 		return $path;
 	}
 
@@ -125,7 +125,7 @@ class Dir
 		{
 			return;
 		}
-			
+		
 		$directoryIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
 		/**
 		 * @var RecursiveDirectoryIterator $iterator
@@ -139,12 +139,12 @@ class Dir
 			{
 				continue;
 			}
-
+			
 			if(str_contains($file->getPathname(), '.svn'))
 			{
 				continue;
 			}
-
+			
 			if($file->isFile())
 			{
 				unlink($file->getPathname());
@@ -154,7 +154,7 @@ class Dir
 				rmdir($file->getPathname());
 			}
 		}
-
+		
 		if($remove)
 		{
 			rmdir($path);
@@ -186,7 +186,7 @@ class Dir
 	{
 		$pathToKeep = self::preProcess($pathToKeep);
 		$path = self::preProcess($path, true);
-
+		
 		if(!empty($path) && is_dir($pathToKeep))
 		{
 			$pathToRemove = $pathToKeep . DIRECTORY_SEPARATOR . $path;
@@ -202,7 +202,7 @@ class Dir
 					return;
 				}
 			}
-
+			
 			if(str_contains($path, DIRECTORY_SEPARATOR))
 			{
 				$pathUp = substr($path, 0, strrpos($path, DIRECTORY_SEPARATOR));
@@ -269,7 +269,7 @@ class Dir
 	{
 		$pathFrom = self::preProcess($pathFrom);
 		$pathTo = self::preProcess($pathTo);
-
+		
 		if(is_dir($pathFrom) && is_dir($pathTo))
 		{
 			$directoryIterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
@@ -304,11 +304,10 @@ class Dir
 						
 					if($overwrite === true
 						|| file_exists($destination) === false
-					)	
+					)
 					{
-						if($callback
-							&& copy((string)$file, $destination) // on successful operation
-						)
+						if(copy((string)$file, $destination) // on successful operation
+							&& $callback) // if callback exists
 						{
 							$callback($file, $destination);
 						}
