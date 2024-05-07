@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper\Placeholders;
 
+use Ovos\View;
+
 use function ob_start;
 use function ob_get_clean;
 
@@ -35,7 +37,6 @@ class Placeholder
 	/**
 	 * @param null|string|bool|int $value
 	 * @param string $placement
-	 * @param bool $unique
 	 *
 	 * @return self
 	 */
@@ -75,7 +76,7 @@ class Placeholder
 	}
 
 	/**
-	 * @param  null|string|bool|int $value
+	 * @param null|string|bool|int $value
 	 *
 	 * @return self
 	 */
@@ -108,6 +109,8 @@ class Placeholder
 	/**
 	 * @param string $script
 	 * @param string $placement
+	 * @param string $template
+	 * @param bool $asset
 	 * 
 	 * @return self
 	 */
@@ -115,8 +118,14 @@ class Placeholder
 		string $script,
 		string $placement = self::PLACEMENT_APPEND,
 		string $template = '<script type="text/javascript" src="%s"></script>' . PHP_EOL,
+		bool $asset = false,
 	): self
 	{
+		if($asset)
+		{
+			$script = View::asset($script);
+		}
+	
 		if(array_search($script, $this->_scripts) !== false)
 		{
 			return $this;
