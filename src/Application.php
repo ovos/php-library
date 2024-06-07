@@ -568,7 +568,7 @@ class Application
 			return $this;
 		}
 		
-		if($_SERVER['REQUEST_SCHEME'] !== $this->getConfig()->system->protocol) // REQUEST_SCHEME available since Apache 2.4.16
+		if(Client::getProtocol() !== $this->getConfig()->system->protocol)
 		{
 			$this->setResponse((new Redirect())
 				->withHost()

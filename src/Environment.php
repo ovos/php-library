@@ -23,17 +23,17 @@ class Environment
 	 * @var string 
 	 */
 	protected string $_env = self::ENV_PRODUCTION;
-
+	
 	/**
 	 * @var array 
 	 */
 	protected array $_config;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_flat;
-
+	
 	/**
 	 * @param array $config
 	 */
@@ -44,10 +44,10 @@ class Environment
 		{
 			$this->_env = $this->_config[self::ENV_KEY];
 		}
-
+		
 		$this->_flat = Arrays::flatten($config);
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -63,7 +63,7 @@ class Environment
 	{
 		return $this->_config;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -71,22 +71,37 @@ class Environment
 	{
 		return $this->_flat;
 	}
-
+	
+	/**
+	 * @return array
+	 */
+	/**
+	 * Parsing callback for yaml tag.
+	 * 
+	 * @param mixed $value Data from yaml file
+	 * @param string $tag Tag that triggered callback
+	 * @param int $flags Scalar entity style (see YAML_*_SCALAR_STYLE)
+	 * 
+	 * @return mixed Value that YAML parser should emit for the given value
+	 */
+	public function getYamlTag(mixed $value, string $tag, int $flags): mixed
+	{
+		if(isset($this->_flat[$value]))
+		{
+			return $this->_flat[$value];
+		}
+		
+		return null;
+	}
+		
 	/**
 	 * @return array
 	 */
 	public function getYamlTags(): array
 	{
-		$tags = [];
-		
-		foreach($this->_flat as $key => $replaceValue)
-		{
-			$tags['!' . $key] = static function($value, $tag, $flags) use($replaceValue) 
-			{
-				return $replaceValue;
-			};
-		}
-		
-		return $tags;
+		return
+		[
+			'!' . self::ENV_KEY => [$this, 'getYamlTag'],
+		];
 	}
 }
