@@ -15,8 +15,48 @@ use function explode;
  */
 class Client
 {
+	/**#@+
+	 * Protocol constant
+	 */
+	public const PROTOCOL_HTTP = 'http';
+	public const PROTOCOL_HTTPS = 'https';
+	/**#@-*/
+
 	/**
-	 * IP Address
+	 * Returns current protocol (http or https)
+	 *
+	 * @var ?string
+	 */
+	protected static ?string $_protocol = null;
+
+	/**
+	 * Is HTTPS on?
+	 *
+	 * @return string
+	 */
+	public static function getProtocol(): string
+	{
+		if(self::$_protocol === null)
+		{
+			/**
+			 * REQUEST_SCHEME is available since Apache 2.4.16, but only on servers with direct TLS connections
+			 * - not present on servers with load-balancer + TLS offloading
+			 * (TLS offloaded at the load-balancer and then forwarded to the worker-nodes via http)
+			 * 
+			 * For setups with load-balancer or cloudflare, we need to rely on HTTP_X_FORWARDED_PROTO
+			 * HTTPS header is not reliable, sometimes it's "on" even on HTTP
+			 */
+			$isHttps = $_SERVER['REQUEST_SCHEME'] === self::PROTOCOL_HTTPS
+				|| (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === self::PROTOCOL_HTTPS);
+			
+			self::$_protocol = $isHttps ? self::PROTOCOL_HTTPS : self::PROTOCOL_HTTP;
+		}	
+
+		return self::$_protocol;
+	}
+
+	/**
+	 * IP address
 	 *
 	 * @var ?string
 	 */
@@ -64,8 +104,8 @@ class Client
 				}
 			}
 
-			// no valid IP sent by proxies, use default
-			if(!self::$_ip)
+			// no valid IP sent by proxies, use default or return an empty string
+			if(self::$_ip === null)
 			{
 				self::$_ip = $_SERVER['REMOTE_ADDR'] ?? '';
 			}
@@ -77,7 +117,7 @@ class Client
 	/**
 	 * @return ?string
 	 */
-	public static function getUserAgent(): null|string
+	public static function getUserAgent(): ?string
 	{
 		return $_SERVER['HTTP_USER_AGENT'] ?? null;
 	}
