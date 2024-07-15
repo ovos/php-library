@@ -371,7 +371,7 @@ abstract class Mysql extends Store
 			$query->andWhereNotIn($property, $whereValues);
 		}
 		
-				foreach($like as $property => $value)
+		foreach($like as $property => $value)
 		{
 			$query->andWhere($property . ' LIKE ?');
 			$values[] = $value;
@@ -382,7 +382,7 @@ abstract class Mysql extends Store
 			$values[] = $value;
 		}
 		
-				foreach($isNull as $property)
+		foreach($isNull as $property)
 		{
 			$query->andWhere($property . ' IS NULL');
 		}
