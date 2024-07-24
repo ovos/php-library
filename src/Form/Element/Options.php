@@ -142,8 +142,8 @@ class Options extends Element
 	 */
 	public function isValid(): bool
 	{
-		$valuesSelected = $this->getValue();	
-		$values = $this->getOptionsValues();	
+		$valuesSelected = $this->getValue();
+		$values = $this->getOptionsValues();
 	
 		// multiple values (name[] of input)
 		if(is_array($valuesSelected))
