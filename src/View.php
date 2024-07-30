@@ -31,6 +31,7 @@ use function class_exists;
  * @method static Helper\Placeholders placeholders
  * @method static Helper\Title title
  * @method static Helper\Url url
+ * @method static Helper\Email email
  */
 class View
 {

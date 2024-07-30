@@ -164,4 +164,22 @@ class Strings
 	{
 		return $wrap . $string . $wrap;
 	}
+	
+	/**
+	 * @param string $string
+	 *
+	 * @return string
+	 */
+	public static function entities(string $string): string
+	{
+		$strlen = strlen($string);
+		$return = '';
+		
+		for($i = 0; $i < $strlen; $i++)
+		{
+			$return.= '&#' . ord($string[$i]) . ';';
+		}
+		
+		return $return;
+	}
 }
