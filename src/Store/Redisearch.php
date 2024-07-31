@@ -5,6 +5,9 @@ namespace Ovos\Store;
 
 /**
  * Redisearch
+ * 
+ * Important: please adjust MAXSEARCHRESULTS value to -1 on the cache instance
+ * https://redis.io/docs/latest/develop/interact/search-and-query/basic-constructs/configuration-parameters/#maxsearchresults
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
