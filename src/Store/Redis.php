@@ -7,6 +7,7 @@ use Ovos\Exception;
 use Ovos\ArrayObject;
 use Ovos\Redis\Connection;
 use Redis as BaseRedis;
+use RedisException;
 
 /**
  * Redis
@@ -33,6 +34,11 @@ class Redis extends Cache
 	 */
 	protected string $_hash = 'cache';
 	
+	/**
+	 * @var int
+	 */
+	protected int $_multiMode = BaseRedis::PIPELINE;
+	
 	/**#@+
 	 * Separators
 	 */
@@ -44,6 +50,12 @@ class Redis extends Cache
 	 */
 	public const KEY_DATA = 'data';
 	/**#@-*/	
+		
+	/**#@+
+	 * Functions
+	 */
+	public const FUNCTION_BATCHES = 'batches';
+	/**#@-*/		
 		
 	/**#@+
 	 * Statuses
@@ -174,7 +186,8 @@ class Redis extends Cache
 		
 		$value = $this->compress($this->serialize($value));
 		
-		$result = $client->hSet(
+		$client->multi($this->_multiMode);
+		$client->hSet(
 			$this->prefix($key, $this->getHashName()), 
 			self::KEY_DATA, $value,
 		);
@@ -184,8 +197,9 @@ class Redis extends Cache
 		{
 			$client->expire($key, $ttl);
 		}
+		$result = $client->exec();
 	
-		return $result !== false;
+		return $result[0] !== false;
 	}
 	
 	/**
@@ -198,32 +212,82 @@ class Redis extends Cache
 			return false;	
 		}
 		
-		// clear all keys with our prefix
-		$iterator = null;
-		$count = 0;
-		do
-		{
-			$keys = $client->scan($iterator,
-				$this->prefix('*', $this->getHashName())
-			);
-	
-			// Redis may return empty results, so protect against that
-			if($keys === false)
-			{
-				continue;
-			}
+		$script = '';
+		$script.= $this->getFunction(self::FUNCTION_BATCHES);
+		$script.= "
+			local prefix = ARGV[1]
 			
-			foreach($keys as $key)
-			{
-				$keysUnlinked = $client->unlink($key);
-				if($keysUnlinked !== false)
-				{
-					$count+= $keysUnlinked;
-				}
-			}
+			-- unlink every ID
+			local count = 0
+			local cursor = '0'
+			repeat
+				local results = redis.call('SCAN', cursor,
+					'MATCH', prefix,
+					'COUNT', 5000
+				)
+				cursor = results[1]
+				local ids = {}
+				
+				for _, id in ipairs(results[2]) do
+					table.insert(ids, id)
+				end
+				
+				if #ids > 0 then
+					count = count + #ids
+					for from, to in batches(#ids) do -- security measure, not really needed with 5000 batch size
+						redis.call('UNLINK', unpack(ids, from, to))
+					end
+				end
+			until '0' == cursor
+			
+			return count -- return count of deleted ids
+		";		
+		
+		$hashName = $this->getHashName();
+		$prefix = $this->prefix('*', $hashName);
+		$count = 0;
+		
+		$client->clearLastError();
+		
+		$args = [$prefix];
+		$result = $client->eval($script, $args, 0);
+		if(is_int($result))
+		{
+			$count = $result;
 		}
-		while($iterator > 0);
+		
+		if($error = $client->getLastError())
+		{
+			throw new RedisException($error);
+		}
 		
 		return $count;
+	}
+	
+	/**
+	 * @param string $name
+	 *
+	 * @return string
+	 */
+	public function getFunction(string $name): string
+	{
+		return match($name)
+		{
+			'batches' => "
+				local function batches(n, batchSize)
+					batchSize = batchSize or 7500
+					local i = 0
+					
+					return function()
+						local from = i * batchSize + 1
+						i = i + 1
+						if (from <= n) then
+							local to = math.min(from + batchSize - 1, n)
+							return from, to
+						end
+					end
+				end
+			",
+		};
 	}
 }

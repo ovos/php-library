@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Store;
 
+use RedisException;
+
 /**
  * Redisearch
  * 
@@ -81,35 +83,56 @@ class Redisearch extends Redis
 		{
 			// create the index
 			$this->indexCreate($hashName);
-		}
-		
-		$results = $client->rawCommand('FT.SEARCH',
-			$hashName,
-			sprintf('@tags:{%s}', implode('|', $tags))
-		);
-		
-		if(is_array($results) === false)
-		{
-			return true;
-		}
-		
-		$resultsCount = $results[0];
-		if($resultsCount === 0)
-		{
-			return true;
-		}
-		
-		for($i = 1; $i < $resultsCount * 2; $i+=2)
-		{
-			if(isset($results[$i], $results[$i + 1]) === false)
-			{
-				break;
-			}
 			
-			$resultId = $results[$i];
-			$result = $results[$i + 1];
+			$client->rawCommand('FT.CONFIG', 'SET', 'MAXSEARCHRESULTS', -1);
+		}
+		
+		$script = '';
+		$script.= $this->getFunction(self::FUNCTION_BATCHES);
+		$script.= "
+			local index = ARGV[1]
+			local tags = ARGV[2]
+			local batchSize = 10000
+			local offset = 0
 			
-			$client->unlink($resultId);
+			while true do
+				-- Perform the FT.SEARCH with batching
+				local searchCommand = {'FT.SEARCH', index, '@tags:{' .. tags .. '}', 'LIMIT', offset, batchSize}
+				local result = redis.call(unpack(searchCommand))
+				
+				-- quit if there are no more matches
+				local totalResults = tonumber(result[1])
+				if totalResults == 0 then
+					break
+				end	
+				
+				local rems = {}
+				
+				-- loop every second item, skipping the first which is totalResults
+				for i = 2, #result, 2 do
+					-- local id = result[i] -- The document ID/key
+					-- local fields = result[i+1] -- The document's fields and values (array)
+					
+					table.insert(rems, result[i]) -- save for removal after the loop
+				end
+				
+				-- remove hash keys which no longer exist
+				if #rems > 0 then
+					for from, to in batches(#rems) do
+						redis.call('UNLINK', unpack(rems, from, to))
+					end
+				end
+			end
+		";
+		
+		$client->clearLastError();
+		
+		$args = [$hashName, implode('|', $tags)];
+		$client->eval($script, $args, 0);
+		
+		if($error = $client->getLastError())
+		{
+			throw new RedisException($error);
 		}
 		
 		return true;
