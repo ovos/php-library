@@ -74,8 +74,8 @@ class Strings
 	 */
 	public static function studlyCase(string $string): string
 	{
-        $string = ucwords(str_replace(array('-', '_'), ' ', $string));
-        return str_replace(' ', '', $string);
+		$string = ucwords(str_replace(array('-', '_'), ' ', $string));
+		return str_replace(' ', '', $string);
 	}
 
 	/**
@@ -85,7 +85,7 @@ class Strings
 	 */
 	public static function camelCase(string $string): string
 	{
-        return lcfirst(self::studlyCase($string));
+		return lcfirst(self::studlyCase($string));
 	}
 
 	/**
@@ -181,5 +181,24 @@ class Strings
 		}
 		
 		return $return;
+	}
+	
+	/**
+	 * Shortens the string to the given maximum length, appending a specified ending if necessary
+	 * 
+	 * @param string $string The input string
+	 * @param int $length The maximum length of the string including the ending
+	 * @param string $ending The string to append if truncation is necessary
+	 * 
+	 * @return string The shortened string
+	 */
+	public static function shortenString(string $string, int $length, string $ending = '...'): string
+	{
+		if(mb_strlen($string) <= $length)
+		{
+			return $string;
+		}
+		
+		return mb_strimwidth($string, 0, $length, $ending);
 	}
 }
