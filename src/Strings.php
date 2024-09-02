@@ -192,7 +192,7 @@ class Strings
 	 * 
 	 * @return string The shortened string
 	 */
-	public static function shortenString(string $string, int $length, string $ending = '...'): string
+	public static function shorten(string $string, int $length, string $ending = '...'): string
 	{
 		if(mb_strlen($string) <= $length)
 		{
