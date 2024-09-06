@@ -329,4 +329,14 @@ class Element
 	{
 		return (string)$this->getValue();
 	}
+	
+	/**
+	 * @return array
+	 */
+	public function __debugInfo(): array
+	{
+		return [
+			$this->getValue()
+		];
+	}	
 }

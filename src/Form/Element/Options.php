@@ -148,6 +148,11 @@ class Options extends Element
 		// multiple values (name[] of input)
 		if(is_array($valuesSelected))
 		{
+			if(array_is_list($valuesSelected) === false) // associative array
+			{
+				$valuesSelected = array_keys($valuesSelected);
+			}
+			
 			if(count(array_intersect($valuesSelected, $values)) === 0)
 			{
 				$this->setValue(null);
@@ -164,5 +169,5 @@ class Options extends Element
 		}
 		
 		return parent::isValid();
-	}	
+	}
 }
