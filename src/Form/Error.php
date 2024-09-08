@@ -132,9 +132,9 @@ class Error
 	}
 
 	/**
-	 * @return null|array
+	 * @return array
 	 */
-	public function __debugInfo()
+	public function __debugInfo(): array
 	{
 		return [
 			'message' => $this->getMessage(),
