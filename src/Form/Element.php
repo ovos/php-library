@@ -5,6 +5,7 @@ namespace Ovos\Form;
 
 use Ovos\Exception;
 use Ovos\Form;
+
 use function count;
 use function is_array;
 
@@ -130,24 +131,35 @@ class Element
 	public function setValue(null|string|bool|int|float|array $value): self
 	{
 		$this->reset(); // clear cache of getValue()
-		$this->getForm()->setValue($this->_id, $value);
+		$this->getForm()
+			->setValue($this->_id, $value);
 
 		return $this;
 	}
 
-	/*
+	/**
+	 * @param bool $default
+	 * 
 	 * @return null|string|bool|int|float|array
 	 */
-	public function getValue(): null|string|bool|int|float|array
+	public function getValue(bool $default = true): null|string|bool|int|float|array
 	{
+		$value = $this->_form
+			->getRawValue($this->_id);
+		
+		// return default value, if no other value is present
+		// do not filter it, we assume it's in filtered state
+		if($value === null
+			&& $default === true)
+		{
+			return $this->_form
+				->getDefaultValue($this->_id);	
+		}
+		
+		// if default value was not requested, process our value & cache it for future calls
+		// some filters also process null values (for example casting to int)
 		if($this->_value === null)
 		{
-			$value = $this->_form->getRawValue($this->_id);
-			if($value === null)
-			{
-				return null;
-			}
-			
 			if(is_array($value))
 			{
 				foreach($value as &$item)
@@ -163,7 +175,8 @@ class Element
 
 			$this->_value = $value;
 		}
-
+		
+		// return cached value
 		return $this->_value;
 	}
 
@@ -204,7 +217,8 @@ class Element
 	 */
 	public function setDefault(null|string|bool|int|float|array $default): self
 	{
-		$this->getForm()->setDefault($this->_id, $default);
+		$this->getForm()
+			->setDefault($this->_id, $default);
 
 		return $this;
 	}	
@@ -329,4 +343,14 @@ class Element
 	{
 		return (string)$this->getValue();
 	}
+	
+	/**
+	 * @return array
+	 */
+	public function __debugInfo(): array
+	{
+		return [
+			$this->getValue()
+		];
+	}	
 }

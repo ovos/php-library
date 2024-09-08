@@ -71,7 +71,7 @@ class Form implements Iterator
 	{
 		$this->_app = app();
 		$this->_id = $id;
-
+		
 		$this->init();
 	}
 
@@ -118,7 +118,7 @@ class Form implements Iterator
 		{
 			$id = $this->_form->getId() . '_' . $id;
 		}
-
+		
 		return $id;
 	}
 
@@ -130,7 +130,7 @@ class Form implements Iterator
 	public function setForm(Form $form): self
 	{
 		$this->_form = $form;
-
+		
 		return $this;
 	}
 
@@ -155,6 +155,23 @@ class Form implements Iterator
 	}
 
 	/**
+	 * Set value
+	 * 
+	 * @param string $id
+	 * @param null|string|bool|int|float|array $value
+	 * 
+	 * @return self
+	 */
+	public function setValue(string $id, null|string|bool|int|float|array $value): self
+	{
+		$this->_values[$id] = $value;
+		
+		return $this;
+	}
+	
+	/**
+	 * Set values
+	 * 
 	 * @param array $values
 	 *
 	 * @return self
@@ -170,22 +187,9 @@ class Form implements Iterator
 		
 		return $this;
 	}
-
-	/**
-	 * @param string $id
-	 * @param null|string|bool|int|float|array $value
-	 * 
-	 * @return self
-	 */
-	public function setValue(string $id, null|string|bool|int|float|array $value): self
-	{
-		$this->_values[$id] = $value;
-		
-		return $this;
-	}
 	
 	/**
-	 * Raw input value
+	 * Raw value (unfiltered)
 	 * 
 	 * @param string $id
 	 *
@@ -197,29 +201,12 @@ class Form implements Iterator
 		{
 			return $this->_values[$id];
 		}
-
-		if(isset($this->_defaults[$id]))
-		{
-			return $this->_defaults[$id];
-		}
-
+		
 		return null;
 	}
 	
 	/**
-	 * Raw input value
-	 * 
-	 * @param string $id
-	 *
-	 * @return null|string|bool|int|float|array
-	 */
-	public function getValue(string $id): null|string|bool|int|float|array
-	{
-		return $this->__get($id)->getValue();
-	}
-
-	/**
-	 * Raw input values
+	 * Raw values
 	 * 
 	 * @return array
 	 */
@@ -229,33 +216,23 @@ class Form implements Iterator
 	}
 	
 	/**
-	 * Validated and filtered values
+	 * Set default value
 	 * 
-	 * @return array
+	 * @param string $id
+	 * @param null|string|bool|int|float|array $default
+	 * 
+	 * @return self
 	 */
-	public function getValues(): array
+	public function setDefault(string $id, null|string|bool|int|float|array $default): self
 	{
-		$values = [];
+		$this->_defaults[$id] = $default;
 		
-		foreach($this->_elements as $element)
-		{
-			$values[$element->getId(withFormId: false)] = $element->getValue();
-		}
-	
-		return $values;
+		return $this;
 	}
 	
 	/**
-	 * @deprecated
+	 * Set default values
 	 * 
-	 * @return array
-	 */
-	public function getValuesFiltered(): array
-	{
-		return $this->getValues();
-	}
-	
-	/**
 	 * @param array $defaults
 	 *
 	 * @return self
@@ -268,21 +245,76 @@ class Form implements Iterator
 		}
 		
 		$this->_defaults = array_merge($this->_defaults, $defaults);
-
+		
 		return $this;
-	}	
+	}
 
 	/**
-	 * @param string $id
-	 * @param null|string|bool|int|float|array $default
+	 * Default value
 	 * 
-	 * @return self
+	 * @param string $id
+	 *
+	 * @return null|string|bool|int|float|array
 	 */
-	public function setDefault(string $id, null|string|bool|int|float|array $default): self
+	public function getDefaultValue(string $id): null|string|bool|int|float|array
 	{
-		$this->_defaults[$id] = $default;
+		if(isset($this->_defaults[$id]))
+		{
+			return $this->_defaults[$id];
+		}
+		
+		return null;
+	}
 	
-		return $this;
+	/**
+	 * Default values
+	 * 
+	 * @return array
+	 */
+	public function getDefaultValues(): array
+	{
+		return $this->_defaults;
+	}
+	
+	/**
+	 * Value (filtered)
+	 * 
+	 * @param string $id
+	 *
+	 * @return null|string|bool|int|float|array
+	 */
+	public function getValue(string $id): null|string|bool|int|float|array
+	{
+		return $this->__get($id)->getValue();
+	}
+	
+	/**
+	 * Validated and filtered values
+	 * 
+	 * @param bool $default
+	 * 
+	 * @return array
+	 */
+	public function getValues(bool $default = false): array
+	{
+		$values = [];
+		
+		foreach($this->_elements as $element)
+		{
+			$values[$element->getId(withFormId: false)] = $element->getValue($default);
+		}
+		
+		return $values;
+	}
+	
+	/**
+	 * @deprecated
+	 * 
+	 * @return array
+	 */
+	public function getValuesFiltered(): array
+	{
+		return $this->getValues();
 	}
 
 	/**
@@ -297,7 +329,7 @@ class Form implements Iterator
 			$element = new Element;
 			$this->__set($id, $element); // default type
 		}
-
+		
 		return $this->_elements[$id];
 	}
 	
@@ -365,7 +397,7 @@ class Form implements Iterator
 		{
 			$element->isValid();
 		}
-	
+		
 		return count($this->getErrors()) === 0;
 	}
 
@@ -375,7 +407,7 @@ class Form implements Iterator
 	public function getErrors(): array
 	{
 		$errors = [[]];
-
+		
 		foreach($this->_elements as $element)
 		{
 			$errors[] = $element->getErrors();
@@ -438,7 +470,7 @@ class Form implements Iterator
 	public function valid(): bool
 	{
 		$key = $this->key();
-
+		
 		return ($key !== null && $key !== false);
 	}
 }

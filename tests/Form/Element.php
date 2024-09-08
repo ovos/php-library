@@ -33,4 +33,24 @@ class Element extends Test
 		
 		return $form->getValues()['element'] === 'value';
 	}
+	
+	public function checked(): bool
+	{
+		$form = new Form;
+		$form->checkbox->setDefault(1);
+		$form->setValues(['checkbox' => 'on']);
+		$values = $form->getValues();
+		
+		return $values['checkbox'] !== null;
+	}
+	
+	public function unchecked(): bool
+	{
+		$form = new Form;
+		$form->checkbox->setDefault(1);
+		$form->setValues([]);
+		$values = $form->getValues();
+		
+		return $values['checkbox'] === null;
+	}
 }

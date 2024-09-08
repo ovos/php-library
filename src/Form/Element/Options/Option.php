@@ -17,12 +17,12 @@ class Option
 	 * @var Options
 	 */
 	protected Options $_options;
-
+	
 	/**
 	 * @var null|mixed
 	 */
 	protected mixed $_value = null;
-
+	
 	/**
 	 * @var null|mixed
 	 */
@@ -49,7 +49,7 @@ class Option
 		$this->setLabel($label);
 		$this->setObject($object);
 	}
-
+	
 	/**
 	 * @param Options $options
 	 * 
@@ -61,7 +61,7 @@ class Option
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Options
 	 */
@@ -69,7 +69,7 @@ class Option
 	{
 		return $this->_options;
 	}
-
+	
 	/**
 	 * @param mixed $value
 	 * 
@@ -81,7 +81,7 @@ class Option
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return mixed
 	 */
@@ -89,7 +89,7 @@ class Option
 	{
 		return $this->_value;
 	}
-
+	
 	/**
 	 * @param null|mixed $label
 	 * 
@@ -101,7 +101,7 @@ class Option
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return null|mixed
 	 */
@@ -114,7 +114,7 @@ class Option
 	
 		return $this->getValue();
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -138,7 +138,7 @@ class Option
 		$selectedValue = (string)$selectedValues;
 		return $selectedValue === $thisValue;
 	}
-
+	
 	/**
 	 * @param ?object $object
 	 * 
@@ -150,7 +150,7 @@ class Option
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?object
 	 */
@@ -158,5 +158,4 @@ class Option
 	{
 		return $this->_object;
 	}
-
 }
