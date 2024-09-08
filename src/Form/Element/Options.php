@@ -29,7 +29,7 @@ class Options extends Element
 	{
 		$this->setOptions($options);
 	}
-
+	
 	/**
 	 * @param array $options
 	 * @param string $valueKey
@@ -52,7 +52,17 @@ class Options extends Element
 		
 		return $this;
 	}
-
+	
+	/**
+	 * @return self
+	 */
+	public function clearOptions(): self
+	{
+		$this->_options = [];
+		
+		return $this;
+	}
+	
 	/**
 	 * @param array $options
 	 * 
@@ -72,7 +82,7 @@ class Options extends Element
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param int|string|Option $option
 	 * 
@@ -88,7 +98,7 @@ class Options extends Element
 	
 		return $this;
 	}
-
+	
 	/**
 	 * @param array $options
 	 * @param bool $keyIsValue
@@ -111,7 +121,7 @@ class Options extends Element
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Option[]
 	 */
@@ -119,7 +129,7 @@ class Options extends Element
 	{
 		return $this->_options;
 	}
-
+	
 	/**
 	 * @return string[]
 	 */
