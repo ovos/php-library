@@ -28,6 +28,13 @@ abstract class Mysql extends Store
 	 * @var string
 	 */
 	public const TABLE = null;
+	
+	/**
+	 * Related model name
+	 *
+	 * @var string
+	 */
+	public const MODEL = null;
 
 	/**
 	 * @var string
@@ -76,6 +83,19 @@ abstract class Mysql extends Store
 		}
 
 		return static::TABLE;
+	}
+		
+	/**
+	 * @return string
+	 */
+	public static function getModel(): string
+	{
+		if(static::MODEL === null)
+		{
+			throw new Exception('Store is required to have a non-null model name.');
+		}
+
+		return static::MODEL;
 	}
 	
 	/**
