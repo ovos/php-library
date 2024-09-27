@@ -34,7 +34,7 @@ trait MemoryService
 	 *
 	 * @return bool
 	 */
-	public function invalidateCache(?string $cache): bool
+	public function invalidateCache(?string $cache = null): bool
 	{
 		$store = $this->_memoryService->getStore();
 		$cacheId = self::TABLE;
