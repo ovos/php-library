@@ -138,6 +138,13 @@ class Url
 			{
 				$uri = $_SERVER['REQUEST_URI'];
 				$source = parse_url($uri, PHP_URL_PATH);
+				if($source === null // example: "//app.config.json"
+					|| $source === false // malformed URL
+				)
+				{
+					return $components;
+				}
+				
 				$source = substr($source, strlen(ROUTE_PATH));
 				if($source !== '' && $source !== false) // empty or ROUTE_PATH longer than source
 				{
