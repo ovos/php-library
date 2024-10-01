@@ -6,7 +6,6 @@ namespace Ovos\Store\Traits;
 use Ovos\Model;
 use Ovos\Service\Memory;
 use Ovos\Services;
-use PDO;
 
 /**
  * Find
