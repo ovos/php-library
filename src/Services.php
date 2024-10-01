@@ -39,22 +39,35 @@ class Services
 
 	/**
 	 * @param string $symbol
+	 * @param ?callable $registerCallback
 	 *
 	 * @return ?Service
 	 */
-	public function get(string $symbol): ?Service
+	public function get(
+		string $symbol,
+		?callable $registerCallback = null,
+	): ?Service
 	{
+		$service = null;
+		// check if service is registered
 		if(isset(self::$_items[$symbol]))
 		{
 			$service = self::$_items[$symbol];
-			if($service->isEnabled() === false)
-			{
-				return new Disabled;
-			}
-
+		}
+		// check if we should register it
+		else if($registerCallback !== null)
+		{
+			$service = $registerCallback();
+			$this->register($service, $symbol);
+		}
+		
+		// if service is registered and is not disabled
+		if($service !== null
+			&& $service->isEnabled())
+		{
 			return $service;
 		}
-
+		
 		return new Disabled;
 	}
 
