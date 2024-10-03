@@ -83,31 +83,23 @@ class Pager
 	 */
 	public function getPagesInRange(): array
 	{
-		$delta = ceil($this->_pageRange / 2);
-
-		if($this->_page - $delta > $this->_pages - $this->_pageRange)
-		{
-			$lowerBound = $this->_pages - $this->_pageRange + 1;
-			$upperBound = $this->_pages;
-		}
-		else
-		{
-			if($this->_page - $delta < 0)
-			{
-				$delta = $this->_page;
-			}
-
-			$offset = $this->_page - $delta;
-			$lowerBound = $offset + 1;
-			$upperBound = $offset + $this->_pageRange;
-		}	
+		$halfRange = (int)floor($this->_pageRange / 2);
+		$start = max(1, $this->_page - $halfRange);
+		$end = min($this->_pages, $this->_page + $halfRange);
 	
-		$pages = [];
-
-		for($page = $lowerBound; $page <= $upperBound; $page++)
+		// adjust if there are fewer pages to the left
+		if($this->_page - $start < $halfRange)
 		{
-			$pages[$page] = $page;
+			$end = min($this->_pages, $end + ($halfRange - ($this->_page - $start)));
 		}
+	
+		// adjust if there are fewer pages to the right
+		if($end - $this->_page < $halfRange)
+		{
+			$start = max(1, $start - ($halfRange - ($end - $this->_page)));
+		}
+	
+		$pages = range($start, $end);
 	
 		return $pages;
 	}
