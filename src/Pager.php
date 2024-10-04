@@ -39,19 +39,26 @@ class Pager
 	/**
 	 * @var int
 	 */
-	protected int $_pageRange = 10;
+	protected int $_pageRange;
 	
 	/**
 	 * @param int $page
 	 * @param int $count
 	 * @param int $perPage
+	 * @param int $pageRange
 	 */
-	public function __construct(int $page, int $count, int $perPage)
+	public function __construct(
+		int $page,
+		int $count,
+		int $perPage,
+		int $pageRange = 10,
+	)
 	{
 		$this->_count = $count;
 		$this->_perPage = $perPage;
 		$this->_pages = (int)ceil($count / $perPage);
 		$this->_page = ($page <= 0 || $page > $this->_pages) ? $this->_firstPage : $page;
+		$this->_pageRange = $pageRange;
 	}
 
 	/**
