@@ -133,7 +133,7 @@ class Events extends Service implements Countable, Iterator
 	/**
 	 * Logs events (errors or exceptions)
 	 *
-	 * @param mixed ...$event
+	 * @param mixed[] ...$event
 	 *
 	 * @return self
 	 */

@@ -24,11 +24,6 @@ class Streams extends Service
 	public const SYMBOL = 'streams';
 	
 	/**
-	 * @var int
-	 */
-	public const DEFAULT_TIMEOUT = 15;
-	
-	/**
 	 * @var ?ArrayObject 
 	 */
 	protected ?ArrayObject $_config = null;	
@@ -42,7 +37,7 @@ class Streams extends Service
 	 * @var Request[]
 	 */
 	protected array $_requests = [];
-	
+
 	/**
 	 * @return string
 	 */
@@ -58,10 +53,14 @@ class Streams extends Service
 		parent::__construct();
 		
 		$this->_config = $this->_app->getConfig()->get('streams');
+		if($this->_config === null)
+		{
+			throw new Exception('"streams" config section is missing.');
+		}
 		
 		$this->_defaultContextOptions = [
 			'http' => [
-				'timeout' => $this->_config->timeout ?: self::DEFAULT_TIMEOUT,
+				'timeout' => $this->_config->timeout ?: 15,
 			],
 		];
 		
