@@ -280,12 +280,16 @@ class Form implements Iterator
 	 * Value (filtered)
 	 * 
 	 * @param string $id
+	 * @param bool $default
 	 *
 	 * @return null|string|bool|int|float|array
 	 */
-	public function getValue(string $id): null|string|bool|int|float|array
+	public function getValue(
+		string $id,
+		bool $default = true,
+	): null|string|bool|int|float|array
 	{
-		return $this->__get($id)->getValue();
+		return $this->__get($id)->getValue($default);
 	}
 	
 	/**
