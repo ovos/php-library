@@ -142,7 +142,7 @@ class Element
 	 * 
 	 * @return null|string|bool|int|float|array
 	 */
-	public function getValue(bool $default = false): null|string|bool|int|float|array
+	public function getValue(bool $default = true): null|string|bool|int|float|array
 	{
 		$value = $this->_form
 			->getRawValue($this->_id);
@@ -180,22 +180,6 @@ class Element
 		return $this->_value;
 	}
 
-	/**
-	 * @return null|string|bool|int|float|array
-	 */
-	public function getInputValue(): null|string|bool|int|float|array
-	{
-		return $this->getValue(true);
-	}
-	
-	/**
-	 * @return null|string|bool|int|float|array
-	 */
-	public function getUserValue(): null|string|bool|int|float|array
-	{
-		return $this->getValue(false);
-	}
-	
 	/**
 	 * @return self
 	 */
@@ -284,7 +268,7 @@ class Element
 	public function isValid(): bool
 	{
 		$this->_errors = []; // reset errors
-		$value = $this->getUserValue();
+		$value = $this->getValue();
 		
 		foreach($this->_validators as $validator)
 		{

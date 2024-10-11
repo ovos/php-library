@@ -121,12 +121,13 @@ class Option
 	public function isSelected(): bool
 	{
 		// avoid selecting '' options, where no option is selected
-		if(($selectedValues = $this->getOptions()->getInputValue()) === null)
+		if($this->getOptions()->getValue() === null)
 		{
 			return false;
 		}
 		
 		$thisValue = (string)$this->getValue();
+		$selectedValues = $this->getOptions()->getValue();
 		// multiple values selected
 		if(is_array($selectedValues))
 		{

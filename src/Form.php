@@ -280,44 +280,12 @@ class Form implements Iterator
 	 * Value (filtered)
 	 * 
 	 * @param string $id
-	 * @param bool $default
 	 *
 	 * @return null|string|bool|int|float|array
 	 */
-	public function getValue(
-		string $id,
-		bool $default = false,
-	): null|string|bool|int|float|array
+	public function getValue(string $id): null|string|bool|int|float|array
 	{
-		return $this->__get($id)->getValue($default);
-	}
-	
-	/**
-	 * Input value (filtered)
-	 * 
-	 * @param string $id
-	 *
-	 * @return null|string|bool|int|float|array
-	 */
-	public function getInputValue(
-		string $id,
-	): null|string|bool|int|float|array
-	{
-		return $this->__get($id)->getValue(true);
-	}
-	
-	/**
-	 * User value (filtered)
-	 * 
-	 * @param string $id
-	 *
-	 * @return null|string|bool|int|float|array
-	 */
-	public function getUserValue(
-		string $id,
-	): null|string|bool|int|float|array
-	{
-		return $this->__get($id)->getValue(false);
+		return $this->__get($id)->getValue();
 	}
 	
 	/**
@@ -333,33 +301,22 @@ class Form implements Iterator
 		
 		foreach($this->_elements as $element)
 		{
-			$values[$element->getId(withFormId: false)] 
-				= $element->getValue($default);
+			$values[$element->getId(withFormId: false)] = $element->getValue($default);
 		}
 		
 		return $values;
 	}
 	
 	/**
-	 * Validated and filtered input values
+	 * @deprecated
 	 * 
 	 * @return array
 	 */
-	public function getInputValues(): array
+	public function getValuesFiltered(): array
 	{
-		return $this->getValues(true);
+		return $this->getValues();
 	}
-	
-	/**
-	 * Validated and filtered user values
-	 * 
-	 * @return array
-	 */
-	public function getUserValues(): array
-	{
-		return $this->getValues(false);
-	}
-	
+
 	/**
 	 * @param string $id
 	 *
