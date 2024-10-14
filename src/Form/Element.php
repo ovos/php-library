@@ -181,13 +181,19 @@ class Element
 	}
 
 	/**
-	 * @param bool $default
-	 * 
 	 * @return null|string|bool|int|float|array
 	 */
-	public function getInputValue(bool $default = true): null|string|bool|int|float|array
+	public function getInputValue(): null|string|bool|int|float|array
 	{
-		return $this->getValue($default);
+		return $this->getValue(true);
+	}
+	
+	/**
+	 * @return null|string|bool|int|float|array
+	 */
+	public function getUserValue(): null|string|bool|int|float|array
+	{
+		return $this->getValue(false);
 	}
 	
 	/**
@@ -278,7 +284,7 @@ class Element
 	public function isValid(): bool
 	{
 		$this->_errors = []; // reset errors
-		$value = $this->getValue();
+		$value = $this->getUserValue();
 		
 		foreach($this->_validators as $validator)
 		{
