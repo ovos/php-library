@@ -9,6 +9,7 @@ use Ovos\Form\Element\Options\Option;
 use function array_column;
 use function is_array;
 use function array_intersect;
+use function array_is_list;
 
 /**
  * Options
@@ -29,29 +30,6 @@ class Options extends Element
 	public function __construct(array $options = [])
 	{
 		$this->setOptions($options);
-	}
-	
-	/**
-	 * @param array $options
-	 * @param string $valueKey
-	 * @param string $labelKey
-	 * 
-	 * @return self
-	 */
-	public function fromObjects(array $options, string $valueKey,
-		string $labelKey = null): self
-	{
-		foreach($options as $object)
-		{
-			$option = new Option(
-				$object->{$valueKey}, 
-				$labelKey ? $object->{$labelKey} : null,
-				$object,
-			);
-			$this->addOption($option);
-		}
-		
-		return $this;
 	}
 	
 	/**
@@ -85,36 +63,50 @@ class Options extends Element
 	}
 	
 	/**
-	 * @param int|string|Option $option
+	 * @param mixed|Option $key
+	 * @param mixed $value
+	 * @param ?object $object
 	 * 
 	 * @return self
 	 */
-	public function addOption(int|string|Option $option): self
+	public function addOption(
+		mixed $key,
+		mixed $value = null,
+		?object $object = null
+	): self
 	{
-		$optionObj = $option instanceof Option ? 
-			$option : new Option($option);
-		$optionObj->setOptions($this);
-			
-		$this->_options[] = $optionObj;	
+		if($key instanceof Option)
+		{
+			$option = $key;
+		}
+		else
+		{
+			$optionArgs = [$key, $value, $object];
+			$option = new Option(...$optionArgs);
+		}
+		
+		$option->setOptions($this);
+		$this->_options[] = $option;	
 	
 		return $this;
 	}
 	
 	/**
 	 * @param array $options
-	 * @param bool $keyIsValue
 	 * 
 	 * @return self
 	 */
-	public function addOptions(array $options, bool $keyIsValue = false): self
+	public function addOptions(array $options): self
 	{
-		foreach($options as $key => $option)
+		$isList = array_is_list($options);
+		
+		foreach($options as $key => $value)
 		{
 			if(($option instanceof Option) === false)
 			{
-				$option = $keyIsValue ?
-					new Option($key, $option)
-					: new Option($option);
+				$option = $isList ?
+					new Option($value)
+					: new Option($key, $value); // $key = value, $value = label
 			}
 			
 			$this->addOption($option);
@@ -122,6 +114,29 @@ class Options extends Element
 		
 		return $this;
 	}
+	
+	/**
+	 * @param array $options
+	 * @param string $valueKey
+	 * @param string $labelKey
+	 * 
+	 * @return self
+	 */
+	public function fromObjects(array $options, string $valueKey,
+		string $labelKey = null): self
+	{
+		foreach($options as $object)
+		{
+			$option = new Option(
+				$object->{$valueKey}, 
+				$labelKey ? $object->{$labelKey} : null,
+				$object,
+			);
+			$this->addOption($option);
+		}
+		
+		return $this;
+	}	
 	
 	/**
 	 * @return Option[]

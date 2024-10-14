@@ -286,7 +286,7 @@ class Form implements Iterator
 	 */
 	public function getValue(
 		string $id,
-		bool $default = true,
+		bool $default = false,
 	): null|string|bool|int|float|array
 	{
 		return $this->__get($id)->getValue($default);
