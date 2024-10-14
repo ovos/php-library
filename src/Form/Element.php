@@ -142,7 +142,7 @@ class Element
 	 * 
 	 * @return null|string|bool|int|float|array
 	 */
-	public function getValue(bool $default = true): null|string|bool|int|float|array
+	public function getValue(bool $default = false): null|string|bool|int|float|array
 	{
 		$value = $this->_form
 			->getRawValue($this->_id);
@@ -180,6 +180,16 @@ class Element
 		return $this->_value;
 	}
 
+	/**
+	 * @param bool $default
+	 * 
+	 * @return null|string|bool|int|float|array
+	 */
+	public function getInputValue(bool $default = true): null|string|bool|int|float|array
+	{
+		return $this->getValue($default);
+	}
+	
 	/**
 	 * @return self
 	 */
