@@ -100,13 +100,13 @@ class Options extends Element
 	{
 		$isList = array_is_list($options);
 		
-		foreach($options as $key => $value)
+		foreach($options as $key => $option)
 		{
 			if(($option instanceof Option) === false)
 			{
 				$option = $isList ?
-					new Option($value)
-					: new Option($key, $value); // $key = value, $value = label
+					new Option($option)
+					: new Option($key, $option); // $key = value, $option = label
 			}
 			
 			$this->addOption($option);
