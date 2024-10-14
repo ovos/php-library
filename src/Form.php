@@ -293,6 +293,34 @@ class Form implements Iterator
 	}
 	
 	/**
+	 * Input value (filtered)
+	 * 
+	 * @param string $id
+	 *
+	 * @return null|string|bool|int|float|array
+	 */
+	public function getInputValue(
+		string $id,
+	): null|string|bool|int|float|array
+	{
+		return $this->__get($id)->getValue(true);
+	}
+	
+	/**
+	 * User value (filtered)
+	 * 
+	 * @param string $id
+	 *
+	 * @return null|string|bool|int|float|array
+	 */
+	public function getUserValue(
+		string $id,
+	): null|string|bool|int|float|array
+	{
+		return $this->__get($id)->getValue(false);
+	}
+	
+	/**
 	 * Validated and filtered values
 	 * 
 	 * @param bool $default
@@ -305,22 +333,33 @@ class Form implements Iterator
 		
 		foreach($this->_elements as $element)
 		{
-			$values[$element->getId(withFormId: false)] = $element->getValue($default);
+			$values[$element->getId(withFormId: false)] 
+				= $element->getValue($default);
 		}
 		
 		return $values;
 	}
 	
 	/**
-	 * @deprecated
+	 * Validated and filtered input values
 	 * 
 	 * @return array
 	 */
-	public function getValuesFiltered(): array
+	public function getInputValues(): array
 	{
-		return $this->getValues();
+		return $this->getValues(true);
 	}
-
+	
+	/**
+	 * Validated and filtered user values
+	 * 
+	 * @return array
+	 */
+	public function getUserValues(): array
+	{
+		return $this->getValues(false);
+	}
+	
 	/**
 	 * @param string $id
 	 *
