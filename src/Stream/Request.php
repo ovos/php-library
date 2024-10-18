@@ -114,7 +114,7 @@ class Request
 		
 		if($this->_content !== null && !isset($options['http']['content']))
 		{
-			$contextOptions['http']['content'] = $this->_content;
+			$contextOptions['http']['content'] = http_build_query($this->_content);
 		}
 		
 		if(isset($options['http']['content'])
