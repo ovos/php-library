@@ -37,6 +37,7 @@ class Request
 	protected array $_contextOptions = [
 		'http' => [
 			'method' => self::METHOD_GET,
+			'header' => [], // required by createContext()
 		]
 	];
 	/**
@@ -112,13 +113,13 @@ class Request
 	{
 		$contextOptions = $this->_contextOptions;
 		
-		if($this->_content !== null && !isset($options['http']['content']))
+		if($this->_content !== null && !isset($contextOptions['http']['content']))
 		{
 			$contextOptions['http']['content'] = http_build_query($this->_content);
 		}
 		
-		if(isset($options['http']['content'])
-			&& $method === Request::METHOD_POST)
+		if(isset($contextOptions['http']['content'])
+			&& $this->_contextOptions['http']['method'] === self::METHOD_POST)
 		{
 			$contextOptions['http']['header'][] = 'Content-Type: application/x-www-form-urlencoded';
 		}
@@ -151,7 +152,7 @@ class Request
 	 *
 	 * @return self
 	 */
-	public function setUrl(string $url)
+	public function setUrl(string $url): self
 	{
 		$this->_url = $url;
 		
