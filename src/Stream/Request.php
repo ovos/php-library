@@ -28,7 +28,7 @@ class Request
 	 * @var string
 	 */
 	protected string $_url;
-
+	
 	/**
 	 * Global context for all requests
 	 * 
@@ -40,16 +40,17 @@ class Request
 			'header' => [], // required by createContext()
 		]
 	];
+	
 	/**
 	 * @var ?array
 	 */
 	protected ?array $_content = null;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_response = null;
-
+	
 	/**
 	 * @see https://www.php.net/manual/en/function.stream-get-meta-data.php
 	 * @see https://www.php.net/manual/en/wrappers.http.php
@@ -57,12 +58,12 @@ class Request
 	 * @var ?array
 	 */
 	protected ?array $_responseMetaData = null;
-
+	
 	/**
 	 * @var Measurement
 	 */
 	protected Measurement $_measurement;
-
+	
 	/**
 	 */
 	public function __construct(string $url,
@@ -106,6 +107,41 @@ class Request
 	}
 	
 	/**
+	 * Parse meta data and return status code
+	 *
+	 * 'wrapper_data' =>
+	 *   [0] =>
+	 *   string(15) "HTTP/1.1 200 OK"
+ 	 * 
+	 * @return ?int
+	 */
+	public function getResponseStatusCode(): ?int
+	{
+		if($this->_responseMetaData === null)
+		{
+			return null;
+		}
+		
+		if(!isset($this->_responseMetaData['wrapper_data']))
+		{
+			return null;
+		}
+		
+		foreach($this->_responseMetaData['wrapper_data'] as $header)
+		{
+			if(str_starts_with($header, 'HTTP/') === false)
+			{
+				continue;
+			}
+			
+			$parts = explode(' ', $header);
+			return intval($parts[1]);
+		}
+		
+		return null;
+	}
+	
+	/**
 	 * @return ?resource
 	 */
 	public function createContext(
@@ -113,15 +149,17 @@ class Request
 	{
 		$contextOptions = $this->_contextOptions;
 		
-		if($this->_content !== null && !isset($contextOptions['http']['content']))
+		if($this->_contextOptions['http']['method'] === self::METHOD_POST)
 		{
-			$contextOptions['http']['content'] = http_build_query($this->_content);
-		}
-		
-		if(isset($contextOptions['http']['content'])
-			&& $this->_contextOptions['http']['method'] === self::METHOD_POST)
-		{
-			$contextOptions['http']['header'][] = 'Content-Type: application/x-www-form-urlencoded';
+			if($this->_content !== null && !isset($contextOptions['http']['content']))
+			{
+				$contextOptions['http']['content'] = http_build_query($this->_content);
+			}
+			
+			if(isset($contextOptions['http']['content']))
+			{
+				$contextOptions['http']['header'][] = 'Content-Type: application/x-www-form-urlencoded';
+			}
 		}
 		
 		return stream_context_create($contextOptions);
@@ -138,7 +176,7 @@ class Request
 
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -166,7 +204,7 @@ class Request
 	{
 		return $this->_url;
 	}
-
+	
 	/**
 	 * @param array $contextOptions
 	 *
@@ -175,10 +213,10 @@ class Request
 	public function setContextOptions(array $contextOptions): self
 	{
 		$this->_contextOptions = Arrays::deepMerge($this->_contextOptions, $contextOptions);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -195,10 +233,10 @@ class Request
 	public function setContent(?array $content): self
 	{
 		$this->_content = $content;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?array
 	 */
@@ -222,7 +260,7 @@ class Request
 	{
 		return json_decode($this->_response, flags: JSON_THROW_ON_ERROR);
 	}
-		
+	
 	/**
 	 * @see https://www.php.net/manual/en/function.stream-get-meta-data.php
 	 * @see https://www.php.net/manual/en/wrappers.http.php
