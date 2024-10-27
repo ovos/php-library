@@ -3,6 +3,13 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function ceil;
+use function floor;
+use function count;
+use function min;
+use function max;
+use function range;
+
 /**
  * Pager
  *
@@ -56,7 +63,7 @@ class Pager
 	{
 		$this->_count = $count;
 		$this->_perPage = $perPage;
-		$this->_pages = (int)ceil($count / $perPage);
+		$this->_pages = max(1, (int)ceil($count / $perPage));
 		$this->_page = ($page <= 0 || $page > $this->_pages) ? $this->_firstPage : $page;
 		$this->_pageRange = $pageRange;
 	}
@@ -93,7 +100,7 @@ class Pager
 		$halfRange = (int)floor($this->_pageRange / 2);
 		$start = max(1, $this->_page - $halfRange);
 		$end = min($this->_pages, $this->_page + $halfRange);
-	
+		
 		// adjust if there are fewer pages to the left
 		if($this->_page - $start < $halfRange)
 		{
@@ -106,9 +113,7 @@ class Pager
 			$start = max(1, $start - ($halfRange - ($end - $this->_page)));
 		}
 	
-		$pages = range($start, $end);
-	
-		return $pages;
+		return range($start, $end);
 	}
 
 	/**
