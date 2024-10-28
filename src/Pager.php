@@ -64,7 +64,9 @@ class Pager
 		$this->_count = $count;
 		$this->_perPage = $perPage;
 		$this->_pages = max(1, (int)ceil($count / $perPage));
-		$this->_page = ($page <= 0 || $page > $this->_pages) ? $this->_firstPage : $page;
+		$this->_page = ($page <= 0 || $page > $this->_pages)
+			? $this->_firstPage
+			: $page;
 		$this->_pageRange = $pageRange;
 	}
 
