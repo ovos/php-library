@@ -261,10 +261,10 @@ abstract class Mysql extends Store
 	}
 
 	/**
-	 * @param PDOStatement $query
+	 * @param PDOStatement $statement
 	 * @param Model|array $fields
 	 */
-	public function bindValues(PDOStatement $query, Model|array $fields): void
+	public function bindValues(PDOStatement $statement, Model|array $fields): void
 	{
 		foreach($fields as $field => $value)
 		{
@@ -277,7 +277,8 @@ abstract class Mysql extends Store
 			$bindType = is_bool($value) ? PDO::PARAM_BOOL : $bindType;
 			$bindType = is_integer($value) ? PDO::PARAM_INT : $bindType;
 			
-			$query->bindValue(':' . $field, $value, $bindType);
+			// ':' prefix is optional, $field can be also numerical, starting from 1
+			$statement->bindValue($field, $value, $bindType);
 		}
 	}
 
