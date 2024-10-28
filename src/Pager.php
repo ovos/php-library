@@ -69,7 +69,7 @@ class Pager
 			: $page;
 		$this->_pageRange = $pageRange;
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -77,7 +77,7 @@ class Pager
 	{
 		return $this->_count;
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -85,7 +85,7 @@ class Pager
 	{
 		return $this->_perPage;
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -108,16 +108,16 @@ class Pager
 		{
 			$end = min($this->_pages, $end + ($halfRange - ($this->_page - $start)));
 		}
-	
+		
 		// adjust if there are fewer pages to the right
 		if($end - $this->_page < $halfRange)
 		{
 			$start = max(1, $start - ($halfRange - ($end - $this->_page)));
 		}
-	
+		
 		return range($start, $end);
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -125,7 +125,7 @@ class Pager
 	{
 		return $this->_page;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -133,7 +133,7 @@ class Pager
 	{
 		return $this->_page < $this->_pages;
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -141,7 +141,7 @@ class Pager
 	{
 		return $this->_page + 1;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -149,7 +149,7 @@ class Pager
 	{
 		return $this->_page > 1;
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -169,7 +169,7 @@ class Pager
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -184,15 +184,15 @@ class Pager
 	public function getFirstPage(): int
 	{
 		return $this->_firstPage;
-	}	
-		
+	}
+	
 	/**
 	 * @return int
 	 */
 	public function getLastPage(): int
 	{
 		return $this->getPages();
-	}	
+	}
 	
 	/**
 	 * @return bool
@@ -225,7 +225,7 @@ class Pager
 	{
 		return $this->getPerPage();
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -233,7 +233,7 @@ class Pager
 	{
 		return $this->getOffset() + 1;
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -244,7 +244,7 @@ class Pager
 		{
 			return $this->_count;
 		}
-
+		
 		return $last;
 	}
 }
