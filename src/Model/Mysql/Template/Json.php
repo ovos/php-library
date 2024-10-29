@@ -49,12 +49,14 @@ class Json extends Template
 	/**
 	 * Class of stored object
 	 * 
-	 * @var ?string
+	 * @var null|string|Closure
 	 */
 	protected null|string|Closure $_class = null;
-
+	
 	/**
 	 * @param array $properties
+	 * @param string $type
+	 * @param null|string|Closure $class
 	 */
 	public function __construct(
 		array $properties = [],
@@ -172,7 +174,7 @@ class Json extends Template
 		// escape backslashes
 		// https://stackoverflow.com/questions/74481967/mysql-valid-json-causes-missing-a-comma-or-after-an-object-member
 		$string = str_replace('\\', '\\\\', $string);
-				// single APOS character causes SQL error, for example, so it needs to be escaped:
+		// single APOS character causes SQL error, for example, so it needs to be escaped:
 		// SELECT CAST('{"name":"\\"Harry's Gastrotainment Harald Schindlegger\\" e.U."}' as JSON);
 		$string = str_replace('\'', '\\\'', $string);
 		

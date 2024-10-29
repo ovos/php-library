@@ -21,37 +21,37 @@ class Element
 	 * @var string
 	 */
 	protected string $_id;
-
+	
 	/**
-	 * @var Form
+	 * @var ?Form
 	 */
 	protected ?Form $_form = null;
-
+	
 	/**
 	 * @var null|string|bool|int|float|array
 	 */
 	protected null|string|bool|int|float|array $_value = null;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_label = null;
-
+	
 	/**
 	 * @var Validator[]
 	 */
 	protected array $_validators = [];
-
+	
 	/**
 	 * @var Filter[]
 	 */
 	protected array $_filters = [];
-
+	
 	/**
 	 * @var Error[]
 	 */
 	protected array $_errors = [];
-
+	
 	/**
 	 * @param string $id
 	 * 
@@ -63,7 +63,7 @@ class Element
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param bool $withFormId
 	 * 
@@ -77,10 +77,10 @@ class Element
 		{
 			$id = $formId . '_' . $id;
 		}
-
+		
 		return $id;
 	}
-
+	
 	/**
 	 * @param bool $withFormId
 	 * 
@@ -94,10 +94,10 @@ class Element
 		{
 			$name = $formId . '[' . $name . ']';
 		}
-
+		
 		return $name;
 	}
-
+	
 	/**
 	 * @param ?Form $form
 	 *
@@ -106,10 +106,10 @@ class Element
 	public function setForm(?Form $form): self
 	{
 		$this->_form = $form;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?Form
 	 */
@@ -117,12 +117,12 @@ class Element
 	{
 		if($this->_form === null)
 		{
-			throw new Exception('The element is not yet assigned to a form.');	
+			throw new Exception('The element is not yet assigned to a form.');
 		}
 	
 		return $this->_form;
 	}
-
+	
 	/**
 	 * @param null|string|bool|int|float|array $value
 	 *
@@ -133,10 +133,10 @@ class Element
 		$this->reset(); // clear cache of getValue()
 		$this->getForm()
 			->setValue($this->_id, $value);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param bool $default
 	 * 
@@ -153,7 +153,7 @@ class Element
 			&& $default === true)
 		{
 			return $this->_form
-				->getDefaultValue($this->_id);	
+				->getDefaultValue($this->_id);
 		}
 		
 		// if default value was not requested, process our value & cache it for future calls
@@ -172,14 +172,14 @@ class Element
 			{
 				$value = $this->filterValue($value);
 			}
-
+			
 			$this->_value = $value;
 		}
 		
 		// return cached value
 		return $this->_value;
 	}
-
+	
 	/**
 	 * @return null|string|bool|int|float|array
 	 */
@@ -205,7 +205,7 @@ class Element
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param ?string $label
 	 * 
@@ -217,7 +217,7 @@ class Element
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -225,7 +225,7 @@ class Element
 	{
 		return $this->_label;
 	}
-
+	
 	/**
 	 * @param null|string|bool|int|float|array $default
 	 *
@@ -235,10 +235,10 @@ class Element
 	{
 		$this->getForm()
 			->setDefault($this->_id, $default);
-
+		
 		return $this;
 	}	
-
+	
 	/**
 	 * @param mixed $value
 	 * 
@@ -246,6 +246,12 @@ class Element
 	 */
 	public function filterValue(mixed $value): mixed
 	{
+		// filters are not required to process null values, this usually only happens when someone is trying to spam the form
+		if($value === null)
+		{
+			return null;
+		}
+		
 		foreach($this->_filters as $filter)
 		{
 			$value = $filter->filter($value);
@@ -262,10 +268,10 @@ class Element
 	public function addFilter(Filter $filter): self
 	{
 		$this->_filters[] = $filter;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param Validator $validator
 	 *
@@ -274,10 +280,10 @@ class Element
 	public function addValidator(Validator $validator): self
 	{
 		$this->_validators[] = $validator;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -294,10 +300,10 @@ class Element
 				$this->addErrors($validator->getErrors());
 			}
 		}
-
+		
 		return $this->hasErrors() === false;
 	}
-
+	
 	/**
 	 * @param Error $error
 	 *
@@ -307,10 +313,10 @@ class Element
 	{
 		$error->setElement($this);
 		$this->_errors[] = $error;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param Error[] $errors
 	 *
@@ -325,7 +331,7 @@ class Element
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -343,7 +349,7 @@ class Element
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Error[]
 	 */
@@ -351,7 +357,7 @@ class Element
 	{
 		return $this->_errors;
 	}
-
+	
 	/**
 	 * @return string
 	 */

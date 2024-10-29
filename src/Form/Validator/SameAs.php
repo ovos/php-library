@@ -27,13 +27,13 @@ class SameAs extends Validator
 	protected array $_messages =
 	[
 		self::ERROR_DIFFERENT => '"%s" should be the same as "%s".',
-	];	
-
+	];
+	
 	/**
 	 * @var string
 	 */
 	protected string $_id;
-
+	
 	/**
 	 * @param string $id
 	 */
@@ -41,7 +41,7 @@ class SameAs extends Validator
 	{
 		$this->setId($id);
 	}
-
+	
 	/**
 	 * @param string $id
 	 * 
@@ -69,7 +69,7 @@ class SameAs extends Validator
 	{
 		return $this->getElement()->getForm()->getElement($this->_id);
 	}
-
+	
 	/**
 	 * @param null|mixed $value
 	 *
@@ -87,7 +87,7 @@ class SameAs extends Validator
 			));
 			$this->addError($error);
 		}
-	
+		
 		return $valid;
 	}
 }

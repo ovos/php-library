@@ -19,7 +19,7 @@ class NotEmpty extends Validator
 	 */
 	public const ERROR_EMPTY = 'empty';
 	/**#@-*/
-
+	
 	/**
 	 * @var string[]
 	 */
@@ -27,7 +27,7 @@ class NotEmpty extends Validator
 	[
 		self::ERROR_EMPTY => '"%s" cannot be empty.',
 	];
-
+	
 	/**
 	 * @param null|mixed $value
 	 *
@@ -43,7 +43,7 @@ class NotEmpty extends Validator
 			));
 			$this->addError($error);
 		}
-	
+		
 		return $valid;
 	}
 }

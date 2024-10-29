@@ -19,12 +19,12 @@ class Callback extends Validator
 	 */
 	public const ERROR_CALLBACK = 'callback';
 	/**#@-*/
-
+	
 	/**
 	 * @var Closure
 	 */
 	protected Closure $_callback;
-
+	
 	/**
 	 * @param Closure $callback
 	 */
@@ -32,7 +32,7 @@ class Callback extends Validator
 	{
 		$this->setCallback($callback);
 	}
-
+	
 	/**
 	 * @param Closure $callback
 	 * 
@@ -52,7 +52,7 @@ class Callback extends Validator
 	{
 		return $this->_callback;
 	}
-
+	
 	/**
 	 * @param null|mixed $value
 	 *

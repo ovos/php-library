@@ -5,6 +5,9 @@ namespace Ovos\Form\Filter;
 
 use Ovos\Form\Filter;
 
+use function is_string;
+use function is_int;
+
 /**
  * Checked
  *

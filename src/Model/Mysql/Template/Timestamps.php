@@ -23,7 +23,7 @@ class Timestamps extends Template
 		'preInsert' => 'created_at',
 		'preUpdate' => 'modified_at'
 	];
-
+	
 	/**
 	 * @param array $update
 	 */
@@ -46,7 +46,7 @@ class Timestamps extends Template
 		
 		$model->{$this->_update[__FUNCTION__]} = new Expression('NOW()');
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */
