@@ -64,16 +64,14 @@ class Geolocation extends Template
 	public function preSave(Mysql $model): void
 	{
 		// sometimes it's always true, because MySQL keeps it in a different format (precision)
-		if($model->isModified($this->_latitude) === false
-			&& $model->isModified($this->_longitude) === false
-		)
+		if($model->isModified($this->_latitude, $this->_longitude) === false)
 		{
 			return;
 		}	
 		
 		$expression = "ST_GeomFromText(CONCAT('POINT(', $this->_latitude, ' ', $this->_longitude, ')'), 4326)";
 		// set value via modifyProperty to record it as modified
-		// it may have been prevented from being loaded due to it's binary value
+		// it may have been prevented from being loaded due to its binary value
 		$model->modifyProperty($this->_target, new Expression($expression));
 	}
 }

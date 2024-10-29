@@ -15,7 +15,7 @@ abstract class Query
 	 * @var string
 	 */
 	protected string $_table;
-
+	
 	/**
 	 * @var array
 	 */
@@ -25,7 +25,7 @@ abstract class Query
 	 * @var array
 	 */
 	protected array $_conditions = [];
-
+	
 	/**
 	 * @param string $table
 	 */
@@ -33,7 +33,7 @@ abstract class Query
 	{
 		$this->setTable($table);
 	}
-
+	
 	/**
 	 * @param string $table
 	 *
@@ -53,7 +53,7 @@ abstract class Query
 	{
 		return $this->_table;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -88,7 +88,7 @@ abstract class Query
 	{
 		return $this->where(...$conditions);
 	}
-
+	
 	/**
 	 * @param string $field
 	 * @param array $values
@@ -137,7 +137,7 @@ abstract class Query
 		
 		return $this;
 	}	
-
+	
 	/**
 	 * @param string $field
 	 * @param array $values

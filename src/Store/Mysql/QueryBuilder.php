@@ -37,7 +37,7 @@ class QueryBuilder
 	{
 		return $this->_table;
 	}
-
+	
 	/**
 	 * @param string ...$conditions
 	 *
@@ -57,7 +57,7 @@ class QueryBuilder
 	 * 
 	 * @param mixed ...$columns
 	 *
-	 * @return Update
+	 * @return Insert
 	 */
 	public function insert(mixed ...$columns): Insert
 	{
@@ -66,7 +66,7 @@ class QueryBuilder
 		
 		return $query;
 	}
-
+	
 	/**
 	 * @param string ...$fields
 	 *
@@ -83,7 +83,7 @@ class QueryBuilder
 		
 		return $query;
 	}
-
+	
 	/**
 	 * Example usage:
 	 * ->set(name: ':name', created_at: 'NOW()')

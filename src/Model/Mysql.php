@@ -8,22 +8,17 @@ use Ovos\Exception;
 use Ovos\Model;
 use Ovos\Store\Mysql as Store;
 use Ovos\Model\Mysql\Template;
-use Ovos\Pdo\Expression;
 use stdClass;
 use Iterator;
 use Countable;
 use JsonSerializable;
 use PDO;
 use PDOStatement;
-use ReflectionClass;
-use ReflectionObject;
-use ReflectionProperty;
 
 use function Ovos\services;
 use function in_array;
 use function count;
 use function array_key_exists;
-use function method_exists;
 use function reset;
 use function current;
 use function next;
@@ -54,48 +49,48 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public const FILTER_MODE_IN = 0;
 	public const FILTER_MODE_OUT = 1;
 	/**#@-*/
-
+	
 	/**
 	 * Return null by reference
 	 */
 	public mixed $null = null;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_sourceName = 'database';
-
+	
 	/**
 	 * A connection between PHP and a database server
 	 *
 	 * @var ?PDO
 	 */
 	protected ?PDO $_source = null;
-
+	
 	/**
 	 * List of primary keys
 	 *
 	 * @var array
 	 */
 	protected array $_primaryKeys = ['id'];
-
+	
 	/**
 	 * Autoincrement key
 	 *
 	 * @var ?string
 	 */
 	protected ?string $_autoIncrementKey = 'id';
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_templates = [];
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_setters = [];
-
+	
 	/**
 	 * @var array
 	 */
@@ -105,12 +100,12 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @var array
 	 */
 	protected array $_gettersCache = [];
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_properties = [];
-
+	
 	/**
 	 * @var array
 	 */
@@ -127,7 +122,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @var bool
 	 */
 	protected bool $_exists = false;
-
+	
 	/**
 	 * @var ?self
 	 */
@@ -168,7 +163,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		// set up whatever needs to be set
 		$this->triggerEvents('setUp');
 	}
-
+	
 	/**
 	 * @return PDO
 	 */
@@ -178,10 +173,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			$this->_initSource();
 		}
-
+		
 		return $this->_source;
 	}
-
+	
 	/**
 	 */
 	public function _initSource(): void
@@ -189,7 +184,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		// get database connection
 		$this->_source = services()->database->get($this->_sourceName);
 	}
-
+	
 	/**
 	 * Short for getSource
 	 *
@@ -199,7 +194,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->getSource();
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -207,7 +202,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->_primaryKeys;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -239,7 +234,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		return $this;
 	}
-
+	
 	/**
 	 * Should be used when initializing multiple properties at once.
 	 * The change will not trigger setters
@@ -256,10 +251,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			$this->setProperty($property, $value);
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -267,7 +262,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->_properties;
 	}
-
+	
 	/**
 	 * Should be used to initialize a single property.
 	 * The change will not trigger setters
@@ -282,7 +277,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function setProperty(string $property, mixed $value): self
 	{
 		$this->_properties[$property] = $value;
-
+		
 		return $this;
 	}
 	
@@ -297,7 +292,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			return null;
 		}
-
+		
 		return $this->_properties[$property];
 	}
 	
@@ -350,7 +345,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			$this->modifyProperty($property, $value);
 		}
-
+		
 		return $this;
 	}
 	
@@ -363,10 +358,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function setReference(string $property, mixed $value): self
 	{
 		$this->_references[$property] = $value;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $property
 	 *
@@ -378,7 +373,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			return $this->null;
 		}
-
+		
 		return $this->_references[$property];
 	}
 	
@@ -407,7 +402,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		return $this->setReference($property, $value);
 	}
-
+	
 	/**
 	 * @param array $modified
 	 *
@@ -416,10 +411,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function setModified(array $modified): self
 	{
 		$this->_modified = $modified;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -427,13 +422,29 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->_modified;
 	}
-
+	
 	/**
+	 * @param string ...$properties
+	 *
 	 * @return bool
 	 */
-	public function isModified(): bool
+	public function isModified(string ...$properties): bool
 	{
-		return count($this->_modified) > 0;
+		if(count($properties) === 0)
+		{
+			return count($this->_modified) > 0;
+		}
+		
+		// check if any of the properties passed was modified
+		foreach($properties as $property)
+		{
+			if(array_key_exists($property, $this->_modified) !== false)
+			{
+				return true;
+			}
+		}
+		
+		return false;
 	}
 	
 	/**
@@ -442,10 +453,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function resetModified(): self
 	{
 		$this->_modified = [];
-	
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param ?self $updateObject
 	 *
@@ -454,10 +465,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function setUpdateObject(?self $updateObject): self
 	{
 		$this->_updateObject = $updateObject;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?self
 	 */
@@ -465,7 +476,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->_updateObject;
 	}
-
+	
 	/**
 	 * @param Template $template
 	 *
@@ -474,10 +485,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function addTemplate(Template $template): self
 	{
 		$this->_templates[] = $template;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -485,7 +496,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->_templates;
 	}
-
+	
 	/**
 	 * @param string $property
 	 * @param callable $callback
@@ -499,7 +510,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			$this->_setters[$property] = [];
 		}
-	
+		
 		if($prepend)
 		{
 			array_unshift($this->_setters[$property], $callback);
@@ -508,7 +519,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			array_push($this->_setters[$property], $callback);
 		}
-
+		
 		return $this;
 	}
 
@@ -563,7 +574,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			array_push($this->_getters[$property], $callback);
 		}
-
+		
 		return $this;
 	}
 
@@ -609,7 +620,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		$this->addGetter($property, $getter, $prepend);
 		$this->addSetter($property, $setter, $prepend);
-
+		
 		return $this;
 	}
 	
@@ -624,7 +635,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->getValue($property);
 	}
-
+	
 	/**
 	 * Value = property or reference
 	 * 
@@ -674,7 +685,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		return array_key_exists($property, $this->_properties)
 			|| array_key_exists($property, $this->_references);
 	}
-
+	
 	/**
 	 * Called also by PDO on FETCH_CLASS
 	 * 
@@ -685,7 +696,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		$this->setValue($property, $value);
 	}
-
+	
 	/**
 	 * Should be used to change value on the object
 	 * 
@@ -720,7 +731,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $property
 	 */
@@ -789,7 +800,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			$destination->exists(true); // needed by save()
 		}
-
+		
 		return $destination;
 	}
 	
@@ -815,7 +826,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 			restore: true,
 			exists: true,
 		);
-
+		
 		return $destination;
 	}
 	
@@ -861,7 +872,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 			type: $type,
 		);
 	}
-
+	
 	/**
 	 * Exports the object for storage in session or database
 	 * 
@@ -883,7 +894,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	): stdClass|array|ArrayObject
 	{
 		$export = new stdClass;
-
+		
 		foreach($this as $property => $value)
 		{
 			if($filter !== null
@@ -905,7 +916,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 				type: $type,
 			);
 		}
-
+		
 		return $this->_getExportType($export, $type);
 	}
 	
@@ -992,7 +1003,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 			type: self::EXPORT_TYPE_ARRAY,
 		);
 	}
-
+	
 	/**
 	 * @param stdClass $object
 	 * @param int $type
@@ -1008,7 +1019,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 			self::EXPORT_TYPE_ARRAYOBJECT => new ArrayObject((array)$object),
 		};
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -1032,7 +1043,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 			type: self::EXPORT_TYPE_STDCLASS,
 		);
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -1040,7 +1051,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return count($this->_properties);
 	}
-
+	
 	/**
 	 * @return void
 	 */
@@ -1048,7 +1059,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		reset($this->_properties);
 	}
-
+	
 	/**
 	 * @return mixed
 	 */
@@ -1056,7 +1067,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return current($this->_properties);
 	}
-
+	
 	/**
 	 * @return void
 	 */
@@ -1064,7 +1075,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		next($this->_properties);
 	}
-
+	
 	/**
 	 * @return null|int|string
 	 */
@@ -1072,17 +1083,17 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return key($this->_properties);
 	}
-
+	
 	/**
 	 * @return bool
 	 */
 	public function valid(): bool
 	{
 		$key = $this->key();
-
+		
 		return ($key !== null && $key !== false);
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -1091,10 +1102,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		$storeClass = static::getStoreClass();
 		/** @var Store $store */
 		$store = new $storeClass;
-
+		
 		$this->triggerEvents('preInsert', 'preSave');
 		$query = $store->insertQuery($this);
-
+		
 		$result = $query->execute();
 		if($this->_autoIncrementKey)
 		{
@@ -1104,10 +1115,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		// reset modified values
 		$this->resetModified();
 		$this->exists(true);
-
+		
 		return $result;
 	}
-
+	
 	/**
 	 * @param string $property
 	 * @param callable $generator
@@ -1119,7 +1130,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		return $this->saveUnique($property, $generator, $attemptsMax);
 	}
-
+	
 	/**
 	 * @param string $property
 	 * @param callable $generator
@@ -1183,7 +1194,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		return $result;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -1202,7 +1213,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		$updateObject = self::import($this->getModifiedValues());
 		return $this->update($updateObject);
 	}
-
+	
 	/**
 	 * @return bool
 	 *
@@ -1211,7 +1222,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function refresh(): bool
 	{
 		$properties = array_keys($this->_properties);
-
+		
 		// refresh only loaded fields
 		$query = $this->source()->prepare('
 			SELECT ' . implode(', ', $properties) . '
@@ -1220,7 +1231,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		);
 		$this->bindPrimaryKeys($query);
 		$result = $query->execute();
-
+		
 		if($result)
 		{
 			$updatedModel = $query->fetchObject();
@@ -1228,16 +1239,16 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 			{
 				$this->modifyProperty($property, $value);
 			}
-
+			
 			// reset modified values
 			$this->resetModified();
 			// reset getters cache
 			$this->_gettersCache = [];
 		}
-
+		
 		return $result;
 	}
-
+	
 	/**
 	 * @return bool
 	 *
@@ -1252,10 +1263,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 			WHERE ' . $this->getPrimaryKeysConditions()
 		);
 		$this->bindPrimaryKeys($query);
-
+		
 		return $query->execute();
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -1265,7 +1276,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		/** @var Store $storeClass */
 		return $storeClass::getTable();
 	}
-
+	
 	/**
 	 * @param ?bool $exists
 	 *
@@ -1280,7 +1291,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		return $this->_exists;
 	}
-
+	
 	/**
 	 * Can be called only after population by PDO::FETCH_CLASS
 	 * @see https://electrictoolbox.com/php-pdo-fetch-class-gotcha/
@@ -1309,16 +1320,16 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			throw new Exception('Primary keys have to be selected for update.');
 		}
-	
+		
 		$conditions = [];
 		foreach($this->_primaryKeys as $primaryKey)
 		{
 			$conditions[] = sprintf('%s = :%s', $primaryKey, $primaryKey);
 		}
-
+		
 		return implode(' AND ', $conditions);
 	}
-
+	
 	/**
 	 * @param PDOStatement $statement
 	 *
@@ -1332,27 +1343,27 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 				PDO::PARAM_STR);
 		}
 	}
-
+	
 	/**
 	 * @return stdClass
 	 */
 	public function getModifiedValues(): stdClass
 	{
 		$values = new stdClass;
-
+		
 		foreach($this as $property => $value)
 		{
 			if(array_key_exists($property, $this->_modified) === false)
 			{
 				continue;
 			}
-
+			
 			$values->{$property} = $this->getValue($property);
 		}
-
+		
 		return $values;
 	}
-
+	
 	/**
 	 * @param mixed ...$events
 	 */
@@ -1361,14 +1372,14 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		foreach($events as $event)
 		{
 			$this->$event();
-		
+			
 			foreach($this->getTemplates() as $template)
 			{
 				$template->$event($this);
 			}
 		}
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -1382,25 +1393,25 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	public function setUp(): void
 	{
 	}
-
+	
 	/**
 	 */
 	public function preInsert(): void
 	{
 	}
-
+	
 	/**
 	 */
 	public function preUpdate(): void
 	{
 	}
-
+	
 	/**
 	 */
 	public function preSave(): void
 	{
 	}
-
+	
 	/**
 	 */
 	public function preDelete(): void
