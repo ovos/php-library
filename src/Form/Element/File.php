@@ -7,6 +7,8 @@ use Ovos\ArrayObject;
 use Ovos\Form\Element;
 use Ovos\Form\Validator\FileUploaded;
 
+use function array_key_exists;
+
 /**
  * File
  *
@@ -18,8 +20,8 @@ class File extends Element
 	/**
 	 * @var array
 	 */
-	protected $_types;
-
+	protected array $_types;
+	
 	/**
 	 * @param array $types
 	 */
@@ -28,7 +30,7 @@ class File extends Element
 		$this->setTypes($types);
 		$this->addValidator(new FileUploaded);
 	}
-
+	
 	/**
 	 * @param array $types
 	 * 
@@ -40,17 +42,19 @@ class File extends Element
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
 	public function getTypes(): array
 	{
 		return $this->_types;
-	}	
-
+	}
+	
 	/**
 	 * @param string $key
+	 *
+	 * @return mixed
 	 */
 	public function __get(string $key): mixed
 	{
@@ -58,10 +62,10 @@ class File extends Element
 		{
 			return null;
 		}
-
+		
 		return $_FILES[$this->_id][$key];
 	}
-
+	
 	/**
 	 * @param string $key
 	 * @param mixed $value
@@ -80,7 +84,7 @@ class File extends Element
 	{
 		return array_key_exists($key, $_FILES[$this->_id]);
 	}	
-
+	
 	/**
 	 * @return ArrayObject
 	 */

@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Form;
 
-use Ovos\Form;
-
 /**
  * Element
  *
@@ -14,47 +12,47 @@ use Ovos\Form;
 class Error
 {
 	/**
-	 * @var Element
+	 * @var ?Element
 	 */
-	protected Element $_element;
-
-	/**
-	 * @var string
-	 */
-	protected $_code;
+	protected ?Element $_element = null;
 	
 	/**
 	 * @var string
 	 */
-	protected $_message;
-
+	protected string $_code;
+	
+	/**
+	 * @var string
+	 */
+	protected string $_message;
+	
 	/**
 	 * @var Validator
 	 */
-	protected $_validator;
+	protected Validator $_validator;
 	
 	/**
 	 * @param string $code
-	 * @param string $message
+	 * @param ?string $message
 	 */
-	public function __construct(string $code, string $message = null)
+	public function __construct(string $code, ?string $message = null)
 	{
 		$this->setCode($code);
 		$this->setMessage($message);
 	}
-
+	
 	/**
-	 * @param Element $element
+	 * @param ?Element $element
 	 *
 	 * @return self
 	 */
-	public function setElement(Element $element): self
+	public function setElement(?Element $element): self
 	{
 		$this->_element = $element;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -62,11 +60,11 @@ class Error
 	{
 		return $this->_element !== null;
 	}
-
+	
 	/**
-	 * @return Element
+	 * @return ?Element
 	 */
-	public function getElement(): Element
+	public function getElement(): ?Element
 	{
 		return $this->_element;
 	}
@@ -82,7 +80,7 @@ class Error
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Validator
 	 */
@@ -90,7 +88,7 @@ class Error
 	{
 		return $this->_validator;
 	}	
-
+	
 	/**
 	 * @param ?string $message
 	 * 
@@ -102,7 +100,7 @@ class Error
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -122,7 +120,7 @@ class Error
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -130,7 +128,7 @@ class Error
 	{
 		return $this->_code;
 	}
-
+	
 	/**
 	 * @return array
 	 */

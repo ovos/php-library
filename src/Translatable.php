@@ -22,7 +22,7 @@ trait Translatable
 		return Translator::getCurrentLocale()->getTranslator()->translate(
 			$phrase, ...$params);
 	}
-
+	
 	/**
 	 * @param string $phraseSingular
 	 * @param string $phrasePlural

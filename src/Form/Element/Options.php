@@ -6,10 +6,12 @@ namespace Ovos\Form\Element;
 use Ovos\Form\Element;
 use Ovos\Form\Element\Options\Option;
 
-use function array_column;
 use function is_array;
 use function array_intersect;
 use function array_is_list;
+use function count;
+use function array_keys;
+use function in_array;
 
 /**
  * Options
@@ -23,7 +25,7 @@ class Options extends Element
 	 * @var Option[]
 	 */
 	protected array $_options = [];
-
+	
 	/**
 	 * @param array $options
 	 */
@@ -53,7 +55,7 @@ class Options extends Element
 		{
 			$options = $options[0];
 		}
-	
+		
 		foreach($options as $option)
 		{
 			$this->addOption($option);
@@ -86,8 +88,8 @@ class Options extends Element
 		}
 		
 		$option->setOptions($this);
-		$this->_options[] = $option;	
-	
+		$this->_options[] = $option;
+		
 		return $this;
 	}
 	
@@ -118,8 +120,8 @@ class Options extends Element
 	/**
 	 * @param array $options
 	 * @param string $valueKey
-	 * @param string $labelKey
-	 * 
+	 * @param ?string $labelKey
+	 *
 	 * @return self
 	 */
 	public function fromObjects(array $options, string $valueKey,

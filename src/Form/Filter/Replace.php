@@ -5,6 +5,8 @@ namespace Ovos\Form\Filter;
 
 use Ovos\Form\Filter;
 
+use function preg_replace;
+
 /**
  * Replace
  *
@@ -17,12 +19,12 @@ class Replace extends Filter
 	 * @var string
 	 */
 	protected string $_pattern;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_replacement = null;
-
+	
 	/**
 	 * @param string $pattern
 	 *
@@ -31,10 +33,10 @@ class Replace extends Filter
 	public function setPattern(string $pattern): self
 	{
 		$this->_pattern = $pattern;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -42,7 +44,7 @@ class Replace extends Filter
 	{
 		return $this->_pattern;
 	}
-
+	
 	/**
 	 * @param ?string $replacement
 	 *
@@ -51,10 +53,10 @@ class Replace extends Filter
 	public function setReplacement(?string $replacement): self
 	{
 		$this->_replacement = $replacement;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -62,7 +64,7 @@ class Replace extends Filter
 	{
 		return $this->_replacement;
 	}
-
+	
 	/**
 	 * @param string $pattern
 	 * @param ?string $replacement
@@ -72,7 +74,7 @@ class Replace extends Filter
 		$this->setPattern($pattern);
 		$this->setReplacement($replacement);
 	}
-
+	
 	/**
 	 * @param mixed $value
 	 *
