@@ -20,7 +20,7 @@ class IfChecked extends Validator
 	 */
 	public const ERROR_NOT_CHECKED = 'not_checked';
 	/**#@-*/
-
+	
 	/**
 	 * @var string[]
 	 */
@@ -28,12 +28,12 @@ class IfChecked extends Validator
 	[
 		self::ERROR_NOT_CHECKED => '"{0}" has to be completed first.',
 	];
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_id;
-
+	
 	/**
 	 * @param string $id
 	 */
@@ -41,7 +41,7 @@ class IfChecked extends Validator
 	{
 		$this->setId($id);
 	}
-
+	
 	/**
 	 * @param string $id
 	 * 
@@ -69,7 +69,7 @@ class IfChecked extends Validator
 	{
 		return $this->getElement()->getForm()->getElement($this->_id);
 	}
-
+	
 	/**
 	 * @param null|mixed $value
 	 *
@@ -91,7 +91,7 @@ class IfChecked extends Validator
 			));
 			$this->addError($error);
 		}
-	
+		
 		return $valid;
 	}
 }

@@ -5,6 +5,8 @@ namespace Ovos\Form\Filter;
 
 use Ovos\Form\Filter;
 
+use function str_starts_with;
+
 /**
  * Prefix
  *
@@ -17,7 +19,7 @@ class Prefix extends Filter
 	 * @var string
 	 */
 	protected string $_prefix;
-
+	
 	/**
 	 * @param string $prefix
 	 *
@@ -26,10 +28,10 @@ class Prefix extends Filter
 	public function setPrefix(string $prefix): self
 	{
 		$this->_prefix = $prefix;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -37,7 +39,7 @@ class Prefix extends Filter
 	{
 		return $this->_prefix;
 	}
-
+	
 	/**
 	 * @param string $prefix
 	 */
@@ -45,7 +47,7 @@ class Prefix extends Filter
 	{
 		$this->setPrefix($prefix);
 	}
-
+	
 	/**
 	 * @param mixed $value
 	 *
@@ -57,7 +59,7 @@ class Prefix extends Filter
 		{
 			return $value;
 		}
-
+		
 		return $this->_prefix . $value;
 	}
 }

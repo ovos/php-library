@@ -18,17 +18,17 @@ abstract class Validator
 	 * @var Element
 	 */
 	protected Element $_element;
-
+	
 	/**
 	 * @var Error[]
 	 */
 	protected array $_errors = [];
-
+	
 	/**
 	 * @var string[]
 	 */
 	protected array $_messages = [];
-
+	
 	/**
 	 * @param Element $element
 	 *
@@ -37,10 +37,10 @@ abstract class Validator
 	public function setElement(Element $element): self
 	{
 		$this->_element = $element;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Element
 	 */
@@ -56,7 +56,7 @@ abstract class Validator
 	{
 		return count($this->_errors) > 0;
 	}
-
+	
 	/**
 	 * @param Error $error
 	 * 
@@ -70,7 +70,7 @@ abstract class Validator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Error[]
 	 */
@@ -78,7 +78,7 @@ abstract class Validator
 	{
 		return $this->_errors;
 	}
-
+	
 	/**
 	 * @return self
 	 */
@@ -88,7 +88,7 @@ abstract class Validator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -96,7 +96,7 @@ abstract class Validator
 	{
 		return $this->_messages;
 	}
-
+	
 	/**
 	 * @param string $errorCode
 	 * @param string $value
@@ -109,7 +109,7 @@ abstract class Validator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $errorCode
 	 * 
