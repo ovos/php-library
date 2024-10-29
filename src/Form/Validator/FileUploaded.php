@@ -55,7 +55,7 @@ class FileUploaded extends Validator
 			return $this->error(new Error(self::ERROR_INPUT_INVALID, 
 				$this->getMessage(self::ERROR_INPUT_INVALID)));
 		}
-
+		
 		switch($_FILES[$id]['error'])
 		{
 			case UPLOAD_ERR_OK:
@@ -77,7 +77,7 @@ class FileUploaded extends Validator
 			return $this->error(new Error(self::ERROR_EMPTY, 
 				$this->getMessage(self::ERROR_EMPTY)));
 		}
-
+		
 		/** @var File $element */
 		$element = $this->getElement();
 		if($types = $element->getTypes())
@@ -109,7 +109,7 @@ class FileUploaded extends Validator
 	 */
 	public function error(Error $error): bool
 	{
-		$this->addError($error);	
+		$this->addError($error);
 		
 		return false;
 	}

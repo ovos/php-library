@@ -20,7 +20,7 @@ class PasswordStrength extends Validator
 	 */
 	public const ERROR_WEAK = 'password_weak';
 	/**#@-*/
-
+	
 	/**
 	 * @var string[]
 	 */
@@ -28,7 +28,7 @@ class PasswordStrength extends Validator
 	[
 		self::ERROR_WEAK => 'Password is not strong enough.',
 	];
-
+	
 	/**
 	 * @var int
 	 */
@@ -48,7 +48,7 @@ class PasswordStrength extends Validator
 	 * @var bool
 	 */
 	protected bool $_special;
-
+	
 	/**
 	 * @param int $length
 	 * @param bool $uppercase
@@ -66,7 +66,7 @@ class PasswordStrength extends Validator
 		$this->_digits = $digits;
 		$this->_special = $special;
 	}
-
+	
 	/**
 	 * @param null|mixed $value
 	 *
@@ -106,7 +106,7 @@ class PasswordStrength extends Validator
 		{
 			$valid = false;
 		}
-
+		
 		if($valid === false)
 		{
 			$error = new Error(self::ERROR_WEAK, sprintf($this->getMessage(self::ERROR_WEAK),

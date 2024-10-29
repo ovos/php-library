@@ -5,6 +5,8 @@ namespace Ovos\Form\Filter;
 
 use Ovos\Form\Filter;
 
+use function strip_tags;
+
 /**
  * StripTags
  *
