@@ -27,7 +27,7 @@ class Measurements
 		$roundedTime = round($endTime - $startTime, 8);
 		return number_format($roundedTime, 8, '.', '');
 	}
-
+	
 	/**
 	 * Calculates and formats memory usage
 	 *

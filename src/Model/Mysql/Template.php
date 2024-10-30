@@ -20,16 +20,16 @@ abstract class Template
 	/**
 	 * Application
 	 *
-	 * @var Application
+	 * @var ?Application
 	 */
-	protected null|Application $_app = null;
-
+	protected ?Application $_app = null;
+	
 	/**
 	 * Config
 	 *
-	 * @var ArrayObject
+	 * @var ?ArrayObject
 	 */
-	protected null|ArrayObject $_config = null;
+	protected ?ArrayObject $_config = null;
 
 	/**
 	 */
@@ -37,7 +37,7 @@ abstract class Template
 	{
 		$this->__wakeup();
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -49,7 +49,7 @@ abstract class Template
 		
 		return array_keys($properties);
 	}
-
+	
 	/**
 	 */
 	public function __wakeup()
@@ -64,28 +64,28 @@ abstract class Template
 	public function setUp(Mysql $model): void
 	{
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */
 	public function preInsert(Mysql $model): void
 	{
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */
 	public function preUpdate(Mysql $model): void
 	{
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */
 	public function preSave(Mysql $model): void
 	{
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */

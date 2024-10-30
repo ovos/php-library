@@ -20,7 +20,7 @@ class Terminal
 	 * @var string
 	 */
 	public const SAPI_CLI = 'cli';
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -32,10 +32,10 @@ class Terminal
 		{
 			return null;
 		}
-
+		
 		return $line;
 	}
-
+	
 	/**
 	 * Output the message string
 	 * 

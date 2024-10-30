@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace Ovos\Pdo\Profiler\Exception;
+
 use Ovos\Exception;
 
 /**

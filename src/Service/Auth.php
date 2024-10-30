@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Models\User;
-use Ovos\Exception;
 use Ovos\Service;
 
 /**
@@ -32,7 +31,7 @@ class Auth extends Service
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 * @param ?User $user
 	 *
@@ -44,7 +43,7 @@ class Auth extends Service
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -52,7 +51,7 @@ class Auth extends Service
 	{
 		return $this->_user !== null;
 	}
-
+	
 	/**
 	 * @return ?User
 	 */

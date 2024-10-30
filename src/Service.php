@@ -17,32 +17,32 @@ abstract class Service
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * @var Request
 	 */
 	protected Request $_request;
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_enabled = true;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_dependsOn = [];
-
+	
 	/**
 	 */
 	public function __construct()
 	{
 		$this->_app = app();
 		$this->_request = $this->_app->getRequest();
-
+		
 		$this->_dependsOn();
 	}
-
+	
 	/**
 	 * @throws RuntimeException
 	 */
@@ -58,7 +58,7 @@ abstract class Service
 			}
 		}
 	}
-
+	
 	/**
 	 * @param bool $enabled
 	 *
@@ -67,10 +67,10 @@ abstract class Service
 	public function setEnabled(bool $enabled): self
 	{
 		$this->_enabled = $enabled;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -78,7 +78,7 @@ abstract class Service
 	{
 		return $this->_enabled;
 	}
-
+	
 	/**
 	 * @return string
 	 */

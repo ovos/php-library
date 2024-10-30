@@ -40,7 +40,7 @@ class Strings
 	{
 		return str_starts_with($haystack, $needle);
 	}
-
+	
 	/**
 	 * @deprecated @see https://wiki.php.net/rfc/str_contains
 	 * 
@@ -53,7 +53,7 @@ class Strings
 	{
 		return str_contains($haystack, $needle);
 	}
-
+	
 	/**
 	 * Returns the slug-version of the string.
 	 *
@@ -63,10 +63,10 @@ class Strings
 	 */
 	public static function slugify(string $string): string
 	{
-		$slugify = new Slugify();
+		$slugify = new Slugify;
 		return $slugify->slugify($string);
 	}
-
+	
 	/**
 	 * @param string $string
 	 *
@@ -77,7 +77,7 @@ class Strings
 		$string = ucwords(str_replace(array('-', '_'), ' ', $string));
 		return str_replace(' ', '', $string);
 	}
-
+	
 	/**
 	 * @param string $string
 	 *
@@ -87,7 +87,7 @@ class Strings
 	{
 		return lcfirst(self::studlyCase($string));
 	}
-
+	
 	/**
 	 * @param string $value
 	 * @param string $delimiter
@@ -96,14 +96,14 @@ class Strings
 	 */
 	public static function snakeCase(string $value, string $delimiter = '-'): string
 	{
-		if(!ctype_lower($value))
+		if(ctype_lower($value) === false)
 		{
 			$value = strtolower(preg_replace('/(.)(?=[A-Z])/u', '$1' . $delimiter, $value));
 		}
-
+		
 		return $value;
 	}
-
+	
 	/**
 	 * Generate random string
 	 *
@@ -125,7 +125,7 @@ class Strings
 		}
 		return $str;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -133,7 +133,7 @@ class Strings
 	{
 		return str_pad(dechex(random_int(0, 255)), 2, '0', STR_PAD_LEFT);
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -141,7 +141,7 @@ class Strings
 	{
 		return self::randomColorPart() . self::randomColorPart() . self::randomColorPart();
 	}
-
+	
 	/**
 	 * Escapes the string for safe display inside HTML
 	 *
@@ -153,7 +153,7 @@ class Strings
 	{
 		return htmlspecialchars($string, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 	}
-
+	
 	/**
 	 * @param string $string
 	 * @param string $wrap

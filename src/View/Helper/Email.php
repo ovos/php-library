@@ -18,11 +18,11 @@ class Email extends Helper
 	 * @var string
 	 */
 	public const MAILTO = '&#109;&#97;&#105;&#108;&#116;&#111;&#58;';
-
+	
 	/**
 	 * @var array
 	 */
-	protected $_cache = [];
+	protected array $_cache = [];
 	
 	/**
 	 * @param string $email

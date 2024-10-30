@@ -5,6 +5,7 @@ namespace Ovos\View\Helper;
 
 use Ovos\View\Helper;
 use Ovos\Url as BaseUrl;
+
 use function count;
 
 /**

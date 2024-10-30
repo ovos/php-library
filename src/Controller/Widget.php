@@ -5,8 +5,8 @@ namespace Ovos\Controller;
 
 use Ovos\Application;
 use Ovos\Request;
-use Ovos\Response;
 use Ovos\Translatable;
+
 use function Ovos\app;
 
 /**
@@ -18,24 +18,24 @@ use function Ovos\app;
 abstract class Widget
 {
 	use Translatable;
-
+	
 	/**
 	 * Application
 	 *
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * @var Request
 	 */
 	protected Request $_request;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_script;
-
+	
 	/**
 	 */
 	public function __construct()
@@ -43,7 +43,7 @@ abstract class Widget
 		$this->_app = app();
 		$this->_request = $this->_app->getRequest();
 	}
-
+	
 	/**
 	 * @param string $script
 	 *
@@ -52,10 +52,10 @@ abstract class Widget
 	public function setScript(string $script): self
 	{
 		$this->_script = $script;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -68,7 +68,7 @@ abstract class Widget
 	 * @return string
 	 */
 	abstract public function render(): string;
-
+	
 	/**
 	 * @return string
 	 */

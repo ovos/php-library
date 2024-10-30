@@ -7,6 +7,11 @@ use Ovos\Exception\NotFoundException;
 use PDO;
 use ReflectionClass;
 
+use function file_exists;
+use function file_get_contents;
+use function sprintf;
+use function substr;
+
 /**
  * Migration
  *
@@ -21,7 +26,7 @@ abstract class Migration
 	public const DIRECTION_UP = 'up';
 	public const DIRECTION_DOWN = 'down';
 	/**#@-*/
-
+	
 	/**
 	 * @var ReflectionClass
 	 */
@@ -31,11 +36,11 @@ abstract class Migration
 	 * @var string
 	 */
 	protected string $_sourceName = 'database';
-
+	
 	/**
 	 * A connection between PHP and a database server
 	 *
-	 * @var PDO
+	 * @var ?PDO
 	 */
 	protected ?PDO $_source = null;
 	
@@ -60,7 +65,7 @@ abstract class Migration
 
 		return $this->_source;
 	}
-
+	
 	/**
 	 * Short for getSource
 	 *
@@ -71,9 +76,9 @@ abstract class Migration
 		return $this->getSource();
 	}
 	
-	public abstract function up(): void;
-	public abstract function down(): void;
-
+	abstract public function up(): void;
+	abstract public function down(): void;
+	
 	/**
 	 * @return int|false
 	 * 
@@ -83,7 +88,7 @@ abstract class Migration
 	{
 		return $this->runSql(self::DIRECTION_UP);
 	}
-
+	
 	/**
 	 * @return int|false
 	 * 
@@ -93,7 +98,7 @@ abstract class Migration
 	{
 		return $this->runSql(self::DIRECTION_DOWN);
 	}
-
+	
 	/**
 	 * @param string $suffix
 	 *
@@ -121,7 +126,7 @@ abstract class Migration
 		
 		return $result;
 	}
-
+	
 	/**
 	 * @param string $suffix
 	 *

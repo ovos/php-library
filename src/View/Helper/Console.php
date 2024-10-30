@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
-use Ovos\ArrayObject;
 use Ovos\Console as BaseConsole;
 use Ovos\View;
 use Ovos\View\Helper;
@@ -39,10 +38,10 @@ class Console extends Helper
 		{
 			return '';
 		}
-
+		
 		$view = new View('helpers/console.phtml');
 		$view->messages = $messages;
-
+		
 		return $view->__toString();
 	}
 }

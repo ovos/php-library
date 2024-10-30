@@ -9,6 +9,7 @@ use Ovos\Form\Element;
 use Ovos\Form\Element\Options\Option;
 use Ovos\View;
 use Ovos\View\Helper\Placeholders\Placeholder;
+
 use function sprintf;
 
 /**
@@ -23,42 +24,42 @@ class FormElement extends Helper
 	 * @var ?Element
 	 */
 	protected ?Element $_element = null;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_type = null;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_description = null;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_placeholder = null;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_elementClass = null;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_fieldClass = null;
-
+	
 	/**
 	 * @var ?Closure
 	 */
 	protected ?Closure $_fieldClassCallback = null;
-
+	
 	/**
 	 * @var ?Closure
 	 */
 	protected ?Closure $_fieldLabelCallback = null;
-
+	
 	/**
 	 * @var ?Placeholder
 	 */
@@ -73,27 +74,27 @@ class FormElement extends Helper
 	 * @var ?Placeholder
 	 */
 	protected ?Placeholder $_inputInsert = null;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_attributes = [];
-
+	
 	/**
-	 * @var Closure
+	 * @var ?Closure
 	 */
 	protected ?Closure $_attributesCallback = null;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_options = [];
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_optionLabelWrap = null;
-
+	
 	/**
 	 * @var ?Closure
 	 */
@@ -103,7 +104,7 @@ class FormElement extends Helper
 	 * @var ?Closure
 	 */
 	protected ?Closure $_optionLabelCallback = null;
-
+	
 	/**
 	 * @param Element $element
 	 * 
@@ -113,7 +114,7 @@ class FormElement extends Helper
 	{
 		return new self($element);
 	}
-
+	
 	/**
 	 * @param ?Element $element
 	 */
@@ -123,7 +124,7 @@ class FormElement extends Helper
 		
 		$this->setElement($element);
 	}
-
+	
 	/**
 	 * @param ?Element $element
 	 * 
@@ -135,7 +136,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?Element
 	 */
@@ -143,7 +144,7 @@ class FormElement extends Helper
 	{
 		return $this->_element;
 	}
-
+	
 	/**
 	 * @param ?string $type
 	 * 
@@ -155,7 +156,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -163,7 +164,7 @@ class FormElement extends Helper
 	{
 		return $this->_type;
 	}
-
+	
 	/**
 	 * @param ?Placeholder $insert
 	 * 
@@ -175,7 +176,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?Placeholder
 	 */
@@ -203,7 +204,7 @@ class FormElement extends Helper
 	{
 		return $this->_fieldInsert;
 	}
-		
+	
 	/**
 	 * @param ?Placeholder $insert
 	 * 
@@ -235,7 +236,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -243,7 +244,7 @@ class FormElement extends Helper
 	{
 		return $this->_description;
 	}
-
+	
 	/**
 	 * @param ?string $placeholder
 	 * 
@@ -255,7 +256,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -263,7 +264,7 @@ class FormElement extends Helper
 	{
 		return $this->_placeholder;
 	}
-
+	
 	/**
 	 * @param ?string $elementClass
 	 * 
@@ -275,7 +276,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -283,7 +284,7 @@ class FormElement extends Helper
 	{
 		return $this->_elementClass;
 	}
-
+	
 	/**
 	 * @param ?string $fieldClass
 	 * 
@@ -295,7 +296,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -315,7 +316,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?Closure
 	 */
@@ -335,7 +336,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?Closure
 	 */
@@ -355,10 +356,10 @@ class FormElement extends Helper
 		{
 			return $option->getLabel();
 		}
-	
+		
 		return ($this->_fieldLabelCallback)($option);
-	}	
-
+	}
+	
 	/**
 	 * @param string $attribute
 	 * @param int|string $value
@@ -371,7 +372,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param array $attributes
 	 * 
@@ -383,7 +384,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -403,7 +404,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?Closure
 	 */
@@ -423,7 +424,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $key
 	 * 
@@ -458,7 +459,7 @@ class FormElement extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @deprecated
 	 * @see getOptionLabelWrap
@@ -469,7 +470,7 @@ class FormElement extends Helper
 	{
 		return $this->getOptionLabelWrap();
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -477,7 +478,7 @@ class FormElement extends Helper
 	{
 		return $this->_optionLabelWrap;
 	}
-
+	
 	/**
 	 * @deprecated
 	 * @see optionLabelWrap
@@ -502,7 +503,7 @@ class FormElement extends Helper
 		{
 			return $label;
 		}
-	
+		
 		return sprintf($this->_optionLabelWrap, $label);
 	}
 	
@@ -537,7 +538,7 @@ class FormElement extends Helper
 		{
 			return $label;
 		}
-	
+		
 		return ($this->_optionLabelCallback)($label);
 	}
 		
@@ -591,7 +592,7 @@ class FormElement extends Helper
 		
 		return $view->render();
 	}
-
+	
 	/**
 	 * @return string
 	 */

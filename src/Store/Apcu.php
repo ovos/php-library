@@ -4,9 +4,15 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Arrays;
 use Ovos\Exception;
 use APCUIterator;
+
+use function is_string;
+use function apcu_store;
+use function apcu_fetch;
+use function apcu_delete;
+use function apcu_cache_info;
+use function apcu_clear_cache;
 
 /**
  * Apcu
@@ -20,13 +26,13 @@ class Apcu extends Cache
 	 * @var ?string 
 	 */
 	protected ?string $_prefix = null;
-
+	
 	/**#@+
 	 * Separators
 	 */
 	public const SEPARATOR_PREFIX = ':';
 	/**#@-*/
-
+	
 	/**
 	 * @param ?string $prefix
 	 */
@@ -35,7 +41,7 @@ class Apcu extends Cache
 		parent::__construct();
 		
 		// this store does not rely on config availability on purpose
-	
+		
 		$this->setPrefix($prefix);
 	}
 	
@@ -51,7 +57,7 @@ class Apcu extends Cache
 		{
 			throw new Exception('"cache: prefix" is a required config value.');
 		}
-	
+		
 		$instance = new self($config->prefix);
 		$instance->setConfig($config->perishable);
 		
@@ -79,7 +85,7 @@ class Apcu extends Cache
 	public function prefix(string $key, ?string $prefix = null): string
 	{
 		return $prefix ?: $this->_prefix . self::SEPARATOR_PREFIX . $key;
-	}	
+	}
 	
 	/**
 	 * @param string $key
@@ -91,7 +97,7 @@ class Apcu extends Cache
 	public function set(string $key, mixed $value, int $ttl = 0): bool
 	{
 		$value = $this->compress($this->serialize($value));
-	
+		
 		return apcu_store($this->prefix($key), $value, $ttl);
 	}
 	
@@ -122,7 +128,7 @@ class Apcu extends Cache
 		{
 			$key = $this->prefix($key);
 		}
-	
+		
 		return apcu_delete($key);
 	}
 	

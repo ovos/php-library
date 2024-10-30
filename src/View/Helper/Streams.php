@@ -6,6 +6,7 @@ namespace Ovos\View\Helper;
 use Ovos\View;
 use Ovos\View\Helper;
 use Ovos\Service\Streams as Service;
+
 use function Ovos\services;
 
 /**
@@ -23,7 +24,7 @@ class Streams extends Helper
 	{
 		return $this;
 	}
-
+	
 	/**
 	 * @return Service
 	 */
@@ -31,7 +32,7 @@ class Streams extends Helper
 	{
 		return services()->streams;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -39,7 +40,7 @@ class Streams extends Helper
 	{
 		return services()->isRegistered(Service::SYMBOL);
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -49,7 +50,7 @@ class Streams extends Helper
 			? $this->get()->getRequests()
 			: [];
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -59,16 +60,16 @@ class Streams extends Helper
 		{
 			return '';
 		}
-	
+		
 		$requests = $this->getRequests();
 		if(empty($requests))
 		{
 			return '';
 		}
-
+		
 		$view = new View('helpers/streams.phtml');
 		$view->requests = $requests;
-
+		
 		return $view->__toString();
 	}
 }

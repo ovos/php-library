@@ -7,6 +7,7 @@ use Ovos\Measurement;
 use Ovos\View;
 use Ovos\View\Helper;
 use Ovos\Service;
+
 use function Ovos\services;
 
 /**
@@ -31,7 +32,7 @@ class Benchmark extends Helper
 		
 		return $benchmark;
 	}
-
+	
 	/**
 	 * @return ?Measurement
 	 */
@@ -44,7 +45,7 @@ class Benchmark extends Helper
 		
 		return $this->getBenchmark()->getMeasurements()['total'];
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -54,10 +55,10 @@ class Benchmark extends Helper
 		{
 			return '';
 		}
-
+		
 		$view = new View('helpers/benchmark.phtml');
 		$view->measurements = $benchmark->getMeasurements();
-
+		
 		return $view->__toString();
 	}
 }

@@ -25,7 +25,7 @@ class File
 	public static function extractFilename(string $filename): array
 	{
 		$basename = $ext = null;
-
+		
 		$dotPos = mb_strrpos($filename, '.');
 		if($dotPos > 0)
 		{
@@ -36,7 +36,7 @@ class File
 				$basename = mb_substr($filename, 0, $dotPos);
 			}
 		}
-
+		
 		return [$basename, $ext];
 	}
 }

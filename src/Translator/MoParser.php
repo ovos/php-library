@@ -98,28 +98,28 @@ final class MoParser
 	{
 		return $this->_error;
 	}
-
+	
 	/**
 	 * Parses .mo file and stores phrases into an array
 	 */
 	public function parse(): array
 	{
 		$this->_translations = [];
-	
+		
 		if($this->_filename === null)
 		{
 			return [];
 		}
-
+		
 		if(!is_readable($this->_filename))
 		{
 			$this->_error = self::ERROR_DOES_NOT_EXIST;
 			
 			return [];
 		}
-
+		
 		$stream = new StringReader($this->_filename);
-
+		
 		try
 		{
 			$magic = $stream->read(0, 4);
@@ -135,20 +135,20 @@ final class MoParser
 			else
 			{
 				$this->_error = self::ERROR_BAD_MAGIC;
-
+				
 				return [];
 			}
-
+			
 			/* parse header */
 			$total = $stream->readInt($unpack, 8);
 			$originals = $stream->readInt($unpack, 12);
 			$translations = $stream->readInt($unpack, 16);
-
+			
 			/* get original and translations tables */
 			$totalTimesTwo = ($total * 2);
 			$tableOriginals = $stream->readIntArray($unpack, $originals, $totalTimesTwo);
 			$tableTranslations = $stream->readIntArray($unpack, $translations, $totalTimesTwo);
-
+			
 			/* read all strings to the cache */
 			for($i = 0; $i < $total; ++$i)
 			{
@@ -165,7 +165,7 @@ final class MoParser
 		catch(Exception $exception)
 		{
 			$this->_error = self::ERROR_READING;
-
+			
 			return [];
 		}
 		

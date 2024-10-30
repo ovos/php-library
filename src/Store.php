@@ -17,7 +17,7 @@ abstract class Store
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 */
 	public function __construct()

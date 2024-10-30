@@ -15,6 +15,8 @@ use function implode;
 use function preg_split;
 use function array_shift;
 use function strlen;
+use function substr;
+use function parse_url;
 
 /**
  * Url
@@ -25,20 +27,20 @@ use function strlen;
 class Url
 {
 	/**
-	 * @var null|Locale
+	 * @var ?Locale
 	 */
-	protected null|Locale $_locale = null;
-
+	protected ?Locale $_locale = null;
+	
 	/**
 	 * @var array
 	 */
 	protected array $_components = [];
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_relative = false;
-
+	
 	/**
 	 * Construct
 	 *
@@ -59,10 +61,10 @@ class Url
 			$urlComponents = array_merge(...$urlComponents);
 			
 			$this->setComponents($urlComponents);
-
+			
 			return;
 		}
-
+		
 		$this->setComponents(self::getRequestComponents(), true);
 	}
 
@@ -77,7 +79,7 @@ class Url
 		{
 			return [$url];
 		}
-	
+		
 		$position = strpos($url, '/');
 		if($position === false)
 		{
@@ -87,10 +89,10 @@ class Url
 		{
 			return [];
 		}
-
+		
 		return preg_split('~/+~', trim($url, '/'));
 	}
-
+	
 	/**
 	 * @param array $components
 	 * @param bool $relative
@@ -100,7 +102,7 @@ class Url
 	public static function getUrlFromComponents(array $components, bool $relative = false): ?string
 	{
 		$url = $relative ? '' : ROUTE_PATH;
-
+		
 		if(count($components) === 0)
 		{
 			return $url;
@@ -116,11 +118,11 @@ class Url
 			{
 				$component = $component ? 'true' : 'false';
 			}
-		}		
-
+		}
+		
 		return $url . implode('/', $components) . '/';
 	}
-
+	
 	/**
 	 * Returns request components
 	 *
@@ -129,11 +131,11 @@ class Url
 	public static function getRequestComponents(): array
 	{
 		static $components;
-
+		
 		if($components === null)
 		{
 			$components = [];
-
+			
 			if(app()->isInterfaceHttp())
 			{
 				$uri = $_SERVER['REQUEST_URI'];
@@ -157,10 +159,10 @@ class Url
 				array_shift($components); // remove filename
 			}
 		}
-
+		
 		return $components;
 	}
-
+	
 	/**
 	 * @param array $components
 	 * @param bool $detectLocale
@@ -177,12 +179,12 @@ class Url
 			$localeUrlName = array_shift($components);
 			$this->setLocale(Locales::get($localeUrlName));
 		}
-
+		
 		$this->_components = $components;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param array $components
 	 * @param bool $detectLocale
@@ -192,8 +194,8 @@ class Url
 	public function set(array $components, bool $detectLocale = false): self
 	{
 		return $this->setComponents($components, $detectLocale);
-	}	
-
+	}
+	
 	/**
 	 * Add *new* component
 	 * 
@@ -206,9 +208,9 @@ class Url
 		$lastComponentKey = $this->_getLastComponentKey();
 		if($this->_components[$lastComponentKey] !== $component)
 		{
-			$this->_components[] = $component;	
+			$this->_components[] = $component;
 		}
-
+		
 		return $this;
 	}
 	
@@ -223,7 +225,7 @@ class Url
 		{
 			$this->addComponent($component);
 		}
-	
+		
 		return $this;
 	}
 		
@@ -255,7 +257,7 @@ class Url
 		{
 			unset($this->_components[$key]);
 		}
-
+		
 		return $this;
 	}
 	
@@ -280,10 +282,10 @@ class Url
 		{
 			$this->_components[$lastComponentKey] = $component;
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return null|int|string
 	 */
@@ -307,7 +309,7 @@ class Url
 	{
 		return $this->setLastComponent($component);
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -315,7 +317,7 @@ class Url
 	{
 		return $this->_components;
 	}
-
+	
 	/**
 	 * @param null|Locale|string $locale
 	 *
@@ -327,9 +329,9 @@ class Url
 		{
 			$locale = Locales::get($locale);
 		}
-
+		
 		$this->_locale = $locale;
-
+		
 		return $this;
 	}
 
@@ -342,10 +344,10 @@ class Url
 		{
 			$this->_locale = Locales::getDefault();
 		}
-
+		
 		return $this->_locale;
 	}
-
+	
 	/**
 	 * @param bool $relative
 	 *
@@ -354,10 +356,10 @@ class Url
 	public function setRelative(bool $relative): self
 	{
 		$this->_relative = $relative;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -365,7 +367,7 @@ class Url
 	{
 		return $this->_relative;
 	}
-
+	
 	/**
 	 * @param bool $relative
 	 *
@@ -380,16 +382,16 @@ class Url
 		{
 			$locale = app()->getRequest()->getLocale();
 		}
-
+		
 		if($locale->isDefault() === false)
 		{
 			array_unshift($components, $locale->getUrlName());
 		}
-
+		
 		return self::getUrlFromComponents($components,
 			$relative || $this->_relative);
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -405,7 +407,7 @@ class Url
 	{
 		return $this->getUrl();
 	}
-
+	
 	/**
 	 * @return self
 	 */

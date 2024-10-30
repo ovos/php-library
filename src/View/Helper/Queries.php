@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
-use Ovos\Arrays;
 use Ovos\Pdo\Profiler\Reporter;
 use Ovos\View;
 use Ovos\View\Helper;
@@ -53,10 +52,10 @@ class Queries extends Helper
 		{
 			return '';
 		}
-
+		
 		$view = new View('helpers/queries.phtml');
 		$view->queries = $report;
-
+		
 		return $view->__toString();
 	}
 }

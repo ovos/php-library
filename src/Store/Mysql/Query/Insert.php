@@ -5,6 +5,10 @@ namespace Ovos\Store\Mysql\Query;
 
 use Ovos\Store\Mysql\Query;
 
+use function implode;
+use function array_keys;
+use function array_values;
+
 /**
  * Insert
  *

@@ -6,8 +6,8 @@ namespace Ovos\Controller;
 use Ovos\Application;
 use Ovos\Controller;
 use Ovos\Request;
-use Ovos\Response;
 use Ovos\Exception\RuntimeException;
+
 use function Ovos\app;
 
 /**
@@ -22,27 +22,27 @@ abstract class Plugin
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * @var Request
 	 */
 	protected Request $_request;
-
+	
 	/**
 	 * @var Controller
 	 */
 	protected Controller $_controller;
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_enabled = true;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_dependsOn = [];
-
+	
 	/**
 	 */
 	public function __construct()
@@ -53,7 +53,7 @@ abstract class Plugin
 		
 		$this->_dependsOn();
 	}
-
+	
 	/**
 	 * @throws RuntimeException
 	 */
@@ -69,7 +69,7 @@ abstract class Plugin
 			}
 		}
 	}
-
+	
 	/**
 	 * @return Request
 	 */
@@ -77,7 +77,7 @@ abstract class Plugin
 	{
 		return $this->_request;
 	}
-
+	
 	/**
 	 * @param Controller $controller
 	 *
@@ -86,10 +86,10 @@ abstract class Plugin
 	public function setController(Controller $controller): self
 	{
 		$this->_controller = $controller;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Controller
 	 */
@@ -97,27 +97,26 @@ abstract class Plugin
 	{
 		return $this->_controller;
 	}
-
+	
 	/**
 	 * @return string
 	 */
 	abstract public static function getSymbol(): string;
-
+	
 	/**
 	 * @return void
 	 */
 	public function preDispatch(): void
 	{
 	}
-
+	
 	/**
 	 * @return void
 	 */
 	public function postDispatch(): void
 	{
-
 	}
-
+	
 	/**
 	 * @param bool $enabled
 	 *
@@ -126,20 +125,20 @@ abstract class Plugin
 	public function setEnabled(bool $enabled = true): self
 	{
 		$this->_enabled = $enabled;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return self
 	 */
 	public function disable(): self
 	{
 		$this->_enabled = false;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -147,7 +146,7 @@ abstract class Plugin
 	{
 		return $this->_enabled;
 	}
-
+	
 	/**
 	 * @param string $phrase
 	 * @param mixed ...$params
@@ -159,7 +158,7 @@ abstract class Plugin
 		return $this->getController()->_(
 			$phrase, ...$params);
 	}
-
+	
 	/**
 	 * @param string $phraseSingular
 	 * @param string $phrasePlural

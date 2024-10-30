@@ -12,7 +12,13 @@ use PDOStatement;
 use Ovos\Store\Mysql\Query;
 use Ovos\Store\Mysql\QueryBuilder;
 use Closure;
+
 use function Ovos\services;
+use function sprintf;
+use function is_bool;
+use function is_integer;
+use function array_keys;
+use function array_map;
 
 /**
  * Mysql
@@ -35,19 +41,19 @@ abstract class Mysql extends Store
 	 * @var string
 	 */
 	public const MODEL = null;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_sourceName = 'database';
-
+	
 	/**
 	 * A connection between PHP and a database server
 	 *
 	 * @var ?PDO
 	 */
 	protected ?PDO $_source = null;
-
+	
 	/**
 	 * @return PDO
 	 */
@@ -58,10 +64,10 @@ abstract class Mysql extends Store
 			// get database connection
 			$this->_source = services()->database->get($this->_sourceName);
 		}
-
+		
 		return $this->_source;
 	}
-
+	
 	/**
 	 * Short for getSource
 	 *
@@ -81,7 +87,7 @@ abstract class Mysql extends Store
 		{
 			throw new Exception('Store is required to have a non-null table name.');
 		}
-
+		
 		return static::TABLE;
 	}
 		
@@ -94,7 +100,7 @@ abstract class Mysql extends Store
 		{
 			throw new Exception('Store is required to have a non-null model name.');
 		}
-
+		
 		return static::MODEL;
 	}
 	
@@ -148,7 +154,7 @@ abstract class Mysql extends Store
 			SHOW TABLES LIKE "' . self::getTable() . '"
 		')->fetch(PDO::FETCH_NUM) !== false;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -159,7 +165,7 @@ abstract class Mysql extends Store
 			TABLE ' . self::getTable() . '
 		')->closeCursor();
 	}
-
+	
 	/**
 	 * @param Model $object
 	 *
@@ -168,7 +174,7 @@ abstract class Mysql extends Store
 	public function insertQuery(Model $object): false|PDOStatement
 	{
 		$values = $this->getQueryValues($object);
-
+		
 		$sql = 'INSERT INTO ' . self::getTable() . ' (%s) VALUES (%s);';
 		$sql = sprintf($sql, implode(', ', array_keys($values)), implode(', ', $values));
 		
@@ -177,7 +183,7 @@ abstract class Mysql extends Store
 		
 		return $statement;
 	}
-
+	
 	/**
 	 * @deprecated
 	 * @param Model $object
@@ -208,7 +214,7 @@ abstract class Mysql extends Store
 		return $statement;
 	}
 	*/
-
+	
 	/**
 	 * @param Model $model
 	 * @param Model $updateObject
@@ -229,7 +235,7 @@ abstract class Mysql extends Store
 		
 		return $statement;
 	}
-
+	
 	/**
 	 * @param Model|array $fields
 	 * @param false $sets
@@ -239,7 +245,7 @@ abstract class Mysql extends Store
 	public function getQueryValues(Model|array $fields, $sets = false): array
 	{
 		$values = [];
-	
+		
 		foreach($fields as $field => $value)
 		{
 			if($value instanceof Expression)
@@ -259,7 +265,7 @@ abstract class Mysql extends Store
 		
 		return $values;
 	}
-
+	
 	/**
 	 * @param PDOStatement $statement
 	 * @param Model|array $fields
@@ -281,7 +287,7 @@ abstract class Mysql extends Store
 			$statement->bindValue($field, $value, $bindType);
 		}
 	}
-
+	
 	/**
 	 * @param Model $object
 	 * @param Model $objectUpdate
@@ -292,7 +298,7 @@ abstract class Mysql extends Store
 	{
 		return $object->update($objectUpdate);
 	}
-
+	
 	/**
 	 * @param Model $model
 	 *
@@ -302,14 +308,19 @@ abstract class Mysql extends Store
 	{
 		return $model->insert();
 	}
-
+	
 	/**
 	 * @param array $where
 	 * @param string $select
+	 * @param array $options
 	 * @param ?string $alias
 	 * @param array $orWhere
 	 * @param array $whereIn
 	 * @param array $whereNotIn
+	 * @param array $isNull
+	 * @param array $isNotNull
+	 * @param array $like
+	 * @param array $notLike
 	 * @param mixed $limit
 	 * @param mixed $offset
 	 * @param array $groupBy
@@ -420,7 +431,7 @@ abstract class Mysql extends Store
 		if($limit !== null)
 		{
 			$query->offset($limit);
-		}		
+		}
 		
 		if($groupBy)
 		{
@@ -441,7 +452,7 @@ abstract class Mysql extends Store
 		{
 			$query->leftJoin(...$leftJoin);
 		}
-				
+		
 		if($innerJoin)
 		{
 			$query->innerJoin(...$innerJoin);
@@ -495,7 +506,7 @@ abstract class Mysql extends Store
 		{
 			$queryCallback($query);
 		}
-			
+		
 		$query = $this->getSource()->query($query->getSql());
 		return $this->fetchGrouped($query, $class);
 	}
@@ -524,7 +535,7 @@ abstract class Mysql extends Store
 		$query = $this->query()
 			->select(static::TABLE . '.*')
 			->where(sprintf($referencedBy . ' IN (%s)', implode( ', ', $ids)));
-		if($queryCallback)	
+		if($queryCallback)
 		{
 			$queryCallback($query);
 		}
@@ -606,7 +617,7 @@ abstract class Mysql extends Store
 		
 		return $referenced;
 	}
-
+	
 	/**
 	 * Removed all characters which can break AGAINST (... IN BOOLEAN MODE) queries
 	 * 

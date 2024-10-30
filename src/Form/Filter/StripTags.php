@@ -39,14 +39,19 @@ class StripTags extends Filter
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param mixed $value
 	 *
-	 * @return mixed
+	 * @return ?string
 	 */
-	public function filter(mixed $value): string
+	public function filter(mixed $value): ?string
 	{
+		if($value === null)
+		{
+			return null;
+		}
+		
 		return strip_tags($value, $this->_allowedTags);
 	}
 }

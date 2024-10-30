@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper\Messages;
 
-use Ovos\View\Helper\Messages;
 use Ovos\View;
 
 /**
@@ -22,29 +21,28 @@ class Message
 	public const TYPE_WARNING = 'warning';
 	public const TYPE_ERROR = 'error';
 	/**#@-*/
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_title;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_description;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_type;
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_raw;
-
+	
 	/**
-	 * @param Messages $messages
 	 * @param string $type
 	 * @param ?string $description
 	 * @param ?string $title
@@ -55,14 +53,14 @@ class Message
 		?string $description = null,
 		?string $title = null,
 		bool $raw = false,
-	)	
+	)
 	{
 		$this->setType($type);
 		$this->setDescription($description);
 		$this->setTitle($title);
 		$this->setIsRaw($raw);
 	}
-
+	
 	/**
 	 * @param ?string $title
 	 *
@@ -71,10 +69,10 @@ class Message
 	public function setTitle(?string $title): self
 	{
 		$this->_title = $title;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -82,7 +80,7 @@ class Message
 	{
 		return $this->_title;
 	}
-
+	
 	/**
 	 * @param ?string $description
 	 *
@@ -91,10 +89,10 @@ class Message
 	public function setDescription(?string $description): self
 	{
 		$this->_description = $description;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -102,7 +100,7 @@ class Message
 	{
 		return $this->_description;
 	}
-
+	
 	/**
 	 * @param string $type
 	 *
@@ -111,10 +109,10 @@ class Message
 	public function setType(string $type): self
 	{
 		$this->_type = $type;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -122,7 +120,7 @@ class Message
 	{
 		return $this->_type;
 	}
-
+	
 	/**
 	 * @param bool $raw
 	 *
@@ -131,10 +129,10 @@ class Message
 	public function setIsRaw(bool $raw = true): self
 	{
 		$this->_raw = $raw;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -142,7 +140,7 @@ class Message
 	{
 		return $this->_raw;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -150,7 +148,7 @@ class Message
 	{
 		return $this->getType() === self::TYPE_INFO;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -158,7 +156,7 @@ class Message
 	{
 		return $this->getType() === self::TYPE_SUCCESS;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -166,7 +164,7 @@ class Message
 	{
 		return $this->getType() === self::TYPE_WARNING;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -174,7 +172,7 @@ class Message
 	{
 		return $this->getType() === self::TYPE_ERROR;
 	}
-
+	
 	/**
 	 * @return string
 	 */

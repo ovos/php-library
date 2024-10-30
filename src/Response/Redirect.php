@@ -20,37 +20,37 @@ class Redirect extends Response
 	 * @var Url
 	 */
 	protected Url $_url;
-
+	
 	/**
 	 * HTTP code
 	 *
 	 * @var int
 	 */
 	protected int $_httpCode = 302;
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_withHost = false;
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_withQueryString = false;
-
+	
 	/**
 	 * @param Url|string[] $urlComponents
 	 */
 	public function __construct(...$urlComponents)
 	{
 		parent::__construct();
-
+		
 		if(isset($urlComponents[0]) && ($urlComponents[0] instanceof Url))
 		{
 			$this->_url = $urlComponents[0];
 			return;
 		}
-
+		
 		if(count($urlComponents) === 0)
 		{
 			$urlComponents[] = '/';
@@ -58,7 +58,7 @@ class Redirect extends Response
 		
 		$this->_url = new Url(...$urlComponents);
 	}
-
+	
 	/**
 	 * @return Url
 	 */
@@ -66,7 +66,7 @@ class Redirect extends Response
 	{
 		return $this->_url;
 	}
-
+	
 	/**
 	 * Send headers
 	 *
@@ -75,16 +75,13 @@ class Redirect extends Response
 	public function sendHeaders(): Response
 	{
 		$url = $this->__toString();
-		if($url !== null)
-		{
-			$this->setHeader('Location', $url);
-		}
-
+		$this->setHeader('Location', $url);
+		
 		parent::sendHeaders();
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param bool $withHost
 	 *
@@ -96,7 +93,7 @@ class Redirect extends Response
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param bool $withQueryString
 	 *
@@ -108,7 +105,7 @@ class Redirect extends Response
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */

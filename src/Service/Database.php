@@ -8,8 +8,7 @@ use Ovos\Pdo\Profiler\Collector;
 use Ovos\Service;
 use Ovos\Pdo\Profiler\Pdo as OvosPdo;
 use PDO;
-
-use function Ovos\services;
+use Ovos\Pdo\Profiler\PdoStatement;
 
 /**
  * Database
@@ -23,12 +22,12 @@ class Database extends Service
 	 * @var string
 	 */
 	public const DEFAULT = 'database';
-
+	
 	/**
 	 * @var string
 	 */
 	public const SYMBOL = 'database';
-
+	
 	/**
 	 * @return string
 	 */
@@ -36,17 +35,17 @@ class Database extends Service
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;
-
+	
 	/**
 	 * @var OvosPdo[]
 	 */
 	protected array $_clients;
-
+	
 	/**
 	 * Returns database client
 	 *
@@ -56,7 +55,7 @@ class Database extends Service
 	 */
 	public function get(string $name = self::DEFAULT): OvosPdo
 	{
-		if(!isset($this->_clients[$name]))
+		if(isset($this->_clients[$name]) === false)
 		{
 			$database = &$this->_clients[$name];
 			$config = $this->_app->getConfig()->offsetGet($name);
@@ -66,19 +65,19 @@ class Database extends Service
 				PDO::ATTR_EMULATE_PREPARES => false,
 				PDO::ATTR_ERRMODE => Pdo::ERRMODE_EXCEPTION,
 			]);
-
+			
 			/** @var ArrayObject $configProfilers */
 			$configProfilers = $this->_app->getConfig()->system->profilers;
 			if($configProfilers->enabled)
 			{
-				$database->setAttribute(PDO::ATTR_STATEMENT_CLASS, ['Ovos\Pdo\Profiler\PdoStatement']);
+				$database->setAttribute(PDO::ATTR_STATEMENT_CLASS, [PdoStatement::class]);
 				if($configProfilers->offsetExists('queries'))
 				{
 					Collector::$limit = $configProfilers->queries->limit;
 				}
 			}
 		}
-
+		
 		return $this->_clients[$name];
 	}
 }

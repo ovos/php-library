@@ -30,7 +30,7 @@ class Reporter
 	 * @var SplQueue
 	 */
 	protected SplQueue $_queries;
-
+	
 	/**
 	 * Stores collector data into internal array
 	 */
@@ -39,7 +39,7 @@ class Reporter
 		$this->_queries = Collector::getInstance()
 			->getQueries();
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -59,7 +59,7 @@ class Reporter
 		{
 			return null;
 		}
-
+		
 		$report = [];
 		foreach($this->_queries as $key => $query)
 		{
@@ -71,10 +71,10 @@ class Reporter
 				'memory' => $query['measurement']->getTotalMemory(),
 			]);
 		}
-
+		
 		return $report;
 	}
-
+	
 	/**
 	 * Parse and beautify SQL query
 	 *
@@ -97,7 +97,7 @@ class Reporter
 				}
 				$value = "'" . $value . "'";
 			});
-
+			
 			// Replace values
 			foreach($parameters as $parameter => $value)
 			{
@@ -109,7 +109,7 @@ class Reporter
 				}
 			}
 		}
-
+		
 		// make it a one-liner
 		return preg_replace('/\s+/', ' ', trim($sql));
 	}

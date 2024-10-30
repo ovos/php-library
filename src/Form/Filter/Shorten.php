@@ -77,10 +77,15 @@ class Shorten extends Filter
 	/**
 	 * @param mixed $value
 	 *
-	 * @return mixed
+	 * @return ?string
 	 */
-	public function filter(mixed $value): string
+	public function filter(mixed $value): ?string
 	{
+		if($value === null)
+		{
+			return null;
+		}
+		
 		return Strings::shorten($value, $this->getLength(), $this->getEnding());
 	}
 }

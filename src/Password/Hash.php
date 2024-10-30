@@ -15,12 +15,12 @@ class Hash
 	 * @var string
 	 */
 	protected string $_algorithm;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_options;
-
+	
 	/**
 	 */
 	public function __construct()
@@ -42,27 +42,27 @@ class Hash
 			];
 		}
 	}
-
+	
 	/**
 	 * @param string $algorithm
 	 * 
 	 * @return self
 	 */
-	public function setAlgorithm($algorithm): self
+	public function setAlgorithm(string $algorithm): self
 	{
 		$this->_algorithm = $algorithm;
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
-	public function getAlgorithm()
+	public function getAlgorithm(): string
 	{
 		return $this->_algorithm;
 	}
-
+	
 	/**
 	 * @param array $options
 	 * 
@@ -74,7 +74,7 @@ class Hash
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -85,13 +85,15 @@ class Hash
 	
 	/**
 	 * @param string $password
-	 * @param string $algorithm
-	 * @param array $options
+	 * @param ?string $algorithm
+	 * @param ?array $options
 	 *
-	 * @return bool|string
+	 * @return null|bool|string
 	 */
-	public function hash(string $password, string $algorithm = null,
-		array $options = null)
+	public function hash(string $password,
+		?string $algorithm = null,
+		?array $options = null
+	): null|bool|string
 	{
 		if($algorithm !== null)
 		{
@@ -101,14 +103,14 @@ class Hash
 		{
 			$this->setOptions($options);
 		}
-	
+		
 		return password_hash($password, $this->getAlgorithm(), $this->getOptions());
 	}
 	
 	/**
 	 * @param string $password
-	 * @param string $algorithm
-	 * @param array $options
+	 * @param ?string $algorithm
+	 * @param ?array $options
 	 *
 	 * @return bool
 	 */
@@ -123,7 +125,7 @@ class Hash
 		{
 			$this->setOptions($options);
 		}
-	
+		
 		return password_needs_rehash($password, $this->getAlgorithm(), $this->getOptions());
 	}
 }

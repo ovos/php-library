@@ -11,7 +11,6 @@ use Ovos\Service;
 use Throwable;
 
 use function Ovos\app;
-use function Ovos\config;
 use function is_array;
 use function is_numeric;
 use function is_string;
@@ -34,12 +33,12 @@ use function mb_strlen;
 class Logger extends Service
 {
 	use LoggerTrait\File;
-
+	
 	/**
 	 * @var string
 	 */
 	public const SYMBOL = 'logger';
-
+	
 	/**
 	 * @var string
 	 */
@@ -49,11 +48,11 @@ class Logger extends Service
 	 * @var string
 	 */
 	protected string $_file = 'events';
-
+	
 	/**
 	 * @var array
 	 */
-	protected $_remove = [
+	protected array $_remove = [
 		'~^password.*~',
 		'~Authorization~',
 	];
@@ -74,10 +73,10 @@ class Logger extends Service
 	public function addRemove(array $remove): self
 	{
 		$this->_remove = array_merge($this->_remove, $remove);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -117,7 +116,7 @@ class Logger extends Service
 		{
 			$extras = $event[1];
 		}
-
+		
 		$output = $this->getEvent($event[0]);
 		
 		// extras
@@ -129,13 +128,13 @@ class Logger extends Service
 		$prepend = $this->getPrepend();
 		// append
 		$append = $this->getAppend();
-
+		
 		$output = $prepend . $output . $append;
 		$this->output($output);
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -159,10 +158,10 @@ class Logger extends Service
 			$prepend.= 'CLI: ' . (isset($_SERVER['argv']) ?
 				implode(' ', $_SERVER['argv']) : 'no arguments');
 		}
-
+		
 		return $prepend . PHP_EOL;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -185,10 +184,10 @@ class Logger extends Service
 			$append.= 'FILES: ' . PHP_EOL
 				. json_encode($_FILES, JSON_PRETTY_PRINT) . PHP_EOL;
 		}
-
+		
 		return $append . PHP_EOL;
 	}
-
+	
 	/**
 	 * @param array $data
 	 * 
@@ -223,7 +222,7 @@ class Logger extends Service
 		
 		return $data;
 	}
-
+	
 	/**
 	 * @param object $event
 	 *
@@ -241,7 +240,7 @@ class Logger extends Service
 				if($previous) $className = "\nPrevious " . $className;
 				$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
 				$output.= $className . ': ' . $event->getMessage() . PHP_EOL . $event->getTraceAsString();
-
+				
 				$previous = true;
 			}
 			while($event = $event->getPrevious());
@@ -253,7 +252,7 @@ class Logger extends Service
 			$output.= $name . ': ' . $event->getMessage() . PHP_EOL . $event->getTraceAsString();
 		}
 		$output.= PHP_EOL;
-
+		
 		return $output;
 	}
 }

@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace Ovos\Environment;
 
 use Ovos\Environment;
-use Ovos\Arrays;
-use Ovos\Exception;
 use Ovos\Service\Memory;
 use Ovos\Services;
+
+use function basename;
 
 /**
  * Loader
@@ -26,9 +26,11 @@ class Loader
 	 */
 	public function __construct()
 	{
-		$this->_memoryService = Services::getInstance()->get(Memory::SYMBOL);
+		/** @var Memory $memoryService */
+		$memoryService = Services::getInstance()->get(Memory::SYMBOL);
+		$this->_memoryService = $memoryService;
 	}
-
+	
 	/**
 	 * @param string $file
 	 * @param ?string $cacheId
@@ -46,7 +48,7 @@ class Loader
 		{
 			return $value;
 		}
-
+		
 		$config = Parser::parse($file);
 		if($config === null)
 		{
@@ -55,7 +57,7 @@ class Loader
 		
 		$env = new Environment($config);
 		$store->set($cacheId, $env);
-
+		
 		return $env;
 	}
 }

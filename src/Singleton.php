@@ -15,7 +15,7 @@ trait Singleton
 	 * @var ?self
 	 */
 	protected static ?self $_instance = null;
-
+	
 	/**
 	 * @return self
 	 */
@@ -25,10 +25,10 @@ trait Singleton
 		{
 			static::$_instance = new static;
 		}
-
+		
 		return static::$_instance;
 	}
-
+	
 	/**
 	 * Clears old instance and creates a new one
 	 * 

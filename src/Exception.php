@@ -3,6 +3,7 @@
 namespace Ovos;
 
 use function count;
+use function sprintf;
 
 /**
  * Exception

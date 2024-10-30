@@ -23,6 +23,9 @@ use function reset;
 use function current;
 use function next;
 use function key;
+use function array_values;
+use function array_keys;
+use function array_merge;
 
 /**
  * Mysql
@@ -114,7 +117,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * @var array
 	 */
-	protected array $_references = [];	
+	protected array $_references = [];
 	
 	/**
 	 * A record exists if it was fetched with PK, otherwise it's considered new
@@ -551,7 +554,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $property
 	 * @param callable $callback
@@ -577,7 +580,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $property
 	 * @param callable $callback

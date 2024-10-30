@@ -5,6 +5,10 @@ namespace Ovos\Store;
 
 use RedisException;
 
+use function in_array;
+use function implode;
+use function count;
+
 /**
  * Redisearch
  * 
@@ -34,7 +38,7 @@ class Redisearch extends Redis
 		string $key,
 		mixed $value,
 		int $ttl = 0,
-		array $tags = [],	
+		array $tags = [],
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
@@ -55,7 +59,7 @@ class Redisearch extends Redis
 		{
 			$client->expire($key, $ttl);
 		}
-	
+		
 		return $result !== false;
 	}
 	

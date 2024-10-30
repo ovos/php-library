@@ -2,6 +2,7 @@
 
 namespace Ovos;
 
+use function count;
 use function str_replace;
 use function array_keys;
 use function array_values;
@@ -20,29 +21,29 @@ class Command
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_name;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_params;
-
+	
 	/**
 	 * @param string $name
 	 * @param array $params
 	 */
-	public function __construct($name, $params = [])
+	public function __construct(string $name, array $params = [])
 	{
 		$this->_app = app();
-
+		
 		$this->setName($name);
 		$this->setParams($params);
 	}
-
+	
 	/**
 	 * @param string $name
 	 * 
@@ -54,7 +55,7 @@ class Command
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param array $params
 	 * 
@@ -66,7 +67,7 @@ class Command
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ArrayObject
 	 */
@@ -74,20 +75,20 @@ class Command
 	{
 		return $this->_app->getConfig()->commands;
 	}
-
+	
 	/**
 	 * @return string
 	 */
 	public function get(): string
 	{
 		$commands = $this->getConfig();
-		if(!isset($commands[$this->_name]))
+		if(isset($commands[$this->_name]) === false)
 		{
 			return '';
 		}
-
+		
 		$command = $commands[$this->_name];
-
+		
 		if(count($this->_params))
 		{
 			$command = str_replace(array_keys($this->_params), array_values($this->_params), $command);
@@ -95,7 +96,7 @@ class Command
 		
 		return $command;
 	}
-
+	
 	/**
 	 * @return string
 	 */

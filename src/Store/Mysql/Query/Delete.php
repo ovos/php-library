@@ -5,6 +5,8 @@ namespace Ovos\Store\Mysql\Query;
 
 use Ovos\Store\Mysql\Query;
 
+use function implode;
+
 /**
  * Delete
  *
