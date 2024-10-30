@@ -5,6 +5,8 @@ namespace Ovos\Store\Mysql\Query;
 
 use Ovos\Store\Mysql\Query;
 
+use function implode;
+
 /**
  * Select
  *
@@ -41,18 +43,18 @@ class Select extends Query
 	/**
 	 * @var array
 	 */
-	protected array $_having = [];	
+	protected array $_having = [];
 	
 	/**
 	 * @var mixed
 	 */
 	protected mixed $_limit = null;
-
+	
 	/**
 	 * @var mixed
 	 */
 	protected mixed $_offset = null;
-
+	
 	/**
 	 * @return string
 	 */
@@ -103,10 +105,10 @@ class Select extends Query
 		{
 			$sql.= 'OFFSET ' . $this->_offset . PHP_EOL;
 		}
-
+		
 		return $sql;
 	}
-
+	
 	/**
 	 * @param string ...$fields
 	 *
@@ -121,7 +123,7 @@ class Select extends Query
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $table
 	 * @param ?string $alias
@@ -133,12 +135,12 @@ class Select extends Query
 		$this->_table = $table;
 		if($alias !== null)
 		{
-			$this->alias($alias);	
+			$this->alias($alias);
 		}
-	
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $alias
 	 *
@@ -147,10 +149,10 @@ class Select extends Query
 	public function alias(string $alias): self
 	{
 		$this->_alias = $alias;
-	
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param mixed $limit
 	 *
@@ -162,7 +164,7 @@ class Select extends Query
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param mixed $offset
 	 *
@@ -174,7 +176,7 @@ class Select extends Query
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string ...$arguments
 	 *
@@ -189,7 +191,7 @@ class Select extends Query
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string ...$conditions
 	 *
@@ -204,7 +206,7 @@ class Select extends Query
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string ...$arguments
 	 *
@@ -219,7 +221,7 @@ class Select extends Query
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string ...$joins
 	 *
@@ -236,7 +238,7 @@ class Select extends Query
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string ...$joins
 	 *

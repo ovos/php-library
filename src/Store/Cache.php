@@ -6,6 +6,16 @@ namespace Ovos\Store;
 use Ovos\Store;
 use Ovos\ArrayObject;
 
+use function is_array;
+use function is_object;
+use function serialize;
+use function substr;
+use function unserialize;
+use function function_exists;
+use function strlen;
+use function gzcompress;
+use function gzuncompress;
+
 /**
  * Cache
  *
@@ -36,7 +46,7 @@ class Cache extends Store
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?ArrayObject
 	 */
@@ -76,14 +86,14 @@ class Cache extends Store
 		{
 			return null;
 		}
-	
+		
 		$prefix = substr($value, 0, 2);
 		if($prefix !== self::PREFIX_SERIALIZE)
 		{
 			return $value; // not serialized
 		}
 		$value = substr($value, 2);
-	
+		
 		return unserialize($value, ['allowed_classes' => true]);
 	}
 		
@@ -120,10 +130,10 @@ class Cache extends Store
 		{
 			$value = 'gz' . self::PREFIX_COMPRESS . gzcompress($value, 3);
 		}
-	
+		
 		return $value;
-	}	
-
+	}
+	
 	/**
 	 * @param ?string $value
 	 * 

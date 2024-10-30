@@ -20,11 +20,10 @@ class Filter extends Test
 	{
 		$form = new Form;
 		$form->checkbox
-			->setDefault(1)
 			->addFilter(new Filters\Checked);
 		
 		$form->setValues(['checkbox' => 'on']);
-		$values = $form->getValues();
+		$values = $form->getUserValues();
 		
 		return $values['checkbox'] === 1;
 	}
@@ -33,11 +32,10 @@ class Filter extends Test
 	{
 		$form = new Form;
 		$form->checkbox
-			->setDefault(1)
 			->addFilter(new Filters\Checked);
 		
 		$form->setValues([]);
-		$values = $form->getValues();
+		$values = $form->getUserValues();
 		
 		return $values['checkbox'] === 0;
 	}

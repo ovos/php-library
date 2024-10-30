@@ -22,9 +22,9 @@ class Layout extends View
 		{
 			$viewScriptFile = 'layouts' . DIRECTORY_SEPARATOR . $viewScriptFile;
 		}
-
+		
 		parent::__construct($viewScriptFile);
-
+		
 		$this->host = SYSTEM_HOST . SYSTEM_PATH;
 	}
 }

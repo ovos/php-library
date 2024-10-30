@@ -7,7 +7,6 @@ use Ovos\Form\Element;
 use Ovos\View\Helper;
 use Throwable;
 
-use function Ovos\services;
 use function call_user_func_array;
 use function method_exists;
 use function ob_start;
@@ -36,32 +35,32 @@ use function class_exists;
 class View
 {
 	use Translatable;
-
+	
 	/**
 	 * @var string
 	 */
 	public const SUFFIX = '.phtml';
-
+	
 	/**
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_viewScriptFile;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_vars = [];
-
+	
 	/**
 	 * @var array
 	 */
 	protected static array $_helpers = [];
-
+	
 	/**
 	 * @param ?string $viewScriptFile
 	 * @param array $vars
@@ -69,7 +68,7 @@ class View
 	public function __construct(?string $viewScriptFile = null, array $vars = [])
 	{
 		$this->_viewScriptFile = $viewScriptFile;
-
+		
 		$this->_app = app();
 		$this->app = $this->_app;
 		$this->interface = $this->_app->getInterface();
@@ -81,11 +80,11 @@ class View
 		$this->action = $this->_app->getRequest()->getAction();
 		$this->locale = $this->_app->getRequest()->getLocale();
 		$this->client = Client::class;
-
+		
 		// assign additional variables
 		$this->setMultiple($vars);
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -97,10 +96,10 @@ class View
 		{
 			return null;
 		}
-
+		
 		return $this->_vars[$name];
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -110,7 +109,7 @@ class View
 	{
 		return array_key_exists($name, $this->_vars);
 	}
-
+	
 	/**
 	 * @param string $name
 	 * @param mixed $value
@@ -119,7 +118,7 @@ class View
 	{
 		$this->_vars[$name] = $value;
 	}
-
+	
 	/**
 	 * @param string $name
 	 */
@@ -127,7 +126,7 @@ class View
 	{
 		unset($this->_vars[$name]);
 	}
-
+	
 	/**
 	 * @param string $name
 	 * @param array $arguments
@@ -138,7 +137,7 @@ class View
 	{
 		return self::__callStatic($name, $arguments);
 	}
-
+	
 	/**
 	 * @param string $name
 	 * @param array $arguments
@@ -151,23 +150,23 @@ class View
 		{
 			$helper = self::getHelperClass($name);
 			$instance = new $helper;
-
+			
 			//$reflector = new ReflectionClass($helper);
 			//$instance = $reflector->newInstanceArgs($arguments);
-
+			
 			self::$_helpers[$name] = $instance;
 		}
-
+		
 		$instance = self::$_helpers[$name];
-
+		
 		if(method_exists($instance, $name))
 		{
 			return call_user_func_array([$instance, $name], $arguments);
 		}
-
+		
 		return $instance;
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -177,7 +176,7 @@ class View
 	{
 		$systemConfig = app()->getConfig()->system;
 		$name = ucfirst($name);
-	
+		
 		/** @var ArrayObject $viewHelpers */
 		if(($namespaces = $systemConfig->get('view_helpers.namespaces')))
 		{
@@ -190,10 +189,10 @@ class View
 				}
 			}
 		}
-
-		return 'Ovos\View\Helper\\'. $name;
+		
+		return 'Ovos\View\Helper\\' . $name;
 	}
-
+	
 	/**
 	 * Escapes a value for output in a view script.
 	 *
@@ -220,7 +219,7 @@ class View
 		
 		return Strings::escapeForHtml($value);
 	}
-
+	
 	/**
 	 * @param ?string $viewScriptFile (optional)
 	 * @param array $variables (optional)
@@ -235,15 +234,15 @@ class View
 		{
 			$viewScriptFile = $this->_viewScriptFile;
 		}
-
+		
 		if($viewScriptFile === null)
 		{
 			throw new Exception('View script cannot be null.');
 		}
-
+		
 		// assign additional variables
 		$this->setMultiple($variables);
-
+		
 		ob_start();
 		
 		try
@@ -273,7 +272,7 @@ class View
 			$this->__set($name, $value);
 		}
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -281,7 +280,7 @@ class View
 	{
 		return $this->_vars;
 	}
-
+	
 	/**
 	 * @return string
 	 *

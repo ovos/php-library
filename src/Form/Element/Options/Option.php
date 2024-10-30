@@ -5,6 +5,10 @@ namespace Ovos\Form\Element\Options;
 
 use Ovos\Form\Element\Options;
 
+use function array_map;
+use function in_array;
+use function is_array;
+
 /**
  * Option
  *
@@ -30,7 +34,7 @@ class Option
 	
 	/**
 	 * Object associated with the option
-	 * Can be used for futher processing of the option
+	 * Can be used for further processing of the option
 	 * 
 	 * @var ?object
 	 */
@@ -111,7 +115,7 @@ class Option
 		{
 			return $this->_label;
 		}
-	
+		
 		return $this->getValue();
 	}
 	

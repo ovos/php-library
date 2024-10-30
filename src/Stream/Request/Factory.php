@@ -4,8 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Stream\Request;
 
 use Ovos\Arrays;
-use Ovos\Measurement;
-use Ovos\Response;
 use Ovos\Stream\Request;
 
 /**
@@ -25,7 +23,7 @@ class Factory
 	/**
 	 * @var array
 	 */
-	protected array $_defaultContextOptions = [];	
+	protected array $_defaultContextOptions = [];
 	
 	/**
 	 */
@@ -49,13 +47,13 @@ class Factory
 		$requestContextOptions = Arrays::deepMerge($this->_defaultContextOptions, $contextOptions);
 		return new Request($requestUrl, $requestContextOptions);
 	}
-
+	
 	/**
 	 * @param string $baseUrl
 	 *
 	 * @return self
 	 */
-	public function setBaseUrl(string $baseUrl)
+	public function setBaseUrl(string $baseUrl): self
 	{
 		$this->_baseUrl = $baseUrl;
 		
@@ -69,7 +67,7 @@ class Factory
 	{
 		return $this->_baseUrl;
 	}
-
+	
 	/**
 	 * @param array $defaultContextOptions
 	 *
@@ -78,10 +76,10 @@ class Factory
 	public function setDefaultContextOptions(array $defaultContextOptions): self
 	{
 		$this->_defaultContextOptions = $defaultContextOptions;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */

@@ -21,22 +21,22 @@ class Cookies extends Service
 	 * @var string
 	 */
 	public const SYMBOL = 'cookies';
-
+	
 	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;
-
+	
 	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_cookiesConfig;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_prefix;
-
+	
 	/**
 	 * @return string
 	 */
@@ -44,13 +44,13 @@ class Cookies extends Service
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 */
 	public function __construct()
 	{
 		parent::__construct();
-
+		
 		$this->_config = $this->_app->getConfig();
 		if($this->_config->cookies === null)
 		{
@@ -71,7 +71,7 @@ class Cookies extends Service
 		{
 			return;
 		}
-
+	
 		foreach($_COOKIE as $name => $value)
 		{
 			if(str_starts_with($name, $this->_prefix))
@@ -82,7 +82,7 @@ class Cookies extends Service
 			}
 		}
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -94,10 +94,10 @@ class Cookies extends Service
 		{
 			return $name;
 		}
-
+		
 		return $this->_prefix . $name;
 	}
-
+	
 	/**
 	 * @see http://php.net/setcookie
 	 *
@@ -124,7 +124,7 @@ class Cookies extends Service
 		
 		return setcookie($name, $value, $options);
 	}
-
+	
 	/**
 	 * @see http://php.net/setcookie
 	 *
@@ -140,31 +140,31 @@ class Cookies extends Service
 		{
 			return true;
 		}
-
+		
 		return $this->set($name, $value, $options);
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
 	 * @return ?string
 	 */
-	public function get($name): ?string
+	public function get(string $name): ?string
 	{
 		if(!isset($_COOKIE[$name]))
 		{
 			return null;
 		}
-
+		
 		return $_COOKIE[$name];
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
 	 * @return bool
 	 */
-	public function unset($name): bool
+	public function unset(string $name): bool
 	{
 		if(!isset($_COOKIE[$name]))
 		{
@@ -177,7 +177,7 @@ class Cookies extends Service
 			'domain' => $this->_app->getDomain(),
 		]);
 		unset($_COOKIE[$name]);
-
+		
 		return true;
 	}
 }

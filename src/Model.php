@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Store;
+use function get_object_vars;
+use function array_keys;
 
 /**
  * Model
@@ -19,7 +20,7 @@ abstract class Model
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * Config
 	 *
@@ -33,7 +34,7 @@ abstract class Model
 	{
 		$this->__wakeup();
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -45,7 +46,7 @@ abstract class Model
 		
 		return array_keys($properties);
 	}
-
+	
 	/**
 	 */
 	public function __wakeup()

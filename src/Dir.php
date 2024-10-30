@@ -24,6 +24,8 @@ use function is_readable;
 use function scandir;
 use function is_dir;
 use function func_get_args;
+use function sort;
+use function ksort;
 
 /**
  * Dir
@@ -77,13 +79,13 @@ class Dir
 				umask($umask);
 				return $result;
 			}
-
+		
 			return true;
 		}
 		
 		return false;
 	}
-
+	
 	/**
 	 * Pre-processes a path or relative path (second param)
 	 * Removes directory separator from the end and replaces all separators with consistent ones
@@ -105,7 +107,7 @@ class Dir
 		
 		return $path;
 	}
-
+	
 	/**
 	 * Remove the directory with all it's contents
 	 *
@@ -160,7 +162,7 @@ class Dir
 			rmdir($path);
 		}
 	}
-
+	
 	/**
 	 * Empty the directory or remove recursively files and directories matching regular expression
 	 *
@@ -173,7 +175,7 @@ class Dir
 	{
 		self::remove($path, false, $match);
 	}
-
+	
 	/**
 	 * Remove path of directories if they are empty
 	 *
@@ -190,7 +192,7 @@ class Dir
 		if(!empty($path) && is_dir($pathToKeep))
 		{
 			$pathToRemove = $pathToKeep . DIRECTORY_SEPARATOR . $path;
-
+			
 			if(is_dir($pathToRemove))
 			{
 				if(self::isEmpty($pathToRemove))
@@ -210,7 +212,7 @@ class Dir
 			}
 		}
 	}
-
+	
 	/**
 	 * Moves contents of one directory to another recursively without removing target directory's contents
 	 *
@@ -223,7 +225,7 @@ class Dir
 	{
 		$pathFrom = self::preProcess($pathFrom);
 		$pathTo = self::preProcess($pathTo);
-
+		
 		if(is_dir($pathFrom) && is_dir($pathTo))
 		{
 			$directoryIterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
@@ -279,13 +281,13 @@ class Dir
 			foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::SELF_FIRST) as $file)
 			{
 				$filename = $filenameCallback
-				? $filenameCallback($file)
-				: $file->getFilename();
+					? $filenameCallback($file)
+					: $file->getFilename();
 				if($filename === null)
 				{
 					continue;
 				}
-			
+				
 				/**
 				 * @var SplFileInfo $file
 				 */
@@ -301,7 +303,7 @@ class Dir
 					$destination = $pathTo
 						. DIRECTORY_SEPARATOR . $iterator->getSubPath()
 						. DIRECTORY_SEPARATOR . $filename;
-						
+					
 					if($overwrite === true
 						|| file_exists($destination) === false
 					)
@@ -316,7 +318,7 @@ class Dir
 			}
 		}
 	}
-
+	
 	/**
 	 * Check if the directory is empty
 	 *
@@ -326,7 +328,7 @@ class Dir
 	 */
 	public static function isEmpty(string $path): ?bool
 	{
-		if(!is_readable($path))
+		if(is_readable($path) === false)
 		{
 			return null;
 		}
@@ -428,7 +430,7 @@ class Dir
 		
 		return $dirs + $files;
 	}
-
+	
 	/**
 	 * @param string $path
 	 * @param bool $skipHidden
@@ -445,7 +447,7 @@ class Dir
 	): array
 	{
 		$files = [];
-
+		
 		$directoryIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
 		/**
 		 * @var RecursiveDirectoryIterator $iterator
@@ -457,7 +459,7 @@ class Dir
 			{
 				continue;
 			}
-		
+			
 			/**
 			 * @var SplFileInfo $file
 			 */

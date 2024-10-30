@@ -5,6 +5,7 @@ namespace Ovos;
 
 use function header;
 use function http_response_code;
+use function ob_get_length;
 
 /**
  * Response
@@ -20,7 +21,7 @@ class Response
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * HTTP code
 	 *
@@ -34,21 +35,21 @@ class Response
 	 * @var bool
 	 */
 	protected bool $_sent = false;
-
+	
 	/**
 	 * Headers
 	 *
 	 * @var array
 	 */
 	protected array $_headers = [];
-
+	
 	/**
 	 * Headers sent
 	 *
 	 * @var bool
 	 */
 	protected bool $_headersSent = false;
-
+	
 	/**
 	 * Construct
 	 */
@@ -57,7 +58,7 @@ class Response
 		$this->_app = app();
 		$this->_app->setResponse($this);
 	}
-
+	
 	/**
 	 * @param int $httpCode
 	 *
@@ -66,10 +67,10 @@ class Response
 	public function setHttpCode(int $httpCode): self
 	{
 		$this->_httpCode = $httpCode;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $name
 	 * @param mixed $value
@@ -83,10 +84,10 @@ class Response
 			'value' => $value,
 			'replace' => $replace
 		];
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -98,20 +99,20 @@ class Response
 		{
 			unset($this->_headers[$name]);
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return self
 	 */
 	public function clearAllHeaders(): self
 	{
 		$this->_headers = [];
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Send headers
 	 *
@@ -123,24 +124,24 @@ class Response
 		{
 			return $this;
 		}
-	
+		
 		if($this->_app->getRequest()->isCli() === false)
 		{
 			foreach($this->_headers as $name => $header)
 			{
 				header($name . ': ' . $header['value'], $header['replace']);
 			}
-
+			
 			http_response_code($this->_httpCode);
 		}
 		
 		$this->setHeadersSent(true);
-
+		
 		return $this;
 	}
-
+	
 	/**
-	 * @return null|$this
+	 * @return ?self
 	 */
 	public function send(): ?self
 	{
@@ -153,14 +154,14 @@ class Response
 		{
 			$this->sendHeaders();
 		}
-
+		
 		echo $this;
-
+		
 		$this->setIsSent(true);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param bool $sent
 	 *
@@ -169,7 +170,7 @@ class Response
 	public function setIsSent(bool $sent): self
 	{
 		$this->_sent = $sent;
-
+		
 		return $this;
 	}
 	
@@ -189,7 +190,7 @@ class Response
 	public function setHeadersSent(bool $headersSent): self
 	{
 		$this->_headersSent = $headersSent;
-
+		
 		return $this;
 	}
 	
@@ -200,7 +201,7 @@ class Response
 	{
 		return $this->_headersSent;
 	}
-
+	
 	/**
 	 * @return string
 	 */

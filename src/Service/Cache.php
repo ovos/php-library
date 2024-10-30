@@ -9,8 +9,6 @@ use Ovos\Store\Apcu;
 use Ovos\Store\Redis;
 use Ovos\Store\Redisearch;
 
-use function Ovos\services;
-
 /**
  * Cache
  *
@@ -23,35 +21,35 @@ class Cache extends Service
 	 * @var string
 	 */
 	public const SYMBOL = 'cache';
-
+	
 	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;
-
+	
 	/**
 	 * @var ?Redis
 	 */
 	protected ?Redis $_persistentStore = null;
-
+	
 	/**
 	 * @var ?Apcu
 	 */
 	protected ?Apcu $_perishableStore = null;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_dependsOn = [
 		Events::SYMBOL,
 	];
-
+	
 	/**
 	 */
 	public function __construct()
 	{
 		parent::__construct();
-
+		
 		$this->_config = $this->_app->getConfig()->cache;
 		$this->setEnabled($this->_config->enabled);
 	}
@@ -63,7 +61,7 @@ class Cache extends Service
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 * @param bool $persistent
 	 * 
@@ -75,7 +73,7 @@ class Cache extends Service
 			$this->getPersistentStore()
 			: $this->getPerishableStore();
 	}
-
+	
 	/**
 	 * @return null|Redis|Redisearch
 	 */
@@ -90,10 +88,10 @@ class Cache extends Service
 			{
 				return null;
 			}
-
+			
 			$this->_persistentStore = $store;
 		}
-
+		
 		return $this->_persistentStore;
 	}
 	
@@ -106,7 +104,7 @@ class Cache extends Service
 		{
 			$this->_perishableStore = Apcu::fromConfig($this->_config);
 		}
-
+		
 		return $this->_perishableStore;
 	}
 }

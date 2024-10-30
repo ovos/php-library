@@ -28,7 +28,7 @@ class Date
 		
 		return sprintf('%02d:%02d:%02d', $diff->days * 24 + $diff->h, $diff->i, $diff->s);
 	}
-
+	
 	/**
 	 * @param string $month (this, current, previous, next, 0, 1, 2, -1, -2, ...)
 	 * 
@@ -40,10 +40,10 @@ class Date
 		$date
 			->modify('first day of ' . $month . ' month')
 			->setTime(0, 0, 0, 0);
-			
+		
 		return $date;
 	}
-
+	
 	/**
 	 * @param string $month (this, current, previous, next, 0, 1, 2, -1, -2, ...)
 	 * 
@@ -55,10 +55,10 @@ class Date
 		$date
 			->modify('last day of ' . $month . ' month')
 			->setTime(23, 59, 59, 999999);
-			
-		return $date;	
+		
+		return $date;
 	}
-
+	
 	/**
 	 * @param string $week (this, current, previous, next, 0, 1, 2, -1, -2, ...)
 	 * 
@@ -70,10 +70,10 @@ class Date
 		$start
 			->modify('monday ' . $week . ' week')
 			->setTime(0, 0, 0, 0);
-			
+		
 		return $start;
 	}
-
+	
 	/**
 	 * @param DateTime $start
 	 * 
@@ -84,7 +84,7 @@ class Date
 		$end = clone $start;
 		$end->modify('sunday this week')
 			->setTime(23, 59, 59, 999999);
-			
-		return $end;	
+		
+		return $end;
 	}
 }

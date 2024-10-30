@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
-use Ovos\ArrayObject;
 use Ovos\Service;
 
 /**
@@ -18,7 +17,7 @@ class Disabled extends Service
 	 * @var string
 	 */
 	public const SYMBOL = 'disabled';
-
+	
 	/**
 	 * @var bool
 	 */
@@ -31,7 +30,7 @@ class Disabled extends Service
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 * @param string $name
 	 * @param array $arguments
@@ -49,28 +48,30 @@ class Disabled extends Service
 	{
 		// do nothing
 	}
-
+	
 	/**
 	 * @param string $name
 	 */
-	public function __get($name): void
+	public function __get(string $name): void
 	{
 		// do nothing	
 	}
-
+	
 	/**
 	 * @param string $name
 	 * @param mixed $value
 	 */
-	public function __set($name, $value): void
+	public function __set(string $name, mixed $value): void
 	{
 		// do nothing
 	}
 	
 	/**
 	 * @param string $name
+	 *
+	 * @return bool
 	 */
-	public function __isset($name): bool
+	public function __isset(string $name): bool
 	{
 		// do nothing
 		return false;

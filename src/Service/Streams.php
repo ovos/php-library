@@ -5,10 +5,9 @@ namespace Ovos\Service;
 
 use Ovos\Service;
 use Ovos\ArrayObject;
-use Ovos\Exception;
-use Ovos\Arrays;
 use Ovos\Stream\Request;
 use Ovos\Stream\Request\Factory;
+use ErrorException;
 
 /**
  * Streams
@@ -31,12 +30,12 @@ class Streams extends Service
 	/**
 	 * @var ?ArrayObject 
 	 */
-	protected ?ArrayObject $_config = null;	
+	protected ?ArrayObject $_config = null;
 	
 	/**
 	 * @var array
 	 */
-	protected array $_defaultContextOptions = [];	
+	protected array $_defaultContextOptions = [];
 	
 	/**
 	 * @var Request[]

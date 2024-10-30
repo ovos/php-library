@@ -4,12 +4,14 @@ declare(strict_types=1);
 namespace Ovos\Config;
 
 use Ovos\Arrays;
-use Ovos\Cache\Filesystem;
 use Ovos\ArrayObject;
 use Ovos\Environment;
-use Ovos\Exception;
 use Ovos\Service\Memory;
 use Ovos\Services;
+
+use function basename;
+use function filemtime;
+use function str_replace;
 
 /**
  * Loader
@@ -23,29 +25,26 @@ class Loader
 	 * @var Memory
 	 */
 	protected Memory $_memoryService;
-
-	/**
-	 * @var string
-	 */
-	//public const CACHE_DIR = 'configs' . DIRECTORY_SEPARATOR;
 	
 	/**
 	 */
 	public function __construct()
 	{
-		$this->_memoryService = Services::getInstance()->get(Memory::SYMBOL);
+		/** @var Memory $memoryService */
+		$memoryService = Services::getInstance()->get(Memory::SYMBOL);
+		$this->_memoryService = $memoryService;
 	}
-
+	
 	/**
 	 * @param string $file
 	 * @param Environment $environment
-	 * @param string $cacheId
+	 * @param ?string $cacheId
 	 *
-	 * @return null|ArrayObject
+	 * @return ?ArrayObject
 	 */
 	public function load(string $file,
 		Environment $environment,
-		string $cacheId = null
+		?string $cacheId = null
 	): ?ArrayObject
 	{
 		$rootSection = $environment->getEnv();
@@ -53,32 +52,26 @@ class Loader
 		$cacheId = ($cacheId ?? basename($file)) . '_'
 			. str_replace('-', '_', $rootSection);
 		
-		/*
-		$filesystem = new Filesystem;
-		$pool = $filesystem->getCachePool();
-		$pool->setFolder(self::CACHE_DIR);
-		*/
-		
 		$store = $this->_memoryService->getStore();
 		if(($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)
 		{
 			return $item->config;
 		}
-
+		
 		$config = Parser::parse($file, $environment);
 		if($config === null)
 		{
 			return null;
 		}
-
+		
 		if(!isset($config[$rootSection]))
 		{
 			return null;
 		}
-
+		
 		$config = $config[$rootSection];
-		$configObject = Arrays::deepToArrayObject($config, 'Ovos\ArrayObject');
+		$configObject = Arrays::deepToArrayObject($config, ArrayObject::class);
 		
 		$item = new ArrayObject;
 		$item->mtime = $mTime;

@@ -9,6 +9,8 @@ use Ovos\Redis\Connection;
 use Redis as BaseRedis;
 use RedisException;
 
+use function is_int;
+
 /**
  * Redis
  *

@@ -25,7 +25,7 @@ class Test
 	/**
 	 * @var int
 	 */
-	public int $result = self::RESULT_FAILED;	
+	public int $result = self::RESULT_FAILED;
 	
 	/**
 	 * @var ?Throwable
@@ -33,7 +33,7 @@ class Test
 	public ?Throwable $throwable = null;
 	
 	/**
-	 * @var string
+	 * @var ?string
 	 */
 	public ?string $reason = null;
 	

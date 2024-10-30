@@ -7,6 +7,8 @@ use Ovos\Measurement;
 use PDO;
 use PDOException;
 
+use function ltrim;
+
 /**
  * PdoStatement
  *
@@ -35,10 +37,10 @@ class PdoStatement extends \PDOStatement
 	): bool
 	{
 		$this->_storeParameter($param, $var);
-
+		
 		return parent::bindParam($param, $var, $type, $maxLength, $driverOptions);
 	}
-
+	
 	/**
 	 * Catches value, passes arguments to PDO
 	 * @see https://www.php.net/manual/en/pdostatement.bindvalue.php
@@ -50,10 +52,10 @@ class PdoStatement extends \PDOStatement
 	): bool
 	{
 		$this->_storeParameter($param, $value);
-
+		
 		return parent::bindValue($param, $value, $type);
 	}
-
+	
 	/**
 	 * Measures time while executing statement, returns result
 	 * @see https://www.php.net/manual/en/pdostatement.execute.php
@@ -89,19 +91,19 @@ class PdoStatement extends \PDOStatement
 			// pass query and parameters to collector
 			Collector::getInstance()
 				->setQuery($this->queryString, $this->_parameters, $measurement);
-
+			
 			throw $exception;
 		}
-
+		
 		$measurement->stop();
-
+		
 		// Pass query and parameters to collector
 		Collector::getInstance()
 			->setQuery($this->queryString, $this->_parameters, $measurement);
-
+		
 		// Reset values
 		$this->_parameters = [];
-
+		
 		return $data;
 	}
 

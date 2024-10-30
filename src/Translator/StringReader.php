@@ -44,7 +44,7 @@ class StringReader
 		$this->_string = (string)file_get_contents($filename);
 		$this->_length = strlen($this->_string);
 	}
-
+	
 	/**
 	 * Read number of bytes from given offset.
 	 *
@@ -59,7 +59,7 @@ class StringReader
 		{
 			throw new Exception('Not enough bytes!');
 		}
-
+		
 		return substr($this->_string, $pos, $bytes);
 	}
 
@@ -78,9 +78,9 @@ class StringReader
 		{
 			return PHP_INT_MAX;
 		}
-
+		
 		$result = $data[1];
-
+		
 		/* We're reading unsigned int, but PHP will happily
 		 * give us negative number on 32-bit platforms.
 		 *
@@ -89,7 +89,7 @@ class StringReader
 		 */
 		return $result < 0 ? PHP_INT_MAX : $result;
 	}
-
+	
 	/**
 	 * Reads an array of integers from the stream.
 	 *
@@ -106,7 +106,7 @@ class StringReader
 		{
 			return [];
 		}
-
+		
 		return $data;
 	}
 }

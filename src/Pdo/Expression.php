@@ -15,7 +15,7 @@ class Expression
 	 * @var string
 	 */
 	protected string $_value;
-
+	
 	/**
 	 * @param string $value
 	 */
@@ -23,7 +23,7 @@ class Expression
 	{
 		$this->_value = $value;
 	}
-
+	
 	/**
 	 * @return string
 	 */

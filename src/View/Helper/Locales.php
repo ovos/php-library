@@ -5,7 +5,6 @@ namespace Ovos\View\Helper;
 
 use Ovos\Locale;
 use Ovos\Locales as BaseLocales;
-use Ovos\View;
 use Ovos\View\Helper;
 
 /**
