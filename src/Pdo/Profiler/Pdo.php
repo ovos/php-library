@@ -2,10 +2,11 @@
 
 namespace Ovos\Pdo\Profiler;
 
-use Ovos\Pdo\Profiler\Exception\ProfilerException;
 use Ovos\Measurement;
 use PDOStatement;
 use PDOException;
+
+use function func_get_args;
 
 /**
  * Pdo
@@ -23,7 +24,7 @@ class Pdo extends \PDO
 	public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): false|PDOStatement
 	{
 		$args = func_get_args();
-
+		
 		// Execute query and measure time & memory usage
 		$measurement = new Measurement;
 		$measurement->start();
@@ -39,16 +40,16 @@ class Pdo extends \PDO
 			// pass query to collector
 			Collector::getInstance()
 				->setQuery($query, [], $measurement);
-
+			
 			throw $exception;
 		}
-
+		
 		$measurement->stop();
-
+		
 		// Pass query  to collector
 		Collector::getInstance()
 			->setQuery($query, [], $measurement);
-
+		
 		return $data;
 	}
 	
@@ -75,16 +76,16 @@ class Pdo extends \PDO
 			// pass query to collector
 			Collector::getInstance()
 				->setQuery($statement, [], $measurement);
-
+			
 			throw $exception;
 		}
-
+		
 		$measurement->stop();
-
+		
 		// Pass query  to collector
 		Collector::getInstance()
 			->setQuery($statement, [], $measurement);
-
+		
 		return $affectedRows;
 	}
 }

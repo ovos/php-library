@@ -6,6 +6,10 @@ namespace Ovos;
 use ArrayObject as BaseArrayObject;
 
 use function count;
+use function array_shift;
+use function array_merge;
+use function implode;
+use function explode;
 
 /**
  * ArrayObject
@@ -26,7 +30,7 @@ class ArrayObject extends BaseArrayObject
 	{
 		parent::__construct($array, $flags, $iteratorClass);
 	}
-
+	
 	/**
 	 * @param mixed $key
 	 * 
@@ -41,7 +45,7 @@ class ArrayObject extends BaseArrayObject
 		
 		return parent::offsetGet($key);
 	}
-
+	
 	/**
 	 * Returns a nested value specified by dot separated path
 	 *
@@ -56,28 +60,28 @@ class ArrayObject extends BaseArrayObject
 	{
 		$pathElements = explode('.', $path);
 		$currentPath = array_shift($pathElements);
-
+		
 		if($config === null)
 		{
 			$config = $this;
 		}
-
+		
 		if($config->offsetExists($currentPath))
 		{
 			$config = $config->offsetGet($currentPath);
-
+			
 			if(count($pathElements))
 			{
 				$path = implode('.', $pathElements);
 				return $this->get($path, $config);
 			}
-
+			
 			return $config;
 		}
-
+		
 		return null;
 	}
-
+	
 	/**
 	 * @param array $toMerge
 	 * 
@@ -102,7 +106,7 @@ class ArrayObject extends BaseArrayObject
 		{
 			return null;
 		}
-
+		
 		// return null on non-existing properties
 		if(($value = $this->offsetGet($key)) === null)
 		{
@@ -111,7 +115,7 @@ class ArrayObject extends BaseArrayObject
 		
 		return explode(', ', $value);
 	}
-
+	
 	/**
 	 * @param array $array
 	 *

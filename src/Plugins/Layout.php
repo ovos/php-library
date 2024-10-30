@@ -3,12 +3,11 @@ declare(strict_types=1);
 
 namespace Ovos\Plugins;
 
-use Ovos\Application;
 use Ovos\Controller\Plugin;
 use Ovos\Response;
 use Ovos\View;
+
 use function get_class;
-use function Ovos\app;
 
 /**
  * Layout
@@ -22,48 +21,48 @@ class Layout extends Plugin
 	 * @var string
 	 */
 	public const SYMBOL = 'layout';
-
+	
 	/**
 	 * @var string
 	 */
 	public const CONTENT_PLACEHOLDER = 'content';
-
+	
 	/**
 	 * @var View
 	 */
 	protected View $_layout;
-
+	
 	/**
 	 * Automatically create these placeholders
 	 * 
 	 * @var array
 	 */
 	protected array $_placeholders = [];
-
+	
 	/**
 	 * @param string $layout
 	 */
 	public function __construct(string $layout)
 	{
 		parent::__construct();
-
+		
 		// disable on XMLHttpRequest
 		if($this->_request->isXmlHttpRequest())
 		{
 			$this->disable();
 			return;
 		}
-
+		
 		$this->_layout = new View\Layout($layout);
 		$this->_layout::placeholders()->clear();
 		
 		// automatically create these placeholders
 		foreach($this->_placeholders as $placeholder)
 		{
-			$this->_layout->placeholders()->{$placeholder};
+			$this->_layout::placeholders()->{$placeholder};
 		}
 	}
-
+	
 	/**
 	 * @return View
 	 */
@@ -71,7 +70,7 @@ class Layout extends Plugin
 	{
 		return $this->_layout;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -79,14 +78,14 @@ class Layout extends Plugin
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 * @return void
 	 */
 	public function preDispatch(): void
 	{
 	}
-
+	
 	/**
 	 * @return void
 	 */
@@ -96,7 +95,7 @@ class Layout extends Plugin
 		{
 			$this->_layout->$placeholder = $value;
 		}
-
+		
 		$response = $this->_app->getResponse();
 		if($response instanceof Response
 			&& get_class($response) === Response\Html::class)

@@ -4,7 +4,8 @@ declare(strict_types=1);
 namespace Ovos;
 
 use SplQueue;
-use function Ovos\config;
+
+use function count;
 
 /**
  * Console
@@ -66,12 +67,12 @@ class Console
 			'message' => $message,
 		]);
 		
-		// delete oldest element from the queue if we reached the limit
+		// delete the oldest element from the queue if we reached the limit
 		if(self::$limit && $this->_messages->count() > self::$limit)
 		{
 			$this->_messages->shift();
 		}
-
+		
 		return $this;
 	}
 	
@@ -116,7 +117,7 @@ class Console
 				'message' => $message['message'],
 			]);
 		}
-	
+		
 		return $messages;
 	}
 	

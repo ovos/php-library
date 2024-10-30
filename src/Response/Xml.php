@@ -14,12 +14,12 @@ class Xml extends Html
 	/**
 	 * Construct
 	 *
-	 * @param string $response
+	 * @param ?string $response
 	 */
-	public function __construct(string $response = null)
+	public function __construct(?string $response = null)
 	{
 		parent::__construct($response);
-
+		
 		$this->setHeader('Content-Type', 'text/xml; charset=utf-8');
 	}
 }

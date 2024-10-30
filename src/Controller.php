@@ -31,36 +31,36 @@ class Controller
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * @var Request
 	 */
 	protected Request $_request;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_dispatchedAction;
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_dispatched = false;
-
+	
 	/**
 	 * Params
 	 *
 	 * @var array
 	 */
 	protected array $_params = [];
-
+	
 	/**
 	 * Plugins
 	 *
 	 * @var array
 	 */
 	protected array $_plugins = [];
-
+	
 	/**
 	 */
 	public function __construct()
@@ -72,7 +72,7 @@ class Controller
 		$this->registerSystemPlugins();
 		$this->registerPlugins();
 	}
-
+	
 	/**
 	 * @param string $action
 	 * @param array $requestParams
@@ -102,7 +102,7 @@ class Controller
 			$this->_app->setResponse($response); // for postDispatch
 		}
 		$this->postDispatch();
-
+		
 		return $response;
 	}
 	
@@ -142,7 +142,7 @@ class Controller
 			}
 			else
 			{
-				$requestParamsUnnamed[] = $requestParam;				
+				$requestParamsUnnamed[] = $requestParam;
 			}
 		}
 		
@@ -154,7 +154,7 @@ class Controller
 		// merge them into one array that will be passed as params, first unnamed, then named
 		return array_merge($requestParamsUnnamed, $requestParamsNamed);
 	}
-
+	
 	/**
 	 * @param array $methodParams
 	 * @param array $requestParams
@@ -175,14 +175,14 @@ class Controller
 				
 				// int
 				if($typeName === 'int'
-					|| ($typeName === '?int' && $requestParams[$valueKey] !== null))
+					|| ($typeName === '?int'))
 				{
 					$requestParams[$valueKey] = (int)$requestParams[$valueKey];
 				}
 				
 				// float
 				if($typeName === 'float'
-					|| ($typeName === '?float' && $requestParams[$valueKey] !== null))
+					|| ($typeName === '?float'))
 				{
 					$requestParams[$valueKey] = (float)$requestParams[$valueKey];
 				}
@@ -191,7 +191,7 @@ class Controller
 		
 		return $requestParams;
 	}
-
+	
 	/**
 	 * @param string $dispatchedAction
 	 *
@@ -203,7 +203,7 @@ class Controller
 
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -211,7 +211,7 @@ class Controller
 	{
 		return $this->_dispatchedAction;
 	}
-
+	
 	/**
 	 * @param array $params
 	 *
@@ -223,7 +223,7 @@ class Controller
 
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -241,7 +241,7 @@ class Controller
 	{
 		$this->preDispatchPlugins();
 	}
-
+	
 	/**
 	 * postDispatch
 	 */
@@ -249,7 +249,7 @@ class Controller
 	{
 		$this->postDispatchPlugins();
 	}
-
+	
 	/**
 	 * Returns request
 	 *
@@ -259,7 +259,7 @@ class Controller
 	{
 		return $this->_app->getRequest();
 	}
-
+	
 	/**
 	 * Returns router
 	 *
@@ -269,7 +269,7 @@ class Controller
 	{
 		return $this->_app->getRouter();
 	}
-
+	
 	/**
 	 * @param bool $dispatched
 	 *
@@ -278,10 +278,10 @@ class Controller
 	public function setDispatched(bool $dispatched): self
 	{
 		$this->_dispatched = $dispatched;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */

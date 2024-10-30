@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\View\Helper;
 
 use Ovos\View\Helper;
+
 use function array_unshift;
 use function array_reverse;
 use function implode;
@@ -20,22 +21,22 @@ class Title extends Helper
 	 * @var string
 	 */
 	protected string $_defaultTitle;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_title = null;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_separator = ' &raquo; ';
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_items = [];
-
+	
 	/**
 	 * @param ?string $defaultTitle
 	 *
@@ -47,10 +48,10 @@ class Title extends Helper
 		{
 			$this->setDefault($defaultTitle);
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $title
 	 *
@@ -59,10 +60,10 @@ class Title extends Helper
 	public function set(string $title): self
 	{
 		$this->_title = $title;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -70,7 +71,7 @@ class Title extends Helper
 	{
 		return $this->_title;
 	}
-
+	
 	/**
 	 * @param string $defaultTitle
 	 *
@@ -79,10 +80,10 @@ class Title extends Helper
 	public function setDefault(string $defaultTitle): self
 	{
 		$this->_defaultTitle = $defaultTitle;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -90,7 +91,7 @@ class Title extends Helper
 	{
 		return $this->_defaultTitle;
 	}
-
+	
 	/**
 	 * @param string $separator
 	 *
@@ -99,10 +100,10 @@ class Title extends Helper
 	public function setSeparator(string $separator): self
 	{
 		$this->_separator = $separator;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $item
 	 *
@@ -111,21 +112,21 @@ class Title extends Helper
 	public function add(string $item): self
 	{
 		$this->_items[] = $item;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
 	public function __toString(): string
 	{
 		$items = $this->_items;
-		array_unshift($items, $this->_title ? $this->_title : $this->_defaultTitle);
-
+		array_unshift($items, $this->_title ?: $this->_defaultTitle);
+		
 		return implode($this->_separator, array_reverse($items));
 	}
-
+	
 	/**
 	 * @return array
 	 */

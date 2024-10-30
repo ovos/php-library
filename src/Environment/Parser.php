@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Environment;
 
-use Ovos\Exception;
+use function parse_ini_file;
 
 /**
  * Parser
@@ -24,7 +24,7 @@ class Parser
 		{
 			return null;
 		}
-
+		
 		return $result;
 	}
 }

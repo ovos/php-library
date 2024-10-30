@@ -17,9 +17,9 @@ use function simplexml_load_string;
 class Xml
 {
 	/**
-	 * @param mixed $xml
+	 * @param null|string|SimpleXMLElement $xml
 	 *
-	 * @return null|string|SimpleXMLElement
+	 * @return ?string
 	 */
 	public static function format(null|string|SimpleXMLElement $xml): ?string
 	{
@@ -27,17 +27,17 @@ class Xml
 		{
 			return null;
 		}
-
+		
 		if(($xml instanceof SimpleXMLElement) === false)
 		{
 			$xml = simplexml_load_string($xml);
 		}
-
+		
 		$dom = new DOMDocument;
 		$dom->preserveWhiteSpace = false;
 		$dom->formatOutput = true;
 		$dom->loadXML($xml->asXML());
-
+		
 		return $dom->saveXML($dom->documentElement);
 	}
 }

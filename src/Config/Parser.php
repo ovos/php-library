@@ -4,7 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Config;
 
 use Ovos\Environment;
-use Ovos\Exception;
+
+use function yaml_parse_file;
 
 /**
  * Parser
@@ -16,17 +17,19 @@ class Parser
 {
 	/**
 	 * @param string $file
-	 * @param Environment $environment
+	 * @param ?Environment $environment
 	 * 
-	 * @return null|array
+	 * @return ?array
 	 */
-	public static function parse(string $file, Environment $environment = null): ?array
+	public static function parse(string $file,
+		?Environment $environment = null
+	): ?array
 	{
 		$result = yaml_parse_file(
 			$file, 
 			0, 
 			$ndocs,
-			$environment->getYamlTags()
+			$environment?->getYamlTags(),
 		);
 		
 		if($result === false)

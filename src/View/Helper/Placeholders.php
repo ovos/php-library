@@ -18,7 +18,7 @@ class Placeholders extends Helper
 	 * @var Placeholder[]
 	 */
 	protected array $_items = [];
-
+	
 	/**
 	 * @param string $placeholder
 	 *
@@ -30,10 +30,10 @@ class Placeholders extends Helper
 		{
 			$this->_items[$placeholder] = new Placeholder;
 		}
-
+		
 		return $this->_items[$placeholder];
 	}
-
+	
 	/**
 	 * @param string $placeholder
 	 *
@@ -46,7 +46,7 @@ class Placeholders extends Helper
 			unset($this->_items[$placeholder]);
 		}
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -54,14 +54,14 @@ class Placeholders extends Helper
 	{
 		return $this->_items;
 	}
-
+	
 	/**
 	 * @return self
 	 */
 	public function clear(): self
 	{
 		$this->_items = [];
-
+		
 		return $this;
 	}
 }

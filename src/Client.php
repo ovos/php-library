@@ -6,6 +6,7 @@ namespace Ovos;
 use function preg_match;
 use function array_merge;
 use function explode;
+use function ip2long;
 
 /**
  * Client
@@ -21,14 +22,14 @@ class Client
 	public const PROTOCOL_HTTP = 'http';
 	public const PROTOCOL_HTTPS = 'https';
 	/**#@-*/
-
+	
 	/**
 	 * Returns current protocol (http or https)
 	 *
 	 * @var ?string
 	 */
 	protected static ?string $_protocol = null;
-
+	
 	/**
 	 * Is HTTPS on?
 	 *
@@ -51,7 +52,7 @@ class Client
 			
 			self::$_protocol = $isHttps ? self::PROTOCOL_HTTPS : self::PROTOCOL_HTTP;
 		}	
-
+		
 		return self::$_protocol;
 	}
 
@@ -61,7 +62,7 @@ class Client
 	 * @var ?string
 	 */
 	protected static ?string $_ip = null;
-
+	
 	/**
 	 * Returns visitor's IP address
 	 * Supports proxies
@@ -75,21 +76,21 @@ class Client
 		{
 			// build up an array of available IPs
 			$ips = [];
-
+			
 			// check headers sent by proxies
-
+			
 			// sometimes proxy sends original IP in this header
 			if(!empty($_SERVER['HTTP_CLIENT_IP']))
 			{
 				$ips[] = $_SERVER['HTTP_CLIENT_IP'];
 			}
-
+			
 			// sometimes proxy sends original IP in this header, sometimes with proxy IP following it
 			if(!empty($_SERVER['HTTP_X_FORWARDED_FOR']))
 			{
 				$ips = array_merge($ips, explode(', ', $_SERVER['HTTP_X_FORWARDED_FOR']));
 			}
-
+			
 			// look for the first valid IP
 			foreach($ips as $possibleIp)
 			{
@@ -103,17 +104,17 @@ class Client
 					}
 				}
 			}
-
+			
 			// no valid IP sent by proxies, use default or return an empty string
 			if(self::$_ip === null)
 			{
 				self::$_ip = $_SERVER['REMOTE_ADDR'] ?? '';
 			}
 		}
-
+		
 		return self::$_ip;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */

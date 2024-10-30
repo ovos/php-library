@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\View\Helper;
 
 use Ovos\View\Helper;
+
 use function is_string;
 use function preg_split;
 use function implode;
@@ -22,14 +23,14 @@ class Elements extends Helper
 	 * @var array
 	 */
 	protected array $_elements = [];
-
+	
 	/**
 	 * Classes
 	 *
 	 * @var array
 	 */
 	protected array $_classes = [];
-
+	
 	/**
 	 * @return self
 	 */
@@ -37,7 +38,7 @@ class Elements extends Helper
 	{
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -49,10 +50,10 @@ class Elements extends Helper
 		{
 			$this->_elements[$name] = new self;
 		}
-
+		
 		return $this->_elements[$name];
 	}
-
+	
 	/**
 	 * Adds class
 	 *
@@ -63,10 +64,10 @@ class Elements extends Helper
 	public function addClass(string $class): self
 	{
 		$this->_classes[$class] = $class;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Ads classes
 	 *
@@ -80,15 +81,15 @@ class Elements extends Helper
 		{
 			$classes = $this->stringToArray($classes);
 		}
-
+		
 		foreach($classes as $class)
 		{
 			$this->_classes[$class] = $class;
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Has class
 	 *
@@ -100,7 +101,7 @@ class Elements extends Helper
 	{
 		return isset($this->_classes[$class]);
 	}
-
+	
 	/**
 	 * Has any classes
 	 *
@@ -110,7 +111,7 @@ class Elements extends Helper
 	{
 		return empty($this->_classes) === false;
 	}
-
+	
 	/**
 	 * Removes class
 	 *
@@ -124,10 +125,10 @@ class Elements extends Helper
 		{
 			unset($this->_classes[$class]);
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Removes classes
 	 *
@@ -141,7 +142,7 @@ class Elements extends Helper
 		{
 			$classes = $this->stringToArray($classes);
 		}
-
+		
 		foreach($classes as $class)
 		{
 			if(isset($this->_classes[$class]))
@@ -149,10 +150,10 @@ class Elements extends Helper
 				unset($this->_classes[$class]);
 			}
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Returns classes
 	 *
@@ -162,7 +163,7 @@ class Elements extends Helper
 	{
 		return $this->_classes;
 	}
-
+	
 	/**
 	 * Converts classes string to array
 	 *
@@ -174,7 +175,7 @@ class Elements extends Helper
 	{
 		return preg_split('~\s+~', $classes);
 	}
-
+	
 	/**
 	 * Returns classes as string
 	 *
@@ -184,7 +185,7 @@ class Elements extends Helper
 	{
 		return implode(' ', $this->_classes);
 	}
-
+	
 	/**
 	 * __toString
 	 *

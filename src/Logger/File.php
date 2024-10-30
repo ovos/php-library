@@ -5,6 +5,9 @@ namespace Ovos\Logger;
 
 use Ovos\Dir;
 
+use function date;
+use function file_put_contents;
+
 /**
  * Trait File
  *
@@ -14,10 +17,10 @@ use Ovos\Dir;
 trait File
 {
 	/**
-	 * @var string
+	 * @var ?string
 	 */
-	protected ?string $_absoluteDir = null;	
-
+	protected ?string $_absoluteDir = null;
+	
 	/**
 	 * @return string
 	 */
@@ -29,12 +32,12 @@ trait File
 				. 'logs' . DIRECTORY_SEPARATOR
 				. $this->_dir . DIRECTORY_SEPARATOR;
 			
-			Dir::create($this->_absoluteDir);	
+			Dir::create($this->_absoluteDir);
 		}
 	
 		return $this->_absoluteDir;
 	}
-
+	
 	/**
 	 * @param string $output
 	 */

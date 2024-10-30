@@ -6,6 +6,8 @@ namespace Ovos\Service;
 use Ovos\Service;
 use Ovos\Store\Apcu;
 
+use function str_replace;
+
 /**
  * Memory
  *
@@ -18,7 +20,7 @@ class Memory extends Service
 	 * @var string
 	 */
 	public const SYMBOL = 'memory';
-
+	
 	/**
 	 * @var ?Apcu
 	 */
@@ -31,7 +33,7 @@ class Memory extends Service
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 * @return Apcu
 	 */
@@ -41,7 +43,7 @@ class Memory extends Service
 		{
 			$this->_store = new Apcu(str_replace([':', DIRECTORY_SEPARATOR], '', BASE_DIR) . '_');
 		}
-
+		
 		return $this->_store;
 	}
 }

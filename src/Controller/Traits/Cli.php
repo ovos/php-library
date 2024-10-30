@@ -10,6 +10,8 @@ use FilesystemIterator;
 use function count;
 use function str_starts_with;
 use function printf;
+use function krsort;
+use function array_values;
 
 /**
  * Trait Cli
@@ -36,7 +38,7 @@ trait Cli
 		
 		return $line;
 	}
-
+	
 	/**
 	 * @param string $dir
 	 * @param bool $selectDirectory
@@ -46,7 +48,7 @@ trait Cli
 	public function listFiles(string $dir, bool $selectDirectory = false): array
 	{
 		$files = [];
-
+		
 		$iterator = new FilesystemIterator($dir, FilesystemIterator::SKIP_DOTS);
 		foreach($iterator as $file)
 		{
@@ -83,7 +85,7 @@ trait Cli
 		{
 			return null;
 		}
-
+		
 		$this->log('Please pick a %s (type the number and hit <blue>ENTER<reset>):', 
 			$selectDirectory ? 'directory' : 'file');
 			
@@ -91,12 +93,14 @@ trait Cli
 		{
 			printf("\t%d. %s" . PHP_EOL, $key + 1, $file->getBasename());
 		}
-
+		
 		$selection = (int)$this->readLine() - 1;
 		if(isset($files[$selection]))
 		{
 			return $files[$selection];
 		}
+		
+		return null;
 	}
 	
 	/**

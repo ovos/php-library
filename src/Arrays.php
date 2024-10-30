@@ -7,6 +7,15 @@ use ArrayObject;
 
 use function is_array;
 use function count;
+use function array_unique;
+use function array_merge;
+use function array_keys;
+use function array_key_exists;
+use function array_shift;
+use function array_map;
+use function array_combine;
+use function strstr;
+use function str_replace;
 
 /**
  * Arrays
@@ -36,7 +45,7 @@ class Arrays
 			
 			$array[$key] = self::deepToArrayObject($value, $className, $flags);
 		}
-
+		
 		return new $className($array, $flags);
 	}
 	
@@ -69,10 +78,10 @@ class Arrays
 		{
 			case 0:
 				return false;
-
+			
 			case 1:
 				return $arrays[0];
-
+			
 			case 2:
 				$arrays[2] = [];
 				
@@ -86,7 +95,7 @@ class Arrays
 				{
 					$isKey0 = array_key_exists($key, $arrays[0]);
 					$isKey1 = array_key_exists($key, $arrays[1]);
-
+					
 					if($isKey0 && $isKey1 && is_array($arrays[0][$key]) && is_array($arrays[1][$key]))
 					{
 						$arrays[2][$key] = (__METHOD__)($arrays[0][$key], $arrays[1][$key]);
@@ -104,15 +113,15 @@ class Arrays
 						$arrays[2][$key] = $arrays[1][$key];
 					}
 				}
-
+				
 				return $arrays[2];
 				
 			default: // merge first two and repeat until there are just two left
 				$arrays[1] = (__METHOD__)($arrays[0], $arrays[1]);
 				array_shift($arrays);
-
+				
 				return (__METHOD__)(...$arrays);
-
+			
 			break;
 		}
 	}
@@ -129,7 +138,7 @@ class Arrays
 	public static function getPairs(array $values): array
 	{
 		$paired = [];
-
+		
 		$count = count($values);
 		for($i = 0; $i < $count; $i+=2)
 		{
@@ -139,7 +148,7 @@ class Arrays
 				$paired[$values[$i]] = $values[$i + 1];
 			}
 		}
-
+		
 		return $paired;
 	}
 
@@ -179,9 +188,9 @@ class Arrays
 				
 				$flat[$key . $column] = $columnValue;
 			}
-
+		
 		}
-
+		
 		return $flat;
 	}
 	

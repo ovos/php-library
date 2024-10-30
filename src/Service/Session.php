@@ -8,6 +8,11 @@ use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Ovos\Service;
 
+use function array_key_exists;
+use function ini_set;
+use function session_cache_limiter;
+use function session_get_cookie_params;
+
 /**
  * Session
  *
@@ -20,12 +25,12 @@ class Session extends Service
 	 * @var string
 	 */
 	public const SYMBOL = 'session';
-
+	
 	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;
-
+	
 	/**
 	 * @var ArrayObject
 	 */
@@ -35,17 +40,17 @@ class Session extends Service
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_sessionConfig;
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_initialized = false;
-
+	
 	/**
 	 * @var array
 	 */
 	protected array $_session = [];
-
+	
 	/**
 	 * @return string
 	 */
@@ -53,13 +58,13 @@ class Session extends Service
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 */
 	public function __construct()
 	{
 		parent::__construct();
-
+		
 		$this->_config = $this->_app->getConfig();
 		if($this->_config->cookies === null)
 		{
@@ -86,7 +91,7 @@ class Session extends Service
 			$this->start();
 		}
 	}
-
+	
 	/**
 	 */
 	protected function _initialize(): void
@@ -126,7 +131,7 @@ class Session extends Service
 			$this->_initialized = true;
 		}
 	}
-
+	
 	public function start(): void
 	{
 		if($this->_request->isCli())
@@ -141,7 +146,7 @@ class Session extends Service
 		}
 		$this->_session = &$_SESSION;
 	}
-
+	
 	public function close(): void
 	{
 		if($this->_request->isCli())
@@ -151,7 +156,7 @@ class Session extends Service
 		
 		session_write_close();
 	}
-
+	
 	/**
 	 * @see https://www.php.net/session_regenerate_id
 	 * 
@@ -163,7 +168,7 @@ class Session extends Service
 	{
 		return session_regenerate_id($deleteOldSession);
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -183,7 +188,7 @@ class Session extends Service
 		
 		return false;
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -195,10 +200,10 @@ class Session extends Service
 		{
 			$this->_session[$name] = null;
 		}
-
+		
 		return $this->_session[$name];
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -208,16 +213,16 @@ class Session extends Service
 	{
 		return array_key_exists($name, $this->_session);
 	}
-
+	
 	/**
 	 * @param string $name
 	 * @param mixed $value
 	 */
-	public function __set(string $name, $value): void
+	public function __set(string $name, mixed $value): void
 	{
 		$this->_session[$name] = $value;
 	}
-
+	
 	/**
 	 * @param string $name
 	 */

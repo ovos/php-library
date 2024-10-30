@@ -3,6 +3,13 @@ declare(strict_types=1);
 
 namespace Ovos\Terminal;
 
+use function array_key_exists;
+use function str_pad;
+use function str_replace;
+
+use const STR_PAD_BOTH;
+use const PHP_EOL;
+
 /**
  * Formatter
  *
@@ -28,11 +35,11 @@ class Formatter
 	public const COLOR_BROWN = 'brown';
 	public const COLOR_YELLOW = 'yellow';
 	public const COLOR_WHITE = 'white';
-
+	
 	/**
 	 * @var string[]
 	 */	
-	public static $colors =
+	public static array $colors =
 	[
 		self::COLOR_RESET => "\33[0m",
 		self::COLOR_BLACK => "\33[0;30m",
@@ -56,7 +63,7 @@ class Formatter
 	/**
 	 * @param string $color
 	 * 
-	 * @return string|null
+	 * @return ?string
 	 */
 	public static function getColor(string $color): ?string
 	{
@@ -118,8 +125,8 @@ class Formatter
 	 * 
 	 * @return string
 	 */
-	public static function getHeader($header)
+	public static function getHeader(string $header): string
 	{
 		return str_pad(' ' . $header . ' ', 50, '-', STR_PAD_BOTH) . PHP_EOL;
-	}		
+	}
 }

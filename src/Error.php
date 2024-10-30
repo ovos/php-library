@@ -4,6 +4,26 @@ declare(strict_types=1);
 namespace Ovos;
 
 use function array_slice;
+use function explode;
+use function implode;
+use function preg_replace_callback;
+use function sprintf;
+
+use const E_ERROR;
+use const E_WARNING;
+use const E_PARSE;
+use const E_NOTICE;
+use const E_CORE_ERROR;
+use const E_CORE_WARNING;
+use const E_COMPILE_ERROR;
+use const E_COMPILE_WARNING;
+use const E_USER_ERROR;
+use const E_USER_WARNING;
+use const E_USER_NOTICE;
+use const E_STRICT;
+use const E_RECOVERABLE_ERROR;
+use const E_DEPRECATED;
+use const E_USER_DEPRECATED;
 
 /**
  * Error
@@ -17,39 +37,44 @@ class Error
 	 * @var int
 	 */
 	protected int $_errorCode;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_errorMessage;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_errorFile;
-
+	
 	/**
 	 * @var int
 	 */
 	protected int $_errorLine;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_errorName;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_errorTrace;
-
+	
 	/**
 	 * @param int $errorCode
 	 * @param string $errorMessage
 	 * @param string $errorFile
 	 * @param int $errorLine
 	 */
-	public function __construct(int $errorCode, string $errorMessage, string $errorFile, int $errorLine)
+	public function __construct(
+		int $errorCode,
+		string $errorMessage,
+		string $errorFile,
+		int $errorLine
+	)
 	{
 		$this->_errorCode = $errorCode;
 		$this->_errorMessage = $errorMessage;
@@ -58,7 +83,7 @@ class Error
 		$this->_errorName = $this->_getName();
 		$this->_errorTrace = $this->_getTraceAsString();
 	}
-
+	
 	/**
 	 * Error code
 	 *
@@ -68,7 +93,7 @@ class Error
 	{
 		return $this->_errorCode;
 	}
-
+	
 	/**
 	 * Error message
 	 *
@@ -78,7 +103,7 @@ class Error
 	{
 		return $this->_errorMessage;
 	}
-
+	
 	/**
 	 * Error file
 	 *
@@ -88,7 +113,7 @@ class Error
 	{
 		return $this->_errorFile;
 	}
-
+	
 	/**
 	 * Error line
 	 *
@@ -98,7 +123,7 @@ class Error
 	{
 		return $this->_errorLine;
 	}
-
+	
 	/**
 	 * Error name
 	 *
@@ -108,7 +133,7 @@ class Error
 	{
 		return $this->_errorName;
 	}
-
+	
 	/**
 	 * Error trace
 	 *
@@ -118,7 +143,7 @@ class Error
 	{
 		return $this->_errorTrace;
 	}
-
+	
 	/**
 	 * Compose readable message
 	 *
@@ -129,7 +154,7 @@ class Error
 		return sprintf("error '%s' with message '%s' in %s:%s\nStack trace:\n%s",
 			$this->_errorName, $this->_errorMessage, $this->_errorFile, $this->_errorLine, $this->_errorTrace);
 	}
-
+	
 	/**
 	 * Maps severity to cool name
 	 *
@@ -155,15 +180,15 @@ class Error
 			E_DEPRECATED => 'Deprecated',
 			E_USER_DEPRECATED => 'User Deprecated',
 		);
-
+		
 		if(isset($errorNames[$this->_errorCode]))
 		{
 			return $errorNames[$this->_errorCode];
 		}
-
+		
 		return 'Unknown Error';
 	}
-
+	
 	/**
 	 * Composes error trace
 	 *
@@ -175,16 +200,16 @@ class Error
 	{
 		$exception = new Exception;
 		$trace = $exception->getTraceAsString();
-		$trace = preg_replace_callback('/((?:^|\n)#)(\d+)/', function($r) use ($tracesToIgnore)
+		$trace = preg_replace_callback('/((?:^|\n)#)(\d+)/', static function($r) use ($tracesToIgnore)
 		{
 			return $r[1] . ($r[2] - $tracesToIgnore);
 		}, $trace);
-
+		
 		// Remove first 3 lines
 		$trace = explode("\n", $trace);
 		$trace = array_slice($trace, $tracesToIgnore);
 		$trace = implode("\n", $trace);
-
+		
 		return $trace;
 	}
 }

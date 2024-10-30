@@ -58,7 +58,7 @@ class File extends Element
 	 */
 	public function __get(string $key): mixed
 	{
-		if(!isset($_FILES[$this->_id][$key]))
+		if(isset($_FILES[$this->_id][$key]) === false)
 		{
 			return null;
 		}
@@ -83,7 +83,7 @@ class File extends Element
 	public function __isset(string $key): bool
 	{
 		return array_key_exists($key, $_FILES[$this->_id]);
-	}	
+	}
 	
 	/**
 	 * @return ArrayObject

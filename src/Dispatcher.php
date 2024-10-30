@@ -8,6 +8,7 @@ use Ovos\Exception\NotFoundException;
 use function preg_match;
 use function class_exists;
 use function is_subclass_of;
+use function method_exists;
 
 /**
  * Dispatcher
@@ -20,7 +21,7 @@ class Dispatcher
 	/**
 	 * @param Request $request
 	 *
-	 * @return null|Response
+	 * @return ?Response
 	 *
 	 * @throws NotFoundException
 	 */
@@ -36,7 +37,7 @@ class Dispatcher
 		{
 			throw new NotFoundException('Controller class does not exist "%s".', $controllerClassNs);
 		}
-
+		
 		/** @var Controller $controller */
 		$controller = new $controllerClassNs;
 		if(!is_subclass_of($controller, 'Ovos\Controller'))
@@ -44,7 +45,7 @@ class Dispatcher
 			throw new NotFoundException('A controller has to extend a "Ovos\Controller" class.');
 		}
 		$controller->setParams($request->getParams());
-
+		
 		$action = $request->getActionMethod();
 		if(!method_exists($controller, $action))
 		{

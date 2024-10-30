@@ -8,6 +8,8 @@ use Ovos\Form\Error;
 use Ovos\Form\Validator;
 use finfo;
 
+use function array_search;
+
 /**
  * FileUploaded
  *

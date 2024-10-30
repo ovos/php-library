@@ -6,7 +6,12 @@ namespace Ovos\Model\Mysql\Template;
 use Ovos\ArrayObject;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
-use Ovos\Pdo\Expression;
+
+use function bin2hex;
+use function openssl_cipher_iv_length;
+use function openssl_decrypt;
+use function openssl_encrypt;
+use function random_bytes;
 
 /**
  * Encrypted
@@ -22,20 +27,15 @@ class Encrypted extends Template
 	protected array $_properties = [];
 	
 	/**
-	 * @var array
-	 */
-	protected array $_cache = [];
-
-	/**
 	 * @param array $properties
 	 */
 	public function __construct(array $properties = [])
 	{
 		parent::__construct();
-	
+		
 		$this->setProperties($properties);
 	}
-
+	
 	/**
 	 * @param array $properties
 	 * 
@@ -47,7 +47,7 @@ class Encrypted extends Template
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -55,7 +55,7 @@ class Encrypted extends Template
 	{
 		return $this->_properties;
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */
@@ -80,24 +80,24 @@ class Encrypted extends Template
 	}
 	
 	/**
-	 * @param string $string
+	 * @param ?string $string
 	 * @param string $property
 	 * @param Mysql $model
 	 *
 	 * @return ?string
 	 */
-	public function encrypt(string $string, string $property, Mysql $model): ?string
+	public function encrypt(?string $string, string $property, Mysql $model): ?string
 	{
 		if($string === null)
 		{
 			return null;
 		}
-	
+		
 		if(($config = $this->getEncryptionConfig()) === null)
 		{
 			return null;
 		}
-	
+		
 		if($model->cipher_key === null)
 		{
 			$model->cipher_key = bin2hex(random_bytes(16));
@@ -108,24 +108,24 @@ class Encrypted extends Template
 			$length = openssl_cipher_iv_length($config->method);
 			$model->cipher_iv = random_bytes($length);
 		}
-	
+		
 		$string = openssl_encrypt($string, 
 			$config->method,
 			$config->key . $model->cipher_key, 
 			OPENSSL_RAW_DATA,
 			$model->cipher_iv);
-			
+		
 		return $string ?: null;	
 	}
 	
 	/**
-	 * @param string $string
+	 * @param ?string $string
 	 * @param string $property
 	 * @param Mysql $model
 	 *
 	 * @return ?string
 	 */
-	public function decrypt(string $string, string $property, Mysql $model): ?string
+	public function decrypt(?string $string, string $property, Mysql $model): ?string
 	{
 		if($string === null)
 		{

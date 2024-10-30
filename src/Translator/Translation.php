@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Translator;
 
-use Ovos\Locale;
 use Ovos\Translator;
 
 /**
@@ -23,7 +22,7 @@ class Translation
 	 * @var string
 	 */
 	protected string $_path;
-
+	
 	/**
 	 * @var ?CachedAdapter
 	 */
@@ -78,7 +77,7 @@ class Translation
 	{
 		return $this->_translator;
 	}
-
+	
 	/**
 	 * @param string $phrase
 	 *
@@ -88,7 +87,7 @@ class Translation
 	{
 		return $this->getAdapter()->gettext($phrase);
 	}
-
+	
 	/**
 	 * @param string $phraseSingular
 	 * @param string $phrasePlural
@@ -100,7 +99,7 @@ class Translation
 	{
 		return $this->getAdapter()->ngettext($phraseSingular, $phrasePlural, $n);
 	}
-
+	
 	/**
 	 * @return CachedAdapter
 	 */
@@ -110,10 +109,10 @@ class Translation
 		{
 			$this->_adapter = new CachedAdapter($this);
 		}
-
+		
 		return $this->_adapter;
 	}
-
+	
 	/**
 	 * @return string
 	 */

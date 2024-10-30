@@ -3,11 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Response;
 
-use Ovos\Response;
-use Ovos\Exception;
-use function Ovos\app;
-use function Ovos\services;
-
 /**
  * Cli
  *
@@ -24,15 +19,15 @@ class Cli extends Html
 	/**
 	 * Construct
 	 *
-	 * @param string $response
+	 * @param ?string $response
 	 */
-	public function __construct(string $response = null)
+	public function __construct(?string $response = null)
 	{
 		parent::__construct();
-
+		
 		$this->set($response);
 	}
-
+	
 	/**
 	 * @param bool $coloredOutput
 	 * 
@@ -44,7 +39,7 @@ class Cli extends Html
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */

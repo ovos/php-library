@@ -3,14 +3,17 @@ declare(strict_types=1);
 
 namespace Ovos\Model\Mysql\Template;
 
-use Ovos\ArrayObject;
 use Ovos\Exception;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
-use Ovos\Pdo\Expression;
 use PDO;
 use stdClass;
 use Closure;
+
+use function is_string;
+use function json_decode;
+use function json_encode;
+use function str_replace;
 
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_UNICODE;

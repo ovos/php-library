@@ -7,6 +7,8 @@ use Ovos\View;
 
 use function ob_start;
 use function ob_get_clean;
+use function sprintf;
+use function array_search;
 
 /**
  * Placeholder
@@ -57,10 +59,10 @@ class Placeholder
 				$this->_value.= $value;
 				break;
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param null|string|bool|int $value
 	 *
@@ -71,10 +73,10 @@ class Placeholder
 	): self
 	{
 		$this->set($value, self::PLACEMENT_PREPEND);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param null|string|bool|int $value
 	 *
@@ -85,17 +87,17 @@ class Placeholder
 	): self
 	{
 		$this->set($value, self::PLACEMENT_APPEND);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 */
 	public function captureStart(): void
 	{
 		ob_start();
 	}
-
+	
 	/**
 	 * @param string $placement
 	 */
@@ -105,7 +107,7 @@ class Placeholder
 	{
 		$this->set(ob_get_clean(), $placement);
 	}
-
+	
 	/**
 	 * @param string $script
 	 * @param string $placement
@@ -125,8 +127,8 @@ class Placeholder
 		{
 			$script = View::asset($script);
 		}
-	
-		if(array_search($script, $this->_scripts) !== false)
+		
+		if(in_array($script, $this->_scripts, true))
 		{
 			return $this;
 		}
@@ -136,7 +138,7 @@ class Placeholder
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return null|string|bool|int
 	 */
@@ -144,7 +146,7 @@ class Placeholder
 	{
 		return $this->_value;
 	}
-
+	
 	/**
 	 * @return string
 	 */

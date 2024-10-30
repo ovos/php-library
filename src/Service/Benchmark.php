@@ -19,17 +19,17 @@ class Benchmark extends Service
 	 * @var string
 	 */
 	public const SYMBOL = 'benchmark';
-
+	
 	/**
 	 * @var string
 	 */
 	public const TOTAL = 'total';
-
+	
 	/**
 	 * @var Measurement[]
 	 */
 	protected array $_measurements = [];
-
+	
 	/**
 	 * @return string
 	 */
@@ -37,16 +37,16 @@ class Benchmark extends Service
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 */
 	public function __construct()
 	{
 		parent::__construct();
-
+		
 		$this->start();
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -56,10 +56,10 @@ class Benchmark extends Service
 	{
 		$this->_measurements[$name] = new Measurement;
 		$this->_measurements[$name]->start();
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -68,10 +68,10 @@ class Benchmark extends Service
 	public function stop(string $name = self::TOTAL): self
 	{
 		$this->get($name)->stop();
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -81,14 +81,14 @@ class Benchmark extends Service
 	 */
 	public function get(string $name = self::TOTAL): Measurement
 	{
-		if(!isset($this->_measurements[$name]))
+		if(isset($this->_measurements[$name]) === false)
 		{
 			throw new Exception('Please use start() first.');
 		}
-
+		
 		return $this->_measurements[$name];
 	}
-
+	
 	/**
 	 * @return Measurement[]
 	 */

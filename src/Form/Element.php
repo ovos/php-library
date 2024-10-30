@@ -119,7 +119,7 @@ class Element
 		{
 			throw new Exception('The element is not yet assigned to a form.');
 		}
-	
+		
 		return $this->_form;
 	}
 	
@@ -246,12 +246,6 @@ class Element
 	 */
 	public function filterValue(mixed $value): mixed
 	{
-		// filters are not required to process null values, this usually only happens when someone is trying to spam the form
-		if($value === null)
-		{
-			return null;
-		}
-		
 		foreach($this->_filters as $filter)
 		{
 			$value = $filter->filter($value);
@@ -374,5 +368,5 @@ class Element
 		return [
 			$this->getValue()
 		];
-	}	
+	}
 }

@@ -21,22 +21,22 @@ class ShellCommand
 	 * @var string
 	 */
 	protected string $_command;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_executedCommand;
-
+	
 	/**
-	 * @var array
+	 * @var ?array
 	 */
-	protected null|array $_output = null;
-
+	protected ?array $_output = null;
+	
 	/**
 	 * @var int
 	 */
 	protected int $_exitStatus;
-
+	
 	/**
 	 * @param string|Command $command
 	 */
@@ -44,7 +44,7 @@ class ShellCommand
 	{
 		$this->setCommand($command);
 	}
-
+	
 	/**
 	 * @param string|Command $command
 	 */
@@ -54,15 +54,15 @@ class ShellCommand
 		{
 			$command = $command->__toString();
 		}
-
+		
 		// remove newlines and convert single quotes to double to prevent errors
 		$command = str_replace(["\n", "\r", "'"], ['', '', '"'], $command);
 		// replace multiple spaces with single space
 		$command = preg_replace('~(\s){2,}~', ' ', $command);
-
+		
 		$this->_command = $command;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -70,7 +70,7 @@ class ShellCommand
 	{
 		return $this->_command;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -78,7 +78,7 @@ class ShellCommand
 	{
 		return $this->_executedCommand;
 	}
-
+	
 	/**
 	 * Executes a shell command with given arguments
 	 *
@@ -99,10 +99,10 @@ class ShellCommand
 		$this->_exitStatus = 0; // 0: success, 1: error
 		exec($command, $this->_output, $this->_exitStatus);
 		$this->_executedCommand = $command;
-
+		
 		return !$this->_exitStatus;
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -110,7 +110,7 @@ class ShellCommand
 	{
 		return $this->_exitStatus;
 	}
-
+	
 	/**
 	 * Returns command output
 	 *

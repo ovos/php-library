@@ -7,6 +7,9 @@ use Ovos\Form\Error;
 use Ovos\Form\Validator;
 use Ovos\Strings;
 
+use function filter_var;
+use function sprintf;
+
 /**
  * EmailAddress
  *

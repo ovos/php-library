@@ -15,6 +15,7 @@ use function round;
 use function memory_get_usage;
 use function count;
 use function getmypid;
+use function date;
 
 /**
  * Cli
@@ -25,12 +26,12 @@ use function getmypid;
 class Cli extends Controller
 {
 	use Controller\Traits\Cli;
-
+	
 	/**
 	 * @var bool
 	 */
 	protected bool $_allowHttpAccess = false;
-
+	
 	/**
 	 * Allows to access specified CLI methods via HTTP
 	 *
@@ -53,7 +54,7 @@ class Cli extends Controller
 	public function preDispatch(array $actionParams): void
 	{
 		$this->preDispatchPlugins();
-	
+		
 		if($this->getRequest()->isCli() === true)
 		{
 			return;
@@ -81,7 +82,7 @@ class Cli extends Controller
 		{
 			$this->_pid = getmypid();
 		}
-
+		
 		return $this->_pid;
 	}
 	
@@ -93,10 +94,10 @@ class Cli extends Controller
 	public function setAllowHttpAccess(bool $allowHttpAccess): self
 	{
 		$this->_allowHttpAccess = $allowHttpAccess;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -104,7 +105,7 @@ class Cli extends Controller
 	{
 		return $this->_allowHttpAccess;
 	}
-
+	
 	/**
 	 * @param string $action
 	 *
@@ -113,7 +114,7 @@ class Cli extends Controller
 	public function addHttpAction(string $action): self
 	{
 		$this->_httpActions[] = $action;
-
+		
 		return $this;
 	}
 	
@@ -125,7 +126,7 @@ class Cli extends Controller
 	public function addHttpActions(array $actions): self
 	{
 		$this->_httpActions = array_merge($this->_httpActions, $actions);
-
+		
 		return $this;
 	}
 	

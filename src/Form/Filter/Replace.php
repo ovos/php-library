@@ -78,10 +78,15 @@ class Replace extends Filter
 	/**
 	 * @param mixed $value
 	 *
-	 * @return mixed
+	 * @return ?string
 	 */
-	public function filter(mixed $value): string
+	public function filter(mixed $value): ?string
 	{
+		if($value === null)
+		{
+			return null;
+		}
+		
 		return preg_replace($this->_pattern, $this->_replacement, $value);
 	}
 }

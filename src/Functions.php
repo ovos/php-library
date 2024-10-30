@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use function nl2br;
+use function sprintf;
 
 /**
  * Functions
@@ -26,7 +27,7 @@ class Functions
 	): void
 	{
 		$isCli = PHP_SAPI === 'cli';
-
+		
 		// indent
 		if($indent)
 		{
@@ -39,13 +40,13 @@ class Functions
 				$line = '&emsp;' . $line;
 			}
 		}
-
+		
 		// bold
 		if(!$isCli && $bold)
 		{
 			$line = sprintf('<b>%s</b>', $line);
 		}
-
+		
 		$line.= PHP_EOL;
 		
 		Terminal::output($isCli ? $line : nl2br($line), true);

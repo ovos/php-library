@@ -9,6 +9,7 @@ use Collator;
 use function array_reverse;
 use function array_key_exists;
 use function is_numeric;
+use function str_starts_with;
 
 /**
  * Locale
@@ -34,7 +35,7 @@ class Locale
 	 * @var string
 	 */
 	public string $urlName;
-
+	
 	/**
 	 * @var string
 	 */
@@ -49,7 +50,7 @@ class Locale
 	 * @var string
 	 */
 	public string $country;
-
+	
 	/**
 	 * @var string
 	 */
@@ -59,16 +60,16 @@ class Locale
 	 * @var bool
 	 */
 	public bool $default = false;
-			
+	
 	/**
 	 * @var bool
 	 */
 	public bool $locked = false;
-
+	
 	/**
-	 * @var null|Translator
+	 * @var ?Translator
 	 */
-	protected null|Translator $_translator = null;
+	protected ?Translator $_translator = null;
 	
 	/**
 	 */
@@ -135,7 +136,7 @@ class Locale
 	public function setConfig(ArrayObject $config): self
 	{
 		$this->_config = $config;
-
+		
 		return $this;
 	}
 	
@@ -146,7 +147,7 @@ class Locale
 	{
 		return $this->urlName;
 	}
-
+	
 	/**
 	 * @param string $urlName
 	 *
@@ -155,10 +156,10 @@ class Locale
 	public function setUrlName(string $urlName): self
 	{
 		$this->urlName = $urlName;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -166,7 +167,7 @@ class Locale
 	{
 		return $this->symbol;
 	}
-
+	
 	/**
 	 * @param string $symbol
 	 *
@@ -175,10 +176,10 @@ class Locale
 	public function setSymbol(string $symbol): self
 	{
 		$this->symbol = $symbol;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -186,7 +187,7 @@ class Locale
 	{
 		return $this->language;
 	}
-
+	
 	/**
 	 * @param string $language
 	 * 
@@ -198,7 +199,7 @@ class Locale
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -206,7 +207,7 @@ class Locale
 	{
 		return $this->country;
 	}
-
+	
 	/**
 	 * @param string $country
 	 *
@@ -226,7 +227,7 @@ class Locale
 	{
 		return $this->name;
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -235,7 +236,7 @@ class Locale
 	public function setName(string $name): self
 	{
 		$this->name = $name;
-
+		
 		return $this;
 	}
 	
@@ -247,7 +248,7 @@ class Locale
 	public function setDefault(bool $default): self
 	{
 		$this->default = $default;
-
+		
 		return $this;
 	}
 
@@ -267,10 +268,10 @@ class Locale
 	public function setLocked(bool $locked): self
 	{
 		$this->locked = $locked;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -278,7 +279,7 @@ class Locale
 	{
 		return $this->locked;
 	}
-
+	
 	/**
 	 * @param Request $request
 	 * 
@@ -290,7 +291,7 @@ class Locale
 		{
 			return $this->locked;
 		}
-			
+		
 		$controllers = $this->_config->offsetGet('controllers');
 		if($controllers === null)
 		{
@@ -299,7 +300,7 @@ class Locale
 		
 		// lock list of controllers exist, check if this controller is within this list
 		$currentController = $request->getControllerClass();
-			
+		
 		$locked = true;
 		foreach($controllers as $controller)
 		{
@@ -323,10 +324,10 @@ class Locale
 		{
 			$this->_translator = new Translator($this);
 		}
-
+		
 		return $this->_translator;
 	}
-
+	
 	/**
 	 * @param array $top
 	 * 

@@ -138,7 +138,7 @@ class Options extends Element
 		}
 		
 		return $this;
-	}	
+	}
 	
 	/**
 	 * @return Option[]
@@ -154,7 +154,7 @@ class Options extends Element
 	public function getOptionsValues(): array
 	{
 		$values = [];
-	
+		
 		foreach($this->_options as $options)
 		{
 			$values[] = (string)$options->getValue();
@@ -172,7 +172,7 @@ class Options extends Element
 	{
 		$valuesSelected = $this->getValue();
 		$values = $this->getOptionsValues();
-	
+		
 		// multiple values (name[] of input)
 		if(is_array($valuesSelected))
 		{

@@ -14,13 +14,16 @@ use Throwable;
 use function define;
 use function sprintf;
 use function strpos;
+use function str_starts_with;
 use function array_merge;
+use function array_unshift;
 use function is_array;
 use function count;
 use function implode;
 use function set_include_path;
 use function get_include_path;
 use function error_get_last;
+use function register_shutdown_function;
 
 /**
  * Application
@@ -34,69 +37,69 @@ class Application
 	 * @var ?Application
 	 */
 	public static ?Application $instance = null;
-
+	
 	/**#@+
 	 * Interface constants
 	 */
 	public const INT_HTTP = 'http';
 	public const INT_CLI = 'cli';
 	/**#@-*/
-
+	
 	/**
 	 * The environment state of current application
 	 *
 	 * @var Environment
 	 */
 	protected Environment $_environment;
-
+	
 	/**
 	 * The interface of current application
 	 *
 	 * @var string
 	 */
 	protected string $_interface = self::INT_HTTP;
-
+	
 	/**
 	 * @var ?ArrayObject
 	 */
 	protected ?ArrayObject $_config = null;
-
+	
 	/**
 	 * @var ArrayObject[]
 	 */
 	protected array $_configs = [];
-
+	
 	/**
 	 * @var ?ArrayObject
 	 */
 	protected ?ArrayObject $_bootstrap = null;	
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_domain = null;	
-
+	
 	/**
 	 * Request
 	 *
 	 * @var ?Request
 	 */
 	protected ?Request $_request = null;
-
+	
 	/**
 	 * Response
 	 *
 	 * @var ?Response
 	 */
 	protected ?Response $_response = null;
-
+	
 	/**
 	 * Router
 	 *
 	 * @var ?Router
 	 */
 	protected ?Router $_router = null;
-
+	
 	/**
 	 * Construct
 	 *
@@ -115,7 +118,7 @@ class Application
 		}
 		
 		self::$instance = $this;
-
+		
 		$this->_init()
 			->_initEnvironment()
 			->_initShutdownHandler()
@@ -126,20 +129,20 @@ class Application
 			->_initModules()
 			->_initServices();
 	}
-
+	
 	/**
 	 * Run
 	 */
 	public function run(): void
 	{
 		$request = $this->getRequest();
-
+		
 		$router = $this->getRouter();
 		$router->route($request);
-
+		
 		$this->dispatch($request);
 	}
-
+	
 	/**
 	 * Dispatch
 	 *
@@ -160,7 +163,7 @@ class Application
 			services()->events->add($exception);
 		}
 	}
-
+	
 	/**
 	 * Returns router
 	 *
@@ -172,10 +175,10 @@ class Application
 		{
 			$this->_router = new Router($this->getRequest());
 		}
-
+		
 		return $this->_router;
 	}
-
+	
 	/**
 	 * Returns request
 	 *
@@ -187,10 +190,10 @@ class Application
 		{
 			$this->_request = new Request;
 		}
-
+		
 		return $this->_request;
 	}
-
+	
 	/**
 	 * Returns response
 	 * 
@@ -213,7 +216,7 @@ class Application
 		
 		return $this->_response;
 	}
-
+	
 	/**
 	 * Returns response
 	 *
@@ -224,10 +227,10 @@ class Application
 	public function setResponse(Response $response): self
 	{
 		$this->_response = $response;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return self
 	 */
@@ -238,7 +241,7 @@ class Application
 		
 		return $this;
 	}
-
+	
 	/**
 	 * Sets the environment
 	 *
@@ -250,16 +253,16 @@ class Application
 		$environmentFile = BASE_DIR . Environment::ENV_FILE;
 		$loader = new EnvLoader;
 		$environment = $loader->load($environmentFile);
-		$this->_environment = $environment ? $environment : new Environment;
+		$this->_environment = $environment ?: new Environment;
 		
 		$this->_config = $this->getConfig(
 			BASE_DIR . 'application/configs/environments.yml',
 			$environment
 		);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Returns current environment
 	 *
@@ -269,7 +272,7 @@ class Application
 	{
 		return $this->_environment;
 	}
-
+	
 	/**
 	 * Returns current environment as string
 	 *
@@ -279,7 +282,7 @@ class Application
 	{
 		return $this->_environment->getEnv();
 	}
-
+	
 	/**
 	 * Sets the application's interface
 	 *
@@ -290,10 +293,10 @@ class Application
 	public function setInterface(string $interface): self
 	{
 		$this->_interface = $interface;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Returns the application's interface
 	 *
@@ -303,7 +306,7 @@ class Application
 	{
 		return $this->_interface;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -311,7 +314,7 @@ class Application
 	{
 		return $this->_interface === self::INT_HTTP;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -319,7 +322,7 @@ class Application
 	{
 		return $this->_interface === self::INT_CLI;
 	}
-
+	
 	/**
 	 * Returns the config object (with optional array access)
 	 *
@@ -336,17 +339,17 @@ class Application
 		{
 			return $this->_config;
 		}
-
+		
 		if(!isset($this->_configs[$configFile]))
 		{
 			$loader = new ConfigLoader;
 			$config = $loader->load($configFile, $environment);
 			$this->_configs[$configFile] = $config;
 		}
-
+		
 		return $this->_configs[$configFile];
 	}
-
+	
 	/**
 	 * Sets up shutdown handler
 	 *
@@ -355,10 +358,10 @@ class Application
 	protected function _initShutdownHandler(): self
 	{
 		register_shutdown_function(array($this, 'handleShutdown'));
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Initializes the current bootstrap
 	 *
@@ -401,7 +404,7 @@ class Application
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param ArrayObject $bootstrap
 	 * 
@@ -418,7 +421,7 @@ class Application
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?ArrayObject
 	 */
@@ -435,7 +438,7 @@ class Application
 	protected function _initDomain(): self
 	{
 		$systemConfig = $this->getConfig()->system;
-		/** @var ArrayObject $domain */
+		/** @var string $domain */
 		$domain = $systemConfig->domain; // if there is just one
 		/** @var ArrayObject $domains */
 		$domains = $systemConfig->domains; // if there are many
@@ -496,7 +499,7 @@ class Application
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -551,7 +554,7 @@ class Application
 		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
 		define('LOGS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'logs' .  DIRECTORY_SEPARATOR);
 		define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
-
+		
 		return $this;
 	}
 	
@@ -580,7 +583,7 @@ class Application
 		
 		return $this;
 	}
-
+	
 	/**
 	 * Initializes modules
 	 *
@@ -623,7 +626,7 @@ class Application
 		
 		return $this;
 	}
-
+	
 	/**
 	 * Initializes services
 	 *
@@ -638,23 +641,23 @@ class Application
 		{
 			return $this;
 		}
-
+		
 		foreach($services as $service)
 		{
 			$serviceClass = strpos($service, '\\') === 0
 				? $service : 'Ovos\Service\\' . $service;
-
+			
 			if(!class_exists($serviceClass))
 			{
 				throw new RuntimeException('Service class does not exist "%s".', $serviceClass);
 			}
-
+			
 			Services::getInstance()->register(new $serviceClass);
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Handles shutdown
 	 *
@@ -670,11 +673,12 @@ class Application
 				$error['file'],
 				$error['line']);
 		}
-
+		
 		// get the response to be sent
 		$response = $this->getResponse();
 		
 		$hasEvents = services()->events->count() > 0;
+		
 		// handle erroneous response
 		if($hasEvents)
 		{
@@ -699,7 +703,7 @@ class Application
 						$response->errors = $errors;
 					}
 				}
-
+				
 				$response->success = false;
 			}
 			
@@ -722,7 +726,7 @@ class Application
 				}
 			}
 		}
-
+		
 		// send the response
 		try
 		{
@@ -748,7 +752,7 @@ class Application
 		if($servicesClass !== null)
 		{
 			$servicesClass = str_starts_with($servicesClass, '\\')
-				? $servicesClass : 'Ovos\\' . $servicesClass;		
+				? $servicesClass : 'Ovos\\' . $servicesClass;
 			
 			/**
 			 * @var Services $servicesClass
@@ -758,7 +762,7 @@ class Application
 		
 		return Services::newInstance();
 	}
-
+	
 	/**
 	 * Send response
 	 *
@@ -772,7 +776,7 @@ class Application
 		{
 			return $this;
 		}
-
+		
 		if($response instanceof Response\Json)
 		{
 			/**
@@ -795,10 +799,10 @@ class Application
 			/*** @var Response $response */
 			$response->send();
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Sends JSON response
 	 *
@@ -838,10 +842,10 @@ class Application
 				echo View::$helper(); // calls __toString
 			}
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Sends profiled response
 	 *
@@ -852,7 +856,7 @@ class Application
 	protected function _sendProfiledResponse(Response $response): self
 	{
 		$response->send();
-
+		
 		$profilers = $this->getConfig()->system->profilers;
 		if($profilers->enabled)
 		{
@@ -865,7 +869,7 @@ class Application
 				}
 			}
 		}
-
+		
 		return $this;
 	}
 }
