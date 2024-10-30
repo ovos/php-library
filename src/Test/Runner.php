@@ -3,10 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Test;
 
-use Ovos\Exception;
 use Ovos\Measurement;
 use Ovos\Test;
-use Ovos\ArrayObject;
 use Ovos\Exception\NotFoundException;
 use ReflectionClass;
 use ReflectionMethod;
@@ -31,14 +29,14 @@ class Runner
 	public ReflectionMethod $method;
 	
 	/**
-	 * @var null|Measurement
+	 * @var ?Measurement
 	 */
-	public null|Measurement $measurement = null;
+	public ?Measurement $measurement = null;
 	
 	/**
-	 * @var null|Test 
+	 * @var ?Test 
 	 */
-	public null|Test $test = null;
+	public ?Test $test = null;
 	
 	/**
 	 * @param ReflectionClass $class
@@ -87,7 +85,7 @@ class Runner
 		{
 			// catch for later (see below)
 			// & assign for the reporter
-			$test->throwable = $throwable;			
+			$test->throwable = $throwable;
 		}
 		
 		// clean up
@@ -104,7 +102,7 @@ class Runner
 		}
 		
 		$this->measurement->stop();
-
+		
 		return $test->result;
 	}
 	

@@ -51,10 +51,15 @@ class Prefix extends Filter
 	/**
 	 * @param mixed $value
 	 *
-	 * @return mixed
+	 * @return ?string
 	 */
-	public function filter(mixed $value): string
+	public function filter(mixed $value): ?string
 	{
+		if($value === null)
+		{
+			return null;
+		}
+		
 		if(str_starts_with($value, $this->_prefix) === false)
 		{
 			return $value;

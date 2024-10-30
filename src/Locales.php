@@ -2,6 +2,8 @@
 
 namespace Ovos;
 
+use function class_exists;
+
 /**
  * Locales
  *
@@ -14,7 +16,7 @@ class Locales
 	 * @var array
 	 */
 	protected static array $_instances;
-
+	
 	/**
 	 * @var ?array
 	 */
@@ -29,7 +31,7 @@ class Locales
 		$locales = app()->getConfig()->system->locales;
 		return $locales ?: new ArrayObject;
 	}
-
+	
 	/**
 	 * @param string $urlName
 	 *
@@ -39,7 +41,7 @@ class Locales
 	{
 		return self::getConfig()->offsetExists($urlName);
 	}
-
+	
 	/**
 	 * @param string $urlName
 	 * @param ?ArrayObject $config
@@ -55,24 +57,24 @@ class Locales
 		{
 			return new Locale($urlName, $config);
 		}
-	
+		
 		$configs = self::getConfig();
 		if(($config = $configs->offsetGet($urlName)) === null
 			|| $config->symbol === null)
 		{
 			return new Locale($urlName);
 		}
-	
+		
 		$localeClassNs = 'Locales\\' . $config->symbol;
 		$locale = class_exists($localeClassNs) ?
 			new $localeClassNs($urlName)
 			: new Locale($urlName);
 		
 		$locale->fromConfig($config);
-
+		
 		return $locale;
 	}
-
+	
 	/**
 	 * @param string $urlName
 	 * @param ?ArrayObject $config
@@ -88,7 +90,7 @@ class Locales
 		{
 			self::$_instances[$urlName] = self::create($urlName, $config);
 		}
-
+		
 		return self::$_instances[$urlName];
 	}
 	
@@ -105,17 +107,17 @@ class Locales
 				self::$_all[$urlName] = self::get($urlName);
 			}
 		}
-
+		
 		return self::$_all;
 	}
-
+	
 	/**
 	 * @return Locale
 	 */
 	public static function getDefault(): Locale
 	{
 		$all = self::getAll();
-
+		
 		foreach($all as $locale)
 		{
 			if($locale->isDefault())

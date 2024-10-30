@@ -31,7 +31,7 @@ class Router
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * @var ArrayObject
 	 */
@@ -41,17 +41,17 @@ class Router
 	 * @var string
 	 */
 	public const CACHE_ID_CONTROLLERS = 'controllers';
-
+	
 	/**
 	 * @var Request
 	 */
 	protected Request $_request;
-
+	
 	/**
 	 * @var Url
 	 */
 	protected Url $_url;
-
+	
 	/**
 	 * @var string
 	 */
@@ -66,7 +66,7 @@ class Router
 		'.xml',
 		'.html',
 	];
-
+	
 	/**
 	 * @param Request $request
 	 */
@@ -78,7 +78,7 @@ class Router
 		$this->_request = $request;
 		$this->_url = $request->getUrl();
 	}
-
+	
 	/**
 	 * @return Request
 	 */
@@ -86,7 +86,7 @@ class Router
 	{
 		return $this->_request;
 	}
-
+	
 	/**
 	 * Accepts any number of url components and returns string
 	 *
@@ -99,7 +99,7 @@ class Router
 		$url = new Url(...$components);
 		return $url->__toString();
 	}
-
+	
 	/**
 	 * Supports HTTP & CLI
 	 * HTTP: /:controller/:action/[:paramValue/]+
@@ -113,7 +113,7 @@ class Router
 		$this->_routeFiles($params);
 		$this->_setRequest($request, $params);
 	}
-
+	
 	/**
 	 * Handle routing of files
 	 * 
@@ -142,7 +142,7 @@ class Router
 			return;
 		}
 		
-		if(in_array($matches[1], $this->_nonStaticExtensions))
+		if(in_array($matches[1], $this->_nonStaticExtensions, true))
 		{
 			return;
 		}
@@ -150,7 +150,7 @@ class Router
 		$this->_url->setComponents([]);
 		throw new FileNotFoundException('File not found.');
 	}
-
+	
 	/**
 	 * @param Request $request
 	 * @param array $params
@@ -158,7 +158,7 @@ class Router
 	protected function _setRequest(Request $request, array $params): void
 	{
 		$params = $this->_getParams($request, $params);
-
+		
 		// set params on $request object
 		foreach($params as $param)
 		{
@@ -176,11 +176,11 @@ class Router
 			{
 				$param = null;
 			}
-
+			
 			$request->addParam($param);
 		}
 	}
-
+	
 	/**
 	 * @param Request $request
 	 * @param array $params
@@ -222,12 +222,12 @@ class Router
 					$controllers = $children; // loop children
 					$controllerClass.= Strings::studlyCase($param) . '\\';
 					$controller.= $param . '/';
-
+					
 					continue 2; // go to next param
 				}
-
+				
 				// check if we are already on last level
-				if(is_string($children) // children is not an array but a controller name
+				if(is_string($children) // $children a not an array but a controller name
 					&& strcmp($children, $param) === 0)
 				{
 					break;
@@ -282,7 +282,7 @@ class Router
 			$request->setAction($action);
 			$request->setActionMethod($method);
 		}
-
+		
 		// return the remaining parameters
 		return $params;
 	}
@@ -297,7 +297,7 @@ class Router
 		$cacheId = self::CACHE_ID_CONTROLLERS;
 		
 		$store = services()->cache->getPerishableStore();
-		if($store && ($item = $store->get($cacheId)))
+		if($item = $store->get($cacheId))
 		{
 			return $item;
 		}
@@ -340,11 +340,8 @@ class Router
 			}
 		}
 		
-		if($store)
-		{
-			$store->set($cacheId, $controllers);
-		}
-
+		$store->set($cacheId, $controllers);
+		
 		return $controllers;
 	}
 }

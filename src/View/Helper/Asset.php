@@ -23,7 +23,7 @@ class Asset extends Helper
 	 * @var Memory
 	 */
 	protected Memory $_memoryService;
-
+	
 	/**
 	 * @var string
 	 */
@@ -49,7 +49,7 @@ class Asset extends Helper
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $asset
 	 *
@@ -58,7 +58,7 @@ class Asset extends Helper
 	public function set(string $asset): self
 	{
 		$this->_asset = $asset;
-
+		
 		return $this;
 	}
 	
@@ -70,7 +70,6 @@ class Asset extends Helper
 	public function __toString(): string
 	{
 		$filename = $this->getFilename();
-		$mDate = null;
 		
 		// fetch mtime from memory
 		$store = $this->_memoryService->getStore();
@@ -79,7 +78,7 @@ class Asset extends Helper
 		{
 			return $this->_asset . '?' . $mDate;
 		}
-
+		
 		try
 		{
 			$mTime = filemtime($filename);
@@ -94,7 +93,7 @@ class Asset extends Helper
 		
 		return $this->_asset;
 	}
-
+	
 	/**
 	 * @return string
 	 */

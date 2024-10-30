@@ -18,7 +18,7 @@ class Callback extends Filter
 	 * @var Closure
 	 */
 	protected Closure $_callback;
-
+	
 	/**
 	 * @param Closure $callback
 	 *
@@ -27,10 +27,10 @@ class Callback extends Filter
 	public function setCallback(Closure $callback): self
 	{
 		$this->_callback = $callback;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Closure
 	 */
@@ -38,7 +38,7 @@ class Callback extends Filter
 	{
 		return $this->_callback;
 	}
-
+	
 	/**
 	 * @param Closure $callback
 	 */
@@ -46,7 +46,7 @@ class Callback extends Filter
 	{
 		$this->setCallback($callback);
 	}
-
+	
 	/**
 	 * @param mixed $value
 	 *

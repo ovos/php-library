@@ -5,6 +5,8 @@ namespace Ovos\Store\Mysql\Query;
 
 use Ovos\Store\Mysql\Query;
 
+use function implode;
+
 /**
  * Update
  *
@@ -19,17 +21,17 @@ class Update extends Query
 	public function getSql(): string
 	{
 		$sql = 'UPDATE ' . $this->_table . PHP_EOL;
-
+		
 		if($this->_columns !== [])
 		{
 			$sql.= 'SET ' . implode( ', ', $this->_columns) . PHP_EOL;
 		}
-
+		
 		if($this->_conditions !== [])
 		{
 			$sql.= 'WHERE ' . implode(PHP_EOL . 'AND ', $this->_conditions) . PHP_EOL;
 		}
-
+		
 		return $sql;
 	}
 	

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Form\Filter;
 
-use Ovos\Form\Filter;
+use function ltrim;
 
 /**
  * LeftTrim
@@ -16,10 +16,15 @@ class LeftTrim extends Trim
 	/**
 	 * @param mixed $value
 	 *
-	 * @return mixed
+	 * @return ?string
 	 */
-	public function filter(mixed $value): string
+	public function filter(mixed $value): ?string
 	{
+		if($value === null)
+		{
+			return null;
+		}
+		
 		return ltrim($value, $this->getCharacterMask());
 	}
 }

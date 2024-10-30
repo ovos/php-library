@@ -34,21 +34,21 @@ class Password
 	/**#@-*/
 	
 	/**
-	 * @var null|Hash 
+	 * @var ?Hash 
 	 */
-	public static null|Hash $hashInstance = null;
+	public static ?Hash $hashInstance = null;
 	
 	/**
 	 * @param string $password
 	 * @param ?int $algorithm
-	 * @param null|array $options
+	 * @param ?array $options
 	 *
 	 * @return bool|string
 	 */
 	public static function hash(string $password,
 		?int $algorithm = null,
-		null|array $options = null
-	): bool|string	
+		?array $options = null
+	): bool|string
 	{
 		return self::getHashInstance()->hash($password, $algorithm, $options);
 	}
@@ -56,13 +56,13 @@ class Password
 	/**
 	 * @param string $password
 	 * @param ?int $algorithm
-	 * @param null|array $options
+	 * @param ?array $options
 	 *
 	 * @return bool|string
 	 */
 	public static function needsRehash(string $password,
 		?int $algorithm = null,
-		null|array $options = null
+		?array $options = null
 	): bool|string
 	{
 		return self::getHashInstance()->needsRehash($password, $algorithm, $options);
@@ -80,7 +80,7 @@ class Password
 		
 		return self::$hashInstance;
 	}
-
+	
 	/**
 	 * @param string $password
 	 * @param string $hash
@@ -91,7 +91,7 @@ class Password
 	{
 		return password_verify($password, $hash);
 	}
-
+	
 	/**
 	 * Generates a strong password of N length containing at least one lower case letter,
 	 * one uppercase letter, one digit, and one special character. The remaining characters
@@ -138,7 +138,7 @@ class Password
 		{
 			$sets[] = '!@#%*()_?'; // $ AND & are not accepted by ftp_pwd
 		}
-
+		
 		$all = '';
 		$password = '';
 		foreach($sets as $set)
@@ -147,19 +147,19 @@ class Password
 			$all.= $set;
 		}
 		$all = str_split($all);
-
+		
 		for($i = 0; $i < $length - count($sets); $i++)
 		{
 			$password.= $all[array_rand($all)];
 		}
-
+		
 		$password = str_shuffle($password);
-
+		
 		if($dashes === false)
 		{
 			return $password;
 		}
-
+		
 		$dashesCount = (int)floor(sqrt($length));
 		$passwordDashed = '';
 		while(strlen($password) > $dashesCount)
@@ -168,7 +168,7 @@ class Password
 			$password = substr($password, $dashesCount);
 		}
 		$passwordDashed.= $password;
-
+		
 		return $passwordDashed;
 	}
 }

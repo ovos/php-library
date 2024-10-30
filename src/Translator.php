@@ -34,7 +34,7 @@ class Translator
 	 * @var ?Locale
 	 */
 	protected static ?Locale $_currentLocale = null;
-
+	
 	/**
 	 * @var Translation[]
 	 */
@@ -74,7 +74,7 @@ class Translator
 		{
 			self::$_currentLocale = Locales::getDefault();
 		}
-	
+		
 		return self::$_currentLocale;
 	}
 	
@@ -99,7 +99,7 @@ class Translator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Translation[]
 	 */
@@ -107,7 +107,7 @@ class Translator
 	{
 		return $this->_translations;
 	}
-
+	
 	/**
 	 * @param string $phrase
 	 * @param mixed ...$params
@@ -127,10 +127,10 @@ class Translator
 				$translation = $result;
 			}
 		}
-
+		
 		return $this->_getTranslation($translation, ...$params);
 	}
-
+	
 	/**
 	 * https://stackoverflow.com/questions/12184978/poedit-doesnt-recognize-n-plurals
 	 * 
@@ -145,7 +145,7 @@ class Translator
 	{
 		$translation = $this->getPlural($n) === 0 // english
 			? $phraseSingular : $phrasePlural;
-
+		
 		foreach($this->_translations as $translationAdapter)
 		{
 			$result = $translationAdapter->translatePlural($phraseSingular, $phrasePlural, $n);
@@ -159,10 +159,10 @@ class Translator
 				$translation = $result;
 			}
 		}
-
+		
 		return $this->_getTranslation($translation, ...$params);
 	}
-
+	
 	/**
 	 * @param string $translation
 	 * @param mixed $params

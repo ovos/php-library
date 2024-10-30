@@ -26,64 +26,64 @@ class Request
 	/**#@-*/
 	
 	/**
-	 * @var null|Url
+	 * @var ?Url
 	 */
-	protected null|Url $_url = null;
-
+	protected ?Url $_url = null;
+	
 	/**
 	 * The locale
 	 *
-	 * @var null|Locale
+	 * @var ?Locale
 	 */
-	protected null|Locale $_locale = null;
-
+	protected ?Locale $_locale = null;
+	
 	/**
 	 * The controller
-
+	 * 
 	 * @var string
 	 */
 	protected string $_controller = 'index';
-
+	
 	/**
 	 * The controller class
-
+	 * 
 	 * @var string
 	 */
 	protected string $_controllerClass = 'Index';
-
+	
 	/**
-	 * @var null|Controller
+	 * @var ?Controller
 	 */
-	protected null|Controller $_controllerInstance = null;
-
+	protected ?Controller $_controllerInstance = null;
+	
 	/**
 	 * The action
-
+	 * 
 	 * @var string
 	 */
 	protected string $_action = 'index';
-
+	
 	/**
 	 * The action method
-
+	 * 
 	 * @var string
 	 */
 	protected string $_actionMethod = 'index';
-
+	
 	/**
 	 * Params
 	 *
 	 * @var array
 	 */
 	protected array $_params = [];
-
+	
 	/**
 	 * Construct
 	 */
 	public function __construct()
 	{
 	}
-
+	
 	/**
 	 * @return Url
 	 */
@@ -93,10 +93,10 @@ class Request
 		{
 			$this->_url = new Url;
 		}
-
+		
 		return $this->_url;
 	}
-
+	
 	/**
 	 * @param Locale $locale
 	 *
@@ -105,10 +105,10 @@ class Request
 	public function setLocale(Locale $locale): self
 	{
 		$this->_locale = $locale;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Locale
 	 */
@@ -118,10 +118,10 @@ class Request
 		{
 			$this->_locale = $this->getUrl()->getLocale();
 		}
-
+		
 		return $this->_locale;
 	}
-
+	
 	/**
 	 * @param string $controller
 	 *
@@ -130,10 +130,10 @@ class Request
 	public function setController(string $controller): self
 	{
 		$this->_controller = $controller;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -141,7 +141,7 @@ class Request
 	{
 		return $this->_controller;
 	}
-
+	
 	/**
 	 * @param string $class
 	 *
@@ -150,10 +150,10 @@ class Request
 	public function setControllerClass(string $class): self
 	{
 		$this->_controllerClass = $class;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -161,7 +161,7 @@ class Request
 	{
 		return $this->_controllerClass;
 	}
-
+	
 	/**
 	 * @param Controller $instance
 	 *
@@ -170,10 +170,10 @@ class Request
 	public function setControllerInstance(Controller $instance): self
 	{
 		$this->_controllerInstance = $instance;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return Controller
 	 */
@@ -181,7 +181,7 @@ class Request
 	{
 		return $this->_controllerInstance;
 	}
-
+	
 	/**
 	 * @param string $action
 	 *
@@ -190,10 +190,10 @@ class Request
 	public function setAction(string $action): self
 	{
 		$this->_action = $action;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -201,7 +201,7 @@ class Request
 	{
 		return $this->_action;
 	}
-
+	
 	/**
 	 * @param string $actionMethod
 	 *
@@ -210,10 +210,10 @@ class Request
 	public function setActionMethod(string $actionMethod): self
 	{
 		$this->_actionMethod = $actionMethod;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -230,10 +230,10 @@ class Request
 	public function addParam(mixed $param): self
 	{
 		$this->_params[] = $param;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param array $params
 	 *
@@ -242,10 +242,10 @@ class Request
 	public function setParams(array $params = []): self
 	{
 		$this->_params = $params;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -272,20 +272,20 @@ class Request
 		{
 			return $_GET;
 		}
-
+		
 		if(!isset($_GET[$name]))
 		{
 			if($filter === null)
 			{
 				return $default;
 			}
-
+			
 			return filter_var($filter, $options);
 		}
-
+		
 		return $_GET[$name];
 	}
-
+	
 	/**
 	 * @param ?string $name
 	 * @param null|string|array|int $default
@@ -304,20 +304,20 @@ class Request
 		{
 			return $_POST;
 		}
-
+		
 		if(!isset($_POST[$name]))
 		{
 			if($filter === null)
 			{
 				return $default;
 			}
-
+			
 			return filter_var($filter, $options);
 		}
-
+		
 		return $_POST[$name];
 	}
-
+	
 	/**
 	 * @param string $name
 	 *
@@ -329,11 +329,13 @@ class Request
 		{
 			return null;
 		}
-
+		
 		return $_SERVER[$name];
 	}
-
+	
 	/**
+	 * @param string $method
+	 *
 	 * @return bool
 	 */
 	public function isMethod(string $method): bool
@@ -380,7 +382,7 @@ class Request
 	{
 		return $this->isMethod(self::METHOD_HEAD);
 	}
-
+	
 	/**
 	 * Is the request a Javascript XMLHttpRequest?
 	 *
@@ -393,7 +395,7 @@ class Request
 		return ($this->getPost('X_REQUESTED_WITH') === 'XMLHttpRequest'
 			|| $this->getServer('HTTP_X_REQUESTED_WITH') === 'XMLHttpRequest');
 	}
-
+	
 	/**
 	 * Is the application run from CLI (command line interface)
 	 *
@@ -413,7 +415,7 @@ class Request
 	{
 		return $this->isCli() === false;
 	}
-
+	
 	/**
 	 * Is the request secure
 	 *
@@ -426,7 +428,7 @@ class Request
 		{
 			return true;
 		}
-
+		
 		// proxy
 		if($this->getServer('HTTP_X_FORWARDED_PROTO') === 'https')
 		{
@@ -435,7 +437,7 @@ class Request
 		
 		return false;
 	}
-
+	
 	/**
 	 * Is this a HTTP debug mode
 	 *

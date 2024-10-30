@@ -5,7 +5,6 @@ namespace Ovos;
 
 use function ceil;
 use function floor;
-use function count;
 use function min;
 use function max;
 use function range;
@@ -209,7 +208,7 @@ class Pager
 	{
 		return $this->_page === $this->_pages;
 	}
-
+	
 	/**
 	 * @return int
 	 */

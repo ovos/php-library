@@ -16,7 +16,7 @@ class Integer extends Filter
 	/**
 	 * @param mixed $value
 	 *
-	 * @return mixed
+	 * @return int
 	 */
 	public function filter(mixed $value): int
 	{

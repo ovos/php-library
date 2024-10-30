@@ -17,21 +17,21 @@ class Html extends Response
 	 * @var ?string
 	 */
 	protected ?string $_response = null;
-
+	
 	/**
 	 * Construct
 	 *
-	 * @param string $response
+	 * @param ?string $response
 	 */
-	public function __construct(string $response = null)
+	public function __construct(?string $response = null)
 	{
 		parent::__construct();
-
+		
 		$this->set($response);
-
+		
 		$this->setHeader('Content-Type', 'text/html; charset=utf-8');
 	}
-
+	
 	/**
 	 * @param ?string $response
 	 *
@@ -40,7 +40,7 @@ class Html extends Response
 	public function set(?string $response): self
 	{
 		$this->_response = $response;
-
+		
 		return $this;
 	}
 	
@@ -52,10 +52,10 @@ class Html extends Response
 	public function append(string $response): self
 	{
 		$this->_response.= $response;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -63,7 +63,7 @@ class Html extends Response
 	{
 		return $this->_response;
 	}
-
+	
 	/**
 	 * @return string
 	 */

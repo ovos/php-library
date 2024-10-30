@@ -16,7 +16,7 @@ class FloatingPoint extends Filter
 	/**
 	 * @param mixed $value
 	 *
-	 * @return mixed
+	 * @return float
 	 */
 	public function filter(mixed $value): float
 	{

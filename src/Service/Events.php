@@ -2,9 +2,6 @@
 
 namespace Ovos\Service;
 
-use Ovos\ArrayObject;
-use Ovos\Application;
-use Ovos\Exception;
 use Ovos\Error;
 use Ovos\Service;
 use Countable;
@@ -34,14 +31,14 @@ class Events extends Service implements Countable, Iterator
 	 * @var string
 	 */
 	public const SYMBOL = 'events';
-
+	
 	/**
 	 * List of events that occurred during runtime (such as errors or exceptions)
 	 *
 	 * @var array
 	 */
 	protected array $_events = [];
-
+	
 	/**
 	 * @return string
 	 */
@@ -49,16 +46,16 @@ class Events extends Service implements Countable, Iterator
 	{
 		return self::SYMBOL;
 	}
-
+	
 	/**
 	 */
 	public function __construct()
 	{
 		parent::__construct();
-
+		
 		$this->initErrorHandlers();
 	}
-
+	
 	/**
 	 * @return int
 	 */
@@ -66,7 +63,7 @@ class Events extends Service implements Countable, Iterator
 	{
 		return count($this->_events);
 	}
-
+	
 	/**
 	 * Sets up error handlers
 	 */
@@ -75,7 +72,7 @@ class Events extends Service implements Countable, Iterator
 		set_error_handler(array($this, 'handleError'), E_ALL | E_STRICT);
 		set_exception_handler(array($this, 'handleException'));
 	}
-
+	
 	/**
 	 * Handles errors
 	 *
@@ -95,10 +92,10 @@ class Events extends Service implements Countable, Iterator
 		{
 			return;
 		}
-
+		
 		throw new ErrorException($errorString, 0, $errorCode, $errorFile, $errorLine);
 	}
-
+	
 	/**
 	 * Handles errors
 	 *
@@ -112,11 +109,11 @@ class Events extends Service implements Countable, Iterator
 	protected function _handleError(int $errorCode, string $errorString, string $errorFile, int $errorLine): void
 	{
 		$error = new Error($errorCode, $errorString, $errorFile, $errorLine);
-
+		
 		$this->add($error);
 		$this->log($error);
 	}
-
+	
 	/**
 	 * Handles exceptions
 	 *
@@ -129,7 +126,7 @@ class Events extends Service implements Countable, Iterator
 		$this->add($exception);
 		$this->log($exception);
 	}
-
+	
 	/**
 	 * Logs events (errors or exceptions)
 	 *
@@ -143,7 +140,7 @@ class Events extends Service implements Countable, Iterator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * Adds an event (error or exception)
 	 *
@@ -158,7 +155,7 @@ class Events extends Service implements Countable, Iterator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return array
 	 */
@@ -166,7 +163,7 @@ class Events extends Service implements Countable, Iterator
 	{
 		return $this->_events;
 	}
-
+	
 	/**
 	 * @return void
 	 */
@@ -174,7 +171,7 @@ class Events extends Service implements Countable, Iterator
 	{
 		reset($this->_events);
 	}
-
+	
 	/**
 	 * @return mixed
 	 */
@@ -182,7 +179,7 @@ class Events extends Service implements Countable, Iterator
 	{
 		return current($this->_events);
 	}
-
+	
 	/**
 	 * @return void
 	 */
@@ -190,7 +187,7 @@ class Events extends Service implements Countable, Iterator
 	{
 		next($this->_events);
 	}
-
+	
 	/**
 	 * @return int|string|null
 	 */
@@ -198,14 +195,14 @@ class Events extends Service implements Countable, Iterator
 	{
 		return key($this->_events);
 	}
-
+	
 	/**
 	 * @return bool
 	 */
 	public function valid(): bool
 	{
 		$key = $this->key();
-
+		
 		return $key !== null;
 	}
 }

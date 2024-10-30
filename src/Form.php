@@ -29,31 +29,31 @@ class Form implements Iterator
 	 * @var Application
 	 */
 	protected Application $_app;
-
+	
 	/**
 	 * @var ?string
 	 */
 	protected ?string $_id = null;
-
+	
 	/**
 	 * Parent form
 	 *
 	 * @var null|Form
 	 */
 	protected null|Form $_form = null;
-
+	
 	/**
 	 * @var Url
 	 */
 	protected Url $_action;
-
+	
 	/**
 	 * Element and Form objects, ordered
 	 *
 	 * @var Element[]|Form[]
 	 */
 	protected array $_elements = [];
-
+	
 	/**
 	 * @var array
 	 */
@@ -63,7 +63,7 @@ class Form implements Iterator
 	 * @var string[]
 	 */
 	protected array $_defaults = [];
-
+	
 	/**
 	 * @param ?string $id
 	 */
@@ -74,13 +74,13 @@ class Form implements Iterator
 		
 		$this->init();
 	}
-
+	
 	/**
 	 */
 	public function init(): void
 	{
 	}
-
+	
 	/**
 	 * @return self
 	 */
@@ -95,7 +95,7 @@ class Form implements Iterator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param ?string $id
 	 *
@@ -107,7 +107,7 @@ class Form implements Iterator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -121,7 +121,7 @@ class Form implements Iterator
 		
 		return $id;
 	}
-
+	
 	/**
 	 * @param Form $form
 	 *
@@ -133,7 +133,7 @@ class Form implements Iterator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param Url $action
 	 * 
@@ -145,7 +145,7 @@ class Form implements Iterator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return null|Url
 	 */
@@ -153,7 +153,7 @@ class Form implements Iterator
 	{
 		return $this->_action;
 	}
-
+	
 	/**
 	 * Set value
 	 * 
@@ -248,7 +248,7 @@ class Form implements Iterator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * Default value
 	 * 
@@ -385,7 +385,7 @@ class Form implements Iterator
 	{
 		return $this->__get($id);
 	}
-
+	
 	/**
 	 * @param string $id
 	 * @param Element $element
@@ -397,7 +397,7 @@ class Form implements Iterator
 		
 		$this->_elements[$id] = $element;
 	}
-
+	
 	/**
 	 * @param string $id
 	 * @param Element $element
@@ -410,7 +410,7 @@ class Form implements Iterator
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $id
 	 * 
@@ -430,7 +430,7 @@ class Form implements Iterator
 	{
 		return $this->__isset($id);
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -443,7 +443,7 @@ class Form implements Iterator
 		
 		return count($this->getErrors()) === 0;
 	}
-
+	
 	/**
 	 * @return Error[]
 	 */
@@ -458,7 +458,7 @@ class Form implements Iterator
 		
 		return array_merge(...$errors);
 	}
-
+	
 	/**
 	 * @return Form
 	 */
@@ -466,7 +466,7 @@ class Form implements Iterator
 	{
 		return $this->_form;
 	}
-
+	
 	/**
 	 * @return Element[]|Form[]
 	 */
@@ -474,7 +474,7 @@ class Form implements Iterator
 	{
 		return $this->_elements;
 	}
-
+	
 	/**
 	 * @return void
 	 */
@@ -482,7 +482,7 @@ class Form implements Iterator
 	{
 		reset($this->_elements);
 	}
-
+	
 	/**
 	 * @return mixed
 	 */
@@ -490,7 +490,7 @@ class Form implements Iterator
 	{
 		return current($this->_elements);
 	}
-
+	
 	/**
 	 * @return void
 	 */
@@ -498,7 +498,7 @@ class Form implements Iterator
 	{
 		next($this->_elements);
 	}
-
+	
 	/**
 	 * @return mixed
 	 */
@@ -506,7 +506,7 @@ class Form implements Iterator
 	{
 		return key($this->_elements);
 	}
-
+	
 	/**
 	 * @return bool
 	 */

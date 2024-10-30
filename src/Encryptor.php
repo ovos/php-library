@@ -3,6 +3,16 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function base64_decode;
+use function base64_encode;
+use function bin2hex;
+use function implode;
+use function openssl_cipher_iv_length;
+use function openssl_decrypt;
+use function openssl_encrypt;
+use function preg_match;
+use function random_bytes;
+
 /**
  * Encryptor
  *
@@ -15,12 +25,12 @@ class Encryptor
 	 * @var ?string
 	 */
 	protected ?string $_method;
-
+	
 	/**
 	 * @var string
 	 */
 	protected string $_key;
-
+	
 	/**
 	 * @param string $key
 	 * @param ?string $method (optional)
@@ -30,7 +40,7 @@ class Encryptor
 		$this->setKey($key);
 		$this->setMethod($method);
 	}
-
+	
 	/**
 	 * @param ?string $method
 	 * 
@@ -42,7 +52,7 @@ class Encryptor
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
@@ -62,7 +72,7 @@ class Encryptor
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -70,14 +80,14 @@ class Encryptor
 	{
 		return $this->_key;
 	}
-
+	
 	/**
-	 * @param string $string
+	 * @param ?string $string
 	 * @param ?string $method
 	 * 
 	 * @return ?string
 	 */
-	public function encrypt(string $string, ?string $method = null): ?string
+	public function encrypt(?string $string, ?string $method = null): ?string
 	{
 		if($string === null)
 		{
@@ -92,7 +102,7 @@ class Encryptor
 		$cipherKey = bin2hex(random_bytes(16));
 		$length = openssl_cipher_iv_length($this->getMethod());
 		$cipherIv = random_bytes($length);
-	
+		
 		$string = openssl_encrypt($string, 
 			$this->getMethod(),
 			$this->getKey() . $cipherKey, 
@@ -108,16 +118,16 @@ class Encryptor
 			$tag,
 			$string,
 		]);
-			
-		return $string ? base64_encode($string) : null;	
+		
+		return $string ? base64_encode($string) : null;
 	}
 	
 	/**
-	 * @param string $string
+	 * @param ?string $string
 	 * 
 	 * @return ?string
 	 */
-	public function decrypt(string $string): ?string
+	public function decrypt(?string $string): ?string
 	{
 		if($string === null)
 		{
@@ -125,8 +135,8 @@ class Encryptor
 		}
 		
 		$string = base64_decode($string);
-		[$method, $cipherKey, $cipherIv, $tag, $string] = explode(':', $string);	
-	
+		[$method, $cipherKey, $cipherIv, $tag, $string] = explode(':', $string);
+		
 		$string = openssl_decrypt($string, 
 			$method,
 			$this->getKey() . $cipherKey, 
@@ -134,8 +144,8 @@ class Encryptor
 			$cipherIv,
 			$tag
 		);
-			
-		return $string ?: null;	
+		
+		return $string ?: null;
 	}
 	
 	/**
@@ -154,7 +164,7 @@ class Encryptor
 				
 				continue;
 			}
-		
+			
 			foreach($patterns as $pattern)
 			{
 				if(preg_match($pattern, $key, $matches))
@@ -168,5 +178,4 @@ class Encryptor
 		
 		return $data;
 	}
-		
 }

@@ -12,6 +12,10 @@ use function file_exists;
 use function filemtime;
 use function substr;
 use function strlen;
+use function implode;
+use function str_contains;
+use function array_key_exists;
+use function explode;
 
 /**
  * CachedTranslator
@@ -37,19 +41,19 @@ class CachedAdapter
 	public function __construct(Translation $translation)
 	{
 		$this->_translation = $translation;
-	
+		
 		$filename = $translation->getPath();
 		if(file_exists($filename) === false)
 		{
 			return;
 		}
-
+		
 		$mTime = filemtime($filename);
 		$path = substr($filename, strlen(BASE_DIR));
 		$cacheId = Strings::slugify($path);
-
+		
 		$store = services()->cache->getPerishableStore();
-		if($store && ($item = $store->get($cacheId))
+		if(($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)
 		{
 			$this->setTranslations($item->translations);
@@ -58,14 +62,11 @@ class CachedAdapter
 		$parser = new MoParser($filename);
 		$this->setTranslations($parser->getTranslations());
 		
-		if($store)
-		{
-			$item = new ArrayObject;
-			$item->mtime = $mTime;
-			$item->translations = $this->getTranslations();
-			
-			$store->set($cacheId, $item);
-		}
+		$item = new ArrayObject;
+		$item->mtime = $mTime;
+		$item->translations = $this->getTranslations();
+		
+		$store->set($cacheId, $item);
 	}
 	
 	/**
@@ -80,7 +81,7 @@ class CachedAdapter
 		return $this->exists($msgid)
 			? $this->_translations[$msgid] : $msgid;
 	}
-
+	
 	/**
 	 * Check if a string is translated
 	 *
@@ -107,7 +108,7 @@ class CachedAdapter
 		{
 			return $msgid;
 		}
-
+		
 		return $ret;
 	}
 	
@@ -128,18 +129,18 @@ class CachedAdapter
 		{
 			return $number !== 1 ? $msgidPlural : $msgid;
 		}
-
+		
 		$result = $this->gettext($key);
 		
 		// find out the appropriate form
 		$select = $this->_translation->getTranslator()->getPlural($number);
-
+		
 		$list = explode(chr(0), $result);
 		if(isset($list[$select]) === false)
 		{
 			return $list[0];
 		}
-
+		
 		return $list[$select];
 	}
 
@@ -161,7 +162,7 @@ class CachedAdapter
 		{
 			return $msgid;
 		}
-
+		
 		return $ret;
 	}
 	

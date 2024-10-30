@@ -31,12 +31,12 @@ use Ovos\Service\Database;
 class Services
 {
 	use Singleton;
-
+	
 	/**
 	 * @var Service[]
 	 */
-	protected static $_items = []; // static in case of changing instance with newInstance (after loading the config)
-
+	protected static array $_items = []; // static in case of changing instance with newInstance (after loading the config)
+	
 	/**
 	 * @param string $symbol
 	 * @param ?callable $registerCallback
@@ -70,7 +70,7 @@ class Services
 		
 		return new Disabled;
 	}
-
+	
 	/**
 	 * @param string $symbol
 	 *
@@ -80,7 +80,7 @@ class Services
 	{
 		return $this->get($symbol);
 	}
-
+	
 	/**
 	 * @param Service $service
 	 * @param ?string $symbol
@@ -95,10 +95,10 @@ class Services
 		}
 		
 		self::$_items[$symbol] = $service;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @param string $symbol
 	 *
@@ -108,7 +108,7 @@ class Services
 	{
 		return isset(self::$_items[$symbol]);
 	}
-
+	
 	/**
 	 * @return ArrayObject
 	 */
@@ -116,7 +116,7 @@ class Services
 	{
 		return config()->system->services;
 	}
-
+	
 	/**
 	 * @return array
 	 */

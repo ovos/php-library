@@ -18,7 +18,7 @@ class Table extends Console_Table
 	 * @var bool
 	 */
 	protected bool $_hasMarkup = false;
-
+	
 	/**
 	 * @param bool $hasMarkup
 	 * 

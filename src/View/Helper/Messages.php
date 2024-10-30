@@ -9,6 +9,7 @@ use Ovos\View;
 use Ovos\View\Helper;
 use Ovos\View\Helper\Messages\Message;
 use Countable;
+
 use function Ovos\services;
 use function count;
 
@@ -24,7 +25,7 @@ class Messages extends Helper implements Countable
 	 * @var string
 	 */
 	public const SESSION_NAMESPACE = 'messages';
-
+	
 	/**
 	 * @var Session|Disabled
 	 */
@@ -36,12 +37,12 @@ class Messages extends Helper implements Countable
 	 * @var ?string
 	 */
 	protected ?string $_namespace;
-
+	
 	/**
-	 * @var Message[]
+	 * @var ?Message[]
 	 */
-	protected null|array $_items = [];
-
+	protected ?array $_items = [];
+	
 	/**
 	 */
 	public function __construct()
@@ -66,7 +67,7 @@ class Messages extends Helper implements Countable
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param ?string $namespace
 	 *
@@ -75,18 +76,18 @@ class Messages extends Helper implements Countable
 	public function setNamespace(?string $namespace): self
 	{
 		$this->_namespace = $namespace;
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
-	public function getNamespace(): null|string
+	public function getNamespace(): ?string
 	{
 		return $this->_namespace;
 	}
-
+	
 	/**
 	 * @return Message[]
 	 */
@@ -102,7 +103,7 @@ class Messages extends Helper implements Countable
 			return $this->_items;
 		}
 		
-		if(!isset($this->_items[$this->_namespace]))
+		if(isset($this->_items[$this->_namespace]) === false)
 		{
 			$this->_items[$this->_namespace] = [];
 		}
@@ -124,10 +125,10 @@ class Messages extends Helper implements Countable
 	{
 		$message = new Message($type, $description, $title);
 		$this->getItems()[] = $message;
-
+		
 		return $message;
 	}
-
+	
 	/**
 	 * @param ?string $description
 	 * @param ?string $title
@@ -140,7 +141,7 @@ class Messages extends Helper implements Countable
 	{
 		return $this->addMessage(Message::TYPE_SUCCESS, $description, $title);
 	}
-
+	
 	/**
 	 * @param ?string $description
 	 * @param ?string $title
@@ -152,7 +153,7 @@ class Messages extends Helper implements Countable
 	{
 		return $this->addMessage(Message::TYPE_INFO, $description, $title);
 	}
-
+	
 	/**
 	 * @param ?string $description
 	 * @param ?string $title
@@ -164,7 +165,7 @@ class Messages extends Helper implements Countable
 	{
 		return $this->addMessage(Message::TYPE_ERROR, $description, $title);
 	}
-
+	
 	/**
 	 * @param ?string $description
 	 * @param ?string $title
@@ -176,7 +177,7 @@ class Messages extends Helper implements Countable
 	{
 		return $this->addMessage(Message::TYPE_WARNING, $description, $title);
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -189,10 +190,10 @@ class Messages extends Helper implements Countable
 				return true;
 			}
 		}
-
+		
 		return false;
 	}
-
+	
 	/**
 	 * @return bool
 	 */
@@ -205,10 +206,10 @@ class Messages extends Helper implements Countable
 				return true;
 			}
 		}
-
+		
 		return false;
 	}
-
+	
 	/**
 	 * @return string
 	 */
@@ -218,9 +219,10 @@ class Messages extends Helper implements Countable
 		{
 			return '';
 		}
-
+		
 		$view = new View('helpers/messages.phtml');
 		$view->messages = $this->toArray();
+		
 		return $view->render();
 	}
 	

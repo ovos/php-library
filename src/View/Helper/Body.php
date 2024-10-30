@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
-use Ovos\View\Helper\Elements;
-
 /**
  * Body
  *

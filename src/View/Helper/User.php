@@ -5,6 +5,7 @@ namespace Ovos\View\Helper;
 
 use Ovos\View\Helper;
 use Models\User as Model;
+
 use function Ovos\services;
 
 /**

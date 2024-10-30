@@ -20,12 +20,12 @@ class Measurement
 	 * @var stdClass
 	 */
 	protected stdClass $_time;
-
+	
 	/**
 	 * @var stdClass
 	 */
 	protected stdClass $_memory;
-
+	
 	/**
 	 */
 	public function __construct()
@@ -33,7 +33,7 @@ class Measurement
 		$this->_time = new stdClass;
 		$this->_memory = new stdClass;
 	}
-
+	
 	/**
 	 * @return self
 	 */
@@ -41,10 +41,10 @@ class Measurement
 	{
 		$this->_time->start = microtime(true);
 		$this->_memory->start = memory_get_usage(false);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return self
 	 */
@@ -52,47 +52,47 @@ class Measurement
 	{
 		$this->_time->end = microtime(true);
 		$this->_memory->end = memory_get_usage(false);
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
 	public function getTotalTime(): ?string
 	{
-		if(!isset($this->_time->total))
+		if(isset($this->_time->total) === false)
 		{
-			if(!isset($this->_time->start, $this->_time->end))
+			if(isset($this->_time->start, $this->_time->end) === false)
 			{
 				return null;
 			}
-
+			
 			$this->_time->total = Measurements::formatTime(
 				$this->_time->start,
 				$this->_time->end);
 		}
-
+	
 		return $this->_time->total;
 	}
-
+	
 	/**
 	 * @return ?string
 	 */
 	public function getTotalMemory(): ?string
 	{
-		if(!isset($this->_memory->total))
+		if(isset($this->_memory->total) === false)
 		{
-			if(!isset($this->_memory->start, $this->_memory->end))
+			if(isset($this->_memory->start, $this->_memory->end) === false)
 			{
 				return null;
 			}
-
+			
 			$this->_memory->total = Measurements::formatMemory(
 				$this->_memory->start,
 				$this->_memory->end);
 		}
-
+		
 		return $this->_memory->total;
 	}
 }

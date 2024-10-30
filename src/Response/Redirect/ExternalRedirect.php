@@ -4,8 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Response\Redirect;
 
 use Ovos\Response\Redirect;
-use Ovos\Response;
-use Ovos\Url;
 
 /**
  * ExternalRedirect
@@ -19,17 +17,17 @@ class ExternalRedirect extends Redirect
 	 * @var string
 	 */
 	protected string $_externalUrl;
-
+	
 	/**
 	 * @param string $externalUrl
 	 */
 	public function __construct(string $externalUrl)
 	{
-		Response::__construct();
-	
+		parent::__construct();
+		
 		$this->_externalUrl = $externalUrl;
 	}
-
+	
 	/**
 	 * @return string
 	 */

@@ -135,7 +135,7 @@ class Request
 			}
 			
 			$parts = explode(' ', $header);
-			return intval($parts[1]);
+			return (int)$parts[1];
 		}
 		
 		return null;
@@ -173,12 +173,12 @@ class Request
 	public function setMethod(string $method): self
 	{
 		$this->_contextOptions['http']['method'] = $method;
-
+		
 		return $this;
 	}
 	
 	/**
-	 * @return string
+	 * @return ?string
 	 */
 	public function getMethod(): ?string
 	{
@@ -195,7 +195,7 @@ class Request
 		$this->_url = $url;
 		
 		return $this;
-	}	
+	}
 	
 	/**
 	 * @return string

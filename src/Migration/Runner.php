@@ -8,6 +8,8 @@ use Ovos\Measurement;
 use Ovos\Exception\NotFoundException;
 use ReflectionClass;
 
+use function is_subclass_of;
+
 /**
  * Runner
  *
@@ -27,10 +29,10 @@ class Runner
 	public int $id;
 	
 	/**
-	 * @var null|Measurement
+	 * @var ?Measurement
 	 */
-	public null|Measurement $measurement = null;
-
+	public ?Measurement $measurement = null;
+	
 	/**
 	 * @param ReflectionClass $class
 	 * @param int $id
@@ -40,7 +42,7 @@ class Runner
 		$this->class = $class;
 		$this->id = $id;
 	}
-
+	
 	/**
 	 * @param string $direction
 	 * 
@@ -64,7 +66,7 @@ class Runner
 		
 		$this->measurement->stop();
 	}
-
+	
 	/**
 	 * @return string
 	 */
