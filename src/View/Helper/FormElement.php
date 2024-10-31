@@ -58,13 +58,23 @@ class FormElement extends Helper
 	/**
 	 * @var ?Closure
 	 */
-	protected ?Closure $_fieldLabelCallback = null;
+	protected ?Closure $_labelCallback = null;
+	
+	/**
+	 * @var ?string
+	 */
+	protected ?string $_labelClass = null;
+	
+	/**
+	 * @var ?Closure
+	 */
+	protected ?Closure $_labelClassCallback = null;
 	
 	/**
 	 * @var ?Placeholder
 	 */
 	protected ?Placeholder $_labelInsert = null;
-
+	
 	/**
 	 * @var ?Placeholder
 	 */
@@ -326,13 +336,50 @@ class FormElement extends Helper
 	}
 	
 	/**
-	 * @param ?Closure $fieldLabelCallback
+	 * @deprecated
+	 * @see setLabelCallback()
+	 * 
+	 * @param ?Closure $labelCallback
 	 * 
 	 * @return self
 	 */
-	public function setFieldLabelCallback(?Closure $fieldLabelCallback): self
+	public function setFieldLabelCallback(?Closure $labelCallback): self
 	{
-		$this->_fieldLabelCallback = $fieldLabelCallback;
+		return $this->setLabelCallback($labelCallback);
+	}
+	
+	/**
+	 * @deprecated
+	 * @see getLabelCallback()
+	 * 
+	 * @return ?Closure
+	 */
+	public function getFieldLabelCallback(): ?Closure
+	{
+		return $this->getLabelCallback();
+	}
+	
+	/**
+	 * @deprecated
+	 * @see labelCallback()
+	 * 
+	 * @param Option $option
+	 * 
+	 * @return string
+	 */
+	public function fieldLabelCallback(Option $option): string
+	{
+		return $this->labelCallback($option);
+	}
+	
+	/**
+	 * @param ?Closure $labelCallback
+	 * 
+	 * @return self
+	 */
+	public function setLabelCallback(?Closure $labelCallback): self
+	{
+		$this->_labelCallback = $labelCallback;
 		
 		return $this;
 	}
@@ -340,9 +387,9 @@ class FormElement extends Helper
 	/**
 	 * @return ?Closure
 	 */
-	public function getFieldLabelCallback(): ?Closure
+	public function getLabelCallback(): ?Closure
 	{
-		return $this->_fieldLabelCallback;
+		return $this->_labelCallback;
 	}
 	
 	/**
@@ -350,14 +397,54 @@ class FormElement extends Helper
 	 * 
 	 * @return string
 	 */
-	public function fieldLabelCallback(Option $option): string
+	public function labelCallback(Option $option): string
 	{
-		if($this->_fieldLabelCallback === null)
+		if($this->_labelCallback === null)
 		{
 			return $option->getLabel();
 		}
 		
-		return ($this->_fieldLabelCallback)($option);
+		return ($this->_labelCallback)($option);
+	}
+	
+	/**
+	 * @param ?string $labelClass
+	 * 
+	 * @return self
+	 */
+	public function setLabelClass(?string $labelClass): self
+	{
+		$this->_labelClass = $labelClass;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ?string
+	 */
+	public function getLabelClass(): ?string
+	{
+		return $this->_labelClass;
+	}
+	
+	/**
+	 * @param ?Closure $labelClassCallback
+	 * 
+	 * @return self
+	 */
+	public function setLabelClassCallback(?Closure $labelClassCallback): self
+	{
+		$this->_labelClassCallback = $labelClassCallback;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ?Closure
+	 */
+	public function getLabelClassCallback(): ?Closure
+	{
+		return $this->_labelClassCallback;
 	}
 	
 	/**
