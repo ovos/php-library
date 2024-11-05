@@ -28,6 +28,19 @@ class Filter extends Test
 		return $values['checkbox'] === 1;
 	}
 	
+	public function checkedDefault(): bool
+	{
+		$form = new Form;
+		$form->checkbox
+			->setDefault(0)
+			->addFilter(new Filters\Checked);
+		
+		$form->setValues(['checkbox' => 'on']);
+		$values = $form->getInputValues();
+		
+		return $values['checkbox'] === 1;
+	}
+	
 	public function unchecked(): bool
 	{
 		$form = new Form;
@@ -38,5 +51,18 @@ class Filter extends Test
 		$values = $form->getUserValues();
 		
 		return $values['checkbox'] === 0;
+	}
+	
+	public function uncheckedDefault(): bool
+	{
+		$form = new Form;
+		$form->checkbox
+			->setDefault(1)
+			->addFilter(new Filters\Checked);
+		
+		$form->setValues([]);
+		$values = $form->getInputValues();
+		
+		return $values['checkbox'] === 1;
 	}
 }
