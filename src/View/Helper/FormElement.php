@@ -663,16 +663,18 @@ class FormElement extends Helper
 	}
 	
 	/**
+	 * @param Option $option
+	 * 
 	 * @return ?string
 	 */
-	public function optionClassCallback(): ?string
+	public function optionClassCallback(Option $option): ?string
 	{
 		if($this->_optionClassCallback === null)
 		{
 			return null;
 		}
 		
-		return ($this->_optionClassCallback)();
+		return ($this->_optionClassCallback)($option);
 	}
 	
 	/**
