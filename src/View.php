@@ -261,6 +261,21 @@ class View
 			return '';
 		}
 	}
+		
+	/**
+	 * @param ?string $viewScriptFile (optional)
+	 * @param array $variables (optional)
+	 *
+	 * @return string
+	 *
+	 * @throws Exception
+	 */
+	public function partial(?string $viewScriptFile = null, array $variables = []): string
+	{
+		$view = new self;
+		
+		return $view->render($viewScriptFile, $variables);
+	}
 	
 	/**
 	 * @param array $variables
