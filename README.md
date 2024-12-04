@@ -5,10 +5,13 @@ https://github.com/ovos/php-library
 
 ### Requirements
 
-* PHP 8.0
+* PHP 8.1
+
+### Suggested for usage as standalone application
 * apcu
 * yaml
 * redis
+* simplexml
 
 #### Installation
 1. Add to your .ssh/config
