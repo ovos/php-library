@@ -10,16 +10,12 @@
 	],
   "require" : {
     "php": ">=8.1",
-    "ext-apcu": "*",
-    "ext-redis": "*",
     "ext-json": "*",
-    "ext-yaml": "*",
     "ext-mbstring": "*",
     "ext-fileinfo": "*",
     "ext-intl": "*",
     "ext-ctype": "*",
     "ext-pdo": "*",
-    "ext-simplexml": "*",
     "ext-dom": "*",
     "ext-curl": "*",
     "ext-openssl": "*",
@@ -27,6 +23,12 @@
     "ext-zlib": "*",
     "pear/console_table": "^1.3",
     "cocur/slugify": "^2.5"
+  },
+  "suggest": {
+    "ext-yaml": "YAML is required if you plan to use the Application class.",
+    "ext-apcu": "APCu is required if you plan to use the Application class.",
+    "ext-redis": "YAML is required if you plan to use the Application class.",
+    "ext-simplexml": "SimpleXML is required if you plan to load XML files."
   },
   "minimum-stability": "dev",
   "prefer-stable": true,
