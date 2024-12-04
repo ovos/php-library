@@ -7,7 +7,7 @@ https://github.com/ovos/php-library
 
 * PHP 8.1
 
-### Suggested for usage as standalone application
+### Suggested for usage as a standalone application
 * apcu
 * yaml
 * redis
