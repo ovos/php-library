@@ -38,9 +38,9 @@ class Form implements Iterator
 	/**
 	 * Parent form
 	 *
-	 * @var null|Form
+	 * @var ?Form
 	 */
-	protected null|Form $_form = null;
+	protected ?Form $_form = null;
 	
 	/**
 	 * @var Url

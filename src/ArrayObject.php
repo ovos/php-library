@@ -56,7 +56,7 @@ class ArrayObject extends BaseArrayObject
 	 *
 	 * @throws Exception
 	 */
-	public function get(string $path, self $config = null): mixed
+	public function get(string $path, ?self $config = null): mixed
 	{
 		$pathElements = explode('.', $path);
 		$currentPath = array_shift($pathElements);
