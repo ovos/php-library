@@ -92,7 +92,7 @@ class Hash
 	 */
 	public function hash(string $password,
 		?string $algorithm = null,
-		?array $options = null
+		?array $options = null,
 	): null|bool|string
 	{
 		if($algorithm !== null)
@@ -114,8 +114,11 @@ class Hash
 	 *
 	 * @return bool
 	 */
-	public function needsRehash(string $password, string $algorithm = null,
-		array $options = null): bool
+	public function needsRehash(
+		string $password,
+		?string $algorithm = null,
+		?array $options = null,
+	): bool
 	{
 		if($algorithm !== null)
 		{
