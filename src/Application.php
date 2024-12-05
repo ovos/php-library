@@ -332,8 +332,8 @@ class Application
 	 * @return ArrayObject
 	 */
 	public function getConfig(
-		string $configFile = null,
-		Environment $environment = null): ArrayObject
+		?string $configFile = null,
+		?Environment $environment = null): ArrayObject
 	{
 		if($environment === null && $configFile === null)
 		{

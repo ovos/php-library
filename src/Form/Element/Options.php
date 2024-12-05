@@ -124,8 +124,11 @@ class Options extends Element
 	 *
 	 * @return self
 	 */
-	public function fromObjects(array $options, string $valueKey,
-		string $labelKey = null): self
+	public function fromObjects(
+		array $options,
+		string $valueKey,
+		?string $labelKey = null,
+	): self
 	{
 		foreach($options as $object)
 		{

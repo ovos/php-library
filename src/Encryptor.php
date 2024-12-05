@@ -35,7 +35,7 @@ class Encryptor
 	 * @param string $key
 	 * @param ?string $method (optional)
 	 */
-	public function __construct(string $key, string $method = null)
+	public function __construct(string $key, ?string $method = null)
 	{
 		$this->setKey($key);
 		$this->setMethod($method);

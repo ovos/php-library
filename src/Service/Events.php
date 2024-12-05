@@ -69,7 +69,7 @@ class Events extends Service implements Countable, Iterator
 	 */
 	protected function initErrorHandlers(): void
 	{
-		set_error_handler(array($this, 'handleError'), E_ALL | E_STRICT);
+		set_error_handler(array($this, 'handleError'), E_ALL);
 		set_exception_handler(array($this, 'handleException'));
 	}
 	
