@@ -97,7 +97,7 @@ class Password
 	 * one uppercase letter, one digit, and one special character. The remaining characters
 	 * in the password are chosen at random from those four sets.
 	 *
-	 * The available characters in each set are user friendly - there are no ambiguous
+	 * The available characters in each set are user-friendly - there are no ambiguous
 	 * characters such as i, l, 1, o, 0, etc. This, coupled with the $add_dashes option,
 	 * makes it much easier for users to manually type or speak their passwords.
 	 * Note: the $add_dashes option will increase the length of the password by
