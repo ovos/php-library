@@ -34,3 +34,19 @@ Host ovos.php-library
 ```
 git require ovos/php-library
 ```
+
+### Useful information
+
+#### Useful redis commands
+```
+docker exec -it redis-cache sh -c "redis-cli MONITOR"
+docker exec -it redis-cache sh -c "redis-cli slowlog get 10"
+docker exec -it redis-cache sh -c "redis-cli --latency"
+docker exec -it redis-cache sh -c "redis-cli CONFIG GET timeout"
+docker exec -it redis-cache sh -c "redis-cli CONFIG get maxmemory"
+docker exec -it redis-cache sh -c "redis-cli config SET maxmemory-policy noeviction"
+docker exec -it redis-cache sh -c "redis-cli config maxmemory-policy noeviction"
+docker run -d --name redis-stack-server -p 6379:6379 --env REDIS_ARGS="--maxmemory-policy volatile-ttl" redis/redis-stack-server:latest
+docker run -d --name redis-cache -p 6380:6379 -p 8001:8001 --env REDIS_ARGS="--maxmemory-policy volatile-ttl" redis/redis-stack-server:latest
+```
+
