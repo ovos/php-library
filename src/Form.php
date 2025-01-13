@@ -436,12 +436,15 @@ class Form implements Iterator
 	 */
 	public function isValid(): bool
 	{
+		$isValid = true;
+		
 		foreach($this->_elements as $element)
 		{
-			$element->isValid();
+			$isValid = $isValid
+				&& $element->isValid();
 		}
 		
-		return count($this->getErrors()) === 0;
+		return $isValid;
 	}
 	
 	/**
