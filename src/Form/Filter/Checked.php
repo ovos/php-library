@@ -23,12 +23,12 @@ class Checked extends Filter
 	 */
 	public function filter(mixed $value): int
 	{
-		if(is_string($value) && $value == 'on')
+		if($value === 'on')
 		{
 			return 1;
 		}
 		
-		if(is_int($value) && $value === 1)
+		if($value === 1)
 		{
 			return 1;
 		}
