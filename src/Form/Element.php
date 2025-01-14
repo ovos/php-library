@@ -286,16 +286,19 @@ class Element
 		$this->_errors = []; // reset errors
 		$value = $this->getUserValue();
 		
+		$isValid = true;
+		
 		foreach($this->_validators as $validator)
 		{
 			$validator->setElement($this);
 			if($validator->isValid($value) === false)
 			{
+				$isValid = false;
 				$this->addErrors($validator->getErrors());
 			}
 		}
 		
-		return $this->hasErrors() === false;
+		return $isValid;
 	}
 	
 	/**
