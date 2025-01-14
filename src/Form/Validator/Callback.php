@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Form\Validator;
 
+use Ovos\Form\Error;
 use Ovos\Form\Validator;
 use Closure;
 
@@ -60,6 +61,16 @@ class Callback extends Validator
 	 */
 	public function isValid(mixed $value): bool
 	{
-		return ($this->_callback)($value);
+		$valid = ($this->_callback)($value);
+		
+		if($valid === false)
+		{
+			$error = new Error(self::ERROR_CALLBACK, sprintf($this->getMessage(self::ERROR_CALLBACK),
+				$this->getElement()->getName()
+			));
+			$this->addError($error);
+		}
+		
+		return $valid;
 	}
 }
