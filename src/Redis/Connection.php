@@ -70,6 +70,9 @@ class Connection
 			BaseRedis::OPT_READ_TIMEOUT => $readTimeout,
 			BaseRedis::OPT_SERIALIZER => BaseRedis::SERIALIZER_NONE,
 			BaseRedis::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
+			BaseRedis::OPT_BACKOFF_ALGORITHM => BaseRedis::BACKOFF_ALGORITHM_DECORRELATED_JITTER,
+			BaseRedis::OPT_BACKOFF_BASE => 500, // base for backoff computation: 500ms
+			BaseRedis::OPT_BACKOFF_CAP => 750, // backoff time capped at 750ms
 		];
 		
 		// connect
