@@ -70,9 +70,10 @@ class Connection
 			BaseRedis::OPT_READ_TIMEOUT => $readTimeout,
 			BaseRedis::OPT_SERIALIZER => BaseRedis::SERIALIZER_NONE,
 			BaseRedis::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
-			BaseRedis::OPT_BACKOFF_ALGORITHM => BaseRedis::BACKOFF_ALGORITHM_DECORRELATED_JITTER,
-			BaseRedis::OPT_BACKOFF_BASE => 500, // base for backoff computation: 500ms
-			BaseRedis::OPT_BACKOFF_CAP => 750, // backoff time capped at 750ms
+			BaseRedis::OPT_MAX_RETRIES => 0, // do not limit the max retries, let the timeout handle it
+			BaseRedis::OPT_BACKOFF_ALGORITHM => BaseRedis::BACKOFF_ALGORITHM_DECORRELATED_JITTER, // https://github.com/phpredis/phpredis/pull/1993/files
+			BaseRedis::OPT_BACKOFF_BASE => 500, // the minimum delay between retries when backing off
+			BaseRedis::OPT_BACKOFF_CAP => 750, // the maximum delay between replies when backing off
 		];
 		
 		// connect
