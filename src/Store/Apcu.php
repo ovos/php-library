@@ -30,7 +30,7 @@ class Apcu extends Cache
 	/**#@+
 	 * Separators
 	 */
-	public const SEPARATOR_PREFIX = ':';
+	public const string SEPARATOR_PREFIX = ':';
 	/**#@-*/
 	
 	/**

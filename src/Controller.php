@@ -28,6 +28,16 @@ class Controller
 	use Translatable;
 	
 	/**
+	 * @var string
+	 */
+	public const string NAMESPACE = 'Controllers\\';
+	
+	/**
+	 * @var string
+	 */	
+	public const string WILDCARD = '*';
+	
+	/**
 	 * @var Application
 	 */
 	protected Application $_app;
@@ -334,7 +344,7 @@ class Controller
 		}
 		
 		// name of the class without Controllers\ namespace
-		$currentController = $this->_request->getControllerClass();
+		$currentController = $this->getName();
 		
 		foreach($groups as $group)
 		{
@@ -345,8 +355,6 @@ class Controller
 	}
 	
 	/**
-	 * @deprecated
-	 * 
 	 * Name of the class without \Controllers\ namespace
 	 * 
 	 * @return string
@@ -374,21 +382,23 @@ class Controller
 		{
 			return $plugins;
 		}
-			
+		
 		foreach($group->controllers as $controller)
 		{
 			// if controller matches (begins with the same name)
-			if(str_starts_with($currentController, $controller))
+			if(str_starts_with($currentController, $controller) === false)
 			{
-				$controllerPlugins = $group->get($this->_app->getInterface());
-				if($controllerPlugins !== null)
-				{
-					$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
-				}
-				
-				break; // no need to check further
+				continue;
 			}
-		
+			
+			$controllerPlugins = $group->get($this->_app->getInterface());
+			
+			if($controllerPlugins !== null)
+			{
+				$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
+			}
+			
+			break; // no need to check further
 		}
 		
 		return $plugins;
@@ -410,18 +420,33 @@ class Controller
 		{
 			foreach($controllerPlugins->skip as $skip)
 			{
+				// avoid manipulating current object during iteration 
+				$offsetsToUnset = [];
+				
 				foreach($plugins as $offset => $plugin)
 				{
+					if($skip === self::WILDCARD) // skip all
+					{
+						$offsetsToUnset[] = $offset;
+						
+						continue;
+					}
+					
 					if($skip === $plugin)
 					{
-						$plugins->offsetUnset($offset);
+						$offsetsToUnset[] = $offset;
 						
 						break; // no need to check further
 					}
 				}
+				
+				foreach($offsetsToUnset as $offsetToUnset)
+				{
+					$plugins->offsetUnset($offsetToUnset);
+				}
 			}
 		}
-	
+		
 		// add
 		if($controllerPlugins->add !== null
 			&& count($controllerPlugins->add))
@@ -451,7 +476,6 @@ class Controller
 	
 		foreach($plugins as $plugin)
 		{
-			/** @var Plugin $pluginClass */
 			$pluginClass = str_starts_with($plugin, '\\')
 				? $plugin : 'Plugins\\' . $plugin;
 			

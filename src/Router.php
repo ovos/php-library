@@ -40,7 +40,7 @@ class Router
 	/**
 	 * @var string
 	 */
-	public const CACHE_ID_CONTROLLERS = 'controllers';
+	public const string CACHE_ID_CONTROLLERS = 'controllers';
 	
 	/**
 	 * @var Request

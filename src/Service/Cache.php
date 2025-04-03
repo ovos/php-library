@@ -20,7 +20,7 @@ class Cache extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'cache';
+	public const string SYMBOL = 'cache';
 	
 	/**
 	 * @var ArrayObject

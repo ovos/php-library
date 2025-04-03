@@ -23,8 +23,8 @@ abstract class Migration
 	/**#@+
 	 * Direction
 	 */
-	public const DIRECTION_UP = 'up';
-	public const DIRECTION_DOWN = 'down';
+	public const string DIRECTION_UP = 'up';
+	public const string DIRECTION_DOWN = 'down';
 	/**#@-*/
 	
 	/**

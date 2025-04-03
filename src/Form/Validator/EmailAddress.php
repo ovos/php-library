@@ -21,7 +21,7 @@ class EmailAddress extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_INVALID = 'email_invalid';
+	public const string ERROR_INVALID = 'email_invalid';
 	/**#@-*/
 
 	/**

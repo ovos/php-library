@@ -21,9 +21,9 @@ class Placeholder
 	/**#@+
 	 * Placements
 	 */
-	public const PLACEMENT_REPLACE = 'replace';
-	public const PLACEMENT_PREPEND = 'prepend';
-	public const PLACEMENT_APPEND = 'append';
+	public const string PLACEMENT_REPLACE = 'replace';
+	public const string PLACEMENT_PREPEND = 'prepend';
+	public const string PLACEMENT_APPEND = 'append';
 	/**#@-*/
 
 	/**

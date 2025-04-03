@@ -26,11 +26,11 @@ class Password
 	/**#@+
 	 * Generator sets
 	 */
-	public const SET_LOWERCASE = 1;
-	public const SET_UPPERCASE = 2;
-	public const SET_DIGITS = 4;
-	public const SET_SPECIAL = 8;
-	public const SET_SPECIAL_FTP = 16;
+	public const int SET_LOWERCASE = 1;
+	public const int SET_UPPERCASE = 2;
+	public const int SET_DIGITS = 4;
+	public const int SET_SPECIAL = 8;
+	public const int SET_SPECIAL_FTP = 16;
 	/**#@-*/
 	
 	/**

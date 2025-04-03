@@ -19,7 +19,7 @@ class Terminal
 	/**
 	 * @var string
 	 */
-	public const SAPI_CLI = 'cli';
+	public const string SAPI_CLI = 'cli';
 	
 	/**
 	 * @return ?string

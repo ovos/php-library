@@ -19,8 +19,8 @@ class Client
 	/**#@+
 	 * Protocol constant
 	 */
-	public const PROTOCOL_HTTP = 'http';
-	public const PROTOCOL_HTTPS = 'https';
+	public const string PROTOCOL_HTTP = 'http';
+	public const string PROTOCOL_HTTPS = 'https';
 	/**#@-*/
 	
 	/**

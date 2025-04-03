@@ -19,7 +19,7 @@ class Memory extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'memory';
+	public const string SYMBOL = 'memory';
 	
 	/**
 	 * @var ?Apcu

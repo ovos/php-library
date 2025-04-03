@@ -18,7 +18,7 @@ class IfChecked extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_NOT_CHECKED = 'not_checked';
+	public const string ERROR_NOT_CHECKED = 'not_checked';
 	/**#@-*/
 	
 	/**

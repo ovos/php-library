@@ -20,12 +20,12 @@ class Streams extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'streams';
+	public const string SYMBOL = 'streams';
 	
 	/**
 	 * @var int
 	 */
-	public const DEFAULT_TIMEOUT = 15;
+	public const int DEFAULT_TIMEOUT = 15;
 	
 	/**
 	 * @var ?ArrayObject 

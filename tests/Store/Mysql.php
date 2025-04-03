@@ -26,7 +26,7 @@ class Mysql extends Test
 	{
 		$this->_store = (new class() extends Store
 		{
-			public const TABLE = 'tests';
+			public const ?string TABLE = 'tests';
 		});
 		
 		$this->_store->source()->exec('
