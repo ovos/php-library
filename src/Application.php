@@ -766,12 +766,17 @@ class Application
 	/**
 	 * Send response
 	 *
-	 * @param Response $response
+	 * @param ?Response $response
 	 *
 	 * @return self
 	 */
-	protected function _sendResponse(Response $response): self
+	protected function _sendResponse(?Response $response): self
 	{
+		if($response === null)
+		{
+			return $this;
+		}
+	
 		if($response->isSent())
 		{
 			return $this;
