@@ -18,7 +18,7 @@ class Callback extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_CALLBACK = 'callback';
+	public const string ERROR_CALLBACK = 'callback';
 	/**#@-*/
 	
 	/**

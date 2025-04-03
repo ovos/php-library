@@ -17,7 +17,7 @@ class Auth extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'auth';
+	public const string SYMBOL = 'auth';
 	
 	/**
 	 * @var ?User

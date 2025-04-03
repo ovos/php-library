@@ -44,13 +44,13 @@ class Redis extends Cache
 	/**#@+
 	 * Separators
 	 */
-	public const SEPARATOR_PREFIX = ':';
+	public const string SEPARATOR_PREFIX = ':';
 	/**#@-*/
 	
 	/**#@+
 	 * Keys
 	 */
-	public const KEY_DATA = 'data';
+	public const string KEY_DATA = 'data';
 	/**#@-*/	
 		
 	/**#@+

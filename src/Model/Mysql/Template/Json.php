@@ -33,8 +33,8 @@ class Json extends Template
 	 * 
 	 * @var string
 	 */
-	public const TYPE_ARRAY = 'array';
-	public const TYPE_OBJECT = 'object';
+	public const string TYPE_ARRAY = 'array';
+	public const string TYPE_OBJECT = 'object';
 	/**#@-*/
 	
 	/**

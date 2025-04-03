@@ -27,8 +27,8 @@ class Locale
 	/**#@+
 	 * Default values of the default system locale
 	 */
-	public const DEFAULT_URL_NAME = 'en';
-	public const DEFAULT_SYMBOL = 'en_US';
+	public const string DEFAULT_URL_NAME = 'en';
+	public const string DEFAULT_SYMBOL = 'en_US';
 	/**#@-*/
 	
 	/**

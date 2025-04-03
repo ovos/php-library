@@ -39,7 +39,7 @@ class View
 	/**
 	 * @var string
 	 */
-	public const SUFFIX = '.phtml';
+	public const string SUFFIX = '.phtml';
 	
 	/**
 	 * @var Application

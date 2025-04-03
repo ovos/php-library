@@ -14,9 +14,9 @@ class Environment
 	/**#@+
 	 * Environment constants
 	 */
-	public const ENV_PRODUCTION = 'production';
-	public const ENV_FILE = '.env';
-	public const ENV_KEY = 'ENV';
+	public const string ENV_PRODUCTION = 'production';
+	public const string ENV_FILE = '.env';
+	public const string ENV_KEY = 'ENV';
 	/**#@-*/
 	
 	/**

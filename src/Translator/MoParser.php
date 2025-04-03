@@ -26,15 +26,15 @@ final class MoParser
 	/**
 	 * File does not exist
 	 */
-	public const ERROR_DOES_NOT_EXIST = 1;
+	public const int ERROR_DOES_NOT_EXIST = 1;
 	/**
 	 * File has bad magic number
 	 */
-	public const ERROR_BAD_MAGIC = 2;
+	public const int ERROR_BAD_MAGIC = 2;
 	/**
 	 * Error while reading file, probably too short
 	 */
-	public const ERROR_READING = 3;
+	public const int ERROR_READING = 3;
 	/**#@-*/
 	
 	/**#@+

@@ -16,7 +16,7 @@ class Disabled extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'disabled';
+	public const string SYMBOL = 'disabled';
 	
 	/**
 	 * @var bool

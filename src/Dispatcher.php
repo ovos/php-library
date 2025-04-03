@@ -32,7 +32,7 @@ class Dispatcher
 		{
 			throw new NotFoundException('Invalid controller name.');
 		}
-		$controllerClassNs = 'Controllers\\' . $controllerClass;
+		$controllerClassNs = Controller::NAMESPACE . $controllerClass;
 		if(!class_exists($controllerClassNs))
 		{
 			throw new NotFoundException('Controller class does not exist "%s".', $controllerClassNs);

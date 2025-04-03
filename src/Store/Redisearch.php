@@ -23,7 +23,7 @@ class Redisearch extends Redis
 	/**#@+
 	 * Keys
 	 */
-	public const KEY_TAGS = 'tags';
+	public const string KEY_TAGS = 'tags';
 	/**#@-*/
 	
 	/**
