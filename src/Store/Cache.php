@@ -27,7 +27,7 @@ class Cache extends Store
 	/**
 	 * Prefixes
 	 */
-	public const PREFIX_SERIALIZE= "\x01\xe4";
+	public const PREFIX_SERIALIZE = "\x01\xe4";
 	public const PREFIX_COMPRESS = ":\x1f\x8b";
 	
 	/**
