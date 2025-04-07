@@ -38,9 +38,9 @@ abstract class Mysql extends Store
 	/**
 	 * Related model name
 	 *
-	 * @var string
+	 * @var ?string
 	 */
-	public const MODEL = null;
+	public const ?string MODEL = null;
 	
 	/**
 	 * @var string
