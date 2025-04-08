@@ -56,7 +56,7 @@ class Redis extends Cache
 	/**#@+
 	 * Functions
 	 */
-	public const FUNCTION_BATCHES = 'batches';
+	public const string FUNCTION_BATCHES = 'batches';
 	/**#@-*/		
 		
 	/**#@+
@@ -64,7 +64,7 @@ class Redis extends Cache
 	 * Used for rawCommand, which returns strings instead of boolean values when OPT_REPLY_LITERAL is enabled
 	 * @see https://github.com/phpredis/phpredis/issues/1550
 	 */
-	public const STATUS_OK = 'OK';
+	public const string STATUS_OK = 'OK';
 	/**#@-*/	
 	
 	/**

@@ -48,6 +48,7 @@ class Redisearch extends Redis
 		
 		$value = $this->compress($this->serialize($value));
 		
+		// @see https://redis.io/docs/latest/commands/hset/
 		$result = $client->hSet(
 			$this->prefix($key, $this->getHashName()),
 			self::KEY_DATA, $value,

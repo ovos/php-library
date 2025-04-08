@@ -18,23 +18,23 @@ use const PHP_EOL;
  */
 class Formatter
 {
-	public const COLOR_RESET = 'reset';
-	public const COLOR_BLACK = 'black';
-	public const COLOR_GRAY = 'gray';
-	public const COLOR_DARKGRAY = 'darkgray';
-	public const COLOR_BLUE = 'blue';
-	public const COLOR_DARKBLUE = 'darkblue';
-	public const COLOR_GREEN = 'green';
-	public const COLOR_DARKGREEN = 'darkgreen';
-	public const COLOR_CYAN = 'cyan';
-	public const COLOR_DARKCYAN = 'darkcyan';
-	public const COLOR_RED = 'red';
-	public const COLOR_DARKRED = 'darkred';
-	public const COLOR_PURPLE = 'purple';
-	public const COLOR_DARKPURPLE = 'darkpurple';
-	public const COLOR_BROWN = 'brown';
-	public const COLOR_YELLOW = 'yellow';
-	public const COLOR_WHITE = 'white';
+	public const string COLOR_RESET = 'reset';
+	public const string COLOR_BLACK = 'black';
+	public const string COLOR_GRAY = 'gray';
+	public const string COLOR_DARKGRAY = 'darkgray';
+	public const string COLOR_BLUE = 'blue';
+	public const string COLOR_DARKBLUE = 'darkblue';
+	public const string COLOR_GREEN = 'green';
+	public const string COLOR_DARKGREEN = 'darkgreen';
+	public const string COLOR_CYAN = 'cyan';
+	public const string COLOR_DARKCYAN = 'darkcyan';
+	public const string COLOR_RED = 'red';
+	public const string COLOR_DARKRED = 'darkred';
+	public const string COLOR_PURPLE = 'purple';
+	public const string COLOR_DARKPURPLE = 'darkpurple';
+	public const string COLOR_BROWN = 'brown';
+	public const string COLOR_YELLOW = 'yellow';
+	public const string COLOR_WHITE = 'white';
 	
 	/**
 	 * @var string[]

@@ -43,11 +43,11 @@ final class MoParser
 	/**
 	 * Big endian mo file magic bytes
 	 */
-	public const MAGIC_BE = "\x95\x04\x12\xde";
+	public const string MAGIC_BE = "\x95\x04\x12\xde";
 	/**
 	 * Little endian mo file magic bytes
 	 */
-	public const MAGIC_LE = "\xde\x12\x04\x95";
+	public const string MAGIC_LE = "\xde\x12\x04\x95";
 	/**#@-*/
 	
 	/**
