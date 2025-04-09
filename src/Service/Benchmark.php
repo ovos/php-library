@@ -18,12 +18,12 @@ class Benchmark extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'benchmark';
+	public const string SYMBOL = 'benchmark';
 	
 	/**
 	 * @var string
 	 */
-	public const TOTAL = 'total';
+	public const string TOTAL = 'total';
 	
 	/**
 	 * @var Measurement[]

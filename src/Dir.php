@@ -39,9 +39,9 @@ class Dir
 	/**#@+
 	 * Filter constants
 	 */
-	public const FILTER_NONE = 0;
-	public const FILTER_DIRECTORIES = 1;
-	public const FILTER_FILES = 2;
+	public const int FILTER_NONE = 0;
+	public const int FILTER_DIRECTORIES = 1;
+	public const int FILTER_FILES = 2;
 	/**#@-*/
 	
 	/**

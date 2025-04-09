@@ -21,12 +21,12 @@ class FileUploaded extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_INPUT_INVALID = 'upload_input_invalid';
-	public const ERROR_NO_FILE = 'upload_no_file';
-	public const ERROR_SIZE_EXCEEDED = 'upload_size_exceeded';
-	public const ERROR_UNKNOWN = 'upload_unknown';
-	public const ERROR_EMPTY = 'upload_empty';
-	public const ERROR_FORBIDDEN_TYPE = 'upload_forbidden_type';
+	public const string ERROR_INPUT_INVALID = 'upload_input_invalid';
+	public const string ERROR_NO_FILE = 'upload_no_file';
+	public const string ERROR_SIZE_EXCEEDED = 'upload_size_exceeded';
+	public const string ERROR_UNKNOWN = 'upload_unknown';
+	public const string ERROR_EMPTY = 'upload_empty';
+	public const string ERROR_FORBIDDEN_TYPE = 'upload_forbidden_type';
 	/**#@-*/
 	
 	/**

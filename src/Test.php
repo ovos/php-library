@@ -17,9 +17,9 @@ class Test
 	/**#@+
 	 * Result constants
 	 */
-	public const RESULT_FAILED = 0;
-	public const RESULT_PASSED = 1;
-	public const RESULT_SKIPPED = 2;
+	public const int RESULT_FAILED = 0;
+	public const int RESULT_PASSED = 1;
+	public const int RESULT_SKIPPED = 2;
 	/**#@-*/
 	
 	/**

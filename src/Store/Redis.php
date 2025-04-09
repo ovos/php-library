@@ -44,19 +44,19 @@ class Redis extends Cache
 	/**#@+
 	 * Separators
 	 */
-	public const SEPARATOR_PREFIX = ':';
+	public const string SEPARATOR_PREFIX = ':';
 	/**#@-*/
 	
 	/**#@+
 	 * Keys
 	 */
-	public const KEY_DATA = 'data';
+	public const string KEY_DATA = 'data';
 	/**#@-*/	
 		
 	/**#@+
 	 * Functions
 	 */
-	public const FUNCTION_BATCHES = 'batches';
+	public const string FUNCTION_BATCHES = 'batches';
 	/**#@-*/		
 		
 	/**#@+
@@ -64,7 +64,7 @@ class Redis extends Cache
 	 * Used for rawCommand, which returns strings instead of boolean values when OPT_REPLY_LITERAL is enabled
 	 * @see https://github.com/phpredis/phpredis/issues/1550
 	 */
-	public const STATUS_OK = 'OK';
+	public const string STATUS_OK = 'OK';
 	/**#@-*/	
 	
 	/**

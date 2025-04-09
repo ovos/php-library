@@ -17,9 +17,9 @@ class Request
 	/**#@+
 	 * Method constants
 	 */
-	public const METHOD_GET = 'GET';
-	public const METHOD_POST = 'POST';
-	public const METHOD_PUT = 'PUT';
+	public const string METHOD_GET = 'GET';
+	public const string METHOD_POST = 'POST';
+	public const string METHOD_PUT = 'PUT';
 	/**#@-*/
 	
 	/**

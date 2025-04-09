@@ -41,8 +41,8 @@ class Application
 	/**#@+
 	 * Interface constants
 	 */
-	public const INT_HTTP = 'http';
-	public const INT_CLI = 'cli';
+	public const string INT_HTTP = 'http';
+	public const string INT_CLI = 'cli';
 	/**#@-*/
 	
 	/**

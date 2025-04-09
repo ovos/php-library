@@ -30,7 +30,7 @@ class Events extends Service implements Countable, Iterator
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'events';
+	public const string SYMBOL = 'events';
 	
 	/**
 	 * List of events that occurred during runtime (such as errors or exceptions)

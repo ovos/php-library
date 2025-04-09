@@ -20,12 +20,12 @@ class Layout extends Plugin
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'layout';
+	public const string SYMBOL = 'layout';
 	
 	/**
 	 * @var string
 	 */
-	public const CONTENT_PLACEHOLDER = 'content';
+	public const string CONTENT_PLACEHOLDER = 'content';
 	
 	/**
 	 * @var View

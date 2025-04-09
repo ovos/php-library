@@ -18,7 +18,7 @@ class SameAs extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_DIFFERENT = 'different';
+	public const string ERROR_DIFFERENT = 'different';
 	/**#@-*/
 	
 	/**
