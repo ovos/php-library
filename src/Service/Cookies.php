@@ -20,7 +20,7 @@ class Cookies extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'cookies';
+	public const string SYMBOL = 'cookies';
 	
 	/**
 	 * @var ArrayObject

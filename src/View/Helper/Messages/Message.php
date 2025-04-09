@@ -16,10 +16,10 @@ class Message
 	/**#@+
 	 * Types
 	 */
-	public const TYPE_INFO = 'info';
-	public const TYPE_SUCCESS = 'success';
-	public const TYPE_WARNING = 'warning';
-	public const TYPE_ERROR = 'error';
+	public const string TYPE_INFO = 'info';
+	public const string TYPE_SUCCESS = 'success';
+	public const string TYPE_WARNING = 'warning';
+	public const string TYPE_ERROR = 'error';
 	/**#@-*/
 	
 	/**

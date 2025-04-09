@@ -20,7 +20,7 @@ class Cache extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'cache';
+	public const string SYMBOL = 'cache';
 	
 	/**
 	 * @var ArrayObject
@@ -65,9 +65,9 @@ class Cache extends Service
 	/**
 	 * @param bool $persistent
 	 * 
-	 * @return null|Redis|Apcu
+	 * @return null|Redis|Redisearch|Apcu
 	 */
-	public function getStore(bool $persistent = true): null|Redis|Apcu
+	public function getStore(bool $persistent = true): null|Redis|Redisearch|Apcu
 	{
 		return $persistent ?
 			$this->getPersistentStore()
@@ -81,8 +81,9 @@ class Cache extends Service
 	{
 		if($this->_persistentStore === null)
 		{
-			$store = $this->_config->persistent->tags
-				? new Redisearch($this->_config)
+			$storeClass = $this->_config->persistent->store;
+			$store = $storeClass
+				? new ('Ovos\\Store\\' . $storeClass)($this->_config)
 				: new Redis($this->_config);
 			if($store->connect() === false)
 			{

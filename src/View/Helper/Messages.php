@@ -24,7 +24,7 @@ class Messages extends Helper implements Countable
 	/**
 	 * @var string
 	 */
-	public const SESSION_NAMESPACE = 'messages';
+	public const string SESSION_NAMESPACE = 'messages';
 	
 	/**
 	 * @var Session|Disabled

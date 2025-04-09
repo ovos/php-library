@@ -24,7 +24,7 @@ class Session extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'session';
+	public const string SYMBOL = 'session';
 	
 	/**
 	 * @var ArrayObject

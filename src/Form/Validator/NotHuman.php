@@ -17,7 +17,7 @@ class NotHuman extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_NOT_HUMAN = 'not_human';
+	public const string ERROR_NOT_HUMAN = 'not_human';
 	/**#@-*/
 	
 	/**

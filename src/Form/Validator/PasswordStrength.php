@@ -18,7 +18,7 @@ class PasswordStrength extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_WEAK = 'password_weak';
+	public const string ERROR_WEAK = 'password_weak';
 	/**#@-*/
 	
 	/**

@@ -41,16 +41,16 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**#@+
 	 * Export constants
 	 */
-	public const EXPORT_TYPE_STDCLASS = 0;
-	public const EXPORT_TYPE_ARRAY = 1;
-	public const EXPORT_TYPE_ARRAYOBJECT = 2;
+	public const int EXPORT_TYPE_STDCLASS = 0;
+	public const int EXPORT_TYPE_ARRAY = 1;
+	public const int EXPORT_TYPE_ARRAYOBJECT = 2;
 	/**#@-*/
 	
 	/**#@+
 	 * Filter constants
 	 */
-	public const FILTER_MODE_IN = 0;
-	public const FILTER_MODE_OUT = 1;
+	public const int FILTER_MODE_IN = 0;
+	public const int FILTER_MODE_OUT = 1;
 	/**#@-*/
 	
 	/**

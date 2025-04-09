@@ -21,12 +21,12 @@ class Database extends Service
 	/**
 	 * @var string
 	 */
-	public const DEFAULT = 'database';
+	public const string DEFAULT = 'database';
 	
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'database';
+	public const string SYMBOL = 'database';
 	
 	/**
 	 * @return string

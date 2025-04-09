@@ -37,7 +37,7 @@ class Logger extends Service
 	/**
 	 * @var string
 	 */
-	public const SYMBOL = 'logger';
+	public const string SYMBOL = 'logger';
 	
 	/**
 	 * @var string

@@ -17,7 +17,7 @@ class Translator
 	/**#@+
 	 * Translation constants
 	 */
-	public const TRANSLATION_EXT = '.mo';
+	public const string TRANSLATION_EXT = '.mo';
 	/**#@-*/
 
 	/**

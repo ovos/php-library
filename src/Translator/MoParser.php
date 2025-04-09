@@ -26,15 +26,15 @@ final class MoParser
 	/**
 	 * File does not exist
 	 */
-	public const ERROR_DOES_NOT_EXIST = 1;
+	public const int ERROR_DOES_NOT_EXIST = 1;
 	/**
 	 * File has bad magic number
 	 */
-	public const ERROR_BAD_MAGIC = 2;
+	public const int ERROR_BAD_MAGIC = 2;
 	/**
 	 * Error while reading file, probably too short
 	 */
-	public const ERROR_READING = 3;
+	public const int ERROR_READING = 3;
 	/**#@-*/
 	
 	/**#@+
@@ -43,11 +43,11 @@ final class MoParser
 	/**
 	 * Big endian mo file magic bytes
 	 */
-	public const MAGIC_BE = "\x95\x04\x12\xde";
+	public const string MAGIC_BE = "\x95\x04\x12\xde";
 	/**
 	 * Little endian mo file magic bytes
 	 */
-	public const MAGIC_LE = "\xde\x12\x04\x95";
+	public const string MAGIC_LE = "\xde\x12\x04\x95";
 	/**#@-*/
 	
 	/**

@@ -17,7 +17,7 @@ class NotEmpty extends Validator
 	/**#@+
 	 * Error constants
 	 */
-	public const ERROR_EMPTY = 'empty';
+	public const string ERROR_EMPTY = 'empty';
 	/**#@-*/
 	
 	/**
