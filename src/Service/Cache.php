@@ -81,8 +81,8 @@ class Cache extends Service
 	{
 		if($this->_persistentStore === null)
 		{
-			$store = $this->_config->persistent->tags
-				? new Redisearch($this->_config)
+			$store = $this->_config->persistent->backend
+				? new $this->_config->persistent->backend($this->_config)
 				: new Redis($this->_config);
 			if($store->connect() === false)
 			{
