@@ -83,7 +83,7 @@ class Cache extends Service
 		{
 			$storeClass = $this->_config->persistent->store;
 			$store = $storeClass
-				? new ('Ovos\\Store\\' . $storeClass)($this->_config)
+				? new ('Ovos\Store\\' . $storeClass)($this->_config)
 				: new Redis($this->_config);
 			if($store->connect() === false)
 			{
