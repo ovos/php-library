@@ -72,12 +72,12 @@ class Application
 	/**
 	 * @var ?ArrayObject
 	 */
-	protected ?ArrayObject $_bootstrap = null;	
+	protected ?ArrayObject $_bootstrap = null;
 	
 	/**
 	 * @var ?string
 	 */
-	protected ?string $_domain = null;	
+	protected ?string $_domain = null;
 	
 	/**
 	 * Request
@@ -473,7 +473,7 @@ class Application
 			return $this;
 		}
 		
-		// check from second domain
+		// compare SERVER_NAME against a list of domains in config and set the matching one
 		while($current = $iterator->current())
 		{
 			if(str_contains($_SERVER['SERVER_NAME'], $current)) // in theory str_starts_with should be sufficient,

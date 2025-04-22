@@ -1,15 +1,15 @@
 {
-	"name": "ovos/php-library",
-	"description": "ovos library",
-	"type": "library",
-	"authors": [
-		{
-			"name": "Marcin Gil",
-			"email": "mg@ovos.at"
-		}
-	],
+  "name": "ovos/php-library",
+  "description": "ovos library",
+  "type": "library",
+  "authors": [
+    {
+      "name": "Marcin Gil",
+      "email": "mg@ovos.at"
+    }
+  ],
   "require" : {
-    "php": ">=8.1",
+    "php": ">=8.3",
     "ext-json": "*",
     "ext-mbstring": "*",
     "ext-fileinfo": "*",
@@ -32,15 +32,15 @@
   },
   "minimum-stability": "dev",
   "prefer-stable": true,
-	"autoload": {
-		"psr-4": {
-			"Ovos\\": "src"
-		}
-	},
-	"scripts": {
-		"php:version":
-		[
-			"php -v"
-		]
-	}
+  "autoload": {
+    "psr-4": {
+      "Ovos\\": "src"
+    }
+  },
+  "scripts": {
+    "php:version":
+    [
+      "php -v"
+    ]
+  }
 }

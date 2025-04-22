@@ -473,7 +473,7 @@ class Controller
 		{
 			return $this;
 		}
-	
+		
 		foreach($plugins as $plugin)
 		{
 			$pluginClass = str_starts_with($plugin, '\\')
@@ -483,19 +483,19 @@ class Controller
 			{
 				throw new RuntimeException('Plugin class does not exist "%s".', $pluginClass);
 			}
-
+			
 			$this->addPlugin(new $pluginClass);
 		}
 		
 		return $this;
 	}
-
+	
 	/**
 	 */
 	public function registerPlugins(): void
 	{
 	}
-
+	
 	/**
 	 * @param Plugin $plugin
 	 * @param ?string $symbol
@@ -508,9 +508,9 @@ class Controller
 		{
 			$symbol = $plugin->getSymbol();
 		}
-
+		
 		$this->_plugins[$symbol] = $plugin;
-
+		
 		return $this;
 	}
 
@@ -526,7 +526,7 @@ class Controller
 		{
 			return null;
 		}
-
+		
 		$instance = $this->_plugins[$symbol];
 		if(method_exists($instance, $symbol))
 		{
@@ -545,7 +545,7 @@ class Controller
 	{
 		return array_key_exists($symbol, $this->_plugins);
 	}
-
+	
 	/**
 	 * @param string $symbol
 	 * @param array $arguments
@@ -565,7 +565,7 @@ class Controller
 	public function removePlugin(string $symbol): self
 	{
 		unset($this->_plugins[$symbol]);
-
+		
 		return $this;
 	}
 	
@@ -580,16 +580,16 @@ class Controller
 			{
 				break;
 			}
-
+			
 			if($plugin->isEnabled() === false)
 			{
 				continue;
 			}
-
+			
 			$plugin->preDispatch();
 		}
 	}
-
+	
 	/**
 	 * postDispatch
 	 */
@@ -601,12 +601,12 @@ class Controller
 			{
 				break;
 			}
-
+			
 			if($plugin->isEnabled() === false)
 			{
 				continue;
 			}
-
+			
 			$plugin->postDispatch();
 		}
 	}

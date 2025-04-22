@@ -5,7 +5,7 @@ https://github.com/ovos/php-library
 
 ### Requirements
 
-* PHP 8.1
+* PHP 8.3
 
 ### Suggested for usage as a standalone application
 * apcu
