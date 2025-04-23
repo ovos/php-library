@@ -1,8 +1,8 @@
 production: &production
   system: &system
-    path: /
-    domain: localhost
-    protocol: https
+    path: # CLI application, can be null
+    domain: # CLI application, can be null
+    protocol: # CLI application, can be null
     # display exceptions
     debug: no
     # profilers
@@ -12,7 +12,6 @@ production: &production
         limit: 20 # display last x queries
       # automatically append profilers
       append:
-        http: no # append to every http response
         cli: yes # append to every cli response
       helpers: # used by append above
         - queries
@@ -33,10 +32,6 @@ production: &production
     # services (optionally loaded global objects)
     services:
       container: Services
-      http:
-        - Events # handles errors and exceptions
-        - Benchmark # measures request speed
-        - Cache # cache
       cli:
         - Events # handles errors and exceptions
         - Benchmark # measures request speed
