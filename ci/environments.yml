@@ -1,0 +1,85 @@
+production: &production
+  system: &system
+    path: /
+    domain: localhost
+    protocol: https
+    # display exceptions
+    debug: no
+    # profilers
+    profilers: &profilers
+      enabled: no
+      queries:
+        limit: 20 # display last x queries
+      # automatically append profilers
+      append:
+        http: no # append to every http response
+        cli: yes # append to every cli response
+      helpers: # used by append above
+        - queries
+        - console
+        - benchmark
+    
+    # modules
+    modules:
+      system:
+        path: vendor/ovos/php-module-system/application
+        controllers: true
+        views: true
+    
+    # tests
+    tests:
+      - vendor/ovos/php-library/tests
+    
+    # migrations
+    migrations:
+      - vendor/ovos/php-module-system/application/migrations
+    
+    # services (optionally loaded global objects)
+    services:
+      container: Services
+      http:
+        - Events # handles errors and exceptions
+        - Benchmark # measures request speed
+        - Cache # cache
+      cli:
+        - Events # handles errors and exceptions
+        - Benchmark # measures request speed
+        - Cache # cache
+        - Database # database
+  
+  # mysql
+  database: &database
+    type: mysql
+    host: !ENV DATABASE[HOST]
+    name: !ENV DATABASE[NAME]
+    username: !ENV DATABASE[USERNAME]
+    password: !ENV DATABASE[PASSWORD]
+  
+  # cache
+  cache: &cache
+    enabled: yes
+    prefix: !ENV CACHE-PERSISTENT[PREFIX]
+    perishable: &cache-perishable
+      compression:
+        enabled: yes
+        threshold: 2048
+    persistent: &cache-persistent
+      host: !ENV CACHE-PERSISTENT[HOST]
+      port: !ENV CACHE-PERSISTENT[PORT]
+      timeout: 10
+      read_timeout: 1
+      database: !ENV CACHE-PERSISTENT[DATABASE]
+      store: Redis # Redis or Redisearch
+      compression:
+        enabled: yes
+        threshold: 2048
+
+development: &development
+  <<: *production
+  system: &development-system
+    <<: *system
+    debug: yes
+    # profilers
+    profilers:
+      <<: *profilers
+      enabled: yes    
