@@ -264,10 +264,12 @@ class Application
 		$environment = $loader->load($environmentFile);
 		$this->_environment = $environment ?: new Environment;
 		
+		$configsDir = defined('CONFIGS_DIR')
+			? constant('CONFIGS_DIR')
+			: self::CONFIGS_DIR;
+		
 		$this->_config = $this->getConfig(
-			defined('CONFIGS_DIR')
-				? constant('CONFIGS_DIR')
-				: self::CONFIGS_DIR,
+			$configsDir . 'environments.yml',
 			$environment
 		);
 		
