@@ -31,10 +31,10 @@ class Redisearch extends Test
 	{
 		$this->_config = config()->cache;
 		
-		// disable when redisearch is disabled in the config
-		if($this->_config->persistent->tags !== true)
+		$storeClass = $this->_config->persistent->store;
+		if($storeClass !== __CLASS__)
 		{
-			$this->reason = '"tags" is set to false in cache config.';
+			$this->reason = sprintf('"store" is set to "%s".', $storeClass);
 			$this->setIsDisabled(true);
 		}
 	}
