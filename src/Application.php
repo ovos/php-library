@@ -46,14 +46,23 @@ class Application
 	/**#@-*/
 	
 	/**
-	 * The environment state of current application
+	 * The configs fir
+	 *
+	 * @var string
+	 */
+	public const string CONFIGS_DIR = BASE_DIR
+		. 'application' . DIRECTORY_SEPARATOR
+		. 'configs' . DIRECTORY_SEPARATOR;
+	
+	/**
+	 * The environment state of the current application
 	 *
 	 * @var Environment
 	 */
 	protected Environment $_environment;
 	
 	/**
-	 * The interface of current application
+	 * The interface of the current application
 	 *
 	 * @var string
 	 */
@@ -249,14 +258,18 @@ class Application
 	 */
 	protected function _initEnvironment(): self
 	{
-		// get environment from file
+		// get environment from the file
 		$environmentFile = BASE_DIR . Environment::ENV_FILE;
 		$loader = new EnvLoader;
 		$environment = $loader->load($environmentFile);
 		$this->_environment = $environment ?: new Environment;
 		
+		$configsDir = defined('CONFIGS_DIR')
+			? constant('CONFIGS_DIR')
+			: self::CONFIGS_DIR;
+		
 		$this->_config = $this->getConfig(
-			BASE_DIR . 'application/configs/environments.yml',
+			$configsDir . 'environments.yml',
 			$environment
 		);
 		

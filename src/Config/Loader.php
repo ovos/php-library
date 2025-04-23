@@ -77,7 +77,7 @@ class Loader
 		$item->mtime = $mTime;
 		$item->config = $configObject;
 		$store->set($cacheId, $item);
-
+		
 		return $configObject;
 	}
 }
