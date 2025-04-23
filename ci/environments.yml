@@ -30,10 +30,6 @@ production: &production
     tests:
       - vendor/ovos/php-library/tests
     
-    # migrations
-    migrations:
-      - vendor/ovos/php-module-system/application/migrations
-    
     # services (optionally loaded global objects)
     services:
       container: Services
