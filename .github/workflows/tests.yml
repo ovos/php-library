@@ -1,0 +1,77 @@
+name: "Tests"
+
+on:
+  - pull_request
+  - push
+
+defaults:
+  run:
+    working-directory: ./ci
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        operating-system: ['ubuntu-latest']
+        php-version: ['8.3', '8.4']
+
+    services:
+      mysql:
+        image: mysql:latest
+        env:
+          MYSQL_DATABASE: tests
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_USER: tests
+          MYSQL_PASSWORD: tests
+          MYSQL_ROOT_PASSWORD: tests
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+      
+      redis:
+        # Docker Hub image
+        image: redis/redis-stack-server:latest
+        # Set health checks to wait until redis has started
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          # Maps port 6379 on service container to the host
+          - 6379:6379
+          
+    name: PHP ${{ matrix.php-version }} Test on ${{ matrix.operating-system }}
+    steps:
+      - name: Install SSH keys
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.OVOS_PHP_LIBRARY }}
+            ${{ secrets.OVOS_PHP_MODULE_SYSTEM }}
+            ${{ secrets.OVOS_PHP_MODULE_ADMIN }}
+    
+      - name: Checkout Code
+        uses: actions/checkout@v4
+              
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          tools: composer:v2
+          coverage: none
+          #ini-values: display_errors=off, log_errors=on
+          extensions: :xdebug, curl, fileinfo, gd, gettext, gmp, intl, imap, ldap, mbstring, exif, mysqli, openssl, pdo_mysql, soap, sockets, sodium, sqlite3, pdo_sqlite, redis, yaml, apcu, opcache
+      
+      - name: Copy .env
+        run: |
+          php -r "file_exists('.env') || copy('.env.tests', '.env');"
+      
+      - name: Install dependencies
+        #env:
+          #COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{secrets.COMPOSER_AUTH}}"} }'
+        run: composer prod:install
+
+      - name: "Run tests"
+        run: php cli.php tests run
