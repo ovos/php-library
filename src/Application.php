@@ -456,6 +456,13 @@ class Application
 		/** @var ArrayObject $domains */
 		$domains = $systemConfig->domains; // if there are many
 		
+		// CLI applications don't have domains'
+		if($domain === null
+			&& $domains === null)
+		{
+			return $this;
+		}
+		
 		if($domain !== null
 			&& $domains === null)
 		{
@@ -519,7 +526,7 @@ class Application
 	public function getDomain(): ?string
 	{
 		return $this->_domain;
-	}	
+	}
 	
 	/**
 	 * Initializes constants
@@ -560,13 +567,24 @@ class Application
 			$domainWithPort.= ':' . $systemConfig->port;
 		}
 		
-		define('SYSTEM_HOST', sprintf('%s://%s', $systemConfig->protocol, $domainWithPort));
-		define('SYSTEM_HOST_HTTPS', 'https://' . $domainWithPort);
+		// SYSTEM_HOST
+		$systemHost = $domainWithPort !== null
+			? sprintf('%s://%s', $systemConfig->protocol, $domainWithPort)
+			: null;
+		define('SYSTEM_HOST', $systemHost);
+		// SYSTEM_HOST_HTTPS
+		$systemHostHttps = $domainWithPort !== null
+			? 'https://' . $domainWithPort
+			: null;
+		define('SYSTEM_HOST_HTTPS', $systemHostHttps);
+		// SYSTEM_PATH
 		define('SYSTEM_PATH', $systemPath);
+		// ROUTE_PATH
 		define('ROUTE_PATH', $routePath);
-		//define('TRANSLATIONS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'translations' .  DIRECTORY_SEPARATOR);
-		define('LOGS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'logs' .  DIRECTORY_SEPARATOR);
-		define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' .  DIRECTORY_SEPARATOR);
+		// LOGS_DIR
+		define('LOGS_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR);
+		// RESOURCES_DIR
+		define('RESOURCES_DIR', BASE_DIR . 'application' . DIRECTORY_SEPARATOR . 'resources' . DIRECTORY_SEPARATOR);
 		
 		return $this;
 	}
@@ -727,7 +745,7 @@ class Application
 			{
 				/** @var Response\Html $response */
 				$output = (string)$response->send();
-					
+				
 				$errorController = new \Controllers\System\Events;
 				try
 				{
@@ -789,7 +807,7 @@ class Application
 		{
 			return $this;
 		}
-	
+		
 		if($response->isSent())
 		{
 			return $this;

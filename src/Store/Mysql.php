@@ -206,7 +206,7 @@ abstract class Mysql extends Store
 				fn($value) => sprintf('%s=VALUES(%s)', $value, $value)
 			, array_keys($values))),
 		);
-
+		
 		$statement = $this->getSource()->prepare($sql);
 		$this->bindValues($statement, $conditions);
 		$this->bindValues($statement, $object);
@@ -502,7 +502,7 @@ abstract class Mysql extends Store
 		$query = $this->query()
 			->select($groupBy . ', ' . static::TABLE . '.*')
 			->where(sprintf($groupBy . ' IN (%s)', implode( ', ', $ids)));
-		if($queryCallback)	
+		if($queryCallback)
 		{
 			$queryCallback($query);
 		}

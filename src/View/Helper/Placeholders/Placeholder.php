@@ -25,7 +25,7 @@ class Placeholder
 	public const string PLACEMENT_PREPEND = 'prepend';
 	public const string PLACEMENT_APPEND = 'append';
 	/**#@-*/
-
+	
 	/**
 	 * @var null|string|bool|int
 	 */
@@ -35,7 +35,7 @@ class Placeholder
 	 * @var array
 	 */
 	protected array $_scripts = [];
-
+	
 	/**
 	 * @param null|string|bool|int $value
 	 * @param string $placement

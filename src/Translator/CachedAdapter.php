@@ -143,7 +143,7 @@ class CachedAdapter
 		
 		return $list[$select];
 	}
-
+	
 	/**
 	 * Plural version of pgettext.
 	 *
