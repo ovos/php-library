@@ -171,7 +171,7 @@ class Url
 	 */
 	public function setComponents(array $components, bool $detectLocale = false): self
 	{
-		// if first component is a locale symbol, use it
+		// if the first component is a locale symbol, use it
 		if($detectLocale
 			&& count($components)
 			&& Locales::exists($components[0]))
@@ -334,7 +334,7 @@ class Url
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @return ?Locale
 	 */

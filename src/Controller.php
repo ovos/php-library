@@ -210,7 +210,7 @@ class Controller
 	public function setDispatchedAction(string $dispatchedAction): self
 	{
 		$this->_dispatchedAction = $dispatchedAction;
-
+		
 		return $this;
 	}
 	
@@ -230,7 +230,7 @@ class Controller
 	public function setParams(array $params): self
 	{
 		$this->_params = $params;
-
+		
 		return $this;
 	}
 	
@@ -299,7 +299,7 @@ class Controller
 	{
 		return $this->_dispatched;
 	}
-
+	
 	/**
 	 */
 	public function registerSystemPlugins(): void
@@ -513,7 +513,7 @@ class Controller
 		
 		return $this;
 	}
-
+	
 	/**
 	 * @param ?string $symbol
 	 * @param array $arguments
@@ -535,7 +535,7 @@ class Controller
 		
 		return $instance;
 	}
-
+	
 	/**
 	 * @param ?string $symbol
 	 *

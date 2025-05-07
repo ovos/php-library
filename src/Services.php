@@ -49,7 +49,7 @@ class Services
 	): ?Service
 	{
 		$service = null;
-		// check if service is registered
+		// check if a service is registered
 		if(isset(self::$_items[$symbol]))
 		{
 			$service = self::$_items[$symbol];
@@ -61,7 +61,7 @@ class Services
 			$this->register($service, $symbol);
 		}
 		
-		// if service is registered and is not disabled
+		// if the service is registered and is not disabled
 		if($service !== null
 			&& $service->isEnabled())
 		{

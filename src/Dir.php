@@ -79,7 +79,7 @@ class Dir
 				umask($umask);
 				return $result;
 			}
-		
+			
 			return true;
 		}
 		

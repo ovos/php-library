@@ -71,7 +71,7 @@ class Cookies extends Service
 		{
 			return;
 		}
-	
+		
 		foreach($_COOKIE as $name => $value)
 		{
 			if(str_starts_with($name, $this->_prefix))
@@ -173,7 +173,7 @@ class Cookies extends Service
 		
 		setcookie($this->getName($name), '', [
 			'expires' => -1,
-			'path' => SYSTEM_PATH,	
+			'path' => SYSTEM_PATH,
 			'domain' => $this->_app->getDomain(),
 		]);
 		unset($_COOKIE[$name]);

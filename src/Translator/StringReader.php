@@ -62,7 +62,7 @@ class StringReader
 		
 		return substr($this->_string, $pos, $bytes);
 	}
-
+	
 	/**
 	 * Reads a 32bit integer from the stream.
 	 *
