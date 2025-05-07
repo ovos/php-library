@@ -223,11 +223,11 @@ class Router
 					$controllerClass.= Strings::studlyCase($param) . '\\';
 					$controller.= $param . '/';
 					
-					continue 2; // go to next param
+					continue 2; // go to the next param
 				}
 				
-				// check if we are already on last level
-				if(is_string($children) // $children a not an array but a controller name
+				// check if we are already on the last level
+				if(is_string($children) // $children are not an array but a controller name
 					&& strcmp($children, $param) === 0)
 				{
 					break;
@@ -235,7 +235,7 @@ class Router
 			}
 			
 			// all possible namespaces added, add the controller
-			if(in_array($param, $controllers, true)) // do not set non existing controllers, use default instead
+			if(in_array($param, $controllers, true)) // do not set non-existing controllers, use default instead
 			{
 				$controller.= $param;
 				$request->setController($controller);
@@ -258,7 +258,7 @@ class Router
 				return $params; // not an action for sure
 			}
 			
-			// check if controller has such method
+			// check if the controller has such a method
 			$method = Strings::camelCase($params[0]);
 			$controllerClass = $controllerClass !== null
 				? $controllerClass

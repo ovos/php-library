@@ -21,19 +21,19 @@ class Console
 	 * @var ?self
 	 */
 	protected static ?self $instance = null;
-
+	
 	/**
 	 * Contains collected data
 	 *
 	 * @var SplQueue
 	 */
 	protected SplQueue $_messages;
-
+	
 	/**
 	 * @var int
 	 */
 	public static int $limit = 0;
-
+	
 	/**
 	 * @return self
 	 */
@@ -43,7 +43,7 @@ class Console
 		{
 			self::$instance = new self;
 		}
-
+		
 		return self::$instance;
 	}
 	

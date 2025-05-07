@@ -243,7 +243,7 @@ class Messages extends Helper implements Countable
 	{
 		$items = $this->getItems(); // copy
 		$this->_items = null;
-
+		
 		return $items;
 	}
 }

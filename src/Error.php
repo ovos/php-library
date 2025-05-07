@@ -205,7 +205,7 @@ class Error
 			return $r[1] . ($r[2] - $tracesToIgnore);
 		}, $trace);
 		
-		// Remove first 3 lines
+		// Remove the first 3 lines
 		$trace = explode("\n", $trace);
 		$trace = array_slice($trace, $tracesToIgnore);
 		$trace = implode("\n", $trace);

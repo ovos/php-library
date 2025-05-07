@@ -51,13 +51,13 @@ class Redis extends Cache
 	 * Keys
 	 */
 	public const string KEY_DATA = 'data';
-	/**#@-*/	
+	/**#@-*/
 		
 	/**#@+
 	 * Functions
 	 */
 	public const string FUNCTION_BATCHES = 'batches';
-	/**#@-*/		
+	/**#@-*/
 		
 	/**#@+
 	 * Statuses
@@ -65,7 +65,7 @@ class Redis extends Cache
 	 * @see https://github.com/phpredis/phpredis/issues/1550
 	 */
 	public const string STATUS_OK = 'OK';
-	/**#@-*/	
+	/**#@-*/
 	
 	/**
 	 * @param ArrayObject $config
@@ -140,7 +140,7 @@ class Redis extends Cache
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return null;	
+			return null;
 		}
 		
 		$value = $client->hGet(
@@ -164,7 +164,7 @@ class Redis extends Cache
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return null;	
+			return null;
 		}
 		
 		return $client->unlink(
@@ -183,7 +183,7 @@ class Redis extends Cache
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;	
+			return false;
 		}
 		
 		$value = $this->compress($this->serialize($value));
@@ -211,7 +211,7 @@ class Redis extends Cache
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;	
+			return false;
 		}
 		
 		$script = '';

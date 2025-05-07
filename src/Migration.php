@@ -62,7 +62,7 @@ abstract class Migration
 			// get database connection
 			$this->_source = services()->database->get($this->_sourceName);
 		}
-
+		
 		return $this->_source;
 	}
 	

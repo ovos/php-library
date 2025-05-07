@@ -19,7 +19,7 @@ class Translator
 	 */
 	public const string TRANSLATION_EXT = '.mo';
 	/**#@-*/
-
+	
 	/**
 	 * Locale of this instance
 	 * 

@@ -51,7 +51,7 @@ class Client
 				|| (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === self::PROTOCOL_HTTPS);
 			
 			self::$_protocol = $isHttps ? self::PROTOCOL_HTTPS : self::PROTOCOL_HTTP;
-		}	
+		}
 		
 		return self::$_protocol;
 	}

@@ -745,7 +745,7 @@ class Application
 			{
 				/** @var Response\Html $response */
 				$output = (string)$response->send();
-					
+				
 				$errorController = new \Controllers\System\Events;
 				try
 				{
@@ -807,7 +807,7 @@ class Application
 		{
 			return $this;
 		}
-	
+		
 		if($response->isSent())
 		{
 			return $this;
