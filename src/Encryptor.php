@@ -173,7 +173,7 @@ class Encryptor
 					
 					break;
 				}
-			}	
+			}
 		}
 		
 		return $data;

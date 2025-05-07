@@ -54,7 +54,7 @@ class Disabled extends Service
 	 */
 	public function __get(string $name): void
 	{
-		// do nothing	
+		// do nothing
 	}
 	
 	/**

@@ -27,7 +27,7 @@ class Url extends Helper
 		{
 			return $this->_app->getRequest()->getUrl()->getClone();
 		}
-
+		
 		return $this->_app->getRouter()->assemble(...$urlComponents);
 	}
 }
