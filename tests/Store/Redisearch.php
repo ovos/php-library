@@ -6,6 +6,7 @@ namespace Tests\Store;
 use Ovos\ArrayObject;
 use Ovos\Store\Redisearch as RedisStore;
 use Ovos\Test;
+use ReflectionClass;
 
 use function Ovos\config;
 
@@ -32,7 +33,8 @@ class Redisearch extends Test
 		$this->_config = config()->cache;
 		
 		$storeClass = $this->_config->persistent->store;
-		if($storeClass !== __CLASS__)
+		$currentClass = (new ReflectionClass($this))->getShortName();
+		if($storeClass !== $currentClass)
 		{
 			$this->reason = sprintf('"store" is set to "%s".', $storeClass);
 			$this->setIsDisabled(true);
