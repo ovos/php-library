@@ -36,7 +36,20 @@ class Redis extends Test
 	{
 		$this->_store = new RedisStore($this->_config);
 		
-		return $this->_store->connect();
+		if($this->_store->connect() === false)
+		{
+			throw new RedisException
+			(
+				sprintf('Could not connect to redis server "%s" on port "%s".',
+					$this->_store->getConfig()->host,
+					$this->_store->getConfig()->port,
+				)
+			);
+			
+			return false;
+		}
+		
+		return true;
 	}
 		
 	public function connect(): bool
