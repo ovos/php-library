@@ -26,6 +26,18 @@ class Redisearch extends Redis
 	public const string KEY_TAGS = 'tags';
 	/**#@-*/
 	
+	/**#@+
+	 * Library
+	 */
+	/**
+	 * The array of function libraries used by this lass
+	 */
+	public const array LIBRARIES = [
+		'cache' => 'Lua' . DIRECTORY_SEPARATOR . 'Cache.lua',
+		'cache_search' => 'Lua' . DIRECTORY_SEPARATOR . 'CacheSearch.lua',
+	];
+	/**#@-*/
+	
 	/**
 	 * @param string $key
 	 * @param mixed $value
@@ -83,7 +95,7 @@ class Redisearch extends Redis
 		
 		$hashName = $this->getHashName();
 		
-		// check if index exists
+		// check if the index exists
 		if($this->indexExists($hashName) === false)
 		{
 			// create the index
@@ -92,48 +104,12 @@ class Redisearch extends Redis
 			$client->rawCommand('FT.CONFIG', 'SET', 'MAXSEARCHRESULTS', -1);
 		}
 		
-		$script = '';
-		$script.= $this->getFunction(self::FUNCTION_BATCHES);
-		$script.= "
-			local index = ARGV[1]
-			local tags = ARGV[2]
-			local batchSize = 10000
-			local offset = 0
-			
-			while true do
-				-- Perform the FT.SEARCH with batching
-				local searchCommand = {'FT.SEARCH', index, '@tags:{' .. tags .. '}', 'LIMIT', offset, batchSize}
-				local result = redis.call(unpack(searchCommand))
-				
-				-- quit if there are no more matches
-				local totalResults = tonumber(result[1])
-				if totalResults == 0 then
-					break
-				end	
-				
-				local rems = {}
-				
-				-- loop every second item, skipping the first which is totalResults
-				for i = 2, #result, 2 do
-					-- local id = result[i] -- The document ID/key
-					-- local fields = result[i+1] -- The document's fields and values (array)
-					
-					table.insert(rems, result[i]) -- save for removal after the loop
-				end
-				
-				-- remove hash keys which no longer exist
-				if #rems > 0 then
-					for from, to in batches(#rems) do
-						redis.call('UNLINK', unpack(rems, from, to))
-					end
-				end
-			end
-		";
-		
 		$client->clearLastError();
 		
-		$args = [$hashName, implode('|', $tags)];
-		$client->eval($script, $args, 0);
+		$this->_functionCall('cache_search_unlink_by_tags', [], [
+			$hashName,
+			implode('|', $tags),
+		]);
 		
 		if($error = $client->getLastError())
 		{
@@ -148,11 +124,6 @@ class Redisearch extends Redis
 	 */
 	public function clear(): bool
 	{
-		if(($client = $this->getClient()) === null)
-		{
-			return false;
-		}
-		
 		$keysUnlinked = parent::clear();
 		if($keysUnlinked === false)
 		{
@@ -167,14 +138,9 @@ class Redisearch extends Redis
 	 */
 	public function indexRebuild(): bool
 	{
-		if(($client = $this->getClient()) === null)
-		{
-			return false;
-		}
-		
 		$hashName = $this->getHashName();
 		
-		// check if index exists
+		// check if the index exists
 		if($this->indexExists($hashName))
 		{
 			// drop the index
@@ -197,7 +163,7 @@ class Redisearch extends Redis
 			return false;
 		}
 		
-		// check if index exists
+		// check if the index exists
 		$indices = $client->rawCommand('FT._LIST');
 		return in_array($hashName, $indices, true);
 	}
