@@ -55,7 +55,11 @@ class Redisearch extends Test
 					$this->_store->getConfig()->port,
 				)
 			);
+			
+			return false;
 		}
+		
+		return true;
 	}
 	
 	public function connect(): bool
