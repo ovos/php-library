@@ -9,7 +9,9 @@ use Ovos\Redis\Connection;
 use Redis as BaseRedis;
 use RedisException;
 
+use function Ovos\services;
 use function is_int;
+
 
 /**
  * Redis
@@ -19,6 +21,42 @@ use function is_int;
  */
 class Redis extends Cache
 {
+	/**#@+
+	 * Separators
+	 */
+	public const string SEPARATOR_PREFIX = ':';
+	/**#@-*/
+	
+	/**#@+
+	 * Keys
+	 */
+	public const string KEY_DATA = 'data';
+	/**#@-*/
+	
+	/**#@+
+	 * Statuses
+	 * Used for rawCommand, which returns strings instead of boolean values when OPT_REPLY_LITERAL is enabled
+	 * @see https://github.com/phpredis/phpredis/issues/1550
+	 */
+	public const string STATUS_OK = 'OK';
+	/**#@-*/
+	
+	/**#@+
+	 * Library
+	 */
+	/**
+	 * The array of function libraries used by this lass
+	 */
+	public const array LIBRARIES = [
+		'cache' => 'Lua' . DIRECTORY_SEPARATOR . 'Cache.lua',
+	];
+	/**#@-*/
+	
+	/**
+	 * @var array
+	 */
+	protected array $_librariesLoaded = [];
+	
 	/**
 	 * Redis connection
 	 *
@@ -41,31 +79,40 @@ class Redis extends Cache
 	 */
 	protected int $_multiMode = BaseRedis::PIPELINE;
 	
-	/**#@+
-	 * Separators
+	/**
+	 * Read timeout for light operations 
+	 * 
+	 * @var float
 	 */
-	public const string SEPARATOR_PREFIX = ':';
-	/**#@-*/
+	protected float $_readTimeout = 1;
 	
-	/**#@+
-	 * Keys
+	/**
+	 * Read timeout for heavy operations 
+	 * 
+	 * @var float
 	 */
-	public const string KEY_DATA = 'data';
-	/**#@-*/
-		
-	/**#@+
-	 * Functions
+	protected float $_readTimeoutLong = 10;
+	
+	/**
+	 * Slow log - logs slow Redis queries into file
+	 * 
+	 * @var bool
 	 */
-	public const string FUNCTION_BATCHES = 'batches';
-	/**#@-*/
-		
-	/**#@+
-	 * Statuses
-	 * Used for rawCommand, which returns strings instead of boolean values when OPT_REPLY_LITERAL is enabled
-	 * @see https://github.com/phpredis/phpredis/issues/1550
+	protected bool $_slowLogEnabled = false;
+	
+	/**
+	 * Log queries slower than x seconds
+	 * 
+	 * @var float
 	 */
-	public const string STATUS_OK = 'OK';
-	/**#@-*/
+	protected float $_slowLogThreshold = 2.0;
+	
+	/**
+	 * Log queries into a file with this filename
+	 * 
+	 * @var string
+	 */
+	protected string $_slowLogFilename = 'redis_slow';
 	
 	/**
 	 * @param ArrayObject $config
@@ -73,7 +120,7 @@ class Redis extends Cache
 	public function __construct(ArrayObject $config)
 	{
 		parent::__construct();
-	
+		
 		if($config->offsetExists('prefix') === false)
 		{
 			throw new Exception('"cache: prefix" is a required config value.');
@@ -81,6 +128,43 @@ class Redis extends Cache
 		
 		$this->setPrefix($config->prefix);
 		$this->setConfig($config->persistent);
+		
+		// override default values with values from config
+		if($readTimeout = $this->_config->offsetGet('read_timeout'))
+		{
+			$this->_readTimeout = (float)$readTimeout;
+		}
+		
+		if($readTimeoutLong = $this->_config->offsetGet('read_timeout_long'))
+		{
+			$this->_readTimeoutLong = (float)$readTimeoutLong;
+		}
+		
+		$this->_initSlowLog();
+	}
+	
+	/**
+	 * @return void
+	 */
+	protected function _initSlowLog(): void
+	{
+		if(($slowLog = $this->_config->offsetGet('slow_log')) === null)
+		{
+			return;
+		}
+		
+		if($slowLogEnabled = $slowLog->offsetGet('enabled'))
+		{
+			$this->_slowLogEnabled = $slowLogEnabled;
+		}
+		if($slowLogThreshold = $slowLog->offsetGet('threshold'))
+		{
+			$this->_slowLogThreshold = $slowLogThreshold;
+		}
+		if($slowLogFilename = $slowLog->offsetGet('filename'))
+		{
+			$this->_slowLogFilename = $slowLogFilename;
+		}
 	}
 	
 	/**
@@ -104,7 +188,7 @@ class Redis extends Cache
 	public function prefix(string $key, ?string $prefix = null): string
 	{
 		return ($prefix ?: $this->_prefix) . self::SEPARATOR_PREFIX . $key;
-	}	
+	}
 	
 	/**
 	 * @return bool
@@ -114,7 +198,7 @@ class Redis extends Cache
 		$this->_connection = new Connection($this->_config);
 		return $this->_connection->connect();
 	}
-
+	
 	/**
 	 * @return ?BaseRedis
 	 */
@@ -129,6 +213,151 @@ class Redis extends Cache
 	public function getHashName(): string
 	{
 		return $this->prefix($this->_hash);
+	}
+	
+	/**
+	 * Ensures that all the libraries of scripts are loaded into redis
+	 * 
+	 * @param bool $replace
+	 *
+	 * @return bool
+	 */
+	public function loadLibraries(bool $replace = false): bool
+	{
+		foreach(static::LIBRARIES as $libraryName => $libraryFile)
+		{
+			if($this->loadLibrary($libraryName, $libraryFile, $replace) === false)
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * Ensures that a library of scripts is loaded into redis
+	 * 
+	 * @param string $libraryName
+	 * @param string $libraryFile
+	 * @param bool $replace
+	 * 
+	 * @return bool
+	 */
+	public function loadLibrary
+	(
+		string $libraryName,
+		string $libraryFile,
+		bool $replace = false
+	): bool
+	{
+		if(isset($this->_librariesLoaded[$libraryName])
+			&& $this->_librariesLoaded[$libraryName] === true
+			&& $replace === false)
+		{
+			return true;
+		}
+		
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		// if we force a replacement, no need to detect if a library is loaded
+		if($replace === false)
+		{
+			$list = $client->function('list', 'libraryname', $libraryName);
+			
+			if($list !== false
+				&& isset($list[0])
+				&& $list[0]['library_name'] === $libraryName
+			)
+			{
+				$this->_librariesLoaded[$libraryName] = true;
+				
+				return true;
+			}
+		}
+		
+		$client->clearLastError();
+		
+		$library = "#!lua name=" . $libraryName . PHP_EOL . PHP_EOL
+			. file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $libraryFile);
+		
+		$libraryLoaded = $replace
+			? $client->function('load', 'replace', $library)
+			: $client->function('load', $library);
+		
+		if($error = $client->getLastError())
+		{
+			throw new RedisException($error);
+		}
+		
+		if($libraryLoaded === $libraryName)
+		{
+			$this->_librariesLoaded[$libraryName] = true;
+			
+			return true;
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * @param string $function
+	 * @param array $keys
+	 * @param array $args
+	 * @param bool $readOnly
+	 *
+	 * @return mixed
+	 */
+	protected function _functionCall(
+		string $function,
+		array $keys = [],
+		array $args = [],
+		bool $readOnly = false,
+	): mixed
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		$this->loadLibraries();
+		
+		if($readOnly)
+		{
+			return $this->_slowLog([$client, 'fcall_ro'], $function, $keys, $args);
+		}
+		
+		return $this->_slowLog([$client, 'fcall'], $function, $keys, $args);
+	}
+	
+	/**
+	 * @param string $function
+	 * @param array $keys
+	 * @param array $args
+	 * @param bool $readOnly
+	 * @param int $batchSize
+	 *
+	 * @return void
+	 */
+	protected function _batchFunctionCall(
+		string $function,
+		array $keys = [],
+		array $args = [],
+		bool $readOnly = false,
+		int $batchSize = 1000,
+	): void
+	{
+		$countKeys = count($keys);
+		$totalBatches = (int)ceil($countKeys / $batchSize);
+		
+		for($batch = 0; $batch < $totalBatches; $batch++)
+		{
+			$keysBatch = array_slice($keys, $batch * $batchSize, $batchSize);
+			$this->_functionCall($function, $keysBatch, $args, $readOnly);
+		}
 	}
 	
 	/**
@@ -151,7 +380,7 @@ class Redis extends Cache
 		{
 			return null;
 		}
-	
+		
 		return $this->unserialize($this->decompress($value));
 	}
 	
@@ -200,7 +429,7 @@ class Redis extends Cache
 			$client->expire($key, $ttl);
 		}
 		$result = $client->exec();
-	
+		
 		return $result[0] !== false;
 	}
 	
@@ -214,45 +443,21 @@ class Redis extends Cache
 			return false;
 		}
 		
-		$script = '';
-		$script.= $this->getFunction(self::FUNCTION_BATCHES);
-		$script.= "
-			local prefix = ARGV[1]
-			
-			-- unlink every ID
-			local count = 0
-			local cursor = '0'
-			repeat
-				local results = redis.call('SCAN', cursor,
-					'MATCH', prefix,
-					'COUNT', 5000
-				)
-				cursor = results[1]
-				local ids = {}
-				
-				for _, id in ipairs(results[2]) do
-					table.insert(ids, id)
-				end
-				
-				if #ids > 0 then
-					count = count + #ids
-					for from, to in batches(#ids) do -- security measure, not really needed with 5000 batch size
-						redis.call('UNLINK', unpack(ids, from, to))
-					end
-				end
-			until '0' == cursor
-			
-			return count -- return count of deleted ids
-		";		
-		
 		$hashName = $this->getHashName();
 		$prefix = $this->prefix('*', $hashName);
 		$count = 0;
 		
 		$client->clearLastError();
+		$client->setOption(BaseRedis::OPT_READ_TIMEOUT, $this->_readTimeoutLong);
+		$client->config('SET', 
+			'lua-time-limit',
+			(string)($this->_readTimeoutLong * 1000) // ms
+		);
 		
-		$args = [$prefix];
-		$result = $client->eval($script, $args, 0);
+		$result = $this->_functionCall('cache_clear', [], [
+			$prefix,
+		]);
+		
 		if(is_int($result))
 		{
 			$count = $result;
@@ -267,29 +472,69 @@ class Redis extends Cache
 	}
 	
 	/**
-	 * @param string $name
+	 * @param callable $callback
+	 * @param string $function
+	 * @param array $keys
+	 * @param array $args
 	 *
-	 * @return string
+	 * @return mixed
 	 */
-	public function getFunction(string $name): string
+	protected function _slowLog(
+		callable $callback,
+		string $function,
+		array $keys,
+		array $args,
+	): mixed
 	{
-		return match($name)
+		if($this->_slowLogEnabled)
 		{
-			'batches' => "
-				local function batches(n, batchSize)
-					batchSize = batchSize or 7500
-					local i = 0
-					
-					return function()
-						local from = i * batchSize + 1
-						i = i + 1
-						if (from <= n) then
-							local to = math.min(from + batchSize - 1, n)
-							return from, to
-						end
-					end
-				end
-			",
-		};
+			$start = microtime(true);
+		}
+		
+		$result = $callback($function, $keys, $args);
+		
+		if($this->_slowLogEnabled)
+		{
+			$end = microtime(true);
+			$diff = $end - $start;
+			
+			if($diff >= $this->_slowLogThreshold)
+			{
+				$message = sprintf('%s: %s = %ss' . PHP_EOL,
+					date('Y-m-d H:i:s'),
+					$function,
+					$diff
+				);
+				services()->logger->log($message);
+				
+				$filename = sprintf('%s_%s.txt',
+					$this->_slowLogFilename,
+					date('Y_m_d')
+				);
+				
+				// log to a slow log file
+				file_put_contents(LOGS_DIR . $filename,
+					$message
+				, FILE_APPEND);
+				
+				if(count($keys))
+				{
+					file_put_contents(LOGS_DIR . $filename,
+						'keys: ' . "\n\t" . implode("\n\t", $keys) . PHP_EOL
+					, FILE_APPEND);
+				}
+				if(count($args))
+				{
+					file_put_contents(LOGS_DIR . $filename,
+						'args: ' . "\n\t" . implode("\n\t", $args) . PHP_EOL
+					, FILE_APPEND);
+				}
+				file_put_contents(LOGS_DIR . $filename, 
+				PHP_EOL
+				, FILE_APPEND);
+			}
+		}
+		
+		return $result;
 	}
 }

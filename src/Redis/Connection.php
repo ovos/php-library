@@ -5,6 +5,7 @@ namespace Ovos\Redis;
 
 use Ovos\ArrayObject;
 use Redis as BaseRedis;
+use RedisException;
 
 use function Ovos\services;
 
@@ -62,11 +63,17 @@ class Connection
 	public function connect(): bool
 	{
 		$port = (int)($this->_config->port ?? 6379);
-		$timeout = (int)($this->_config->timeout ?? 1); // in seconds
-		$readTimeout = (int)($this->_config->read_timeout ?? $timeout);
+		$connectTimeout = (int)($this->_config->connect_timeout ?? $this->_config->timeout ?? 1); // in seconds
+		$readTimeout = (int)($this->_config->read_timeout ?? $connectTimeout);
 		
-		$this->_client = new BaseRedis; // supports options since phpredis 6 (TODO in future)
 		$connectionOptions = [
+			'host' => $this->_config->host,
+			'port' => $port,
+			'connectTimeout' => $connectTimeout,
+		];
+		$this->_client = new BaseRedis($connectionOptions);
+		
+		$options = [
 			BaseRedis::OPT_READ_TIMEOUT => $readTimeout,
 			BaseRedis::OPT_SERIALIZER => BaseRedis::SERIALIZER_NONE,
 			BaseRedis::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
@@ -76,30 +83,36 @@ class Connection
 			BaseRedis::OPT_BACKOFF_CAP => 750, // the maximum delay between replies when backing off
 		];
 		
-		// connect
-		// suspend connection errors with @ since it triggers a warning when it cannot connect...
-		$connectionStatus = @$this->_client->connect
-		(
-			$this->_config->host,
-			$port,
-			$timeout,
-		);
+		// set options
+		foreach($options as $optionName => $optionValue)
+		{
+			$this->_client->setOption($optionName, $optionValue);
+		}
 		
-		if($connectionStatus === false)
+		try
+		{
+			$this->_client->select($this->_config->database);
+		}
+		catch(RedisException $exception)
 		{
 			$this->_client = null;
-			services()->events->log('Could not connect to redis server "%s"', $this->_config->host);
+			services()->events->log
+			(
+				new RedisException
+				(
+					sprintf('Could not connect to redis server "%s" on port "%s".',
+						$this->_config->host,
+						$this->_config->port
+					), 
+					0,
+					$exception, // previous
+				)
+			);
+			
+			return false;
 		}
 		
-		// set options
-		foreach($connectionOptions as $connectionOption => $connectionOptionValue)
-		{
-			$this->_client->setOption($connectionOption, $connectionOptionValue);
-		}
-		
-		$this->_client->select($this->_config->database);
-		
-		return $connectionStatus;
+		return true;
 	}
 	
 	/**

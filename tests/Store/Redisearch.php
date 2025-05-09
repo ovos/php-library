@@ -6,6 +6,8 @@ namespace Tests\Store;
 use Ovos\ArrayObject;
 use Ovos\Store\Redisearch as RedisStore;
 use Ovos\Test;
+use RedisException;
+use ReflectionClass;
 
 use function Ovos\config;
 
@@ -32,7 +34,8 @@ class Redisearch extends Test
 		$this->_config = config()->cache;
 		
 		$storeClass = $this->_config->persistent->store;
-		if($storeClass !== __CLASS__)
+		$currentClass = (new ReflectionClass($this))->getShortName();
+		if($storeClass !== $currentClass)
 		{
 			$this->reason = sprintf('"store" is set to "%s".', $storeClass);
 			$this->setIsDisabled(true);
@@ -43,9 +46,22 @@ class Redisearch extends Test
 	{
 		$this->_store = new RedisStore($this->_config);
 		
-		return $this->_store->connect();
-	}
+		if($this->_store->connect() === false)
+		{
+			throw new RedisException
+			(
+				sprintf('Could not connect to redis server "%s" on port "%s".',
+					$this->_store->getConfig()->host,
+					$this->_store->getConfig()->port,
+				)
+			);
+			
+			return false;
+		}
 		
+		return true;
+	}
+	
 	public function connect(): bool
 	{
 		return $this->_connect();
