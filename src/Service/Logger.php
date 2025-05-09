@@ -88,7 +88,7 @@ class Logger extends Service
 	/**
 	 * Logs events (errors or exceptions)
 	 *
-	 * @param mixed[] ...$event
+	 * @param mixed ...$event
 	 *
 	 * @return self
 	 */
