@@ -39,6 +39,11 @@ class Runner
 	public ?Test $test = null;
 	
 	/**
+	 * @var ?Throwable 
+	 */
+	public ?Throwable $throwable = null;
+	
+	/**
 	 * @param ReflectionClass $class
 	 * @param ReflectionMethod $method
 	 */
@@ -59,23 +64,23 @@ class Runner
 		$this->measurement = new Measurement;
 		$this->measurement->start();
 		
-		/** @var Test $test */
-		$this->test = ($test = $this->class->newInstance());
-		
-		// if test is disabled, skip it
-		if($test->isDisabled())
-		{
-			return $test->result = Test::RESULT_SKIPPED;
-		}
-		
-		if(is_subclass_of($test, 'Ovos\Test') === false)
-		{
-			throw new NotFoundException('A class has to extend a "Ovos\Test" class.');
-		}
-		
 		$throwable = null;
 		try
 		{
+			/** @var Test $test */
+			$this->test = ($test = $this->class->newInstance());
+			
+			// if the test is disabled, skip it
+			if($test->isDisabled())
+			{
+				return $test->result = Test::RESULT_SKIPPED;
+			}
+			
+			if(is_subclass_of($test, 'Ovos\Test') === false)
+			{
+				throw new NotFoundException('A class has to extend a "Ovos\Test" class.');
+			}
+			
 			if((bool)$this->method->invoke($test) === true)
 			{
 				$test->result = Test::RESULT_PASSED;
@@ -85,7 +90,7 @@ class Runner
 		{
 			// catch for later (see below)
 			// & assign for the reporter
-			$test->throwable = $throwable;
+			$this->throwable = $throwable;
 		}
 		
 		// clean up
@@ -95,7 +100,7 @@ class Runner
 			$cleanUp->invoke($test);
 		}
 		
-		// throw after clean up
+		// throw after cleanup
 		if($throwable)
 		{
 			throw $throwable;
