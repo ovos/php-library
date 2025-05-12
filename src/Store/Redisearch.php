@@ -21,13 +21,7 @@ use function count;
 class Redisearch extends Redis
 {
 	/**#@+
-	 * Keys
-	 */
-	public const string KEY_TAGS = 'tags';
-	/**#@-*/
-	
-	/**#@+
-	 * Library
+	 * Libraries
 	 */
 	/**
 	 * The array of function libraries used by this lass
@@ -61,8 +55,10 @@ class Redisearch extends Redis
 		$value = $this->compress($this->serialize($value));
 		
 		// @see https://redis.io/docs/latest/commands/hset/
-		$result = $client->hSet(
-			$this->prefix($key, $this->getHashName()),
+		$client->multi($this->_multiMode);
+		// hSet can set multiple pairs of key => value, do not believe the PhpStorm Stub
+		$client->hSet(
+			$this->prefix($key, $this->getType()),
 			self::KEY_DATA, $value,
 			self::KEY_TAGS, implode(', ', $tags),
 		);
@@ -72,8 +68,9 @@ class Redisearch extends Redis
 		{
 			$client->expire($key, $ttl);
 		}
+		$result = $client->exec();
 		
-		return $result !== false;
+		return $result[0] !== false;
 	}
 	
 	/**
@@ -93,13 +90,13 @@ class Redisearch extends Redis
 			return false;
 		}
 		
-		$hashName = $this->getHashName();
+		$type = $this->getType();
 		
 		// check if the index exists
-		if($this->indexExists($hashName) === false)
+		if($this->indexExists($type) === false)
 		{
 			// create the index
-			$this->indexCreate($hashName);
+			$this->indexCreate($type);
 			
 			$client->rawCommand('FT.CONFIG', 'SET', 'MAXSEARCHRESULTS', -1);
 		}
@@ -107,7 +104,7 @@ class Redisearch extends Redis
 		$client->clearLastError();
 		
 		$this->_functionCall('cache_search_unlink_by_tags', [], [
-			$hashName,
+			$type,
 			implode('|', $tags),
 		]);
 		
@@ -138,25 +135,25 @@ class Redisearch extends Redis
 	 */
 	public function indexRebuild(): bool
 	{
-		$hashName = $this->getHashName();
+		$type = $this->getType();
 		
 		// check if the index exists
-		if($this->indexExists($hashName))
+		if($this->indexExists($type))
 		{
 			// drop the index
-			$this->indexDrop($hashName);
+			$this->indexDrop($type);
 		}
 		
 		// create index again
-		return $this->indexCreate($hashName);
+		return $this->indexCreate($type);
 	}
 	
 	/**
-	 * @param string $hashName
+	 * @param string $type
 	 *
 	 * @return bool
 	 */
-	public function indexExists(string $hashName): bool
+	public function indexExists(string $type): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -165,15 +162,15 @@ class Redisearch extends Redis
 		
 		// check if the index exists
 		$indices = $client->rawCommand('FT._LIST');
-		return in_array($hashName, $indices, true);
+		return in_array($type, $indices, true);
 	}
 	
 	/**
-	 * @param string $hashName
+	 * @param string $type
 	 *
 	 * @return bool
 	 */
-	public function indexDrop(string $hashName): bool
+	public function indexDrop(string $type): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -181,16 +178,16 @@ class Redisearch extends Redis
 		}
 		
 		// throws exception if index does not exist
-		return $client->rawCommand('FT.DROPINDEX', $hashName, 'DD')
+		return $client->rawCommand('FT.DROPINDEX', $type, 'DD')
 			=== self::STATUS_OK;
 	}
 	
 	/**
-	 * @param string $hashName
+	 * @param string $type
 	 *
 	 * @return bool
 	 */
-	public function indexCreate(string $hashName): bool
+	public function indexCreate(string $type): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -199,12 +196,12 @@ class Redisearch extends Redis
 		
 		// create index again
 		return $client->rawCommand('FT.CREATE', ...[
-			$hashName,
+			$type,
 			'ON',
 			'HASH',
 			'PREFIX',
 			1,
-			$hashName,
+			$type,
 			'SCHEMA',
 			self::KEY_TAGS,
 			'TAG',
