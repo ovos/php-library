@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\ArrayObject;
+use Ovos\Exception;
+use Ovos\Redis\Connection;
 use Ovos\Service;
+use Ovos\Store\Cache as CacheStore;
 use Ovos\Store\Apcu;
 use Ovos\Store\Redis;
 use Ovos\Store\Redisearch;
@@ -26,6 +29,13 @@ class Cache extends Service
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;
+	
+	/**
+	 * Connection to a persistent database
+	 *
+	 * @var ?Connection
+	 */
+	protected ?Connection $_persistentConnection = null;
 	
 	/**
 	 * @var ?Redis
@@ -63,6 +73,24 @@ class Cache extends Service
 	}
 	
 	/**
+	 * @return ?Connection
+	 */
+	public function getPersistentConnection(): ?Connection
+	{
+		if($this->_persistentConnection === null)
+		{
+			// move to container when DI is available
+			$this->_persistentConnection = new Connection($this->_config->persistent);
+			if($this->_persistentConnection->connect() === false)
+			{
+				return null;
+			}
+		}
+		
+		return $this->_persistentConnection;
+	}
+	
+	/**
 	 * @param bool $persistent
 	 * 
 	 * @return null|Redis|Redisearch|Apcu
@@ -81,14 +109,19 @@ class Cache extends Service
 	{
 		if($this->_persistentStore === null)
 		{
-			$storeClass = $this->_config->persistent->store;
-			$store = $storeClass
-				? new ('Ovos\Store\\' . $storeClass)($this->_config)
-				: new Redis($this->_config);
-			if($store->connect() === false)
+			if($this->_config->offsetExists('prefix') === false)
 			{
-				return null;
+				throw new Exception('"cache: prefix" is a required config value.');
 			}
+			
+			$storeClass = $this->_config->persistent->store ?? 'Redis';
+			$store = new ('Ovos\Store\\' . $storeClass)
+			(
+				$this->getPersistentConnection(),
+				$this->_config->persistent,
+				$this->_config->prefix,
+				CacheStore::GROUP_DEFAULT,
+			);
 			
 			$this->_persistentStore = $store;
 		}

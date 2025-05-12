@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Tests\Store;
 
 use Ovos\ArrayObject;
+use Ovos\Redis\Connection;
+use Ovos\Store\Cache;
 use Ovos\Store\Redis as RedisStore;
 use Ovos\Test;
 
@@ -32,11 +34,10 @@ class Redis extends Test
 		$this->_config = config()->cache;
 	}
 	
-	protected function _connect(): bool
+	public function initStore(): bool
 	{
-		$this->_store = new RedisStore($this->_config);
-		
-		if($this->_store->connect() === false)
+		$connection = new Connection($this->_config->persistent);
+		if($connection->connect() === false)
 		{
 			throw new RedisException
 			(
@@ -45,22 +46,22 @@ class Redis extends Test
 					$this->_store->getConfig()->port,
 				)
 			);
-			
-			return false;
 		}
 		
-		return true;
-	}
+		$this->_store = new RedisStore
+		(
+			$this->_config->prefix,
+			$connection,
+			$this->_config->persistent,
+			Cache::GROUP_TESTS
+		);
 		
-	public function connect(): bool
-	{
-		return $this->_connect();
+		return true;
 	}
 	
 	public function storeArray(): bool
 	{
-		$this->_connect();
-		
+		$this->initStore();
 		$array = [
 			'stored' => true,
 		];
@@ -71,10 +72,22 @@ class Redis extends Test
 		return $array['stored'] === true;
 	}
 	
+	/*
+	public function invalidateTags(): bool
+	{
+		$this->initStore();
+		$this->_store->set('tags', 'test', tags: ['tag1', 'tag2']);
+		$this->_store->invalidateTags(['tag1']);
+		
+		$result = $this->_store->get('tags');
+		
+		return $result === null;
+	}
+	*/
+	
 	public function clear(): bool
 	{
-		$this->_connect();
-		
+		$this->initStore();
 		$array = [
 			'stored' => true,
 		];

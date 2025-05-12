@@ -12,7 +12,6 @@ use RedisException;
 use function Ovos\services;
 use function is_int;
 
-
 /**
  * Redis
  *
@@ -22,15 +21,10 @@ use function is_int;
 class Redis extends Cache
 {
 	/**#@+
-	 * Separators
-	 */
-	public const string SEPARATOR_PREFIX = ':';
-	/**#@-*/
-	
-	/**#@+
 	 * Keys
 	 */
 	public const string KEY_DATA = 'data';
+	public const string KEY_TAGS = 'tags';
 	/**#@-*/
 	
 	/**#@+
@@ -41,57 +35,24 @@ class Redis extends Cache
 	public const string STATUS_OK = 'OK';
 	/**#@-*/
 	
-	/**#@+
-	 * Library
-	 */
 	/**
-	 * The array of function libraries used by this lass
+	 * Types
 	 */
-	public const array LIBRARIES = [
-		'cache' => 'Lua' . DIRECTORY_SEPARATOR . 'Cache.lua',
-	];
+	public const string TYPE_ITEMS = 'items';
+	public const string TYPE_TAGS = 'tags';
 	/**#@-*/
-	
-	/**
-	 * @var array
-	 */
-	protected array $_librariesLoaded = [];
 	
 	/**
 	 * Redis connection
 	 *
-	 * @var ?Connection
+	 * @var Connection
 	 */
-	protected ?Connection $_connection = null;
-	
-	/**
-	 * @var ?string 
-	 */
-	protected ?string $_prefix = null;
-	
-	/**
-	 * @var string
-	 */
-	protected string $_hash = 'cache';
+	protected Connection $_connection;
 	
 	/**
 	 * @var int
 	 */
 	protected int $_multiMode = BaseRedis::PIPELINE;
-	
-	/**
-	 * Read timeout for light operations 
-	 * 
-	 * @var float
-	 */
-	protected float $_readTimeout = 1;
-	
-	/**
-	 * Read timeout for heavy operations 
-	 * 
-	 * @var float
-	 */
-	protected float $_readTimeoutLong = 10;
 	
 	/**
 	 * Slow log - logs slow Redis queries into file
@@ -114,31 +75,42 @@ class Redis extends Cache
 	 */
 	protected string $_slowLogFilename = 'redis_slow';
 	
-	/**
-	 * @param ArrayObject $config
+	/**#@+
+	 * Libraries
 	 */
-	public function __construct(ArrayObject $config)
+	/**
+	 * The array of function libraries used by this lass
+	 */
+	public const array LIBRARIES = [
+		'cache' => 'Lua' . DIRECTORY_SEPARATOR . 'Cache.lua',
+	];
+	/**#@-*/
+	
+	/**
+	 * @var array
+	 */
+	protected array $_librariesLoaded = [];
+	
+	/**
+	 * @param string $prefix
+	 * @param Connection $connection
+	 * @param ArrayObject $config
+	 * @param ?string $group
+	 */
+	public function __construct
+	(
+		string $prefix,
+		Connection $connection,
+		ArrayObject $config,
+		?string $group = null,
+	)
 	{
 		parent::__construct();
 		
-		if($config->offsetExists('prefix') === false)
-		{
-			throw new Exception('"cache: prefix" is a required config value.');
-		}
-		
-		$this->setPrefix($config->prefix);
-		$this->setConfig($config->persistent);
-		
-		// override default values with values from config
-		if($readTimeout = $this->_config->offsetGet('read_timeout'))
-		{
-			$this->_readTimeout = (float)$readTimeout;
-		}
-		
-		if($readTimeoutLong = $this->_config->offsetGet('read_timeout_long'))
-		{
-			$this->_readTimeoutLong = (float)$readTimeoutLong;
-		}
+		$this->setPrefix($prefix);
+		$this->setConnection($connection);
+		$this->setConfig($config);
+		$this->setGroup($group);
 		
 		$this->_initSlowLog();
 	}
@@ -168,35 +140,23 @@ class Redis extends Cache
 	}
 	
 	/**
-	 * @param ?string $prefix
+	 * @param Connection $connection
 	 *
 	 * @return self
 	 */
-	public function setPrefix(?string $prefix = null): self
+	public function setConnection(Connection $connection): self
 	{
-		$this->_prefix = $prefix;
+		$this->_connection = $connection;
 		
 		return $this;
 	}
 	
 	/**
-	 * @param string $key
-	 * @param ?string $prefix
-	 *
-	 * @return string
+	 * @return Connection
 	 */
-	public function prefix(string $key, ?string $prefix = null): string
+	public function getConnection(): Connection
 	{
-		return ($prefix ?: $this->_prefix) . self::SEPARATOR_PREFIX . $key;
-	}
-	
-	/**
-	 * @return bool
-	 */
-	public function connect(): bool
-	{
-		$this->_connection = new Connection($this->_config);
-		return $this->_connection->connect();
+		return $this->_connection;
 	}
 	
 	/**
@@ -208,11 +168,13 @@ class Redis extends Cache
 	}
 	
 	/**
+	 * @param string $type
+	 *
 	 * @return string
 	 */
-	public function getHashName(): string
+	public function getType(string $type = self::TYPE_ITEMS): string
 	{
-		return $this->prefix($this->_hash);
+		return $this->prefix($type, $this->getGroup());
 	}
 	
 	/**
@@ -308,6 +270,7 @@ class Redis extends Cache
 	 * @param array $keys
 	 * @param array $args
 	 * @param bool $readOnly
+	 * @param bool $long
 	 *
 	 * @return mixed
 	 */
@@ -316,6 +279,7 @@ class Redis extends Cache
 		array $keys = [],
 		array $args = [],
 		bool $readOnly = false,
+		bool $long = false,
 	): mixed
 	{
 		if(($client = $this->getClient()) === null)
@@ -325,12 +289,20 @@ class Redis extends Cache
 		
 		$this->loadLibraries();
 		
-		if($readOnly)
+		if($long)
 		{
-			return $this->_slowLog([$client, 'fcall_ro'], $function, $keys, $args);
+			$this->_connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
 		}
 		
-		return $this->_slowLog([$client, 'fcall'], $function, $keys, $args);
+		$call = $readOnly ? 'fcall_ro' : 'fcall';
+		$result = $this->_slowLog([$client, $call], $function, $keys, $args);
+		
+		if($long)
+		{
+			$this->_connection->toggleReadTimeout();
+		}
+		
+		return $result;
 	}
 	
 	/**
@@ -339,7 +311,8 @@ class Redis extends Cache
 	 * @param array $args
 	 * @param bool $readOnly
 	 * @param int $batchSize
-	 *
+	 * @param bool $long
+	 * 
 	 * @return void
 	 */
 	protected function _batchFunctionCall(
@@ -348,8 +321,15 @@ class Redis extends Cache
 		array $args = [],
 		bool $readOnly = false,
 		int $batchSize = 1000,
+		bool $long = false,
 	): void
 	{
+		if($long)
+		{
+			// an extended timeout will be valid through all calls of the batch
+			$this->_connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
+		}
+	
 		$countKeys = count($keys);
 		$totalBatches = (int)ceil($countKeys / $batchSize);
 		
@@ -357,6 +337,11 @@ class Redis extends Cache
 		{
 			$keysBatch = array_slice($keys, $batch * $batchSize, $batchSize);
 			$this->_functionCall($function, $keysBatch, $args, $readOnly);
+		}
+		
+		if($long)
+		{
+			$this->_connection->toggleReadTimeout();
 		}
 	}
 	
@@ -373,7 +358,7 @@ class Redis extends Cache
 		}
 		
 		$value = $client->hGet(
-			$this->prefix($key, $this->getHashName()),
+			$this->prefix($key, $this->getType()),
 			self::KEY_DATA,
 		);
 		if($value === false)
@@ -397,7 +382,7 @@ class Redis extends Cache
 		}
 		
 		return $client->unlink(
-			$this->prefix($key, $this->getHashName()),
+			$this->prefix($key, $this->getType()),
 		) > 0;
 	}
 	
@@ -408,7 +393,11 @@ class Redis extends Cache
 	 *
 	 * @return bool
 	 */
-	public function set(string $key, mixed $value, int $ttl = 0): bool
+	public function set(
+		string $key,
+		mixed $value,
+		int $ttl = 0,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -417,9 +406,10 @@ class Redis extends Cache
 		
 		$value = $this->compress($this->serialize($value));
 		
+		// @see https://redis.io/docs/latest/commands/hset/
 		$client->multi($this->_multiMode);
 		$client->hSet(
-			$this->prefix($key, $this->getHashName()), 
+			$this->prefix($key, $this->getType()), 
 			self::KEY_DATA, $value,
 		);
 		
@@ -443,20 +433,15 @@ class Redis extends Cache
 			return false;
 		}
 		
-		$hashName = $this->getHashName();
-		$prefix = $this->prefix('*', $hashName);
+		$group = $this->getGroup();
+		$prefix = $this->prefix('*', $group);
 		$count = 0;
 		
 		$client->clearLastError();
-		$client->setOption(BaseRedis::OPT_READ_TIMEOUT, $this->_readTimeoutLong);
-		$client->config('SET', 
-			'lua-time-limit',
-			(string)($this->_readTimeoutLong * 1000) // ms
-		);
 		
 		$result = $this->_functionCall('cache_clear', [], [
 			$prefix,
-		]);
+		], long: true);
 		
 		if(is_int($result))
 		{

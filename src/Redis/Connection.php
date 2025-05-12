@@ -29,12 +29,63 @@ class Connection
 	 */
 	protected ?BaseRedis $_client = null;
 	
+	/**#@+
+	 * Timeout constants
+	 */
+	public const string TIMEOUT_READ = 'read';
+	public const string TIMEOUT_READ_LONG = 'long';
+	/**#@-*/
+	
+	/**
+	 * Connect timeout
+	 * Unit: seconds
+	 * 
+	 * @var float
+	 */
+	protected float $_connectTimeout = 1;
+	
+	/**
+	 * Read timeout for light operations
+	 * Unit: seconds
+	 *  
+	 * @var float
+	 */
+	protected float $_readTimeout = 1;
+	
+	/**
+	 * Read timeout for heavy operations
+	 * Unit: seconds
+	 * 
+	 * @var float
+	 */
+	protected float $_readTimeoutLong = 10;
+	
 	/**
 	 * @param ArrayObject $config
 	 */
 	public function __construct(ArrayObject $config)
 	{
 		$this->setConfig($config);
+		
+		// initialize timeout values taking in consideration default values set in this class
+		$this->_connectTimeout = (float)
+		(
+			$this->_config->connect_timeout
+			?? $this->_config->timeout
+			?? $this->_connectTimeout
+		);
+		
+		$this->_readTimeout = (float)
+		(
+			$this->_config->read_timeout
+			?? $this->_readTimeout
+		);
+		
+		$this->_readTimeoutLong = (float)
+		(
+			$this->_config->read_timeout_long
+			?? $this->_readTimeoutLong
+		);
 	}
 	
 	/**
@@ -58,23 +109,50 @@ class Connection
 	}
 	
 	/**
+	 * Can be used to extend and restore timeout to the original value
+	 * 
+	 * @param string $timeout
+	 *
+	 * @return bool
+	 */
+	public function toggleReadTimeout(string $timeout = self::TIMEOUT_READ): bool
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		$readTimeout = match($timeout)
+		{
+			self::TIMEOUT_READ_LONG => $this->_readTimeoutLong,
+			default => $this->_readTimeout,
+		};
+		
+		$client->setOption(BaseRedis::OPT_READ_TIMEOUT, $readTimeout);
+		$client->config('SET', 
+			'lua-time-limit',
+			(string)($readTimeout * 1000) // ms
+		);
+		
+		return true;
+	}
+	
+	/**
 	 * @return bool
 	 */
 	public function connect(): bool
 	{
 		$port = (int)($this->_config->port ?? 6379);
-		$connectTimeout = (int)($this->_config->connect_timeout ?? $this->_config->timeout ?? 1); // in seconds
-		$readTimeout = (int)($this->_config->read_timeout ?? $connectTimeout);
 		
 		$connectionOptions = [
 			'host' => $this->_config->host,
 			'port' => $port,
-			'connectTimeout' => $connectTimeout,
+			'connectTimeout' => $this->_connectTimeout,
 		];
 		$this->_client = new BaseRedis($connectionOptions);
 		
 		$options = [
-			BaseRedis::OPT_READ_TIMEOUT => $readTimeout,
+			BaseRedis::OPT_READ_TIMEOUT => $this->_readTimeout,
 			BaseRedis::OPT_SERIALIZER => BaseRedis::SERIALIZER_NONE,
 			BaseRedis::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
 			BaseRedis::OPT_MAX_RETRIES => 0, // do not limit the max retries, let the timeout handle it
