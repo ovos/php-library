@@ -61,6 +61,27 @@ class Connection
 	protected float $_readTimeoutLong = 10;
 	
 	/**
+	 * Slow log - logs slow Redis queries into file
+	 * 
+	 * @var bool
+	 */
+	protected bool $_slowLogEnabled = false;
+	
+	/**
+	 * Log queries slower than x seconds
+	 * 
+	 * @var float
+	 */
+	protected float $_slowLogThreshold = 2.0;
+	
+	/**
+	 * Log queries into a file with this filename
+	 * 
+	 * @var string
+	 */
+	protected string $_slowLogFilename = 'redis_slow';
+	
+	/**
 	 * @param ArrayObject $config
 	 */
 	public function __construct(ArrayObject $config)
@@ -86,6 +107,8 @@ class Connection
 			$this->_config->read_timeout_long
 			?? $this->_readTimeoutLong
 		);
+		
+		$this->_initSlowLog();
 	}
 	
 	/**
@@ -106,6 +129,97 @@ class Connection
 	public function getConfig(): ArrayObject
 	{
 		return $this->_config;
+	}
+	
+	/**
+	 * @return void
+	 */
+	protected function _initSlowLog(): void
+	{
+		if(($slowLog = $this->_config->offsetGet('slow_log')) === null)
+		{
+			return;
+		}
+		
+		if($slowLogEnabled = $slowLog->offsetGet('enabled'))
+		{
+			$this->_slowLogEnabled = $slowLogEnabled;
+		}
+		if($slowLogThreshold = $slowLog->offsetGet('threshold'))
+		{
+			$this->_slowLogThreshold = $slowLogThreshold;
+		}
+		if($slowLogFilename = $slowLog->offsetGet('filename'))
+		{
+			$this->_slowLogFilename = $slowLogFilename;
+		}
+	}
+	
+	/**
+	 * @param callable $callback
+	 * @param string $function
+	 * @param array $keys
+	 * @param array $args
+	 *
+	 * @return mixed
+	 */
+	public function slowLog(
+		callable $callback,
+		string $function,
+		array $keys,
+		array $args,
+	): mixed
+	{
+		if($this->_slowLogEnabled)
+		{
+			$start = microtime(true);
+		}
+		
+		$result = $callback($function, $keys, $args);
+		
+		if($this->_slowLogEnabled)
+		{
+			$end = microtime(true);
+			$diff = $end - $start;
+			
+			if($diff >= $this->_slowLogThreshold)
+			{
+				$message = sprintf('%s: %s = %ss' . PHP_EOL,
+					date('Y-m-d H:i:s'),
+					$function,
+					$diff
+				);
+				services()->logger->log($message);
+				
+				$filename = sprintf('%s_%s.txt',
+					$this->_slowLogFilename,
+					date('Y_m_d')
+				);
+				
+				// log to a slow log file
+				file_put_contents(LOGS_DIR . $filename,
+					$message
+				, FILE_APPEND);
+				
+				if(count($keys))
+				{
+					file_put_contents(LOGS_DIR . $filename,
+						'keys: ' . "\n\t" . implode("\n\t", $keys) . PHP_EOL
+					, FILE_APPEND);
+				}
+				if(count($args))
+				{
+					file_put_contents(LOGS_DIR . $filename,
+						'args: ' . "\n\t" . implode("\n\t", $args) . PHP_EOL
+					, FILE_APPEND);
+				}
+				file_put_contents(LOGS_DIR . $filename, 
+				PHP_EOL
+				, FILE_APPEND);
+			}
+		}
+		
+		return $result;
 	}
 	
 	/**
