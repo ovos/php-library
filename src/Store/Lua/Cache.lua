@@ -121,7 +121,7 @@ local function cache_unlink_clean_tags(keys, args)
 	local prefix = args[1]
 	local prefix_ids = prefix .. args[2]
 	local prefix_tag_ids = prefix .. args[3]
-	local field_tags = prefix .. args[4]
+	local field_tags = args[4]
 	
 	for _, id in ipairs(ids) do
 	

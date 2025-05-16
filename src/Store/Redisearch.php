@@ -52,25 +52,67 @@ class Redisearch extends Redis
 			return false;
 		}
 		
-		$value = $this->compress($this->serialize($value));
-		
-		// @see https://redis.io/docs/latest/commands/hset/
-		$client->multi($this->_multiMode);
-		// hSet can set multiple pairs of key => value, do not believe the PhpStorm Stub
-		$client->hSet(
-			$this->prefix($key, $this->getType()),
-			self::KEY_DATA, $value,
-			self::KEY_TAGS, implode(', ', $tags),
-		);
-		
-		// set expire if needed
-		if($ttl > 0)
+		try
 		{
-			$client->expire($key, $ttl);
+			$id = $this->prefix($key, $this->getType());
+			$value = $this->compress($this->serialize($value));
+			
+			$client->clearLastError();
+			$client->multi($this->_multiMode);
+			// hSet can set multiple pairs of key => value, do not believe the PhpStorm Stub
+			// @see https://redis.io/docs/latest/commands/hset/
+			$client->hSet(
+				$id,
+				self::KEY_DATA, $value,
+				self::KEY_TAGS, implode(', ', $tags),
+			);
+			
+			// set expire if needed
+			if($ttl > 0)
+			{
+				$client->expire($id, $ttl);
+			}
+			$result = $client->exec();
+			if($error = $client->getLastError())
+			{
+				$this->log($error);
+			}
+			
+			return $result[0] !== false;
 		}
-		$result = $client->exec();
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
 		
-		return $result[0] !== false;
+		return false;
+	}
+	
+	/**
+	 * @param string $key
+	 *
+	 * @return null|bool
+	 */
+	public function delete(string $key): null|bool
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$id = $this->prefix($key, $this->getType());
+			$result = $client->unlink($id);
+			
+			return $result > 0;
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return false;
 	}
 	
 	/**
@@ -92,28 +134,37 @@ class Redisearch extends Redis
 		
 		$type = $this->getType();
 		
-		// check if the index exists
-		if($this->indexExists($type) === false)
+		try
 		{
-			// create the index
-			$this->indexCreate($type);
+			// check if the index exists
+			if($this->indexExists($type) === false)
+			{
+				// create the index
+				$this->indexCreate($type);
+				
+				$client->rawCommand('FT.CONFIG', 'SET', 'MAXSEARCHRESULTS', -1);
+			}
 			
-			$client->rawCommand('FT.CONFIG', 'SET', 'MAXSEARCHRESULTS', -1);
+			$client->clearLastError();
+			
+			/**
+			 * Matches any of the tags given
+			 * We could also reference all matching tags using the following syntax:
+			 * @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}"
+			 */
+			$this->_functionCall('cache_search_unlink_by_tags', [], [
+				$type,
+				'@tags:{' . implode('|', $tags) . '}', // matches any of the tags
+			]);
+			
+			return true;
 		}
-		
-		$client->clearLastError();
-		
-		$this->_functionCall('cache_search_unlink_by_tags', [], [
-			$type,
-			implode('|', $tags),
-		]);
-		
-		if($error = $client->getLastError())
+		catch(RedisException $exception)
 		{
-			throw new RedisException($error);
+			$this->log($exception);
 		}
 		
-		return true;
+		return false;
 	}
 	
 	/**
@@ -137,15 +188,24 @@ class Redisearch extends Redis
 	{
 		$type = $this->getType();
 		
-		// check if the index exists
-		if($this->indexExists($type))
+		try
 		{
-			// drop the index
-			$this->indexDrop($type);
+			// check if the index exists
+			if($this->indexExists($type))
+			{
+				// drop the index
+				$this->indexDrop($type);
+			}
+			
+			// create index again
+			return $this->indexCreate($type);
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
 		}
 		
-		// create index again
-		return $this->indexCreate($type);
+		return false;
 	}
 	
 	/**
@@ -160,9 +220,18 @@ class Redisearch extends Redis
 			return false;
 		}
 		
-		// check if the index exists
-		$indices = $client->rawCommand('FT._LIST');
-		return in_array($type, $indices, true);
+		try
+		{
+			// check if the index exists
+			$indices = $client->rawCommand('FT._LIST');
+			return in_array($type, $indices, true);
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return false;
 	}
 	
 	/**
@@ -177,9 +246,18 @@ class Redisearch extends Redis
 			return false;
 		}
 		
-		// throws exception if index does not exist
-		return $client->rawCommand('FT.DROPINDEX', $type, 'DD')
-			=== self::STATUS_OK;
+		try
+		{
+			// throws exception if index does not exist
+			return $client->rawCommand('FT.DROPINDEX', $type, 'DD')
+				=== self::STATUS_OK;
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return false;
 	}
 	
 	/**
@@ -194,17 +272,26 @@ class Redisearch extends Redis
 			return false;
 		}
 		
-		// create index again
-		return $client->rawCommand('FT.CREATE', ...[
-			$type,
-			'ON',
-			'HASH',
-			'PREFIX',
-			1,
-			$type,
-			'SCHEMA',
-			self::KEY_TAGS,
-			'TAG',
-		]) === self::STATUS_OK;
+		try
+		{
+			// create index again
+			return $client->rawCommand('FT.CREATE', ...[
+				$type,
+				'ON',
+				'HASH',
+				'PREFIX',
+				1,
+				$type,
+				'SCHEMA',
+				self::KEY_TAGS,
+				'TAG',
+			]) === self::STATUS_OK;
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return false;
 	}
 }

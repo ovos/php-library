@@ -21,7 +21,12 @@ local function cache_search_batches(n, batch_size)
 end
 redis.register_function('cache_search_batches', cache_search_batches)
 
--- Unlink all items from given tags (removes every ID that refereces any of the given tags)
+-- Unlink all items from given tags
+-- Removes every ID that refereces any or all of the given tags,
+-- depending on the syntax passed to "tags": 
+-- * any: @tags:{New York|Los Angeles|Barcelona}
+-- * all: @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}"
+-- See https://redis.io/docs/latest/develop/interact/search-and-query/advanced-concepts/tags/
 local function cache_search_unlink_by_tags(keys, args)
 	local index = args[1]
 	local tags = args[2]
@@ -30,14 +35,14 @@ local function cache_search_unlink_by_tags(keys, args)
 	
 	while true do
 		-- Perform the FT.SEARCH with batching
-		local search_command = {'FT.SEARCH', index, '@tags:{' .. tags .. '}', 'LIMIT', offset, batch_size}
+		local search_command = {'FT.SEARCH', index, tags, 'LIMIT', offset, batch_size}
 		local result = redis.call(unpack(search_command))
 		
 		-- quit if there are no more matches
 		local total_results = tonumber(result[1])
 		if total_results == 0 then
 			break
-		end	
+		end
 		
 		local rems = {}
 		
