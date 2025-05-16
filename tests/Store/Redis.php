@@ -214,6 +214,30 @@ class Redis extends Test
 		}
 	}
 	
+	public function cleanTags(): bool
+	{
+		$this->initStore();
+		$this->_store->setCleanTags(true);
+		
+		$key = 'item';
+		$tags = ['tag1', 'tag2'];
+		$this->_store->set($key, 'test', tags: $tags);
+		$this->_store->invalidateTags([$tags[0]]);
+		
+		// check if the ID still exists within the tag field
+		$tagId = $this->_store->prefix($tags[1], $this->_store->getType($this->_store::TYPE_TAGS));
+		$exists = $this->_store->getClient()->hGet($tagId, $key);
+		
+		try
+		{
+			return $exists === false;
+		}
+		finally
+		{
+			$this->_store->delete($key);
+		}
+	}
+	
 	public function collectGarbage(): bool
 	{
 		$this->initStore();

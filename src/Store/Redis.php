@@ -117,12 +117,32 @@ class Redis extends Cache
 	 */
 	public function setStoreOptions(ArrayObject $options): self
 	{
-		if($options->offsetGet('clean_tags'))
+		if(($cleanTags = $options->offsetGet('clean_tags')) !== null) // true or false
 		{
-			$this->_cleanTags = true;
+			$this->setCleanTags($cleanTags);
 		}
 		
 		return $this;
+	}
+	
+	/**
+	 * @param bool $cleanTags
+	 *
+	 * @return self
+	 */
+	public function setCleanTags(bool $cleanTags): self
+	{
+		$this->_cleanTags = $cleanTags;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function getCleanTags(): bool
+	{
+		return $this->_cleanTags;
 	}
 	
 	/**
