@@ -8,6 +8,11 @@ use Redis as BaseRedis;
 use RedisException;
 
 use function Ovos\services;
+use function count;
+use function date;
+use function file_put_contents;
+use function microtime;
+use function sprintf;
 
 /**
  * Connection
@@ -189,7 +194,7 @@ class Connection
 					$function,
 					$diff
 				);
-				services()->logger->log($message);
+				services()->events->log($message);
 				
 				$filename = sprintf('%s_%s.txt',
 					$this->_slowLogFilename,
@@ -313,5 +318,19 @@ class Connection
 	public function getClient(): ?BaseRedis
 	{
 		return $this->_client;
+	}
+	
+	/**
+	 * Logs events (messages/errors/exceptions)
+	 *
+	 * @param mixed ...$event
+	 *
+	 * @return self
+	 */
+	public function log(...$event): self
+	{
+		services()->logger->log(...$event);
+		
+		return $this;
 	}
 }

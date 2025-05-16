@@ -12,6 +12,7 @@ use RedisException;
 use ReflectionClass;
 
 use function Ovos\config;
+use function sprintf;
 
 /**
  * Redisearch
@@ -69,19 +70,41 @@ class Redisearch extends Test
 		return true;
 	}
 	
+	public function delete(): bool
+	{
+		$this->initStore();
+		
+		$key = 'item';
+		
+		$this->_store->set($key, 'test');
+		$this->_store->delete($key);
+		
+		$exists = $this->_store->get($key);
+		
+		return $exists === null;
+	}
+	
 	public function storeArray(): bool
 	{
 		$this->initStore();
 		$this->_store->indexRebuild();
 		
+		$key = 'item';
 		$array = [
 			'stored' => true
 		];
 		
-		$this->_store->set('array', $array);
-		$array = $this->_store->get('array');
+		$this->_store->set($key, $array);
+		$array = $this->_store->get($key);
 		
-		return $array['stored'] === true;
+		try
+		{
+			return $array['stored'] === true;
+		}
+		finally
+		{
+			$this->_store->delete($key);
+		}
 	}
 	
 	public function invalidateTags(): bool
@@ -89,12 +112,22 @@ class Redisearch extends Test
 		$this->initStore();
 		$this->_store->indexRebuild();
 		
-		$this->_store->set('tags', 'test', tags: ['tag1', 'tag2']);
-		$this->_store->invalidateTags(['tag1']);
+		$key = 'item';
+		$tags = ['tag1', 'tag2'];
 		
-		$result = $this->_store->get('tags');
+		$this->_store->set($key, 'test', tags: $tags);
+		$this->_store->invalidateTags([$tags[0]]);
 		
-		return $result === null;
+		$result = $this->_store->get($key);
+		
+		try
+		{
+			return $result === null;
+		}
+		finally
+		{
+			$this->_store->delete($key);
+		}
 	}
 	
 	public function clear(): bool
@@ -102,13 +135,14 @@ class Redisearch extends Test
 		$this->initStore();
 		$this->_store->indexRebuild();
 		
+		$key = 'item';
 		$array = [
 			'stored' => true
 		];
 		
-		$this->_store->set('array', $array);
+		$this->_store->set($key, $array);
 		$this->_store->clear();
-		$result = $this->_store->get('array');
+		$result = $this->_store->get($key);
 		
 		return $result === null;
 	}
