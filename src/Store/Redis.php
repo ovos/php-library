@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\ArrayObject;
+use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Redis as BaseRedis;
 use RedisException;
@@ -28,6 +29,12 @@ use function array_diff;
  */
 class Redis extends Cache
 {
+	/**#@+
+	 * Separators
+	 */
+	public const string SEPARATOR_FUNCTION = '_';
+	/**#@-*/
+	
 	/**#@+
 	 * Keys
 	 */
@@ -63,6 +70,10 @@ class Redis extends Cache
 	protected int $_multiMode = BaseRedis::PIPELINE;
 	
 	/**
+	 * Maintain clean tags = remove ids of invalidated items while invalidating them.
+	 * Results in slower invalidation, at the same benefitting with consistent and compact data.
+	 * If this option is off, make sure to enable garbage collector (can run as CLI once at night).
+	 * 
 	 * @var bool
 	 */
 	protected bool $_cleanTags = false;
@@ -108,6 +119,31 @@ class Redis extends Cache
 		{
 			$this->setStoreOptions($storeOptions);
 		}
+	}
+	
+	/**
+	 * @param Connection $connection
+	 * @param ArrayObject $config
+	 *
+	 * @return self
+	 * @throws Exception
+	 */
+	public static function fromConfig(Connection $connection,
+		ArrayObject $config,
+	): self
+	{
+		if($config->offsetExists('prefix') === false)
+		{
+			throw new Exception('"cache: prefix" is a required config value.');
+		}
+		
+		return new self
+		(
+			$config->prefix,
+			$connection,
+			$config->persistent,
+			self::GROUP_DEFAULT,
+		);
 	}
 	
 	/**
@@ -219,6 +255,8 @@ class Redis extends Cache
 		bool $replace = false
 	): bool
 	{
+		$libraryName = $this->prefix($libraryName, separator: self::SEPARATOR_FUNCTION);
+		
 		if(isset($this->_librariesLoaded[$libraryName])
 			&& $this->_librariesLoaded[$libraryName] === true
 			&& $replace === false)
@@ -249,8 +287,18 @@ class Redis extends Cache
 		
 		$client->clearLastError();
 		
+		$functions = file_get_contents(__DIR__
+			. DIRECTORY_SEPARATOR . $libraryFile,
+		);
+		if($this->_prefix !== null)
+		{
+			$functions = str_replace('[prefix]',
+				$this->_prefix,
+				$functions,
+			);
+		}
 		$library = "#!lua name=" . $libraryName . PHP_EOL . PHP_EOL
-			. file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $libraryFile);
+			. $functions;
 		
 		$libraryLoaded = $replace
 			? $client->function('load', 'replace', $library)
@@ -304,7 +352,9 @@ class Redis extends Cache
 			? 'fcall_ro'
 			: 'fcall'
 		;
-		$result = $this->_connection->slowLog([$client, $call], $function, $keys, $args);
+		$functionName = $this->prefix($function, separator: self::SEPARATOR_FUNCTION);
+		
+		$result = $this->_connection->slowLog([$client, $call], $functionName, $keys, $args);
 		
 		if($long)
 		{
@@ -319,8 +369,8 @@ class Redis extends Cache
 	 * @param array $keys
 	 * @param array $args
 	 * @param bool $readOnly
-	 * @param int $batchSize
 	 * @param bool $long
+	 * @param int $batchSize
 	 * 
 	 * @return void
 	 */
@@ -329,8 +379,8 @@ class Redis extends Cache
 		array $keys = [],
 		array $args = [],
 		bool $readOnly = false,
-		int $batchSize = 1000,
 		bool $long = false,
+		int $batchSize = 1000,
 	): void
 	{
 		if($long)
@@ -634,7 +684,7 @@ class Redis extends Cache
 					$typeItems,
 					$typeTags,
 					self::KEY_TAGS,
-				], long: false);
+				], long: true);
 			}
 			
 			if($error = $client->getLastError())
@@ -651,7 +701,7 @@ class Redis extends Cache
 					$tag,
 					$typeItems,
 					$typeTags,
-				], long: false);
+				], long: true);
 			}
 			
 			if($error = $client->getLastError())

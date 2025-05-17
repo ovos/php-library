@@ -114,13 +114,13 @@ class Cache extends Service
 				throw new Exception('"cache: prefix" is a required config value.');
 			}
 			
-			$storeClass = $this->_config->persistent->store ?? 'Redis';
-			$store = new ('Ovos\Store\\' . $storeClass)
+			/** @var Redis $storeClass */
+			$storeClass = 'Ovos\Store\\'
+				. ($this->_config->persistent->store ?? 'Redis');
+			$store = $storeClass::fromConfig
 			(
 				$this->getPersistentConnection(),
-				$this->_config->persistent,
-				$this->_config->prefix,
-				CacheStore::GROUP_DEFAULT,
+				$this->_config,
 			);
 			
 			$this->_persistentStore = $store;
