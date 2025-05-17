@@ -58,7 +58,7 @@ class Connection
 	protected float $_readTimeout = 1;
 	
 	/**
-	 * Read timeout for heavy operations
+	 * Read timeout for long operations
 	 * Unit: seconds
 	 * 
 	 * @var float

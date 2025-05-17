@@ -74,12 +74,16 @@ class Cache extends Store
 	/**
 	 * @param string $key
 	 * @param ?string $prefix
+	 * @param string $separator
 	 *
 	 * @return string
 	 */
-	public function prefix(string $key, ?string $prefix = null): string
+	public function prefix(string $key,
+		?string $prefix = null,
+		string $separator = self::SEPARATOR_PREFIX
+	): string
 	{
-		return ($prefix ?: $this->_prefix) . self::SEPARATOR_PREFIX . $key;
+		return ($prefix ?: $this->_prefix) . $separator . $key;
 	}
 	
 	/**
