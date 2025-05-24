@@ -34,7 +34,7 @@ class Select extends Query
 	 * @var array
 	 */
 	protected array $_orderBy = [];
-		
+	
 	/**
 	 * @var array
 	 */
