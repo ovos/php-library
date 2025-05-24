@@ -11,7 +11,7 @@ use Attribute;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-#[Attribute]
+#[Attribute(Attribute::TARGET_METHOD)]
 class Internal
 {
 }
