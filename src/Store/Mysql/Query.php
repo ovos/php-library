@@ -106,8 +106,8 @@ abstract class Query
 			. ' IN (' . implode(', ', $values) . ')';
 		
 		return $this;
-	}	
-
+	}
+	
 	/**
 	 * @param string $field
 	 * @param array $values
@@ -117,7 +117,7 @@ abstract class Query
 	public function andWhereIn(string $field, array $values): self
 	{
 		return $this->whereIn($field, $values);
-	}	
+	}
 	
 	/**
 	 * @param string $field
@@ -136,7 +136,7 @@ abstract class Query
 			. ' NOT IN (' . implode(', ', $values) . ')';
 		
 		return $this;
-	}	
+	}
 	
 	/**
 	 * @param string $field

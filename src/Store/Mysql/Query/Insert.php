@@ -39,10 +39,10 @@ class Insert extends Query
 	 *
 	 * @return self
 	 */
-    public function columns(mixed ...$columns): self
+	public function columns(mixed ...$columns): self
 	{
 		$this->_columns = $columns;
 		
 		return $this;
-    }
+	}
 }

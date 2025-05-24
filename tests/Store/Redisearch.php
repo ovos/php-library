@@ -4,12 +4,15 @@ declare(strict_types=1);
 namespace Tests\Store;
 
 use Ovos\ArrayObject;
+use Ovos\Redis\Connection;
+use Ovos\Store\Cache;
 use Ovos\Store\Redisearch as RedisStore;
 use Ovos\Test;
 use RedisException;
 use ReflectionClass;
 
 use function Ovos\config;
+use function sprintf;
 
 /**
  * Redisearch
@@ -42,11 +45,10 @@ class Redisearch extends Test
 		}
 	}
 	
-	protected function _connect(): bool
+	public function initStore(): bool
 	{
-		$this->_store = new RedisStore($this->_config);
-		
-		if($this->_store->connect() === false)
+		$connection = new Connection($this->_config->persistent);
+		if($connection->connect() === false)
 		{
 			throw new RedisException
 			(
@@ -55,58 +57,92 @@ class Redisearch extends Test
 					$this->_store->getConfig()->port,
 				)
 			);
-			
-			return false;
 		}
+		
+		$this->_store = new RedisStore
+		(
+			$this->_config->prefix,
+			$connection,
+			$this->_config->persistent,
+			Cache::GROUP_TESTS
+		);
 		
 		return true;
 	}
 	
-	public function connect(): bool
+	public function delete(): bool
 	{
-		return $this->_connect();
+		$this->initStore();
+		
+		$key = 'item';
+		
+		$this->_store->set($key, 'test');
+		$this->_store->delete($key);
+		
+		$exists = $this->_store->get($key);
+		
+		return $exists === null;
 	}
 	
 	public function storeArray(): bool
 	{
-		$this->_connect();
+		$this->initStore();
 		$this->_store->indexRebuild();
 		
+		$key = 'item';
 		$array = [
 			'stored' => true
 		];
 		
-		$this->_store->set('array', $array);
-		$array = $this->_store->get('array');
+		$this->_store->set($key, $array);
+		$array = $this->_store->get($key);
 		
-		return $array['stored'] === true;
+		try
+		{
+			return $array['stored'] === true;
+		}
+		finally
+		{
+			$this->_store->delete($key);
+		}
 	}
 	
 	public function invalidateTags(): bool
 	{
-		$this->_connect();
+		$this->initStore();
 		$this->_store->indexRebuild();
 		
-		$this->_store->set('array', 'test', tags: ['tag1', 'tag2']);
-		$this->_store->invalidateTags(['tag1']);
+		$key = 'item';
+		$tags = ['tag1', 'tag2'];
 		
-		$result = $this->_store->get('array');
+		$this->_store->set($key, 'test', tags: $tags);
+		$this->_store->invalidateTags([$tags[0]]);
 		
-		return $result === null;
+		$result = $this->_store->get($key);
+		
+		try
+		{
+			return $result === null;
+		}
+		finally
+		{
+			$this->_store->delete($key);
+		}
 	}
 	
 	public function clear(): bool
 	{
-		$this->_connect();
+		$this->initStore();
 		$this->_store->indexRebuild();
 		
+		$key = 'item';
 		$array = [
 			'stored' => true
 		];
 		
-		$this->_store->set('array', $array);
+		$this->_store->set($key, $array);
 		$this->_store->clear();
-		$result = $this->_store->get('array');
+		$result = $this->_store->get($key);
 		
 		return $result === null;
 	}

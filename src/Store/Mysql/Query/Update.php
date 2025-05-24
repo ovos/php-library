@@ -43,13 +43,13 @@ class Update extends Query
 	 *
 	 * @return self
 	 */
-    public function set(mixed ...$columns): self
+	public function set(mixed ...$columns): self
 	{
 		foreach($columns as $column => $value)
 		{
-			$this->_columns[] = $column . ' = ' . (string)$value;
+			$this->_columns[] = $column . ' = ' . $value;
 		}
 		
 		return $this;
-    }
+	}
 }
