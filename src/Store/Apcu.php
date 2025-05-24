@@ -23,17 +23,6 @@ use function apcu_clear_cache;
 class Apcu extends Cache
 {
 	/**
-	 * @var ?string 
-	 */
-	protected ?string $_prefix = null;
-	
-	/**#@+
-	 * Separators
-	 */
-	public const string SEPARATOR_PREFIX = ':';
-	/**#@-*/
-	
-	/**
 	 * @param ?string $prefix
 	 */
 	public function __construct(?string $prefix = null)
@@ -62,29 +51,6 @@ class Apcu extends Cache
 		$instance->setConfig($config->perishable);
 		
 		return $instance;
-	}
-	
-	/**
-	 * @param ?string $prefix
-	 *
-	 * @return self
-	 */
-	public function setPrefix(?string $prefix = null): self
-	{
-		$this->_prefix = $prefix;
-		
-		return $this;
-	}
-	
-	/**
-	 * @param string $key
-	 * @param ?string $prefix
-	 *
-	 * @return string
-	 */
-	public function prefix(string $key, ?string $prefix = null): string
-	{
-		return $prefix ?: $this->_prefix . self::SEPARATOR_PREFIX . $key;
 	}
 	
 	/**

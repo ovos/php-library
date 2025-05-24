@@ -31,10 +31,80 @@ class Cache extends Store
 	public const string PREFIX_COMPRESS = ":\x1f\x8b";
 	/**#@-*/
 	
+	/**#@+
+	 * Separators
+	 */
+	public const string SEPARATOR_PREFIX = ':';
+	/**#@-*/
+	
+	/**
+	 * @var ?string 
+	 */
+	protected ?string $_prefix = null;
+	
+	/**#@+
+	 * Type constants
+	 */
+	public const string GROUP_DEFAULT = 'core';
+	public const string GROUP_TESTS = 'tests';
+	/**#@-*/
+	
+	/**
+	 * @var ?string
+	 */
+	protected ?string $_group = self::GROUP_DEFAULT;
+	
 	/**
 	 * @var ?ArrayObject
 	 */
 	protected ?ArrayObject $_config = null;
+	
+	/**
+	 * @param ?string $prefix
+	 *
+	 * @return self
+	 */
+	public function setPrefix(?string $prefix = null): self
+	{
+		$this->_prefix = $prefix;
+		
+		return $this;
+	}
+	
+	/**
+	 * @param string $key
+	 * @param ?string $prefix
+	 * @param string $separator
+	 *
+	 * @return string
+	 */
+	public function prefix(string $key,
+		?string $prefix = null,
+		string $separator = self::SEPARATOR_PREFIX
+	): string
+	{
+		return ($prefix ?: $this->_prefix) . $separator . $key;
+	}
+	
+	/**
+	 * @param ?string $group
+	 *
+	 * @return self
+	 */
+	public function setGroup(?string $group): self
+	{
+		$this->_group = $group;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return string
+	 */
+	public function getGroup(): string
+	{
+		return $this->prefix($this->_group);
+	}
 	
 	/**
 	 * @param ?ArrayObject $config
@@ -97,7 +167,7 @@ class Cache extends Store
 		
 		return unserialize($value, ['allowed_classes' => true]);
 	}
-		
+	
 	/**
 	 * @param null|mixed $value
 	 * 

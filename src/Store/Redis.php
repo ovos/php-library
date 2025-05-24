@@ -3,15 +3,23 @@ declare(strict_types=1);
 
 namespace Ovos\Store;
 
-use Ovos\Exception;
 use Ovos\ArrayObject;
+use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Redis as BaseRedis;
 use RedisException;
 
-use function Ovos\services;
 use function is_int;
-
+use function count;
+use function explode;
+use function implode;
+use function file_get_contents;
+use function ceil;
+use function array_push;
+use function array_slice;
+use function array_unique;
+use function array_merge;
+use function array_diff;
 
 /**
  * Redis
@@ -24,13 +32,14 @@ class Redis extends Cache
 	/**#@+
 	 * Separators
 	 */
-	public const string SEPARATOR_PREFIX = ':';
+	public const string SEPARATOR_FUNCTION = '_';
 	/**#@-*/
 	
 	/**#@+
 	 * Keys
 	 */
 	public const string KEY_DATA = 'data';
+	public const string KEY_TAGS = 'tags';
 	/**#@-*/
 	
 	/**#@+
@@ -41,8 +50,36 @@ class Redis extends Cache
 	public const string STATUS_OK = 'OK';
 	/**#@-*/
 	
+	/**
+	 * Types
+	 */
+	public const string TYPE_ITEMS = 'items';
+	public const string TYPE_TAGS = 'tags';
+	/**#@-*/
+	
+	/**
+	 * Redis connection
+	 *
+	 * @var Connection
+	 */
+	protected Connection $_connection;
+	
+	/**
+	 * @var int
+	 */
+	protected int $_multiMode = BaseRedis::PIPELINE;
+	
+	/**
+	 * Maintain clean tags = remove ids of invalidated items while invalidating them.
+	 * Results in slower invalidation, at the same benefitting with consistent and compact data.
+	 * If this option is off, make sure to enable garbage collector (can run as CLI once at night).
+	 * 
+	 * @var bool
+	 */
+	protected bool $_cleanTags = false;
+	
 	/**#@+
-	 * Library
+	 * Libraries
 	 */
 	/**
 	 * The array of function libraries used by this lass
@@ -58,145 +95,110 @@ class Redis extends Cache
 	protected array $_librariesLoaded = [];
 	
 	/**
-	 * Redis connection
-	 *
-	 * @var ?Connection
-	 */
-	protected ?Connection $_connection = null;
-	
-	/**
-	 * @var ?string 
-	 */
-	protected ?string $_prefix = null;
-	
-	/**
-	 * @var string
-	 */
-	protected string $_hash = 'cache';
-	
-	/**
-	 * @var int
-	 */
-	protected int $_multiMode = BaseRedis::PIPELINE;
-	
-	/**
-	 * Read timeout for light operations 
-	 * 
-	 * @var float
-	 */
-	protected float $_readTimeout = 1;
-	
-	/**
-	 * Read timeout for heavy operations 
-	 * 
-	 * @var float
-	 */
-	protected float $_readTimeoutLong = 10;
-	
-	/**
-	 * Slow log - logs slow Redis queries into file
-	 * 
-	 * @var bool
-	 */
-	protected bool $_slowLogEnabled = false;
-	
-	/**
-	 * Log queries slower than x seconds
-	 * 
-	 * @var float
-	 */
-	protected float $_slowLogThreshold = 2.0;
-	
-	/**
-	 * Log queries into a file with this filename
-	 * 
-	 * @var string
-	 */
-	protected string $_slowLogFilename = 'redis_slow';
-	
-	/**
+	 * @param string $prefix
+	 * @param Connection $connection
 	 * @param ArrayObject $config
+	 * @param ?string $group
 	 */
-	public function __construct(ArrayObject $config)
+	public function __construct
+	(
+		string $prefix,
+		Connection $connection,
+		ArrayObject $config,
+		?string $group = null,
+	)
 	{
 		parent::__construct();
 		
+		$this->setPrefix($prefix);
+		$this->setConnection($connection);
+		$this->setConfig($config);
+		$this->setGroup($group);
+		
+		if($storeOptions = $this->_config->offsetGet('store_options'))
+		{
+			$this->setStoreOptions($storeOptions);
+		}
+	}
+	
+	/**
+	 * @param Connection $connection
+	 * @param ArrayObject $config
+	 *
+	 * @return self
+	 * @throws Exception
+	 */
+	public static function fromConfig(Connection $connection,
+		ArrayObject $config,
+	): self
+	{
 		if($config->offsetExists('prefix') === false)
 		{
 			throw new Exception('"cache: prefix" is a required config value.');
 		}
 		
-		$this->setPrefix($config->prefix);
-		$this->setConfig($config->persistent);
-		
-		// override default values with values from config
-		if($readTimeout = $this->_config->offsetGet('read_timeout'))
-		{
-			$this->_readTimeout = (float)$readTimeout;
-		}
-		
-		if($readTimeoutLong = $this->_config->offsetGet('read_timeout_long'))
-		{
-			$this->_readTimeoutLong = (float)$readTimeoutLong;
-		}
-		
-		$this->_initSlowLog();
+		return new self
+		(
+			$config->prefix,
+			$connection,
+			$config->persistent,
+			self::GROUP_DEFAULT,
+		);
 	}
 	
 	/**
-	 * @return void
-	 */
-	protected function _initSlowLog(): void
-	{
-		if(($slowLog = $this->_config->offsetGet('slow_log')) === null)
-		{
-			return;
-		}
-		
-		if($slowLogEnabled = $slowLog->offsetGet('enabled'))
-		{
-			$this->_slowLogEnabled = $slowLogEnabled;
-		}
-		if($slowLogThreshold = $slowLog->offsetGet('threshold'))
-		{
-			$this->_slowLogThreshold = $slowLogThreshold;
-		}
-		if($slowLogFilename = $slowLog->offsetGet('filename'))
-		{
-			$this->_slowLogFilename = $slowLogFilename;
-		}
-	}
-	
-	/**
-	 * @param ?string $prefix
+	 * @param ArrayObject $options
 	 *
 	 * @return self
 	 */
-	public function setPrefix(?string $prefix = null): self
+	public function setStoreOptions(ArrayObject $options): self
 	{
-		$this->_prefix = $prefix;
+		if(($cleanTags = $options->offsetGet('clean_tags')) !== null) // true or false
+		{
+			$this->setCleanTags($cleanTags);
+		}
 		
 		return $this;
 	}
 	
 	/**
-	 * @param string $key
-	 * @param ?string $prefix
+	 * @param bool $cleanTags
 	 *
-	 * @return string
+	 * @return self
 	 */
-	public function prefix(string $key, ?string $prefix = null): string
+	public function setCleanTags(bool $cleanTags): self
 	{
-		return ($prefix ?: $this->_prefix) . self::SEPARATOR_PREFIX . $key;
+		$this->_cleanTags = $cleanTags;
+		
+		return $this;
 	}
 	
 	/**
 	 * @return bool
 	 */
-	public function connect(): bool
+	public function getCleanTags(): bool
 	{
-		$this->_connection = new Connection($this->_config);
-		return $this->_connection->connect();
+		return $this->_cleanTags;
+	}
+	
+	/**
+	 * @param Connection $connection
+	 *
+	 * @return self
+	 */
+	public function setConnection(Connection $connection): self
+	{
+		$this->_connection = $connection;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return Connection
+	 */
+	public function getConnection(): Connection
+	{
+		return $this->_connection;
 	}
 	
 	/**
@@ -208,11 +210,13 @@ class Redis extends Cache
 	}
 	
 	/**
+	 * @param string $type
+	 *
 	 * @return string
 	 */
-	public function getHashName(): string
+	public function getType(string $type = self::TYPE_ITEMS): string
 	{
-		return $this->prefix($this->_hash);
+		return $this->prefix($type, $this->getGroup());
 	}
 	
 	/**
@@ -251,6 +255,8 @@ class Redis extends Cache
 		bool $replace = false
 	): bool
 	{
+		$libraryName = $this->prefix($libraryName, separator: self::SEPARATOR_FUNCTION);
+		
 		if(isset($this->_librariesLoaded[$libraryName])
 			&& $this->_librariesLoaded[$libraryName] === true
 			&& $replace === false)
@@ -281,8 +287,18 @@ class Redis extends Cache
 		
 		$client->clearLastError();
 		
+		$functions = file_get_contents(__DIR__
+			. DIRECTORY_SEPARATOR . $libraryFile,
+		);
+		if($this->_prefix !== null)
+		{
+			$functions = str_replace('[prefix]',
+				$this->_prefix,
+				$functions,
+			);
+		}
 		$library = "#!lua name=" . $libraryName . PHP_EOL . PHP_EOL
-			. file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $libraryFile);
+			. $functions;
 		
 		$libraryLoaded = $replace
 			? $client->function('load', 'replace', $library)
@@ -308,6 +324,7 @@ class Redis extends Cache
 	 * @param array $keys
 	 * @param array $args
 	 * @param bool $readOnly
+	 * @param bool $long
 	 *
 	 * @return mixed
 	 */
@@ -316,6 +333,7 @@ class Redis extends Cache
 		array $keys = [],
 		array $args = [],
 		bool $readOnly = false,
+		bool $long = false,
 	): mixed
 	{
 		if(($client = $this->getClient()) === null)
@@ -325,12 +343,25 @@ class Redis extends Cache
 		
 		$this->loadLibraries();
 		
-		if($readOnly)
+		if($long)
 		{
-			return $this->_slowLog([$client, 'fcall_ro'], $function, $keys, $args);
+			$this->_connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
 		}
 		
-		return $this->_slowLog([$client, 'fcall'], $function, $keys, $args);
+		$call = $readOnly
+			? 'fcall_ro'
+			: 'fcall'
+		;
+		$functionName = $this->prefix($function, separator: self::SEPARATOR_FUNCTION);
+		
+		$result = $this->_connection->slowLog([$client, $call], $functionName, $keys, $args);
+		
+		if($long)
+		{
+			$this->_connection->toggleReadTimeout();
+		}
+		
+		return $result;
 	}
 	
 	/**
@@ -338,8 +369,9 @@ class Redis extends Cache
 	 * @param array $keys
 	 * @param array $args
 	 * @param bool $readOnly
+	 * @param bool $long
 	 * @param int $batchSize
-	 *
+	 * 
 	 * @return void
 	 */
 	protected function _batchFunctionCall(
@@ -347,9 +379,16 @@ class Redis extends Cache
 		array $keys = [],
 		array $args = [],
 		bool $readOnly = false,
+		bool $long = false,
 		int $batchSize = 1000,
 	): void
 	{
+		if($long)
+		{
+			// an extended timeout will be valid through all calls of the batch
+			$this->_connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
+		}
+		
 		$countKeys = count($keys);
 		$totalBatches = (int)ceil($countKeys / $batchSize);
 		
@@ -358,6 +397,63 @@ class Redis extends Cache
 			$keysBatch = array_slice($keys, $batch * $batchSize, $batchSize);
 			$this->_functionCall($function, $keysBatch, $args, $readOnly);
 		}
+		
+		if($long)
+		{
+			$this->_connection->toggleReadTimeout();
+		}
+	}
+	
+	/**
+	 * @param BaseRedis $client
+	 * @param string $id
+	 *
+	 * @return array
+	 */
+	protected function _getCurrentTags(BaseRedis $client, string $id): array
+	{
+		try
+		{
+			if(($itemTags = $client->hGet(
+				$id,
+				self::KEY_TAGS,
+			)) !== false)
+			{
+				return explode(',', $itemTags);
+			}
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return [];
+	} 
+	
+	/**
+	 * @param string $key
+	 *
+	 * @return ?array
+	 */
+	public function getTags(string $key): ?array
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$id = $this->prefix($key, $this->getType());
+			
+			return $this->_getCurrentTags($client, $id);
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return null;
 	}
 	
 	/**
@@ -372,16 +468,26 @@ class Redis extends Cache
 			return null;
 		}
 		
-		$value = $client->hGet(
-			$this->prefix($key, $this->getHashName()),
-			self::KEY_DATA,
-		);
-		if($value === false)
+		try
 		{
-			return null;
+			$id = $this->prefix($key, $this->getType());
+			$value = $client->hGet(
+				$id,
+				self::KEY_DATA,
+			);
+			if($value === false)
+			{
+				return null;
+			}
+			
+			return $this->unserialize($this->decompress($value));
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
 		}
 		
-		return $this->unserialize($this->decompress($value));
+		return null;
 	}
 	
 	/**
@@ -396,44 +502,296 @@ class Redis extends Cache
 			return null;
 		}
 		
-		return $client->unlink(
-			$this->prefix($key, $this->getHashName()),
-		) > 0;
+		try
+		{
+			$id = $this->prefix($key, $this->getType());
+			$tags = $this->_getCurrentTags($client, $id);
+			
+			$client->clearLastError();
+			$client->multi($this->_multiMode);
+			$client->unlink($id);
+			
+			foreach($tags as $tag)
+			{
+				$tagId = $this->prefix($tag, $this->getType(self::TYPE_TAGS));
+				$client->hDel($tagId, $id);
+			}
+			
+			$result = $client->exec();
+			if($error = $client->getLastError())
+			{
+				$this->log($error);
+			}
+			
+			if(is_array($result))
+			{
+				return $result[0] > 0; // unlink
+			}
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return false;
 	}
 	
 	/**
 	 * @param string $key
 	 * @param mixed $value
 	 * @param int $ttl
-	 *
+	 * @param array $tags
+	 * 
 	 * @return bool
 	 */
-	public function set(string $key, mixed $value, int $ttl = 0): bool
+	public function set(
+		string $key,
+		mixed $value,
+		int $ttl = 0,
+		array $tags = [],
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
 			return false;
 		}
 		
-		$value = $this->compress($this->serialize($value));
-		
-		$client->multi($this->_multiMode);
-		$client->hSet(
-			$this->prefix($key, $this->getHashName()), 
-			self::KEY_DATA, $value,
-		);
-		
-		// set expire if needed
-		if($ttl > 0)
+		try
 		{
-			$client->expire($key, $ttl);
+			$id = $this->prefix($key, $this->getType());
+			$value = $this->compress($this->serialize($value));
+			
+			$currentTags = $this->_getCurrentTags($client, $id);
+			
+			// if an item has some tags on it and a supplied array is empty,
+			// then we should remove the "tags" field on the item
+			if(count($currentTags) && count($tags) === 0)
+			{
+				$client->hDel($id, self::KEY_TAGS);
+			}
+			
+			$client->clearLastError();
+			$client->multi($this->_multiMode);
+			
+			$args = [$id, self::KEY_DATA, $value];
+			if(count($tags))
+			{
+				array_push($args, 
+					self::KEY_TAGS,
+					implode(',', $tags)
+				);
+			}
+			// @see https://redis.io/docs/latest/commands/hset/
+			$client->hSet(...$args);
+			
+			// set expire if needed
+			if($ttl)
+			{
+				$client->expire($id, $ttl);
+			}
+			
+			$addTags = array_diff($tags, $currentTags);
+			$removeTags = array_diff($currentTags, $tags);
+			
+			// process added tags
+			foreach($addTags as $tag)
+			{
+				$tagId = $this->prefix($tag, $this->getType(self::TYPE_TAGS));
+				
+				// add the id to the list of each tag
+				$client->hSet($tagId,
+					$key, 
+					null,
+				);
+				
+				// expire the id in the list at the same time as id expires
+				if($ttl)
+				{
+					$client->rawCommand('HEXPIRE', 
+					$tagId,
+						$ttl,
+						'FIELDS',
+						1,
+						$key,
+					);
+				}
+			}
+			
+			// process removed tags
+			// remove the id from the list of each tag
+			foreach($removeTags as $tag)
+			{
+				$tagId = $this->prefix($tag, $this->getType(self::TYPE_TAGS));
+				
+				$client->hDel($tagId,
+					$key,
+				);
+			}
+			
+			$result = $client->exec();
+			if($error = $client->getLastError())
+			{
+				$this->log($error);
+			}
+			
+			if(is_array($result))
+			{
+				return $result[0] !== false; // hSet
+			}
 		}
-		$result = $client->exec();
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
 		
-		return $result[0] !== false;
+		return false;
 	}
 	
 	/**
+	 * @param array $tags
+	 *
+	 * @return bool
+	 */
+	public function invalidateTags(array $tags): bool
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		if(count($tags) === 0)
+		{
+			return false;
+		}
+		
+		$group = $this->getGroup() . self::SEPARATOR_PREFIX;
+		$typeItems = self::TYPE_ITEMS . self::SEPARATOR_PREFIX;
+		$typeTags = self::TYPE_TAGS . self::SEPARATOR_PREFIX;
+		
+		try
+		{
+			$ids = $this->getIdsMatchingAnyTags($tags);
+			
+			$client->clearLastError();
+			
+			// this is an option functionality, which is not required
+			// at the cost of speed on invalidation; it keeps a database smaller (clean)
+			// by removing ids from tags
+			if($this->_cleanTags === true)
+			{
+				$this->_batchFunctionCall('cache_unlink_clean_tags', $ids, [
+					$group,
+					$typeItems,
+					$typeTags,
+					self::KEY_TAGS,
+				], long: true);
+			}
+			
+			if($error = $client->getLastError())
+			{
+				$this->log($error);
+			}
+			
+			$client->clearLastError();
+			
+			foreach($tags as $tag)
+			{
+				$this->_functionCall('cache_unlink_by_tag', [], [
+					$group,
+					$tag,
+					$typeItems,
+					$typeTags,
+				], long: true);
+			}
+			
+			if($error = $client->getLastError())
+			{
+				$this->log($error);
+			}
+			
+			return true;
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * @param array $tags
+	 *
+	 * @return array
+	 */
+	public function getIdsMatchingAnyTags(array $tags): array
+	{
+		// return a unique list of ids matching any of the tags
+		$ids = $this->getIdsMatchingAllTags($tags);
+		$countIds = count($ids);
+		
+		if($countIds === 1)
+		{
+			return array_unique($ids[0]);
+		}
+		if($countIds > 1)
+		{
+			return array_unique(array_merge(...$ids));
+		}
+		
+		return [];
+	}
+	
+	/**
+	 * @param array $tags
+	 *
+	 * @return array
+	 */
+	public function getIdsMatchingAllTags(array $tags): array
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return [];
+		}
+		
+		$ids = [];
+		$group = $this->getGroup() . self::SEPARATOR_PREFIX;
+		$typeTags = self::TYPE_TAGS . self::SEPARATOR_PREFIX;
+		
+		try
+		{
+			$client->clearLastError();
+			
+			foreach($tags as $tag)
+			{
+				$results = $this->_functionCall('cache_get_ids_by_tag', [], [
+					$group,
+					$tag,
+					$typeTags,
+				], true);
+				
+				if(is_array($results))
+				{
+					$ids[] = $results;
+				}
+			}
+			
+			if($error = $client->getLastError())
+			{
+				$this->log($error);
+			}
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return $ids;
+	}
+	
+	/**
+	 * Throws exception on purpose, this method is not meant to be used by normal users
+	 * 
 	 * @return bool|int
 	 */
 	public function clear(): bool|int
@@ -443,20 +801,15 @@ class Redis extends Cache
 			return false;
 		}
 		
-		$hashName = $this->getHashName();
-		$prefix = $this->prefix('*', $hashName);
+		$group = $this->getGroup();
+		$prefix = $this->prefix('*', $group);
 		$count = 0;
 		
 		$client->clearLastError();
-		$client->setOption(BaseRedis::OPT_READ_TIMEOUT, $this->_readTimeoutLong);
-		$client->config('SET', 
-			'lua-time-limit',
-			(string)($this->_readTimeoutLong * 1000) // ms
-		);
 		
 		$result = $this->_functionCall('cache_clear', [], [
 			$prefix,
-		]);
+		], long: true);
 		
 		if(is_int($result))
 		{
@@ -472,69 +825,111 @@ class Redis extends Cache
 	}
 	
 	/**
-	 * @param callable $callback
-	 * @param string $function
-	 * @param array $keys
-	 * @param array $args
-	 *
-	 * @return mixed
+	 * Returns a list of all tags
+	 * 
+	 * @return array
 	 */
-	protected function _slowLog(
-		callable $callback,
-		string $function,
-		array $keys,
-		array $args,
-	): mixed
+	public function getAllTags(): array
 	{
-		if($this->_slowLogEnabled)
+		if(($client = $this->getClient()) === null)
 		{
-			$start = microtime(true);
+			return [];
 		}
 		
-		$result = $callback($function, $keys, $args);
+		$tags = [];
+		$group = $this->getGroup() . self::SEPARATOR_PREFIX;
+		$typeTags = self::TYPE_TAGS . self::SEPARATOR_PREFIX;
 		
-		if($this->_slowLogEnabled)
+		try
 		{
-			$end = microtime(true);
-			$diff = $end - $start;
+			$client->clearLastError();
 			
-			if($diff >= $this->_slowLogThreshold)
+			$results = $this->_functionCall('cache_get_tags', [], [
+				$group,
+				$typeTags,
+			], true);
+			
+			if($error = $client->getLastError())
 			{
-				$message = sprintf('%s: %s = %ss' . PHP_EOL,
-					date('Y-m-d H:i:s'),
-					$function,
-					$diff
-				);
-				services()->logger->log($message);
-				
-				$filename = sprintf('%s_%s.txt',
-					$this->_slowLogFilename,
-					date('Y_m_d')
-				);
-				
-				// log to a slow log file
-				file_put_contents(LOGS_DIR . $filename,
-					$message
-				, FILE_APPEND);
-				
-				if(count($keys))
-				{
-					file_put_contents(LOGS_DIR . $filename,
-						'keys: ' . "\n\t" . implode("\n\t", $keys) . PHP_EOL
-					, FILE_APPEND);
-				}
-				if(count($args))
-				{
-					file_put_contents(LOGS_DIR . $filename,
-						'args: ' . "\n\t" . implode("\n\t", $args) . PHP_EOL
-					, FILE_APPEND);
-				}
-				file_put_contents(LOGS_DIR . $filename, 
-				PHP_EOL
-				, FILE_APPEND);
+				$this->log($error);
+			}
+			
+			if(is_array($results))
+			{
+				$tags = array_unique($results);
 			}
 		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
 		
-		return $result;
+		return $tags;
+	}
+	
+	/**
+	 * Throws exception on purpose, this method is not meant to be used by normal users
+	 * 
+	 * @return bool|int
+	 */
+	public function collectGarbage(): bool|int
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		$tags = $this->getAllTags();
+		$group = $this->getGroup() . self::SEPARATOR_PREFIX;
+		$typeItems = self::TYPE_ITEMS . self::SEPARATOR_PREFIX;
+		$typeTags = self::TYPE_TAGS . self::SEPARATOR_PREFIX;
+		$count = 0;
+		
+		try
+		{
+			$client->clearLastError();
+			
+			foreach($tags as $tag)
+			{
+				$result = $this->_functionCall('cache_clean_tag', [], [
+					$group,
+					$tag,
+					$typeItems,
+					$typeTags,
+				], long: true);
+				
+				if(is_int($count))
+				{
+					$count+= $result;
+				}
+			}
+			
+			if($error = $client->getLastError())
+			{
+				$this->log($error);
+			}
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+			
+			return false;
+		}
+		
+		return $count;
+	}
+	
+	/**
+	 * Logs events (messages/errors/exceptions)
+	 *
+	 * @param mixed ...$event
+	 *
+	 * @return self
+	 */
+	public function log(...$event): self
+	{
+		$this->_connection->log(...$event);
+		
+		return $this;
 	}
 }
