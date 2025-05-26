@@ -5,10 +5,8 @@ namespace Ovos;
 
 use ArrayObject as BaseArrayObject;
 
-use function count;
 use function array_shift;
 use function array_merge;
-use function implode;
 use function explode;
 
 /**
@@ -53,30 +51,38 @@ class ArrayObject extends BaseArrayObject
 	 * @param ?self $config
 	 *
 	 * @return mixed (self|mixed|null)
-	 *
-	 * @throws Exception
 	 */
 	public function get(string $path, ?self $config = null): mixed
 	{
-		$pathElements = explode('.', $path);
-		$currentPath = array_shift($pathElements);
+		$pathElements = explode('.', $path); // Break the path into parts
 		
-		if($config === null)
-		{
-			$config = $this;
-		}
+		return $this->_getFromPath($pathElements, $config ?? $this);
+	}
+	
+	/**
+	 * @param array $pathElements
+	 * @param ArrayObject $config
+	 *
+	 * @return mixed
+	 */
+	protected function _getFromPath(array $pathElements, self $config): mixed
+	{
+		$currentPath = array_shift($pathElements);
 		
 		if($config->offsetExists($currentPath))
 		{
-			$config = $config->offsetGet($currentPath);
+			$nextConfig = $config->offsetGet($currentPath);
 			
-			if(count($pathElements))
+			if(empty($pathElements)) // base case: no more elements
 			{
-				$path = implode('.', $pathElements);
-				return $this->get($path, $config);
+				return $nextConfig;
 			}
 			
-			return $config;
+			// recursive case: continue with the remaining path elements
+			if($nextConfig instanceof self)
+			{
+				return $this->_getFromPath($pathElements, $nextConfig);
+			}
 		}
 		
 		return null;
