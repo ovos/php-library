@@ -15,16 +15,26 @@ use Ovos\ArrayObject as BaseArrayObject;
  */
 class ArrayObject extends Test
 {
-	public function get(): bool
+	protected BaseArrayObject $_arrayObject;
+	
+	public function __construct()
 	{
-		$arrayObject = Arrays::deepToArrayObject([
+		$this->_arrayObject = Arrays::deepToArrayObject([
 			'system' => [
 				'database' => [
 					'type' => 'mysql',
 				],
 			],
 		]);
-		
-		return $arrayObject->get('system.database.type') === 'mysql';
+	}
+	
+	public function getString(): bool
+	{
+		return $this->_arrayObject->get('system.database.type') === 'mysql';
+	}
+	
+	public function getArray(): bool
+	{
+		return $this->_arrayObject->get(['system', 'database', 'type']) === 'mysql';
 	}
 }

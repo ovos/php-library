@@ -8,6 +8,7 @@ use ArrayObject as BaseArrayObject;
 use function array_shift;
 use function array_merge;
 use function explode;
+use function is_string;
 
 /**
  * ArrayObject
@@ -46,42 +47,47 @@ class ArrayObject extends BaseArrayObject
 	
 	/**
 	 * Returns a nested value specified by a dot-separated path
-	 *
-	 * @param string $path
-	 * @param ?self $config
-	 *
+	 * 
+	 * @param string|array $path
+	 * @param ?self $arrayObject
+	 * 
 	 * @return mixed (self|mixed|null)
 	 */
-	public function get(string $path, ?self $config = null): mixed
+	public function get(string|array $path, ?self $arrayObject = null): mixed
 	{
-		$pathElements = explode('.', $path); // Break the path into parts
+		$pathElements = is_string($path)
+			? explode('.', $path) // break the path into parts
+			: $path;
 		
-		return $this->_getFromPath($pathElements, $config ?? $this);
+		return $this->_getFromPath($pathElements, 
+			$arrayObject ?? $this);
 	}
 	
 	/**
 	 * @param array $pathElements
-	 * @param ArrayObject $config
-	 *
+	 * @param ArrayObject $arrayObject
+	 * 
 	 * @return mixed
 	 */
-	protected function _getFromPath(array $pathElements, self $config): mixed
+	protected function _getFromPath(array $pathElements,
+		self $arrayObject,
+	): mixed
 	{
 		$currentPath = array_shift($pathElements);
 		
-		if($config->offsetExists($currentPath))
+		if($arrayObject->offsetExists($currentPath))
 		{
-			$nextConfig = $config->offsetGet($currentPath);
+			$nextArrayObject = $arrayObject->offsetGet($currentPath);
 			
 			if(empty($pathElements)) // base case: no more elements
 			{
-				return $nextConfig;
+				return $nextArrayObject;
 			}
 			
 			// recursive case: continue with the remaining path elements
-			if($nextConfig instanceof self)
+			if($nextArrayObject instanceof self)
 			{
-				return $this->_getFromPath($pathElements, $nextConfig);
+				return $this->_getFromPath($pathElements, $nextArrayObject);
 			}
 		}
 		
@@ -103,8 +109,8 @@ class ArrayObject extends BaseArrayObject
 	/**
 	 * @param string $key
 	 * @param string $separator
-	 *
-	 * @return array|null
+	 * 
+	 * @return ?array
 	 */
 	public function asArray(string $key, string $separator = ', '): ?array
 	{
@@ -119,12 +125,12 @@ class ArrayObject extends BaseArrayObject
 			return null;
 		}
 		
-		return explode(', ', $value);
+		return explode($separator, $value);
 	}
 	
 	/**
 	 * @param array $array
-	 *
+	 * 
 	 * @return self
 	 */
 	public static function factory(array $array = []): self
