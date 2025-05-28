@@ -37,6 +37,6 @@ class ArrayObject implements Injected
 	
 	public function process(object $object): mixed
 	{
-		return $object->get($this->_path);
+		return $object->getPath($this->_path);
 	}
 }
