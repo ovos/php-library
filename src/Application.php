@@ -62,6 +62,13 @@ class Application
 	protected Environment $_environment;
 	
 	/**
+	 * The container for object instances of the current application
+	 *
+	 * @var ?Container
+	 */
+	protected ?Container $_container;
+	
+	/**
 	 * The interface of the current application
 	 *
 	 * @var string
@@ -773,7 +780,20 @@ class Application
 			exit(1); // exit with error status for github actions
 		}
 	}
-
+	
+	/**
+	 * @return Container
+	 */
+	public function getContainer(): Container
+	{
+		if($this->_container === null)
+		{
+			$this->_container = new Container;
+		}
+		
+		return $this->_container;
+	}
+	
 	/**
 	 * @return Services
 	 */
@@ -954,6 +974,14 @@ function locale(): Locale
 function console(...$messages): Console
 {
 	return Console::getInstance()->setMessages(...$messages);
+}
+
+/**
+ * @return Container
+ */
+function container(): Container
+{
+	return app()->getContainer();
 }
 
 /**
