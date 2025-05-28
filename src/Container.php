@@ -43,12 +43,12 @@ class Container
 	
 	/**
 	 * Register class
-	 * 
+	 *
 	 * @param string $key
 	 * @param string $class
 	 * @param array $parameters
 	 * @param ?callable $initializer
-	 * 
+	 *
 	 * @return self
 	 */
 	public function registerClass(string $key,
@@ -67,12 +67,12 @@ class Container
 	
 	/**
 	 * Register a lazy object
-	 * 
+	 *
 	 * @param string $key
 	 * @param string $class
 	 * @param array $parameters
 	 * @param ?callable $initializer
-	 * 
+	 *
 	 * @return self
 	 */
 	public function registerLazy(string $key,
@@ -101,11 +101,11 @@ class Container
 	
 	/**
 	 * Register a callable and instantiate it on demand
-	 * 
+	 *
 	 * @param string $key
 	 * @param callable $callable
 	 * @param array $parameters
-	 * 
+	 *
 	 * @return self
 	 */
 	public function registerCallable(string $key,
@@ -123,10 +123,10 @@ class Container
 	/**
 	 * Register an instance of an object
 	 * No need to resolve dependencies
-	 * 
+	 *
 	 * @param string $key
 	 * @param object $object
-	 * 
+	 *
 	 * @return self
 	 */
 	public function registerObject(string $key, object $object): self
@@ -139,10 +139,10 @@ class Container
 	/**
 	 * Register an instance or a lazy object
 	 * No need to resolve dependencies
-	 * 
+	 *
 	 * @param string $key
 	 * @param mixed $value
-	 * 
+	 *
 	 * @return self
 	 */
 	public function registerValue(string $key, mixed $value): self
@@ -154,9 +154,9 @@ class Container
 	
 	/**
 	 * Returns a resolved object or value
-	 * 
+	 *
 	 * @param string $key
-	 * 
+	 *
 	 * @return ?object
 	 */
 	public function get(string $key): ?object
@@ -178,9 +178,9 @@ class Container
 	/**
 	 * Resolves dependencies in constructor
 	 * or marked with #[Inject] attribute
-	 * 
+	 *
 	 * @param Entry $entry
-	 * 
+	 *
 	 * @return ?object
 	 */
 	public function resolve(Entry $entry): ?object
@@ -239,10 +239,10 @@ class Container
 	
 	/**
 	 * Match parameters by name (and return its value if found)
-	 * 
+	 *
 	 * @param string $parameterName
 	 * @param array $parameters
-	 * 
+	 *
 	 * @return mixed
 	 */
 	protected function _resolveValueByName(string $parameterName,
@@ -286,9 +286,9 @@ class Container
 	
 	/**
 	 * Match parameters by type (and resolve them)
-	 * 
+	 *
 	 * @param ?ReflectionType $parameterType
-	 * 
+	 *
 	 * @return mixed
 	 */
 	protected function _resolveValueByType(?ReflectionType $parameterType,
@@ -334,7 +334,7 @@ class Container
 	 * @param ReflectionClass $reflector
 	 * @param object $object
 	 * @param bool $lazy
-	 * 
+	 *
 	 * @return void
 	 */
 	public function resolveProperties(ReflectionClass $reflector,
@@ -364,7 +364,7 @@ class Container
 	/**
 	 * @param ReflectionProperty|ReflectionParameter $property
 	 * @param mixed $resolved
-	 * 
+	 *
 	 * @return mixed
 	 */
 	protected function _processAttributes(
@@ -388,7 +388,7 @@ class Container
 	 * @param object $object
 	 * @param mixed $resolved
 	 * @param bool $lazy
-	 * 
+	 *
 	 * @return void
 	 */
 	protected function _inject(ReflectionProperty $property,
@@ -417,9 +417,9 @@ class Container
 	
 	/**
 	 * Check if a given key is registered
-	 * 
+	 *
 	 * @param string $key
-	 * 
+	 *
 	 * @return bool
 	 */
 	public function isRegistered(string $key): bool

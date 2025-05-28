@@ -15,7 +15,7 @@ class TypeLazy extends TypeClass
 {
 	/**
 	 * @param Container $container
-	 * 
+	 *
 	 * @return ?object
 	 */
 	public function resolve(Container $container): ?object
