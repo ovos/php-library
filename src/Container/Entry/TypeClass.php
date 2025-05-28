@@ -70,7 +70,7 @@ class TypeClass extends Entry
 	
 	/**
 	 * @param ?callable $initializer
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setInitializer(?callable $initializer): self
@@ -103,7 +103,7 @@ class TypeClass extends Entry
 	
 	/**
 	 * @param Container $container
-	 * 
+	 *
 	 * @return ?object
 	 */
 	public function resolve(Container $container): ?object

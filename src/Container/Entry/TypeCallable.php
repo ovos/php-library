@@ -34,7 +34,7 @@ class TypeCallable extends Entry
 	
 	/**
 	 * @param callable $callable
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setCallable(callable $callable): self
@@ -46,7 +46,7 @@ class TypeCallable extends Entry
 	
 	/**
 	 * @param Container $container
-	 * 
+	 *
 	 * @return object
 	 */
 	public function resolve(Container $container): object
