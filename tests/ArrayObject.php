@@ -30,11 +30,11 @@ class ArrayObject extends Test
 	
 	public function getString(): bool
 	{
-		return $this->_arrayObject->get('system.database.type') === 'mysql';
+		return $this->_arrayObject->getPath('system.database.type') === 'mysql';
 	}
 	
 	public function getArray(): bool
 	{
-		return $this->_arrayObject->get(['system', 'database', 'type']) === 'mysql';
+		return $this->_arrayObject->getPath(['system', 'database', 'type']) === 'mysql';
 	}
 }

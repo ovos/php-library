@@ -35,6 +35,37 @@ class ArrayObject extends BaseArrayObject
 	 * 
 	 * @return mixed
 	 */
+	public function get(mixed $key): mixed
+	{
+		return $this->offsetGet($key);
+	}
+		
+	/**
+	 * @param mixed $key
+	 * 
+	 * @return array
+	 */
+	public function getArray(mixed $key = null): array
+	{
+		if($key === null)
+		{
+			return $this->getArrayCopy();
+		}
+		
+		if($this->offsetExists($key) === false)
+		{
+			return [];
+		}
+		
+		return $this->offsetGet($key)
+			->getArrayCopy();
+	}
+	
+	/**
+	 * @param mixed $key
+	 * 
+	 * @return mixed
+	 */
 	public function offsetGet(mixed $key): mixed
 	{
 		if($this->offsetExists($key) === false)
@@ -42,7 +73,66 @@ class ArrayObject extends BaseArrayObject
 			return null;
 		}
 		
-		return parent::offsetGet($key);
+		// convert an array to ArrayObject
+		// so that it will be referenced and using [] will work
+		$value = parent::offsetGet($key);
+		if(is_array($value))
+		{
+			$value = new self($value);
+			$this->offsetSet($key, $value);
+		}
+		
+		return $value;
+	}
+	
+	/**
+	 * @param mixed $key
+	 * @param mixed $value
+	 *
+	 * @return void
+	 */
+	public function offsetSet(mixed $key, mixed $value): void
+	{
+		if(is_array($value))
+		{
+			// convert an array to ArrayObject
+			$value = new self($value);
+		}
+		
+		parent::offsetSet($key, $value);
+	}
+	
+	/**
+	 * @param string $key
+	 *
+	 * @return mixed
+	 */
+	public function __get(string $key): mixed
+	{
+		return $this->offsetExists($key)
+			? $this->offsetGet($key)
+			: null;
+	}
+	
+	/**
+	 * @param string $key
+	 * @param mixed $value
+	 *
+	 * @return void
+	 */
+	public function __set(string $key, mixed $value): void
+	{
+		$this->offsetSet($key, $value);
+	}
+	
+	/**
+	 * @param string $name
+	 *
+	 * @return bool
+	 */
+	public function __isset(string $name): bool
+	{
+		return $this->offsetExists($name);
 	}
 	
 	/**
@@ -53,7 +143,7 @@ class ArrayObject extends BaseArrayObject
 	 * 
 	 * @return mixed (self|mixed|null)
 	 */
-	public function get(string|array $path, ?self $arrayObject = null): mixed
+	public function getPath(string|array $path, ?self $arrayObject = null): mixed
 	{
 		$pathElements = is_string($path)
 			? explode('.', $path) // break the path into parts
@@ -107,6 +197,8 @@ class ArrayObject extends BaseArrayObject
 	}
 	
 	/**
+	 * Returns value as an array
+	 * 
 	 * @param string $key
 	 * @param string $separator
 	 * 

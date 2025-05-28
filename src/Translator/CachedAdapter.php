@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Translator;
 
-use Models\User;
 use Ovos\ArrayObject;
 use Ovos\Strings;
 
@@ -56,7 +55,7 @@ class CachedAdapter
 		if(($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)
 		{
-			$this->setTranslations($item->translations);
+			$this->setTranslations($item->translations->getArrayCopy());
 		}
 		
 		$parser = new MoParser($filename);
