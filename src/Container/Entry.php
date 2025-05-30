@@ -9,7 +9,7 @@ namespace Ovos\Container;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Entry
+abstract class Entry
 {
 	/**
 	 * @var array
@@ -27,7 +27,7 @@ class Entry
 	/**
 	 * @param array $parameters
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setParameters(array $parameters = []): self
 	{
@@ -36,6 +36,9 @@ class Entry
 		return $this;
 	}
 	
+	/**
+	 * @return array
+	 */
 	public function getParameters(): array
 	{
 		return $this->_parameters;

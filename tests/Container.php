@@ -10,6 +10,8 @@ use Ovos\Test;
 use Ovos\Container as BaseContainer;
 use Ovos\Container\ArrayObject;
 use Ovos\Container\Inject;
+use Ovos\Container\Register\TypeClass;
+use Ovos\Container\Register\TypeLazy;
 
 /**
  * Container
@@ -183,6 +185,19 @@ class Container extends Test
 		
 		return $instance->config->offsetGet('username') === 'root';
 	}
+	
+	public function attribuesAutomaticRegistration(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Service4::class,
+			Service4::class,
+		);
+		
+		$instance = $container->get(Service4::class);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->dependency2 instanceof Dependency2;
+	}
 }
 
 class Service1
@@ -222,6 +237,16 @@ class Service3
 	)
 	{
 	}
+}
+
+class Service4
+{
+	#[TypeClass]
+	#[Inject]
+	public Dependency1 $dependency1;
+	#[TypeLazy]
+	#[Inject]
+	public ?Dependency2 $dependency2 = null;
 }
 
 class Dependency1
