@@ -1,11 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Container\Entry;
+namespace Ovos\Container\Register;
 
-use Ovos\Container;
-use Ovos\Container\Entry;
-
+use Ovos\Container\Register;
+use Attribute;
 use Closure;
 
 /**
@@ -14,7 +13,8 @@ use Closure;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class TypeCallable extends Entry
+#[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_PARAMETER)]
+class TypeCallable extends Register
 {
 	/**
 	 * @var Closure
@@ -52,17 +52,5 @@ class TypeCallable extends Entry
 	public function getCallable(): Closure
 	{
 		return $this->_callable;
-	}
-	
-	/**
-	 * @param Container $container
-	 *
-	 * @return object
-	 */
-	public function resolve(Container $container): object
-	{
-		// no resolution whatsoever except for access to the container
-		// inside the anonymous function
-		return ($this->_callable)($container, $this->getParameters());
 	}
 }

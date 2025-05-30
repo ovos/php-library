@@ -6,6 +6,10 @@ namespace Ovos;
 use Ovos\Container\Entry;
 use Ovos\Container\Inject;
 use Ovos\Container\Injected;
+use Ovos\Container\Register;
+use Ovos\Container\Register\TypeClass;
+use Ovos\Container\Register\TypeLazy;
+use Ovos\Container\Register\TypeCallable;
 
 use ReflectionAttribute;
 use ReflectionClass;
@@ -224,7 +228,7 @@ class Container
 				$resolved = $this->_resolveValueByName($parameter->getName(),
 					$values)
 					?? $this->_resolveValueByKey($parameter)
-					?? $this->_resolveValueByType($parameter->getType());
+					?? $this->_resolveValueByType($parameter);
 				
 				if($resolved !== null)
 				{
@@ -287,22 +291,116 @@ class Container
 	/**
 	 * Match parameters by type (and resolve them)
 	 *
-	 * @param ?ReflectionType $parameterType
+	 * @param ReflectionProperty|ReflectionParameter $property
 	 *
 	 * @return mixed
 	 */
-	protected function _resolveValueByType(?ReflectionType $parameterType,
+	protected function _resolveValueByType(
+		ReflectionProperty|ReflectionParameter $property,
 	): mixed
 	{
-		if($parameterType === null)
+		$propertyType = $property->getType();
+		if($propertyType === null)
 		{
 			return null;
 		}
 		
-		$types = [];
-		if($parameterType instanceof ReflectionUnionType)
+		$types = $this->_getOwnTypes($propertyType);
+		if(count($types) === 0)
 		{
-			foreach($parameterType->getTypes() as $type)
+			return null;
+		}
+		
+		$object = null;
+		foreach($types as $type)
+		{
+			// take the first one that we could resolve
+			if(($object = $this->get($type)) !== null)
+			{
+				break;
+			}
+		}
+		
+		// return an object if we managed to resolve it
+		if($object !== null)
+		{
+			return $object;
+		}
+		
+		// could not be resolved,
+		// try to autoregister with the first type
+		return $this->_register($property, $types[0]);
+	}
+	
+	/**
+	 * Try to automatically register the entry
+	 * 
+	 * @param ReflectionProperty|ReflectionParameter $property
+	 * @param string $type
+	 *
+	 * @return ?object
+	 */
+	public function _register(
+		ReflectionProperty|ReflectionParameter $property,
+		string $type,
+	): ?object
+	{
+		$attributes = $property->getAttributes(Register::class,
+			ReflectionAttribute::IS_INSTANCEOF);
+		if(count($attributes) === 0)
+		{
+			$this->registerClass($type, $type);
+			return $this->get($type);
+		}
+		
+		$attribute = $attributes[0];
+		$attributeName = $attribute->getName();
+		
+		if($attributeName === TypeClass::class)
+		{
+			$instance = $attribute->newInstance();
+			$this->registerClass($type, $type,
+				$instance->getParameters(),
+				$instance->getInitializer(),
+			);
+			return $this->get($type);
+		}
+		
+		if($attributeName === TypeLazy::class)
+		{
+			$instance = $attribute->newInstance();
+			$this->registerLazy($type, $type,
+				$instance->getParameters(),
+				$instance->getInitializer(),
+			);
+			return $this->get($type);
+		}
+		
+		if($attributeName === TypeCallable::class)
+		{
+			/** @var TypeCallable $instance */
+			$instance = $attribute->newInstance();
+			$this->registerCallable($type,
+				$instance->getCallable(),
+				$instance->getParameters(),
+			);
+			return $this->get($type);
+		}
+		
+		return null;
+	}
+	
+	/**
+	 * @param ?ReflectionType $propertyType
+	 *
+	 * @return array
+	 */
+	protected function _getOwnTypes(?ReflectionType $propertyType): array
+	{
+		$types = [];
+		if($propertyType instanceof ReflectionUnionType)
+		{
+			foreach($propertyType->getTypes() as $type)
 			{
 				if($type->isBuiltin()) // also null values
 				{
@@ -312,22 +410,13 @@ class Container
 				$types[] = $type->getName();
 			}
 		}
-		else if($parameterType instanceof ReflectionNamedType
-			|| $parameterType->isBuiltin() === false)
+		else if($propertyType instanceof ReflectionNamedType
+			|| $propertyType->isBuiltin() === false)
 		{
-			$types[] = $parameterType->getName();
+			$types[] = $propertyType->getName();
 		}
 		
-		foreach($types as $type)
-		{
-			// take the first one that we could resolve
-			if(($object = $this->get($type)) !== null)
-			{
-				return $object;
-			}
-		}
-		
-		return null;
+		return $types;
 	}
 	
 	/**
@@ -351,7 +440,7 @@ class Container
 			}
 			
 			$resolved = $this->_resolveValueByKey($property)
-				?? $this->_resolveValueByType($property->getType());
+				?? $this->_resolveValueByType($property);
 			
 			if($resolved !== null)
 			{
@@ -426,4 +515,18 @@ class Container
 	{
 		return isset($this->_entries[$key]);
 	}
+}
+
+/**
+ * @return Container
+ */
+function container(): Container
+{
+	static $container;
+	if($container === null)
+	{
+		$container = new Container;
+	}
+	
+	return $container;
 }
