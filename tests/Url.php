@@ -26,7 +26,7 @@ class Url extends Test
 		return 'test/param/' === $url->getUrl(true);
 	}
 	
-	public function fromStringBs()
+	public function fromStringWithSlash()
 	{
 		$url = new BaseUrl('test/param/');
 		return 'test/param/' === $url->getUrl(true);

@@ -30,12 +30,23 @@ use Ovos\Service\Database;
  */
 class Services
 {
-	use Singleton;
+	/**
+	 * @var Container 
+	 */
+	protected Container $_container;
 	
 	/**
 	 * @var Service[]
 	 */
 	protected static array $_items = []; // static in case of changing instance with newInstance (after loading the config)
+	
+	/**
+	 * @param Container $container
+	 */
+	public function __construct(Container $container)
+	{
+		$this->_container = $container;
+	}
 	
 	/**
 	 * @param string $symbol
@@ -114,7 +125,8 @@ class Services
 	 */
 	public function getConfig(): ArrayObject
 	{
-		return config()->system->services;
+		return $this->_container->get('config')
+			->system->services;
 	}
 	
 	/**

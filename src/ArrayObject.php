@@ -5,11 +5,10 @@ namespace Ovos;
 
 use ArrayObject as BaseArrayObject;
 
-use function count;
 use function array_shift;
 use function array_merge;
-use function implode;
 use function explode;
+use function is_string;
 
 /**
  * ArrayObject
@@ -36,6 +35,37 @@ class ArrayObject extends BaseArrayObject
 	 * 
 	 * @return mixed
 	 */
+	public function get(mixed $key): mixed
+	{
+		return $this->offsetGet($key);
+	}
+		
+	/**
+	 * @param mixed $key
+	 * 
+	 * @return array
+	 */
+	public function getArray(mixed $key = null): array
+	{
+		if($key === null)
+		{
+			return $this->getArrayCopy();
+		}
+		
+		if($this->offsetExists($key) === false)
+		{
+			return [];
+		}
+		
+		return $this->offsetGet($key)
+			->getArrayCopy();
+	}
+	
+	/**
+	 * @param mixed $key
+	 * 
+	 * @return mixed
+	 */
 	public function offsetGet(mixed $key): mixed
 	{
 		if($this->offsetExists($key) === false)
@@ -43,40 +73,112 @@ class ArrayObject extends BaseArrayObject
 			return null;
 		}
 		
-		return parent::offsetGet($key);
+		// convert an array to ArrayObject
+		// so that it will be referenced and using [] will work
+		$value = parent::offsetGet($key);
+		if(is_array($value))
+		{
+			$value = new self($value);
+			$this->offsetSet($key, $value);
+		}
+		
+		return $value;
+	}
+	
+	/**
+	 * @param mixed $key
+	 * @param mixed $value
+	 *
+	 * @return void
+	 */
+	public function offsetSet(mixed $key, mixed $value): void
+	{
+		if(is_array($value))
+		{
+			// convert an array to ArrayObject
+			$value = new self($value);
+		}
+		
+		parent::offsetSet($key, $value);
+	}
+	
+	/**
+	 * @param string $key
+	 *
+	 * @return mixed
+	 */
+	public function __get(string $key): mixed
+	{
+		return $this->offsetExists($key)
+			? $this->offsetGet($key)
+			: null;
+	}
+	
+	/**
+	 * @param string $key
+	 * @param mixed $value
+	 *
+	 * @return void
+	 */
+	public function __set(string $key, mixed $value): void
+	{
+		$this->offsetSet($key, $value);
+	}
+	
+	/**
+	 * @param string $name
+	 *
+	 * @return bool
+	 */
+	public function __isset(string $name): bool
+	{
+		return $this->offsetExists($name);
 	}
 	
 	/**
 	 * Returns a nested value specified by a dot-separated path
-	 *
-	 * @param string $path
-	 * @param ?self $config
-	 *
+	 * 
+	 * @param string|array $path
+	 * @param ?self $arrayObject
+	 * 
 	 * @return mixed (self|mixed|null)
-	 *
-	 * @throws Exception
 	 */
-	public function get(string $path, ?self $config = null): mixed
+	public function getPath(string|array $path, ?self $arrayObject = null): mixed
 	{
-		$pathElements = explode('.', $path);
+		$pathElements = is_string($path)
+			? explode('.', $path) // break the path into parts
+			: $path;
+		
+		return $this->_getFromPath($pathElements, 
+			$arrayObject ?? $this);
+	}
+	
+	/**
+	 * @param array $pathElements
+	 * @param ArrayObject $arrayObject
+	 * 
+	 * @return mixed
+	 */
+	protected function _getFromPath(array $pathElements,
+		self $arrayObject,
+	): mixed
+	{
 		$currentPath = array_shift($pathElements);
 		
-		if($config === null)
+		if($arrayObject->offsetExists($currentPath))
 		{
-			$config = $this;
-		}
-		
-		if($config->offsetExists($currentPath))
-		{
-			$config = $config->offsetGet($currentPath);
+			$nextArrayObject = $arrayObject->offsetGet($currentPath);
 			
-			if(count($pathElements))
+			if(empty($pathElements)) // base case: no more elements
 			{
-				$path = implode('.', $pathElements);
-				return $this->get($path, $config);
+				return $nextArrayObject;
 			}
 			
-			return $config;
+			// recursive case: continue with the remaining path elements
+			if($nextArrayObject instanceof self)
+			{
+				return $this->_getFromPath($pathElements, $nextArrayObject);
+			}
 		}
 		
 		return null;
@@ -95,10 +197,12 @@ class ArrayObject extends BaseArrayObject
 	}
 	
 	/**
+	 * Returns value as an array
+	 * 
 	 * @param string $key
 	 * @param string $separator
-	 *
-	 * @return array|null
+	 * 
+	 * @return ?array
 	 */
 	public function asArray(string $key, string $separator = ', '): ?array
 	{
@@ -113,12 +217,12 @@ class ArrayObject extends BaseArrayObject
 			return null;
 		}
 		
-		return explode(', ', $value);
+		return explode($separator, $value);
 	}
 	
 	/**
 	 * @param array $array
-	 *
+	 * 
 	 * @return self
 	 */
 	public static function factory(array $array = []): self

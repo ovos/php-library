@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use ArrayObject;
+use ArrayObject as BaseArrayObject;
 
 use function is_array;
 use function count;
@@ -34,7 +34,7 @@ class Arrays
 	 */
 	public static function deepToArrayObject(array $array,
 		string $className = ArrayObject::class,
-		int $flags = ArrayObject::ARRAY_AS_PROPS): mixed
+		int $flags = BaseArrayObject::ARRAY_AS_PROPS): mixed
 	{
 		foreach($array as $key => $value)
 		{
@@ -50,14 +50,11 @@ class Arrays
 	}
 	
 	/*
-	 * arrayDeepMerge
 	 * @see code from php at moechofe dot com (array_merge comment on php.net)
-	 *
-	 * array arrayDeepMerge ( array array1 [, array array2 [, array ...]] )
-	 *
+	 * 
 	 * Like array_merge
 	 *
-	 * arrayDeepMerge() merges the elements of one or more arrays together so
+	 * deepMerge() merges the elements of one or more arrays together, so
 	 * that the values of one are appended to the end of the previous one. It
 	 * returns the resulting array.
 	 * 
@@ -67,7 +64,7 @@ class Arrays
 	 * will be appended.
 	 * 
 	 * If only one array is given and the array is numerically indexed, the keys
-	 * get reindexed in a continuous way.
+	 * get re-indexed in a continuous way.
 	 *
 	 * Different from array_merge
 	 * If string keys have arrays for values, these arrays will merge recursively.
@@ -156,9 +153,9 @@ class Arrays
 	 * Returns a flattened array
 	 *
 	 * example:
-	 * 		[('Data' => ['first_name' => 'Heniek']]
+	 * 		[('Data' => ['first_name' => 'Hannes']]
 	 * will be transformed to
-	 * 		['Data[first_name]' => 'Heniek']
+	 * 		['Data[first_name]' => 'Hannes']
 	 *
 	 * @param array $array
 	 * @return array
@@ -179,7 +176,10 @@ class Arrays
 			{
 				if($arrayColumn = strstr($column, '['))
 				{
-					$column = '[' . str_replace($arrayColumn, '', $column) . ']' . $arrayColumn;
+					$column = '['
+						. str_replace($arrayColumn, '', $column) 
+						. ']'
+						. $arrayColumn;
 				}
 				else
 				{
@@ -188,7 +188,6 @@ class Arrays
 				
 				$flat[$key . $column] = $columnValue;
 			}
-		
 		}
 		
 		return $flat;

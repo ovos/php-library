@@ -35,7 +35,10 @@
   "autoload": {
     "psr-4": {
       "Ovos\\": "src"
-    }
+    },
+    "files": [
+      "src/Container.php"
+    ]
   },
   "scripts": {
     "php:version":
