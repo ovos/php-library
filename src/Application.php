@@ -4,14 +4,12 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Environment\Loader as EnvLoader;
+use Ovos\Exception\RuntimeException;
 use Ovos\Config\Loader as ConfigLoader;
+use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Response\Redirect;
 use Ovos\Service\Memory;
-use Ovos\Pdo\Profiler\Reporter;
-use Ovos\Exception\RuntimeException;
 use Throwable;
-
-use function Ovos\container;
 
 use function define;
 use function sprintf;
@@ -46,6 +44,12 @@ class Application
 	public const string INT_CLI = 'cli';
 	/**#@-*/
 	
+	/**#@+
+	 * Container constants
+	 */
+	public const string KEY_CONFIG = 'config';
+	/**#@-*/
+	
 	/**
 	 * The configs fir
 	 *
@@ -67,7 +71,7 @@ class Application
 	 *
 	 * @var ?Container
 	 */
-	protected ?Container $_container;
+	protected ?Container $_container = null;
 	
 	/**
 	 * The interface of the current application
@@ -133,10 +137,6 @@ class Application
 		{
 			$this->_interface = self::INT_CLI;
 		}
-		
-		self::$instance = $this;
-		$this->getContainer()
-			->registerObject(Application::class, $this);
 		
 		$this->_init()
 			->_initEnvironment()
@@ -207,7 +207,8 @@ class Application
 	{
 		if($this->_request === null)
 		{
-			$this->_request = new Request;
+			$this->_request = $this->getContainer()
+				->getClass(Request::class, Request::class);
 		}
 		
 		return $this->_request;
@@ -255,8 +256,11 @@ class Application
 	 */
 	protected function _init(): self
 	{
+		self::$instance = $this->_container
+			->getObject(__CLASS__, $this);
+		
 		// register memory service manually for config loading
-		$this->getServices()->register(new Memory);
+		$this->_container->registerClass(Memory::SYMBOL, Memory::class);
 		
 		return $this;
 	}
@@ -270,7 +274,10 @@ class Application
 	{
 		// get environment from the file
 		$environmentFile = BASE_DIR . Environment::ENV_FILE;
-		$loader = new EnvLoader;
+		$loader = $this->_container
+			->registerClass(EnvLoader::class, EnvLoader::class)
+			->get(EnvLoader::class);
+		
 		$environment = $loader->load($environmentFile);
 		$this->_environment = $environment ?: new Environment;
 		
@@ -282,6 +289,9 @@ class Application
 			$configsDir . 'environments.yml',
 			$environment
 		);
+		$this->_container
+			->registerObject(Environment::class, $this->_environment)
+			->registerObject(self::KEY_CONFIG, $this->_config);
 		
 		return $this;
 	}
@@ -366,7 +376,11 @@ class Application
 		
 		if(!isset($this->_configs[$configFile]))
 		{
-			$loader = new ConfigLoader;
+			/** @var ConfigLoader $loader */
+			$loader = $this->_container->getClass(ConfigLoader::class, 
+			ConfigLoader::class,
+			);
+			
 			$config = $loader->load($configFile, $environment);
 			$this->_configs[$configFile] = $config;
 		}
@@ -437,10 +451,12 @@ class Application
 	public function setBoostrap(ArrayObject $bootstrap): self
 	{
 		$this->_bootstrap = $bootstrap;
-		if($controller = $this->_bootstrap->controller->get($this->getInterface()))
+		if($controller = $this->_bootstrap->controller
+			->get($this->getInterface()))
 		{
-			$this->getRequest()->setController($controller);
-			$this->getRequest()->setControllerClass(Strings::studlyCase($controller));
+			$this->getRequest()
+				->setController($controller)
+				->setControllerClass(Strings::studlyCase($controller));
 		}
 		
 		return $this;
@@ -602,7 +618,7 @@ class Application
 	
 	/**
 	 * Initializes protocol (http or https)
-	 * Redirects to correct protocol if needed
+	 * Redirects to the correct protocol if needed
 	 *
 	 * @return self
 	 */
@@ -615,7 +631,7 @@ class Application
 		
 		if(Client::getProtocol() !== $this->getConfig()->system->protocol)
 		{
-			$this->setResponse((new Redirect())
+			$this->setResponse((new Redirect)
 				->withHost()
 				->withQueryString()
 			);
@@ -676,7 +692,27 @@ class Application
 	 */
 	protected function _initServices(): self
 	{
-		$services = $this->getServices();
+		$services = $this->_container
+			->registerCallable(Services::class,
+			function(Container $container)
+			{
+				$servicesClass = $container->get(self::KEY_CONFIG)
+					->system->services->container;
+				if($servicesClass !== null)
+				{
+					$servicesClass = str_starts_with($servicesClass, '\\')
+						? $servicesClass
+						: 'Ovos\\' . $servicesClass;
+					
+					/**
+					 * @var Services $servicesClass
+					 */
+					return new $servicesClass($container);
+				}
+				
+				return new Services($container);
+			})
+			->get(Services::class);
 		
 		$servicesToRegister = $services->getConfig()
 			->get($this->getInterface());
@@ -698,10 +734,18 @@ class Application
 				);
 			}
 			
-			$services->register(new $serviceClass);
+			$services->register($serviceClass);
 		}
 		
 		return $this;
+	}
+	
+	/**
+	 * @return Services
+	 */
+	public function getServices(): Services
+	{
+		return $this->_container->get(Services::class);
 	}
 	
 	/**
@@ -794,50 +838,12 @@ class Application
 	 */
 	public function getContainer(): Container
 	{
-		var_dump(function_exists('container'));
-		var_dump(function_exists('Ovos\container'));
-		die;
-		
 		if($this->_container === null)
 		{
 			$this->_container = container();
 		}
 		
 		return $this->_container;
-	}
-	
-	/**
-	 * @return Services
-	 */
-	public function getServices(): Services
-	{
-		$container = $this->getContainer();
-		if($services = $container->get(Services::class))
-		{
-			return $services;
-		}
-		
-		return $container
-			->registerCallable(Services::class,
-			function(Container $container)
-			{
-				$servicesClass = $container->get('config')
-					->system->services->container;
-				if($servicesClass !== null)
-				{
-					$servicesClass = str_starts_with($servicesClass, '\\')
-						? $servicesClass
-						: 'Ovos\\' . $servicesClass;
-					
-					/**
-					 * @var Services $servicesClass
-					 */
-					return new $servicesClass($container);
-				}
-				
-				return new Services($container);
-			})
-			->get(Services::class);
 	}
 	
 	/**

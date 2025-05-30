@@ -118,13 +118,13 @@ class TypeClass extends Entry
 			$initializer = static function() use ($container, $reflector, $parameters)
 			{
 				$instanceArgs = $container->resolveConstructor($reflector, $parameters);
-				$instance = $reflector->newInstanceArgs($instanceArgs);
-				if($instance === null)
-				{
-					return null;
-				}
-				
+				$instance = $reflector->newInstanceWithoutConstructor();
 				$container->resolveProperties($reflector, $instance);
+				
+				if($constructor = $reflector->getConstructor()) 
+				{
+					$constructor->invokeArgs($instance, $instanceArgs);
+				}
 				
 				return $instance;
 			};

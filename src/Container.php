@@ -20,6 +20,7 @@ use ReflectionUnionType;
 use ReflectionProperty;
 
 use function array_map;
+use function array_keys;
 use function count;
 
 /**
@@ -46,7 +47,7 @@ class Container
 	protected array $_reflectors = [];
 	
 	/**
-	 * Register class
+	 * Register a class
 	 *
 	 * @param string $key
 	 * @param string $class
@@ -67,6 +68,30 @@ class Container
 		);
 		
 		return $this;
+	}
+	
+	/**
+	 * Get a class
+	 *
+	 * @param string $key
+	 * @param string $class
+	 * @param array $parameters
+	 * @param ?callable $initializer
+	 *
+	 * @return ?object
+	 */
+	public function getClass(string $key,
+		string $class,
+		array $parameters = [],
+		?callable $initializer = null,
+	): ?object
+	{
+		if($this->isRegistered($key) === false)
+		{
+			$this->registerClass($key, $class, $parameters, $initializer);
+		}
+		
+		return $this->get($key);
 	}
 	
 	/**
@@ -104,6 +129,30 @@ class Container
 	}
 	
 	/**
+	 * Get a lazy object
+	 *
+	 * @param string $key
+	 * @param string $class
+	 * @param array $parameters
+	 * @param ?callable $initializer
+	 *
+	 * @return ?object
+	 */
+	public function getLazy(string $key,
+		string $class,
+		array $parameters = [],
+		?callable $initializer = null,
+	): ?object
+	{
+		if($this->isRegistered($key) === false)
+		{
+			$this->registerLazy($key, $class, $parameters, $initializer);
+		}
+		
+		return $this->get($key);
+	}
+	
+	/**
 	 * Register a callable and instantiate it on demand
 	 *
 	 * @param string $key
@@ -125,6 +174,28 @@ class Container
 	}
 	
 	/**
+	 * Get a callable
+	 *
+	 * @param string $key
+	 * @param callable $callable
+	 * @param array $parameters
+	 *
+	 * @return ?object
+	 */
+	public function getCallable(string $key,
+		callable $callable,
+		array $parameters = [],
+	): ?object
+	{
+		if($this->isRegistered($key) === false)
+		{
+			$this->registerCallable($key, $callable, $parameters);
+		}
+		
+		return $this->get($key);
+	}
+	
+	/**
 	 * Register an instance of an object
 	 * No need to resolve dependencies
 	 *
@@ -141,6 +212,24 @@ class Container
 	}
 	
 	/**
+	 * Get an object
+	 *
+	 * @param string $key
+	 * @param object $object
+	 *
+	 * @return ?object
+	 */
+	public function getObject(string $key, object $object): ?object
+	{
+		if($this->isRegistered($key) === false)
+		{
+			$this->registerObject($key, $object);
+		}
+		
+		return $this->get($key);
+	}
+	
+	/**
 	 * Register an instance or a lazy object
 	 * No need to resolve dependencies
 	 *
@@ -154,6 +243,24 @@ class Container
 		$this->_resolved[$key] = $value;
 		
 		return $this;
+	}
+	
+	/**
+	 * Get a value
+	 *
+	 * @param string $key
+	 * @param mixed $value
+	 *
+	 * @return mixed
+	 */
+	public function getValue(string $key, mixed $value): mixed
+	{
+		if($this->isRegistered($key) === false)
+		{
+			$this->registerValue($key, $value);
+		}
+		
+		return $this->get($key);
 	}
 	
 	/**
@@ -270,19 +377,18 @@ class Container
 	): mixed
 	{
 		$attributes = $property->getAttributes(Inject::class);
-		foreach($attributes as $attribute)
+		if(count($attributes) === 0)
 		{
-			$arguments = $attribute->getArguments();
-			if(count($arguments) === 0)
-			{
-				continue;
-			}
-			
-			$key = $arguments[0]; // does not have to be a type, may be also just a key
-			if(($object = $this->get($key)) !== null)
-			{
-				return $object;
-			}
+			return null;
+		}
+		
+		$arguments = $attributes[0]->getArguments();
+		$object = $this->_resolveTypes($arguments);
+		
+		// return an object if we managed to resolve it
+		if($object !== null)
+		{
+			return $object;
 		}
 		
 		return null;
@@ -306,20 +412,8 @@ class Container
 		}
 		
 		$types = $this->_getOwnTypes($propertyType);
-		if(count($types) === 0)
-		{
-			return null;
-		}
 		
-		$object = null;
-		foreach($types as $type)
-		{
-			// take the first one that we could resolve
-			if(($object = $this->get($type)) !== null)
-			{
-				break;
-			}
-		}
+		$object = $this->_resolveTypes($types);
 		
 		// return an object if we managed to resolve it
 		if($object !== null)
@@ -330,6 +424,32 @@ class Container
 		// could not be resolved,
 		// try to autoregister with the first type
 		return $this->_register($property, $types[0]);
+	}
+	
+	/**
+	 * @param array $types
+	 *
+	 * @return ?object
+	 */
+	protected function _resolveTypes(
+		array $types,
+	): ?object
+	{
+		if(count($types) === 0)
+		{
+			return null;
+		}
+		
+		foreach($types as $type)
+		{
+			// take the first one that we could resolve
+			if(($object = $this->get($type)) !== null)
+			{
+				return $object;
+			}
+		}
+		
+		return null;
 	}
 	
 	/**
@@ -433,8 +553,8 @@ class Container
 	{
 		foreach($reflector->getProperties() as $property)
 		{
-			$attributesInject = $property->getAttributes(Container\Inject::class);
-			if(count($attributesInject) === 0)
+			$attributes = $property->getAttributes(Inject::class);
+			if(count($attributes) === 0)
 			{
 				continue;
 			}
@@ -515,6 +635,14 @@ class Container
 	{
 		return isset($this->_entries[$key]);
 	}
+	
+	/**
+	 * @return array
+	 */
+	public function __debugInfo(): array
+	{
+		return array_keys($this->_entries);
+	}
 }
 
 /**
@@ -526,6 +654,7 @@ function container(): Container
 	if($container === null)
 	{
 		$container = new Container;
+		$container->registerObject(Container::class, $container);
 	}
 	
 	return $container;
