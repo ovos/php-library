@@ -3,11 +3,13 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
+use Bo2Go\App;
+use Ovos\Application;
 use Ovos\ArrayObject;
+use Ovos\Container;
 use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Ovos\Service;
-use Ovos\Store\Cache as CacheStore;
 use Ovos\Store\Apcu;
 use Ovos\Store\Redis;
 use Ovos\Store\Redisearch;
@@ -64,6 +66,27 @@ class Cache extends Service
 		$this->setEnabled($this->_config->enabled);
 	}
 	
+	/**
+	 * @param Container $container
+	 * @param ?string $key
+	 *
+	 * @return void
+	 */
+	public static function register(Container $container,
+		?string $key = null,
+	): void
+	{
+		$class = static::class;
+		
+		$config = $container->get(Application::KEY_CONFIG);
+		if($config->cache->enabled === false)
+		{
+			$class = Disabled::class;
+		}
+		
+		$key = $key ?? static::SYMBOL;
+		$container->registerClass($key, $class);
+	}
 	/**
 	 * @return string
 	 */

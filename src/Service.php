@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Exception\RuntimeException;
+use Ovos\Container\Inject;
 
 /**
  * Service
@@ -14,13 +15,21 @@ use Ovos\Exception\RuntimeException;
 abstract class Service
 {
 	/**
+	 * @var Container
+	 */
+	#[Inject]
+	protected Container $_container;
+	
+	/**
 	 * @var Application
 	 */
+	#[Inject] 
 	protected Application $_app;
 	
 	/**
 	 * @var Request
 	 */
+	#[Inject] 
 	protected Request $_request;
 	
 	/**
@@ -37,9 +46,6 @@ abstract class Service
 	 */
 	public function __construct()
 	{
-		$this->_app = app();
-		$this->_request = $this->_app->getRequest();
-		
 		$this->_dependsOn();
 	}
 	
@@ -50,13 +56,28 @@ abstract class Service
 	{
 		foreach($this->_dependsOn as $symbol)
 		{
-			if(Services::getInstance()->isRegistered($symbol) === false)
+			if($this->_container->isRegistered($symbol) === false)
 			{
 				// just scream that we need it
-				throw new RuntimeException('"%s" service depends on "%s" service.',
+				throw new RuntimeException(
+					'"%s" service depends on "%s" service.',
 					$this->getSymbol(), $symbol);
 			}
 		}
+	}
+	
+	/**
+	 * @param Container $container
+	 * @param ?string $key
+	 *
+	 * @return void
+	 */
+	public static function register(Container $container,
+		?string $key = null,
+	): void
+	{
+		$key = $key ?? static::SYMBOL;
+		$container->registerClass($key, static::class);
 	}
 	
 	/**
@@ -78,9 +99,4 @@ abstract class Service
 	{
 		return $this->_enabled;
 	}
-	
-	/**
-	 * @return string
-	 */
-	abstract public function getSymbol(): string;
 }
