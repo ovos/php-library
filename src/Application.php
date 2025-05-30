@@ -11,9 +11,10 @@ use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Exception\RuntimeException;
 use Throwable;
 
+use function Ovos\container;
+
 use function define;
 use function sprintf;
-use function strpos;
 use function str_starts_with;
 use function array_merge;
 use function array_unshift;
@@ -60,6 +61,13 @@ class Application
 	 * @var Environment
 	 */
 	protected Environment $_environment;
+	
+	/**
+	 * The container for object instances of the current application
+	 *
+	 * @var ?Container
+	 */
+	protected ?Container $_container;
 	
 	/**
 	 * The interface of the current application
@@ -127,6 +135,8 @@ class Application
 		}
 		
 		self::$instance = $this;
+		$this->getContainer()
+			->registerObject(Application::class, $this);
 		
 		$this->_init()
 			->_initEnvironment()
@@ -246,7 +256,7 @@ class Application
 	protected function _init(): self
 	{
 		// register memory service manually for config loading
-		Services::getInstance()->register(new Memory);
+		$this->getServices()->register(new Memory);
 		
 		return $this;
 	}
@@ -346,7 +356,8 @@ class Application
 	 */
 	public function getConfig(
 		?string $configFile = null,
-		?Environment $environment = null): ArrayObject
+		?Environment $environment = null,
+	): ArrayObject
 	{
 		if($environment === null && $configFile === null)
 		{
@@ -665,25 +676,29 @@ class Application
 	 */
 	protected function _initServices(): self
 	{
-		$services = $this->getServices()
-			->getConfig()
+		$services = $this->getServices();
+		
+		$servicesToRegister = $services->getConfig()
 			->get($this->getInterface());
-		if($services === null)
+		if($servicesToRegister === null)
 		{
 			return $this;
 		}
 		
-		foreach($services as $service)
+		foreach($servicesToRegister as $service)
 		{
-			$serviceClass = strpos($service, '\\') === 0
-				? $service : 'Ovos\Service\\' . $service;
+			$serviceClass = str_starts_with($service, '\\')
+				? $service
+				: 'Ovos\Service\\' . $service;
 			
-			if(!class_exists($serviceClass))
+			if(class_exists($serviceClass) === false)
 			{
-				throw new RuntimeException('Service class does not exist "%s".', $serviceClass);
+				throw new RuntimeException('Service class does not exist "%s".',
+					$serviceClass
+				);
 			}
 			
-			Services::getInstance()->register(new $serviceClass);
+			$services->register(new $serviceClass);
 		}
 		
 		return $this;
@@ -773,25 +788,56 @@ class Application
 			exit(1); // exit with error status for github actions
 		}
 	}
-
+	
+	/**
+	 * @return Container
+	 */
+	public function getContainer(): Container
+	{
+		var_dump(function_exists('container'));
+		var_dump(function_exists('Ovos\container'));
+		die;
+		
+		if($this->_container === null)
+		{
+			$this->_container = container();
+		}
+		
+		return $this->_container;
+	}
+	
 	/**
 	 * @return Services
 	 */
 	public function getServices(): Services
 	{
-		$servicesClass = $this->getConfig()->system->services->container;
-		if($servicesClass !== null)
+		$container = $this->getContainer();
+		if($services = $container->get(Services::class))
 		{
-			$servicesClass = str_starts_with($servicesClass, '\\')
-				? $servicesClass : 'Ovos\\' . $servicesClass;
-			
-			/**
-			 * @var Services $servicesClass
-			 */
-			return $servicesClass::newInstance();
+			return $services;
 		}
 		
-		return Services::newInstance();
+		return $container
+			->registerCallable(Services::class,
+			function(Container $container)
+			{
+				$servicesClass = $container->get('config')
+					->system->services->container;
+				if($servicesClass !== null)
+				{
+					$servicesClass = str_starts_with($servicesClass, '\\')
+						? $servicesClass
+						: 'Ovos\\' . $servicesClass;
+					
+					/**
+					 * @var Services $servicesClass
+					 */
+					return new $servicesClass($container);
+				}
+				
+				return new Services($container);
+			})
+			->get(Services::class);
 	}
 	
 	/**
