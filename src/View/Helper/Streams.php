@@ -18,6 +18,23 @@ use function Ovos\services;
 class Streams extends Helper
 {
 	/**
+	 * @var ?Service
+	 */
+	protected ?Service $_streamsService;
+	
+	/**
+	 * @param ?Service $streamsService
+	 */
+	public function __construct(
+		#[Inject(Service::SYMBOL)] ?Service $streamsService,
+	)
+	{
+		parent::__construct();
+		
+		$this->_streamsService = $streamsService;
+	}
+	
+	/**
 	 * @return self
 	 */
 	public function streams(): self
@@ -26,19 +43,11 @@ class Streams extends Helper
 	}
 	
 	/**
-	 * @return Service
+	 * @return ?Service
 	 */
-	public function get(): Service
+	public function get(): ?Service
 	{
-		return services()->streams;
-	}
-	
-	/**
-	 * @return bool
-	 */
-	public function isRegistered(): bool
-	{
-		return services()->isRegistered(Service::SYMBOL);
+		return $this->_streamsService;
 	}
 	
 	/**
@@ -46,8 +55,8 @@ class Streams extends Helper
 	 */
 	public function getRequests(): array
 	{
-		return $this->isRegistered()
-			? $this->get()->getRequests()
+		return $this->_streamsService !== null
+			? $this->_streamsService->getRequests()
 			: [];
 	}
 	

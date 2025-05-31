@@ -92,16 +92,6 @@ class Services
 	}
 	
 	/**
-	 * @param string $key
-	 *
-	 * @return bool
-	 */
-	public function isRegistered(string $key): bool
-	{
-		return $this->_container->isRegistered($key);
-	}
-	
-	/**
 	 * @return ArrayObject
 	 */
 	public function getConfig(): ArrayObject

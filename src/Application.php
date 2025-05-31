@@ -260,7 +260,8 @@ class Application
 	protected function _init(): self
 	{
 		self::$instance = $this->getContainer()
-			->getObject(__CLASS__, $this);
+			->registerObject(__CLASS__, $this)
+			->get(__CLASS__);
 		
 		$this->_container
 			// Request is required by Memory

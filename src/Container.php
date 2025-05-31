@@ -91,12 +91,14 @@ class Container
 		?callable $initializer = null,
 	): ?object
 	{
-		if($this->isRegistered($key) === false)
+		if(($resolved = $this->get($key)) !== null)
 		{
-			$this->registerClass($key, $class, $parameters, $initializer);
+			return $resolved;
 		}
 		
-		return $this->get($key);
+		return $this
+			->registerClass($key, $class, $parameters, $initializer)
+			->get($key);
 	}
 	
 	/**
@@ -154,12 +156,14 @@ class Container
 		?callable $initializer = null,
 	): ?object
 	{
-		if($this->isRegistered($key) === false)
+		if(($resolved = $this->get($key)) !== null)
 		{
-			$this->registerLazy($key, $class, $parameters, $initializer);
+			return $resolved;
 		}
 		
-		return $this->get($key);
+		return $this
+			->registerLazy($key, $class, $parameters, $initializer)
+			->get($key);
 	}
 	
 	/**
@@ -202,12 +206,14 @@ class Container
 		array $parameters = [],
 	): ?object
 	{
-		if($this->isRegistered($key) === false)
+		if(($resolved = $this->get($key)) !== null)
 		{
-			$this->registerCallable($key, $callable, $parameters);
+			return $resolved;
 		}
 		
-		return $this->get($key);
+		return $this
+			->registerCallable($key, $callable, $parameters)
+			->get($key);
 	}
 	
 	/**
@@ -226,7 +232,8 @@ class Container
 			return $this;
 		}
 		
-		$this->_resolved[$key] = $object;
+		$this->_resolvers[$key] = $object;
+		$this->_resolved[$key] = &$this->_resolvers[$key];
 		
 		return $this;
 	}
@@ -241,12 +248,14 @@ class Container
 	 */
 	public function getObject(string $key, object $object): ?object
 	{
-		if($this->isRegistered($key) === false)
+		if(($resolved = $this->get($key)) !== null)
 		{
-			$this->registerObject($key, $object);
+			return $resolved;
 		}
 		
-		return $this->get($key);
+		return $this
+			->registerObject($key, $object)
+			->get($key);
 	}
 	
 	/**
@@ -265,7 +274,8 @@ class Container
 			return $this;
 		}
 		
-		$this->_resolved[$key] = $value;
+		$this->_resolvers[$key] = $value;
+		$this->_resolved[$key] = &$this->_resolvers[$key];
 		
 		return $this;
 	}
@@ -280,12 +290,14 @@ class Container
 	 */
 	public function getValue(string $key, mixed $value): mixed
 	{
-		if($this->isRegistered($key) === false)
+		if(($resolved = $this->get($key)) !== null)
 		{
-			$this->registerValue($key, $value);
+			return $resolved;
 		}
 		
-		return $this->get($key);
+		return $this
+			->registerValue($key, $value)
+			->get($key);
 	}
 	
 	/**
