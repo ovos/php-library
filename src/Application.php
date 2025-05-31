@@ -129,6 +129,8 @@ class Application
 	 */
 	public function __construct(?string $interface = null)
 	{
+		$this->_init();
+		
 		if($interface !== null)
 		{
 			$this->_interface = $interface;
@@ -138,7 +140,7 @@ class Application
 			$this->_interface = self::INT_CLI;
 		}
 		
-		$this->_init()
+		$this
 			->_initEnvironment()
 			->_initShutdownHandler()
 			->_initBootstrap()
@@ -192,7 +194,8 @@ class Application
 	{
 		if($this->_router === null)
 		{
-			$this->_router = new Router($this->getRequest());
+			$this->_router = $this->_container
+				->get(Router::class);
 		}
 		
 		return $this->_router;
@@ -207,8 +210,8 @@ class Application
 	{
 		if($this->_request === null)
 		{
-			$this->_request = $this->getContainer()
-				->getClass(Request::class, Request::class);
+			$this->_request = $this->_container
+				->get(Request::class);
 		}
 		
 		return $this->_request;
@@ -256,11 +259,14 @@ class Application
 	 */
 	protected function _init(): self
 	{
-		self::$instance = $this->_container
+		self::$instance = $this->getContainer()
 			->getObject(__CLASS__, $this);
 		
-		// register memory service manually for config loading
-		$this->_container->registerClass(Memory::SYMBOL, Memory::class);
+		$this->_container
+			// Request is required by Memory
+			->registerClass(Request::class, Request::class)
+			->registerClass(Router::class, Router::class)
+			->registerClass(Memory::SYMBOL, Memory::class);
 		
 		return $this;
 	}
@@ -692,6 +698,7 @@ class Application
 	 */
 	protected function _initServices(): self
 	{
+		/** @var Services $services */
 		$services = $this->_container
 			->registerCallable(Services::class,
 			function(Container $container)

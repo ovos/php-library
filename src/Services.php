@@ -85,6 +85,7 @@ class Services
 		?string $key = null,
 	): self
 	{
+		/** @var Service $serviceClass */
 		$serviceClass::register($this->_container, $key);
 		
 		return $this;

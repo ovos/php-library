@@ -4,12 +4,12 @@ declare(strict_types=1);
 namespace Ovos\Container;
 
 /**
- * Entry
+ * Resolver
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Entry
+abstract class Resolver
 {
 	/**
 	 * @var array

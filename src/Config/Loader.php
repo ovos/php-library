@@ -29,7 +29,9 @@ class Loader
 	/**
 	 * @param Memory $memoryService
 	 */
-	public function __construct(#[Inject(Memory::SYMBOL)] Memory $memoryService)
+	public function __construct(
+		#[Inject(Memory::SYMBOL)] Memory $memoryService,
+	)
 	{
 		$this->_memoryService = $memoryService;
 	}

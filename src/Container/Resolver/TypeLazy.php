@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Container\Entry;
+namespace Ovos\Container\Resolver;
 
 use Ovos\Container;
 

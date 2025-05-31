@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Container\Entry;
+use Ovos\Container\Resolver;
 use Ovos\Container\Inject;
 use Ovos\Container\Injected;
 use Ovos\Container\Register;
@@ -32,9 +32,9 @@ use function count;
 class Container
 {
 	/**
-	 * @var Entry[]
+	 * @var Resolver[]
 	 */
-	protected array $_entries = [];
+	protected array $_resolvers = [];
 	
 	/**
 	 * @var object[]
@@ -62,7 +62,12 @@ class Container
 		?callable $initializer = null,
 	): self
 	{
-		$this->_entries[$key] = new Entry\TypeClass($class,
+		if(isset($this->_resolvers[$key])) // already registered
+		{
+			return $this;
+		}
+		
+		$this->_resolvers[$key] = new Resolver\TypeClass($class,
 			$parameters,
 			$initializer,
 		);
@@ -110,6 +115,11 @@ class Container
 		?callable $initializer = null,
 	): self
 	{
+		if(isset($this->_resolvers[$key])) // already registered
+		{
+			return $this;
+		}
+		
 		// compatibility with pre 8.4
 		if(PHP_VERSION_ID < 84000)
 		{
@@ -120,7 +130,7 @@ class Container
 			);
 		}
 		
-		$this->_entries[$key] = new Entry\TypeLazy($class,
+		$this->_resolvers[$key] = new Resolver\TypeLazy($class,
 			$parameters,
 			$initializer,
 		);
@@ -166,7 +176,12 @@ class Container
 		array $parameters = [],
 	): self
 	{
-		$this->_entries[$key] = new Entry\TypeCallable($callable,
+		if(isset($this->_resolvers[$key])) // already registered
+		{
+			return $this;
+		}
+		
+		$this->_resolvers[$key] = new Resolver\TypeCallable($callable,
 			$parameters,
 		);
 		
@@ -206,6 +221,11 @@ class Container
 	 */
 	public function registerObject(string $key, object $object): self
 	{
+		if(isset($this->_resolved[$key])) // already registered
+		{
+			return $this;
+		}
+		
 		$this->_resolved[$key] = $object;
 		
 		return $this;
@@ -240,6 +260,11 @@ class Container
 	 */
 	public function registerValue(string $key, mixed $value): self
 	{
+		if(isset($this->_resolved[$key])) // already registered
+		{
+			return $this;
+		}
+		
 		$this->_resolved[$key] = $value;
 		
 		return $this;
@@ -276,8 +301,9 @@ class Container
 		{
 			return $this->_resolved[$key];
 		}
-		if(isset($this->_entries[$key])
-			&& ($resolved = $this->resolve($this->_entries[$key])) !== null
+		if(isset($this->_resolvers[$key])
+			&& $this->_resolvers[$key] instanceof Resolver
+			&& ($resolved = $this->resolve($this->_resolvers[$key])) !== null
 		)
 		{
 			$this->_resolved[$key] = $resolved;
@@ -290,23 +316,23 @@ class Container
 	 * Resolves dependencies in constructor
 	 * or marked with #[Inject] attribute
 	 *
-	 * @param Entry $entry
+	 * @param Resolver $resolver
 	 *
 	 * @return ?object
 	 */
-	public function resolve(Entry $entry): ?object
+	public function resolve(Resolver $resolver): ?object
 	{
-		if($entry instanceof Entry\TypeLazy)
+		if($resolver instanceof Resolver\TypeLazy)
 		{
-			return $entry->resolve($this);
+			return $resolver->resolve($this);
 		}
-		if($entry instanceof Entry\TypeClass)
+		if($resolver instanceof Resolver\TypeClass)
 		{
-			return $entry->resolve($this);
+			return $resolver->resolve($this);
 		}
-		if($entry instanceof Entry\TypeCallable)
+		if($resolver instanceof Resolver\TypeCallable)
 		{
-			return $entry->resolve($this);
+			return $resolver->resolve($this);
 		}
 		
 		return null;
@@ -412,6 +438,10 @@ class Container
 		}
 		
 		$types = $this->_getOwnTypes($propertyType);
+		if(count($types) === 0)
+		{
+			return null;
+		}
 		
 		$object = $this->_resolveTypes($types);
 		
@@ -453,7 +483,7 @@ class Container
 	}
 	
 	/**
-	 * Try to automatically register the entry
+	 * Try to automatically register the resolver
 	 * 
 	 * @param ReflectionProperty|ReflectionParameter $property
 	 * @param string $type
@@ -531,7 +561,7 @@ class Container
 			}
 		}
 		else if($propertyType instanceof ReflectionNamedType
-			|| $propertyType->isBuiltin() === false)
+			&& $propertyType->isBuiltin() === false)
 		{
 			$types[] = $propertyType->getName();
 		}
@@ -633,7 +663,7 @@ class Container
 	 */
 	public function isRegistered(string $key): bool
 	{
-		return isset($this->_entries[$key]);
+		return isset($this->_resolvers[$key]);
 	}
 	
 	/**
@@ -641,7 +671,7 @@ class Container
 	 */
 	public function __debugInfo(): array
 	{
-		return array_keys($this->_entries);
+		return array_keys($this->_resolvers);
 	}
 }
 

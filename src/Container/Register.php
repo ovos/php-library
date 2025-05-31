@@ -9,6 +9,6 @@ namespace Ovos\Container;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Register extends Entry
+abstract class Register extends Resolver
 {
 }

@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Container\Entry;
+namespace Ovos\Container\Resolver;
 
 use Ovos\Container;
-use Ovos\Container\Entry;
+use Ovos\Container\Resolver;
 
 use Closure;
 
@@ -14,7 +14,7 @@ use Closure;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class TypeCallable extends Entry
+class TypeCallable extends Resolver
 {
 	/**
 	 * @var Closure
