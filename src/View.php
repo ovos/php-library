@@ -201,8 +201,8 @@ class View
 			->system;
 		$name = ucfirst($name);
 		
-		/** @var ArrayObject $viewHelpers */
-		if(($namespaces = $systemConfig->get('view_helpers.namespaces')))
+		/** @var ArrayObject $systemConfig */
+		if($namespaces = $systemConfig->getPath(['view_helpers', 'namespaces']))
 		{
 			foreach($namespaces as $namespace)
 			{

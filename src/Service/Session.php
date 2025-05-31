@@ -13,6 +13,11 @@ use function array_key_exists;
 use function ini_set;
 use function session_cache_limiter;
 use function session_get_cookie_params;
+use function session_name;
+use function session_regenerate_id;
+use function session_set_cookie_params;
+use function session_start;
+use function session_write_close;
 
 /**
  * Session
