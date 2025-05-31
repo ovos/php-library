@@ -75,6 +75,7 @@ class Controller
 	 */
 	public function __construct()
 	{
+		// no DI for these two, because we want some controllers to work as standalone objects
 		$this->_app = Application::$instance ?: new Application;
 		$this->_request = $this->_app->getRequest();
 		$this->_request->setControllerInstance($this);
@@ -87,7 +88,7 @@ class Controller
 	 * @param string $action
 	 * @param array $requestParams
 	 *
-	 * @return null|Response
+	 * @return ?Response
 	 */
 	public function dispatch(string $action, array $requestParams = []): ?Response
 	{

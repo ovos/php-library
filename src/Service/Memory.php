@@ -27,14 +27,6 @@ class Memory extends Service
 	protected ?Apcu $_store = null;
 	
 	/**
-	 * @return string
-	 */
-	public function getSymbol(): string
-	{
-		return self::SYMBOL;
-	}
-	
-	/**
 	 * @return Apcu
 	 */
 	public function getStore(): Apcu

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\ArrayObject;
+use Ovos\Container\Inject;
 use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Ovos\Service;
@@ -52,20 +53,15 @@ class Session extends Service
 	protected array $_session = [];
 	
 	/**
-	 * @return string
+	 * @param ArrayObject $config
+	 *
+	 * @throws Exception
 	 */
-	public function getSymbol(): string
+	public function __construct(
+		#[Inject('config')] ArrayObject $config,
+	)
 	{
-		return self::SYMBOL;
-	}
-	
-	/**
-	 */
-	public function __construct()
-	{
-		parent::__construct();
-		
-		$this->_config = $this->_app->getConfig();
+		$this->_config = $config;
 		if($this->_config->cookies === null)
 		{
 			throw new Exception('"cookies" config section is missing.');

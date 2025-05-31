@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\ArrayObject;
+use Ovos\Container\Inject;
 use Ovos\Exception;
 use Ovos\Service;
 
@@ -38,20 +39,15 @@ class Cookies extends Service
 	protected string $_prefix;
 	
 	/**
-	 * @return string
+	 * @param ArrayObject $config
+	 *
+	 * @throws Exception
 	 */
-	public function getSymbol(): string
+	public function __construct(
+		#[Inject('config')] ArrayObject $config,
+	)
 	{
-		return self::SYMBOL;
-	}
-	
-	/**
-	 */
-	public function __construct()
-	{
-		parent::__construct();
-		
-		$this->_config = $this->_app->getConfig();
+		$this->_config = $config;
 		if($this->_config->cookies === null)
 		{
 			throw new Exception('"cookies" config section is missing.');
@@ -61,7 +57,7 @@ class Cookies extends Service
 		$this->_prefix = $this->_cookiesConfig->prefix;
 		$this->stripPrefixes();
 	}
-
+	
 	/**
 	 * Strips cookie prefixes for easier usage of $_COOKIE
 	 */

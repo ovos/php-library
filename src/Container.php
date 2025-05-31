@@ -409,6 +409,11 @@ class Container
 		}
 		
 		$arguments = $attributes[0]->getArguments();
+		if(count($arguments) === 0)
+		{
+			return null;
+		}
+		
 		$object = $this->_resolveTypes($arguments);
 		
 		// return an object if we managed to resolve it
@@ -417,18 +422,22 @@ class Container
 			return $object;
 		}
 		
-		return null;
+		// could not be resolved,
+		// try to autoregister with the key
+		return $this->_resolveValueByType($property, $arguments[0]);
 	}
 	
 	/**
 	 * Match parameters by type (and resolve them)
 	 *
 	 * @param ReflectionProperty|ReflectionParameter $property
+	 * @param ?string $key
 	 *
 	 * @return mixed
 	 */
 	protected function _resolveValueByType(
 		ReflectionProperty|ReflectionParameter $property,
+		?string $key = null,
 	): mixed
 	{
 		$propertyType = $property->getType();
@@ -451,9 +460,11 @@ class Container
 			return $object;
 		}
 		
+		$key = $key ?? $types[0];
+		
 		// could not be resolved,
 		// try to autoregister with the first type
-		return $this->_register($property, $types[0]);
+		return $this->_register($property, $key, $types[0]);
 	}
 	
 	/**
@@ -486,12 +497,14 @@ class Container
 	 * Try to automatically register the resolver
 	 * 
 	 * @param ReflectionProperty|ReflectionParameter $property
+	 * @param string $key
 	 * @param string $type
 	 *
 	 * @return ?object
 	 */
 	public function _register(
 		ReflectionProperty|ReflectionParameter $property,
+		string $key,
 		string $type,
 	): ?object
 	{
@@ -499,8 +512,8 @@ class Container
 			ReflectionAttribute::IS_INSTANCEOF);
 		if(count($attributes) === 0)
 		{
-			$this->registerClass($type, $type);
-			return $this->get($type);
+			$this->registerClass($key, $type);
+			return $this->get($key);
 		}
 		
 		$attribute = $attributes[0];
@@ -509,32 +522,32 @@ class Container
 		if($attributeName === TypeClass::class)
 		{
 			$instance = $attribute->newInstance();
-			$this->registerClass($type, $type,
+			$this->registerClass($key, $type,
 				$instance->getParameters(),
 				$instance->getInitializer(),
 			);
-			return $this->get($type);
+			return $this->get($key);
 		}
 		
 		if($attributeName === TypeLazy::class)
 		{
 			$instance = $attribute->newInstance();
-			$this->registerLazy($type, $type,
+			$this->registerLazy($key, $type,
 				$instance->getParameters(),
 				$instance->getInitializer(),
 			);
-			return $this->get($type);
+			return $this->get($key);
 		}
 		
 		if($attributeName === TypeCallable::class)
 		{
 			/** @var TypeCallable $instance */
 			$instance = $attribute->newInstance();
-			$this->registerCallable($type,
+			$this->registerCallable($key,
 				$instance->getCallable(),
 				$instance->getParameters(),
 			);
-			return $this->get($type);
+			return $this->get($key);
 		}
 		
 		return null;

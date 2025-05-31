@@ -173,7 +173,7 @@ class Application
 	{
 		try
 		{
-			$dispatcher = new Dispatcher;
+			$dispatcher = $this->_container->getClass(Dispatcher::class, Dispatcher::class);
 			if($response = $dispatcher->dispatch($request))
 			{
 				$this->setResponse($response);

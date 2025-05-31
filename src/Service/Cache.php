@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
-use Bo2Go\App;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Container;
@@ -50,20 +49,13 @@ class Cache extends Service
 	protected ?Apcu $_perishableStore = null;
 	
 	/**
-	 * @var array
+	 * @param ArrayObject $config
 	 */
-	protected array $_dependsOn = [
-		Events::SYMBOL,
-	];
-	
-	/**
-	 */
-	public function __construct()
+	public function __construct(
+		ArrayObject $config,
+	)
 	{
-		parent::__construct();
-		
-		$this->_config = $this->_app->getConfig()->cache;
-		$this->setEnabled($this->_config->enabled);
+		$this->_config = $config;
 	}
 	
 	/**
@@ -71,6 +63,7 @@ class Cache extends Service
 	 * @param ?string $key
 	 *
 	 * @return void
+	 * @throws Exception
 	 */
 	public static function register(Container $container,
 		?string $key = null,
@@ -79,20 +72,20 @@ class Cache extends Service
 		$class = static::class;
 		
 		$config = $container->get(Application::KEY_CONFIG);
+		if($config->cache === null)
+		{
+			throw new Exception('"cache" config section is missing.');
+		}
+		
 		if($config->cache->enabled === false)
 		{
 			$class = Disabled::class;
 		}
 		
 		$key = $key ?? static::SYMBOL;
-		$container->registerClass($key, $class);
-	}
-	/**
-	 * @return string
-	 */
-	public function getSymbol(): string
-	{
-		return self::SYMBOL;
+		$container->registerClass($key, $class, [
+			'config' => $config->cache,
+		]);
 	}
 	
 	/**

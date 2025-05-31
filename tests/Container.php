@@ -164,7 +164,6 @@ class Container extends Test
 			Service2::class
 		);
 		
-		/** @var BaseArrayObject $instance */
 		$instance = $container->get(Service2::class);
 		
 		return $instance->config->offsetGet('username') === 'root';
@@ -180,7 +179,6 @@ class Container extends Test
 			Service3::class
 		);
 		
-		/** @var BaseArrayObject $instance */
 		$instance = $container->get(Service3::class);
 		
 		return $instance->config->offsetGet('username') === 'root';
@@ -223,6 +221,18 @@ class Container extends Test
 		
 		return $instance->dependency1 === null
 			&& $instance->dependency2 === null;
+	}
+	
+	public function attribuesAutomaticRegistrationParameterKey(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Service6::class,
+			Service6::class
+		);
+		
+		$instance = $container->get(Service6::class);
+		
+		return $container->get('dependency1') instanceof Dependency1;
 	}
 }
 
@@ -279,6 +289,17 @@ class Service5
 {
 	public ?Dependency1 $dependency1 = null;
 	public ?Dependency2 $dependency2 = null;
+}
+
+class Service6
+{
+	public function __construct
+	(
+		#[Inject('dependency1')]
+		public Dependency1 $dependency1,
+	)
+	{
+	}
 }
 
 class Dependency1

@@ -10,7 +10,6 @@ use Ovos\Logger as LoggerTrait;
 use Ovos\Service;
 use Throwable;
 
-use function Ovos\app;
 use function is_array;
 use function is_numeric;
 use function is_string;
@@ -56,14 +55,6 @@ class Logger extends Service
 		'~^password.*~',
 		'~Authorization~',
 	];
-	
-	/**
-	 * @return string
-	 */
-	public function getSymbol(): string
-	{
-		return self::SYMBOL;
-	}
 	
 	/**
 	 * @param array $remove
@@ -142,7 +133,7 @@ class Logger extends Service
 	{
 		// prepend
 		$prepend = date('c ');
-		if(app()->isInterfaceHttp())
+		if($this->_app->isInterfaceHttp())
 		{
 			$prepend.= sprintf
 			(
@@ -153,7 +144,7 @@ class Logger extends Service
 				$_SERVER['HTTP_USER_AGENT'] ?? ''
 			);
 		}
-		else if(app()->isInterfaceCli())
+		else if($this->_app->isInterfaceCli())
 		{
 			$prepend.= 'CLI: ' . (isset($_SERVER['argv']) ?
 				implode(' ', $_SERVER['argv']) : 'no arguments');
