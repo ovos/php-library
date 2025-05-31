@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Controller\Plugin;
+use Ovos\Container\Resolver\TypeClass;
 use Ovos\Exception\RuntimeException;
 use ReflectionMethod;
 
@@ -36,6 +37,11 @@ class Controller
 	 * @var string
 	 */	
 	public const string WILDCARD = '*';
+	
+	/**
+	 * @var Container
+	 */
+	protected Container $_container;
 	
 	/**
 	 * @var Application
@@ -75,8 +81,10 @@ class Controller
 	 */
 	public function __construct()
 	{
-		// no DI for these two, because we want some controllers to work as standalone objects
-		$this->_app = Application::$instance ?: new Application;
+		$this->_container = container();
+		$this->_app = $this->_container
+			->getClass(Application::class, Application::class);
+		
 		$this->_request = $this->_app->getRequest();
 		$this->_request->setControllerInstance($this);
 		
@@ -319,7 +327,7 @@ class Controller
 			return;
 		}
 		
-		// handle adding & skipping of controller specific plugins
+		// handle adding & skipping of controller-specific plugins
 		$groups = $systemConfig->plugins->groups;
 		if($groups !== null)
 		{
@@ -421,7 +429,7 @@ class Controller
 		{
 			foreach($controllerPlugins->skip as $skip)
 			{
-				// avoid manipulating current object during iteration 
+				// avoid manipulating the current object during iteration 
 				$offsetsToUnset = [];
 				
 				foreach($plugins as $offset => $plugin)
@@ -478,14 +486,17 @@ class Controller
 		foreach($plugins as $plugin)
 		{
 			$pluginClass = str_starts_with($plugin, '\\')
-				? $plugin : 'Plugins\\' . $plugin;
+				? $plugin
+				: 'Plugins\\' . $plugin;
 			
-			if(!class_exists($pluginClass))
+			if(class_exists($pluginClass) === false)
 			{
 				throw new RuntimeException('Plugin class does not exist "%s".', $pluginClass);
 			}
 			
-			$this->addPlugin(new $pluginClass);
+			$instance = $this->_container
+				->resolve(new TypeClass($pluginClass));
+			$this->addPlugin($instance);
 		}
 		
 		return $this;

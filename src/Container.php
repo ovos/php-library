@@ -76,7 +76,7 @@ class Container
 	}
 	
 	/**
-	 * Get a class
+	 * Get a class and register it if needed
 	 *
 	 * @param string $key
 	 * @param string $class
@@ -139,7 +139,7 @@ class Container
 	}
 	
 	/**
-	 * Get a lazy object
+	 * Get a lazy object and register it if needed
 	 *
 	 * @param string $key
 	 * @param string $class
@@ -189,7 +189,7 @@ class Container
 	}
 	
 	/**
-	 * Get a callable
+	 * Get a callable and register it if needed
 	 *
 	 * @param string $key
 	 * @param callable $callable
@@ -232,7 +232,7 @@ class Container
 	}
 	
 	/**
-	 * Get an object
+	 * Get an object and register it if needed
 	 *
 	 * @param string $key
 	 * @param object $object
@@ -271,7 +271,7 @@ class Container
 	}
 	
 	/**
-	 * Get a value
+	 * Get a value and register it if needed
 	 *
 	 * @param string $key
 	 * @param mixed $value
@@ -339,8 +339,11 @@ class Container
 	}
 	
 	/**
+	 * Resolve constructor parameters
+	 * 
 	 * @param ReflectionClass $reflector
 	 * @param array $values
+	 *
 	 * @return array
 	 */
 	public function resolveConstructor(ReflectionClass $reflector,
@@ -352,26 +355,45 @@ class Container
 			return [];
 		}
 		
-		$parameters = $constructor->getParameters();
-		
-		return array_map
-		(
-			function(ReflectionParameter $parameter) use ($values)
+		$parameters = [];
+		foreach($constructor->getParameters() as $parameter)
+		{
+			if(($resolved
+				= $this->_resolveParameter($parameter, $values)) === null)
 			{
-				$resolved = $this->_resolveValueByName($parameter->getName(),
-					$values)
-					?? $this->_resolveValueByKey($parameter)
-					?? $this->_resolveValueByType($parameter);
-				
-				if($resolved !== null)
-				{
-					return $this->_processAttributes($parameter, $resolved);
-				}
-				
-				return null;
-			},
-			$parameters
-		);
+				continue;
+			}
+			
+			$parameters[$parameter->getName()] = $resolved;
+		}
+		
+		return $parameters;
+	}
+	
+	/**
+	 * Resolve a single constructor parameter
+	 * 
+	 * @param ReflectionParameter $parameter
+	 * @param array $values
+	 *
+	 * @return mixed
+	 */
+	protected function _resolveParameter(
+		ReflectionParameter $parameter,
+		array $values = [],
+	): mixed
+	{
+		$resolved = $this->_resolveValueByName($parameter->getName(),
+			$values)
+			?? $this->_resolveValueByKey($parameter)
+			?? $this->_resolveValueByType($parameter);
+		
+		if($resolved !== null)
+		{
+			return $this->_processAttributes($parameter, $resolved);
+		}
+		
+		return null;
 	}
 	
 	/**
@@ -468,6 +490,8 @@ class Container
 	}
 	
 	/**
+	 * Resolve a list of types (return the first matching object)
+	 * 
 	 * @param array $types
 	 *
 	 * @return ?object
@@ -554,6 +578,8 @@ class Container
 	}
 	
 	/**
+	 * Loop properties and return only the own types
+	 * 
 	 * @param ?ReflectionType $propertyType
 	 *
 	 * @return array
@@ -583,6 +609,8 @@ class Container
 	}
 	
 	/**
+	 * Resolve object's properties
+	 * 
 	 * @param ReflectionClass $reflector
 	 * @param object $object
 	 * @param bool $lazy
@@ -614,6 +642,8 @@ class Container
 	}
 	
 	/**
+	 * Process optional attributes
+	 * 
 	 * @param ReflectionProperty|ReflectionParameter $property
 	 * @param mixed $resolved
 	 *
@@ -636,6 +666,8 @@ class Container
 	}
 	
 	/**
+	 * Set a value on an object's property
+	 * 
 	 * @param ReflectionProperty $property
 	 * @param object $object
 	 * @param mixed $resolved
