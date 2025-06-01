@@ -164,7 +164,6 @@ class Container extends Test
 			Service2::class
 		);
 		
-		/** @var BaseArrayObject $instance */
 		$instance = $container->get(Service2::class);
 		
 		return $instance->config->offsetGet('username') === 'root';
@@ -180,13 +179,25 @@ class Container extends Test
 			Service3::class
 		);
 		
-		/** @var BaseArrayObject $instance */
 		$instance = $container->get(Service3::class);
 		
 		return $instance->config->offsetGet('username') === 'root';
 	}
 	
-	public function attribuesAutomaticRegistration(): bool
+	public function attribuesAutomaticRegistrationParameters(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Service1::class,
+			Service1::class,
+		);
+		
+		$instance = $container->get(Service1::class);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->dependency2 instanceof Dependency2;
+	}
+	
+	public function attribuesAutomaticRegistrationProperties(): bool
 	{
 		$container = new BaseContainer;
 		$container->registerClass(Service4::class,
@@ -197,6 +208,31 @@ class Container extends Test
 		
 		return $instance->dependency1 instanceof Dependency1
 			&& $instance->dependency2 instanceof Dependency2;
+	}
+	
+	public function attribuesAutomaticNoRegistrationProperties(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Service5::class,
+			Service5::class,
+		);
+		
+		$instance = $container->get(Service5::class);
+		
+		return $instance->dependency1 === null
+			&& $instance->dependency2 === null;
+	}
+	
+	public function attribuesAutomaticRegistrationParameterKey(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Service6::class,
+			Service6::class
+		);
+		
+		$instance = $container->get(Service6::class);
+		
+		return $container->get('dependency1') instanceof Dependency1;
 	}
 }
 
@@ -247,6 +283,23 @@ class Service4
 	#[TypeLazy]
 	#[Inject]
 	public ?Dependency2 $dependency2 = null;
+}
+
+class Service5
+{
+	public ?Dependency1 $dependency1 = null;
+	public ?Dependency2 $dependency2 = null;
+}
+
+class Service6
+{
+	public function __construct
+	(
+		#[Inject('dependency1')]
+		public Dependency1 $dependency1,
+	)
+	{
+	}
 }
 
 class Dependency1

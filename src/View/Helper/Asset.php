@@ -35,7 +35,9 @@ class Asset extends Helper
 	{
 		parent::__construct();
 		
-		$this->_memoryService = Services::getInstance()->get(Memory::SYMBOL);
+		/** @var Memory $memoryService */
+		$memoryService = $this->_app->getServices()->get(Memory::SYMBOL);
+		$this->_memoryService = $memoryService;
 	}
 	
 	/**

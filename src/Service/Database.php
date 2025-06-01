@@ -29,14 +29,6 @@ class Database extends Service
 	public const string SYMBOL = 'database';
 	
 	/**
-	 * @return string
-	 */
-	public function getSymbol(): string
-	{
-		return self::SYMBOL;
-	}
-	
-	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;

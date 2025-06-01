@@ -5,9 +5,9 @@ namespace Ovos\Config;
 
 use Ovos\Arrays;
 use Ovos\ArrayObject;
+use Ovos\Container\Inject;
 use Ovos\Environment;
 use Ovos\Service\Memory;
-use Ovos\Services;
 
 use function basename;
 use function filemtime;
@@ -27,11 +27,12 @@ class Loader
 	protected Memory $_memoryService;
 	
 	/**
+	 * @param Memory $memoryService
 	 */
-	public function __construct()
+	public function __construct(
+		#[Inject(Memory::SYMBOL)] Memory $memoryService,
+	)
 	{
-		/** @var Memory $memoryService */
-		$memoryService = Services::getInstance()->get(Memory::SYMBOL);
 		$this->_memoryService = $memoryService;
 	}
 	

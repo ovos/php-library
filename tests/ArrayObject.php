@@ -37,4 +37,12 @@ class ArrayObject extends Test
 	{
 		return $this->_arrayObject->getPath(['system', 'database', 'type']) === 'mysql';
 	}
+	
+	public function get(): bool
+	{
+		$arrayObject = new BaseArrayObject;
+		$arrayObject->verified = true;
+		
+		return $arrayObject->verified === true;
+	}
 }

@@ -50,7 +50,7 @@ class Messages extends Helper implements Countable
 		parent::__construct();
 		
 		$this->_session = services()->session;
-		if($this->_session->isEnabled())
+		if($this->_session !== null)
 		{
 			$this->_items = &$this->_session->{self::SESSION_NAMESPACE};
 		}

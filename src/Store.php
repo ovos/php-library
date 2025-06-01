@@ -12,6 +12,13 @@ namespace Ovos;
 abstract class Store
 {
 	/**
+	 * Container
+	 *
+	 * @var Container
+	 */
+	protected Container $_container;
+	
+	/**
 	 * Application
 	 *
 	 * @var Application
@@ -22,6 +29,7 @@ abstract class Store
 	 */
 	public function __construct()
 	{
-		$this->_app = app();
+		$this->_container = container();
+		$this->_app = $this->_container->get(Application::class);
 	}
 }

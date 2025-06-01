@@ -3,11 +3,12 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
+use Ovos\Application;
 use Ovos\ArrayObject;
+use Ovos\Container;
 use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Ovos\Service;
-use Ovos\Store\Cache as CacheStore;
 use Ovos\Store\Apcu;
 use Ovos\Store\Redis;
 use Ovos\Store\Redisearch;
@@ -48,28 +49,43 @@ class Cache extends Service
 	protected ?Apcu $_perishableStore = null;
 	
 	/**
-	 * @var array
+	 * @param ArrayObject $config
 	 */
-	protected array $_dependsOn = [
-		Events::SYMBOL,
-	];
-	
-	/**
-	 */
-	public function __construct()
+	public function __construct(
+		ArrayObject $config,
+	)
 	{
-		parent::__construct();
-		
-		$this->_config = $this->_app->getConfig()->cache;
-		$this->setEnabled($this->_config->enabled);
+		$this->_config = $config;
 	}
 	
 	/**
-	 * @return string
+	 * @param Container $container
+	 * @param ?string $key
+	 *
+	 * @return void
+	 * @throws Exception
 	 */
-	public function getSymbol(): string
+	public static function register(Container $container,
+		?string $key = null,
+	): void
 	{
-		return self::SYMBOL;
+		$class = static::class;
+		
+		$config = $container->get(Application::KEY_CONFIG);
+		if($config->cache === null)
+		{
+			throw new Exception('"cache" config section is missing.');
+		}
+		
+		if($config->cache->enabled === false)
+		{
+			$class = Disabled::class;
+		}
+		
+		$key = $key ?? static::SYMBOL;
+		$container->registerClass($key, $class, [
+			'config' => $config->cache,
+		]);
 	}
 	
 	/**
@@ -80,7 +96,8 @@ class Cache extends Service
 		if($this->_persistentConnection === null)
 		{
 			// move to container when DI is available
-			$this->_persistentConnection = new Connection($this->_config->persistent);
+			$this->_persistentConnection = $this->_container
+				->getValue(Connection::class, new Connection($this->_config->persistent));
 			if($this->_persistentConnection->connect() === false)
 			{
 				return null;

@@ -5,6 +5,7 @@ namespace Ovos;
 
 use Ovos\Form\Element;
 use Ovos\View\Helper;
+use Ovos\Service\Events;
 use Throwable;
 
 use function call_user_func_array;
@@ -42,9 +43,24 @@ class View
 	public const string SUFFIX = '.phtml';
 	
 	/**
+	 * @var Container
+	 */
+	protected Container $_container;
+	
+	/**
 	 * @var Application
 	 */
 	protected Application $_app;
+	
+	/**
+	 * @var Request
+	 */
+	protected Request $_request;
+	
+	/**
+	 * @var Events
+	 */
+	protected Events $_eventsService;
 	
 	/**
 	 * @var ?string
@@ -65,20 +81,29 @@ class View
 	 * @param ?string $viewScriptFile
 	 * @param array $vars
 	 */
-	public function __construct(?string $viewScriptFile = null, array $vars = [])
+	public function __construct(
+		?string $viewScriptFile = null,
+		array $vars = [],
+	)
 	{
 		$this->_viewScriptFile = $viewScriptFile;
 		
-		$this->_app = app();
+		$this->_container = container();
+		$this->_app = $this->_container
+			->getClass(Application::class, Application::class);
+		$this->_request = $this->_app->getRequest();
+		$this->_eventsService = $this->_container->get(Events::SYMBOL);
+		
 		$this->app = $this->_app;
 		$this->interface = $this->_app->getInterface();
 		$this->config = $this->_app->getConfig();
 		$this->request = $this->_app->getRequest();
-		$this->url = $this->_app->getRequest()->getUrl();
-		$this->controller = $this->_app->getRequest()->getController();
-		$this->controllerInstance = $this->_app->getRequest()->getControllerInstance();
-		$this->action = $this->_app->getRequest()->getAction();
-		$this->locale = $this->_app->getRequest()->getLocale();
+		
+		$this->url = $this->_request->getUrl();
+		$this->controller = $this->_request->getController();
+		$this->controllerInstance = $this->_request->getControllerInstance();
+		$this->action = $this->_request->getAction();
+		$this->locale = $this->_request->getLocale();
 		$this->client = Client::class;
 		
 		// assign additional variables
@@ -146,13 +171,10 @@ class View
 	 */
 	public static function __callStatic(string $name, array $arguments): mixed
 	{
-		if(!isset(self::$_helpers[$name]))
+		if(isset(self::$_helpers[$name]) === false)
 		{
 			$helper = self::getHelperClass($name);
-			$instance = new $helper;
-			
-			//$reflector = new ReflectionClass($helper);
-			//$instance = $reflector->newInstanceArgs($arguments);
+			$instance = container()->getClass($helper, $helper);
 			
 			self::$_helpers[$name] = $instance;
 		}
@@ -174,11 +196,13 @@ class View
 	 */
 	public static function getHelperClass(string $name): string
 	{
-		$systemConfig = app()->getConfig()->system;
+		$systemConfig = container()
+			->get(Application::KEY_CONFIG)
+			->system;
 		$name = ucfirst($name);
 		
-		/** @var ArrayObject $viewHelpers */
-		if(($namespaces = $systemConfig->get('view_helpers.namespaces')))
+		/** @var ArrayObject $systemConfig */
+		if($namespaces = $systemConfig->getPath(['view_helpers', 'namespaces']))
 		{
 			foreach($namespaces as $namespace)
 			{
@@ -204,7 +228,7 @@ class View
 	{
 		if($value === null)
 		{
-			return $value;
+			return null;
 		}
 		
 		if(!is_string($value))
@@ -228,7 +252,10 @@ class View
 	 *
 	 * @throws Exception
 	 */
-	public function render(?string $viewScriptFile = null, array $variables = []): string
+	public function render(
+		?string $viewScriptFile = null,
+		array $variables = [],
+	): string
 	{
 		if($viewScriptFile === null)
 		{
@@ -253,9 +280,9 @@ class View
 		}
 		catch(Throwable $throwable)
 		{
-			services()->events->add($throwable);
+			$this->_eventsService->add($throwable);
 			
-			// do not render buggy html
+			// do not render buggy HTML
 			// and prevent previous output buffers to be outputted
 			ob_end_clean();
 			return '';
@@ -270,7 +297,10 @@ class View
 	 *
 	 * @throws Exception
 	 */
-	public function partial(?string $viewScriptFile = null, array $variables = []): string
+	public function partial(
+		?string $viewScriptFile = null,
+		array $variables = [],
+	): string
 	{
 		$view = new self;
 		

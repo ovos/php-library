@@ -46,7 +46,7 @@ class Users extends Template
 		}
 		
 		$auth = services()->auth;
-		if($auth->isEnabled() && ($user = $auth->getUser()))
+		if($auth !== null && ($user = $auth->getUser()))
 		{
 			$model->{$this->_update[__FUNCTION__]} = $user->id;
 		}
@@ -63,7 +63,7 @@ class Users extends Template
 		}
 		
 		$auth = services()->auth;
-		if($auth->isEnabled() && ($user = $auth->getUser()))
+		if($auth !== null && ($user = $auth->getUser()))
 		{
 			$model->{$this->_update[__FUNCTION__]} = $user->id;
 		}

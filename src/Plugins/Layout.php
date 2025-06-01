@@ -72,14 +72,6 @@ class Layout extends Plugin
 	}
 	
 	/**
-	 * @return string
-	 */
-	public static function getSymbol(): string
-	{
-		return self::SYMBOL;
-	}
-	
-	/**
 	 * @return void
 	 */
 	public function preDispatch(): void

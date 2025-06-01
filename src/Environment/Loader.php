@@ -5,7 +5,7 @@ namespace Ovos\Environment;
 
 use Ovos\Environment;
 use Ovos\Service\Memory;
-use Ovos\Services;
+use Ovos\Container\Inject;
 
 use function basename;
 
@@ -23,11 +23,12 @@ class Loader
 	protected Memory $_memoryService;
 	
 	/**
+	 * @param Memory $memoryService
 	 */
-	public function __construct()
+	public function __construct(
+		#[Inject(Memory::SYMBOL)] Memory $memoryService,
+	)
 	{
-		/** @var Memory $memoryService */
-		$memoryService = Services::getInstance()->get(Memory::SYMBOL);
 		$this->_memoryService = $memoryService;
 	}
 	

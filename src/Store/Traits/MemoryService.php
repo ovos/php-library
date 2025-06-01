@@ -25,7 +25,7 @@ trait MemoryService
 	public function initMemoryService(): void
 	{
 		/** @var Memory $memoryService */
-		$memoryService = Services::getInstance()->get(Memory::SYMBOL);
+		$memoryService = $this->_app->getServices()->get(Memory::SYMBOL);
 		$this->_memoryService = $memoryService;
 	}
 	
