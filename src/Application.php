@@ -162,8 +162,6 @@ class Application
 		$router->route($request);
 		
 		$this->dispatch($request);
-		//var_dump($_SESSION['user']);
-		//var_dump($_SESSION['scores']['test']);
 	}
 	
 	/**
