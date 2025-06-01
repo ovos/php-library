@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\ArrayObject;
+use Ovos\Container;
 use Ovos\Container\Inject;
 use Ovos\Exception;
 use Ovos\Redis\Connection;
@@ -56,6 +57,22 @@ class Session extends Service
 	 * @var array
 	 */
 	protected array $_session = [];
+	
+	/**
+	 * @param Container $container
+	 * @param ?string $key
+	 *
+	 * @return void
+	 */
+	public static function register(Container $container,
+		?string $key = null,
+	): void
+	{
+		$key = $key ?? static::SYMBOL;
+		$container->registerClass($key, static::class);
+			// instantiate session service immediately
+			//->get($key);
+	}
 	
 	/**
 	 * @param ArrayObject $config

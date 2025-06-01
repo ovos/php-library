@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Container\Resolver;
+use Ovos\Container\Injector;
 use Ovos\Container\Inject;
 use Ovos\Container\Injected;
 use Ovos\Container\Register;
@@ -19,7 +19,6 @@ use ReflectionNamedType;
 use ReflectionUnionType;
 use ReflectionProperty;
 
-use function array_map;
 use function array_keys;
 use function count;
 
@@ -32,9 +31,9 @@ use function count;
 class Container
 {
 	/**
-	 * @var Resolver[]
+	 * @var Injector[]
 	 */
-	protected array $_resolvers = [];
+	protected array $_injectors = [];
 	
 	/**
 	 * @var object[]
@@ -62,12 +61,12 @@ class Container
 		?callable $initializer = null,
 	): self
 	{
-		if(isset($this->_resolvers[$key])) // already registered
+		if(isset($this->_injectors[$key])) // already registered
 		{
 			return $this;
 		}
 		
-		$this->_resolvers[$key] = new Resolver\TypeClass($class,
+		$this->_injectors[$key] = new Injector\TypeClass($class,
 			$parameters,
 			$initializer,
 		);
@@ -83,15 +82,15 @@ class Container
 	 * @param array $parameters
 	 * @param ?callable $initializer
 	 *
-	 * @return ?object
+	 * @return object
 	 */
 	public function getClass(string $key,
 		string $class,
 		array $parameters = [],
 		?callable $initializer = null,
-	): ?object
+	): object
 	{
-		if(($resolved = $this->get($key)) !== null)
+		if(($resolved = $this->resolve($key)) !== null)
 		{
 			return $resolved;
 		}
@@ -117,7 +116,7 @@ class Container
 		?callable $initializer = null,
 	): self
 	{
-		if(isset($this->_resolvers[$key])) // already registered
+		if(isset($this->_injectors[$key])) // already registered
 		{
 			return $this;
 		}
@@ -132,7 +131,7 @@ class Container
 			);
 		}
 		
-		$this->_resolvers[$key] = new Resolver\TypeLazy($class,
+		$this->_injectors[$key] = new Injector\TypeLazy($class,
 			$parameters,
 			$initializer,
 		);
@@ -148,15 +147,15 @@ class Container
 	 * @param array $parameters
 	 * @param ?callable $initializer
 	 *
-	 * @return ?object
+	 * @return object
 	 */
 	public function getLazy(string $key,
 		string $class,
 		array $parameters = [],
 		?callable $initializer = null,
-	): ?object
+	): object
 	{
-		if(($resolved = $this->get($key)) !== null)
+		if(($resolved = $this->resolve($key)) !== null)
 		{
 			return $resolved;
 		}
@@ -180,12 +179,12 @@ class Container
 		array $parameters = [],
 	): self
 	{
-		if(isset($this->_resolvers[$key])) // already registered
+		if(isset($this->_injectors[$key])) // already registered
 		{
 			return $this;
 		}
 		
-		$this->_resolvers[$key] = new Resolver\TypeCallable($callable,
+		$this->_injectors[$key] = new Injector\TypeCallable($callable,
 			$parameters,
 		);
 		
@@ -199,14 +198,14 @@ class Container
 	 * @param callable $callable
 	 * @param array $parameters
 	 *
-	 * @return ?object
+	 * @return object
 	 */
 	public function getCallable(string $key,
 		callable $callable,
 		array $parameters = [],
-	): ?object
+	): object
 	{
-		if(($resolved = $this->get($key)) !== null)
+		if(($resolved = $this->resolve($key)) !== null)
 		{
 			return $resolved;
 		}
@@ -222,18 +221,23 @@ class Container
 	 *
 	 * @param string $key
 	 * @param object $object
+	 * @param ?callable $initializer
 	 *
 	 * @return self
 	 */
-	public function registerObject(string $key, object $object): self
+	public function registerObject(string $key,
+		object $object,
+		?callable $initializer = null,
+	): self
 	{
-		if(isset($this->_resolved[$key])) // already registered
+		if(isset($this->_injectors[$key])) // already registered
 		{
 			return $this;
 		}
 		
-		$this->_resolvers[$key] = $object;
-		$this->_resolved[$key] = &$this->_resolvers[$key];
+		$this->_injectors[$key] = new Injector\TypeObject($object,
+			$initializer,
+		);
 		
 		return $this;
 	}
@@ -248,7 +252,7 @@ class Container
 	 */
 	public function getObject(string $key, object $object): ?object
 	{
-		if(($resolved = $this->get($key)) !== null)
+		if(($resolved = $this->resolve($key)) !== null)
 		{
 			return $resolved;
 		}
@@ -259,8 +263,7 @@ class Container
 	}
 	
 	/**
-	 * Register an instance or a lazy object
-	 * No need to resolve dependencies
+	 * Register any value without resolving dependencies
 	 *
 	 * @param string $key
 	 * @param mixed $value
@@ -269,13 +272,13 @@ class Container
 	 */
 	public function registerValue(string $key, mixed $value): self
 	{
-		if(isset($this->_resolved[$key])) // already registered
+		if(isset($this->_injectors[$key])) // already registered
 		{
 			return $this;
 		}
 		
-		$this->_resolvers[$key] = $value;
-		$this->_resolved[$key] = &$this->_resolvers[$key];
+		$this->_injectors[$key] = $value;
+		$this->_resolved[$key] = &$this->_injectors[$key];
 		
 		return $this;
 	}
@@ -290,7 +293,7 @@ class Container
 	 */
 	public function getValue(string $key, mixed $value): mixed
 	{
-		if(($resolved = $this->get($key)) !== null)
+		if(($resolved = $this->resolve($key)) !== null)
 		{
 			return $resolved;
 		}
@@ -305,60 +308,67 @@ class Container
 	 *
 	 * @param string $key
 	 *
-	 * @return ?object
+	 * @return mixed
 	 */
-	public function get(string $key): ?object
+	public function get(string $key): mixed
+	{
+		if(($resolved = $this->resolve($key)) === null)
+		{
+			throw new Exception('Dependency "%s" not registered.');
+		}
+		
+		return $resolved;
+	}
+	
+	/**
+	 * @param string $key
+	 *
+	 * @return mixed
+	 */
+	public function resolve(string $key): mixed
 	{
 		if(isset($this->_resolved[$key]))
 		{
 			return $this->_resolved[$key];
 		}
-		if(isset($this->_resolvers[$key])
-			&& $this->_resolvers[$key] instanceof Resolver
-			&& ($resolved = $this->resolve($this->_resolvers[$key])) !== null
-		)
+		
+		if(isset($this->_injectors[$key]) === false)
 		{
-			$this->_resolved[$key] = $resolved;
+			return null;
+		}
+			
+		if(($this->_injectors[$key] instanceof Injector) === false)
+		{
+			return null;
 		}
 		
-		return $this->_resolved[$key] ?? null;
+		return $this->_resolved[$key]
+			= $this->inject($this->_injectors[$key]);
 	}
 	
 	/**
-	 * Resolves dependencies in constructor
+	 * Injects in constructor
 	 * or marked with #[Inject] attribute
+	 * Does not register the resolver in the container
 	 *
-	 * @param Resolver $resolver
+	 * @param Injector $injector
 	 *
-	 * @return ?object
+	 * @return object
 	 */
-	public function resolve(Resolver $resolver): ?object
+	public function inject(Injector $injector): object
 	{
-		if($resolver instanceof Resolver\TypeLazy)
-		{
-			return $resolver->resolve($this);
-		}
-		if($resolver instanceof Resolver\TypeClass)
-		{
-			return $resolver->resolve($this);
-		}
-		if($resolver instanceof Resolver\TypeCallable)
-		{
-			return $resolver->resolve($this);
-		}
-		
-		return null;
+		return $injector->inject($this);
 	}
 	
 	/**
-	 * Resolve constructor parameters
+	 * Inject constructor parameters
 	 * 
 	 * @param ReflectionClass $reflector
 	 * @param array $values
 	 *
 	 * @return array
 	 */
-	public function resolveConstructor(ReflectionClass $reflector,
+	public function injectConstructor(ReflectionClass $reflector,
 		array $values = [],
 	): array
 	{
@@ -371,7 +381,7 @@ class Container
 		foreach($constructor->getParameters() as $parameter)
 		{
 			if(($resolved
-				= $this->_resolveParameter($parameter, $values)) === null)
+				= $this->_injectParameter($parameter, $values)) === null)
 			{
 				continue;
 			}
@@ -383,22 +393,22 @@ class Container
 	}
 	
 	/**
-	 * Resolve a single constructor parameter
+	 * Inject a single constructor parameter
 	 * 
 	 * @param ReflectionParameter $parameter
 	 * @param array $values
 	 *
 	 * @return mixed
 	 */
-	protected function _resolveParameter(
+	protected function _injectParameter(
 		ReflectionParameter $parameter,
 		array $values = [],
 	): mixed
 	{
-		$resolved = $this->_resolveValueByName($parameter->getName(),
+		$resolved = $this->_injectValueByName($parameter->getName(),
 			$values)
-			?? $this->_resolveValueByKey($parameter)
-			?? $this->_resolveValueByType($parameter);
+			?? $this->_injectValueByKey($parameter)
+			?? $this->_injectValueByType($parameter);
 		
 		if($resolved !== null)
 		{
@@ -416,7 +426,7 @@ class Container
 	 *
 	 * @return mixed
 	 */
-	protected function _resolveValueByName(string $parameterName,
+	protected function _injectValueByName(string $parameterName,
 		array $parameters): mixed
 	{
 		if(array_key_exists($parameterName, $parameters) !== false)
@@ -432,7 +442,7 @@ class Container
 	 *
 	 * @return mixed
 	 */
-	protected function _resolveValueByKey(
+	protected function _injectValueByKey(
 		ReflectionProperty|ReflectionParameter $property,
 	): mixed
 	{
@@ -458,7 +468,7 @@ class Container
 		
 		// could not be resolved,
 		// try to autoregister with the key
-		return $this->_resolveValueByType($property, $arguments[0]);
+		return $this->_injectValueByType($property, $arguments[0]);
 	}
 	
 	/**
@@ -469,7 +479,7 @@ class Container
 	 *
 	 * @return mixed
 	 */
-	protected function _resolveValueByType(
+	protected function _injectValueByType(
 		ReflectionProperty|ReflectionParameter $property,
 		?string $key = null,
 	): mixed
@@ -520,7 +530,7 @@ class Container
 		foreach($types as $type)
 		{
 			// take the first one that we could resolve
-			if(($object = $this->get($type)) !== null)
+			if(($object = $this->resolve($type)) !== null)
 			{
 				return $object;
 			}
@@ -642,13 +652,13 @@ class Container
 				continue;
 			}
 			
-			$resolved = $this->_resolveValueByKey($property)
-				?? $this->_resolveValueByType($property);
+			$resolved = $this->_injectValueByKey($property)
+				?? $this->_injectValueByType($property);
 			
 			if($resolved !== null)
 			{
 				$resolved = $this->_processAttributes($property, $resolved);
-				$this->_inject($property, $object, $resolved, $lazy);
+				$this->_injectValue($property, $object, $resolved, $lazy);
 			}
 		}
 	}
@@ -687,7 +697,7 @@ class Container
 	 *
 	 * @return void
 	 */
-	protected function _inject(ReflectionProperty $property,
+	protected function _injectValue(ReflectionProperty $property,
 		object $object,
 		mixed $resolved,
 		bool $lazy,
@@ -720,7 +730,7 @@ class Container
 	 */
 	public function isRegistered(string $key): bool
 	{
-		return isset($this->_resolvers[$key]);
+		return isset($this->_injectors[$key]);
 	}
 	
 	/**
@@ -728,7 +738,7 @@ class Container
 	 */
 	public function __debugInfo(): array
 	{
-		return array_keys($this->_resolvers);
+		return array_keys($this->_injectors);
 	}
 }
 

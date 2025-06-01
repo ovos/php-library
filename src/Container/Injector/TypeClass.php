@@ -1,13 +1,14 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Container\Resolver;
+namespace Ovos\Container\Injector;
 
 use Ovos\Container;
-use Ovos\Container\Resolver;
+use Ovos\Container\Injector;
+use Ovos\Container\Traits\TraitParameters;
+use Ovos\Container\Traits\TraitInitializer;
 
 use ReflectionClass;
-use Closure;
 
 /**
  * TypeClass
@@ -15,17 +16,15 @@ use Closure;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class TypeClass extends Resolver
+class TypeClass extends Injector
 {
+	use TraitParameters;
+	use TraitInitializer;
+	
 	/**
 	 * @var string
 	 */
 	protected string $_class;
-	
-	/**
-	 * @var ?Closure
-	 */
-	protected ?Closure $_initializer = null;
 	
 	/**
 	 * @var ?ReflectionClass 
@@ -42,9 +41,8 @@ class TypeClass extends Resolver
 		?callable $initializer = null,
 	)
 	{
-		parent::__construct($parameters);
-		
 		$this->setClass($class);
+		$this->setParameters($parameters);
 		$this->setInitializer($initializer);
 	}
 	
@@ -69,26 +67,6 @@ class TypeClass extends Resolver
 	}
 	
 	/**
-	 * @param ?callable $initializer
-	 *
-	 * @return self
-	 */
-	public function setInitializer(?callable $initializer): self
-	{
-		$this->_initializer = $initializer;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return ?Closure
-	 */
-	public function getInitializer(): ?Closure
-	{
-		return $this->_initializer;
-	}
-	
-	/**
 	 * @return ReflectionClass
 	 */
 	public function getReflector(): ReflectionClass
@@ -104,9 +82,9 @@ class TypeClass extends Resolver
 	/**
 	 * @param Container $container
 	 *
-	 * @return ?object
+	 * @return object
 	 */
-	public function resolve(Container $container): ?object
+	public function inject(Container $container): object
 	{
 		$reflector = $this->getReflector();
 		$parameters = $this->getParameters();
@@ -117,7 +95,7 @@ class TypeClass extends Resolver
 			// will be only called once, we can declare it as static
 			$initializer = static function() use ($container, $reflector, $parameters)
 			{
-				$instanceArgs = $container->resolveConstructor($reflector, $parameters);
+				$instanceArgs = $container->injectConstructor($reflector, $parameters);
 				$instance = $reflector->newInstanceWithoutConstructor();
 				$container->resolveProperties($reflector, $instance);
 				

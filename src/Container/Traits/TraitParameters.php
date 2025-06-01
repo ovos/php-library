@@ -1,28 +1,20 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Container;
+namespace Ovos\Container\Traits;
 
 /**
- * Resolver
+ * TraitParameters
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Resolver
+trait TraitParameters
 {
 	/**
 	 * @var array
 	 */
 	protected array $_parameters = [];
-	
-	/**
-	 * @param array $_parameters
-	 */
-	public function __construct(array $_parameters = [])
-	{
-		$this->setParameters($_parameters);
-	}
 	
 	/**
 	 * @param array $parameters

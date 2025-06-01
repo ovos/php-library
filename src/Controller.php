@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Controller\Plugin;
-use Ovos\Container\Resolver\TypeClass;
+use Ovos\Container\Injector\TypeClass;
 use Ovos\Exception\RuntimeException;
 use ReflectionMethod;
 
@@ -495,7 +495,7 @@ class Controller
 			}
 			
 			$instance = $this->_container
-				->resolve(new TypeClass($pluginClass));
+				->inject(new TypeClass($pluginClass));
 			$this->addPlugin($instance);
 		}
 		

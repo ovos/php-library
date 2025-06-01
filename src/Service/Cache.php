@@ -96,7 +96,8 @@ class Cache extends Service
 		if($this->_persistentConnection === null)
 		{
 			// move to container when DI is available
-			$this->_persistentConnection = new Connection($this->_config->persistent);
+			$this->_persistentConnection = $this->_container
+				->getValue(Connection::class, new Connection($this->_config->persistent));
 			if($this->_persistentConnection->connect() === false)
 			{
 				return null;
