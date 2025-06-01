@@ -52,7 +52,8 @@ class Dispatcher
 		}
 		
 		/** @var Controller $controller */
-		$controller = $this->_container->getClass($controllerClassNs, $controllerClassNs);
+		$controller = $this->_container
+			->getClass($controllerClassNs, $controllerClassNs);
 		if($controller instanceof Controller === false)
 		{
 			throw new NotFoundException('A controller has to extend a "Ovos\Controller" class.');

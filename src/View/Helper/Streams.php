@@ -3,11 +3,11 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
+use Ovos\ArrayObject;
+use Ovos\Container\Inject;
+use Ovos\Service\Streams as Service;
 use Ovos\View;
 use Ovos\View\Helper;
-use Ovos\Service\Streams as Service;
-
-use function Ovos\services;
 
 /**
  * Streams
@@ -18,20 +18,29 @@ use function Ovos\services;
 class Streams extends Helper
 {
 	/**
+	 * @var ArrayObject
+	 */
+	protected ArrayObject $_config;
+
+	/**
 	 * @var ?Service
 	 */
 	protected ?Service $_streamsService;
 	
 	/**
 	 * @param ?Service $streamsService
+	 * @param ArrayObject $config
 	 */
 	public function __construct(
 		#[Inject(Service::SYMBOL)] ?Service $streamsService,
+		#[Inject('config')]
+		ArrayObject $config,
 	)
 	{
 		parent::__construct();
 		
 		$this->_streamsService = $streamsService;
+		$this->_config = $config;
 	}
 	
 	/**
@@ -65,7 +74,7 @@ class Streams extends Helper
 	 */
 	public function __toString()
 	{
-		if($this->_app->getConfig()->system->profilers->enabled === false)
+		if($this->_config->system->profilers->enabled === false)
 		{
 			return '';
 		}

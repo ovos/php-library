@@ -70,8 +70,6 @@ class Session extends Service
 	{
 		$key = $key ?? static::SYMBOL;
 		$container->registerClass($key, static::class);
-			// instantiate session service immediately
-			//->get($key);
 	}
 	
 	/**

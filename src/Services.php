@@ -43,6 +43,16 @@ class Services
 	}
 	
 	/**
+	 * @deprecated
+	 * 
+	 * @return ?self
+	 */
+	public static function getInstance(): ?self
+	{
+		return container()->get(static::class);
+	}
+	
+	/**
 	 * @param string $key
 	 * @param ?string $registerClass
 	 *
