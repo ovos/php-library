@@ -31,19 +31,9 @@ class Benchmark extends Service
 	protected array $_measurements = [];
 	
 	/**
-	 * @return string
-	 */
-	public function getSymbol(): string
-	{
-		return self::SYMBOL;
-	}
-	
-	/**
 	 */
 	public function __construct()
 	{
-		parent::__construct();
-		
 		$this->start();
 	}
 	

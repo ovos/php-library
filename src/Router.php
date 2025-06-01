@@ -68,11 +68,14 @@ class Router
 	];
 	
 	/**
+	 * @param Application $application
 	 * @param Request $request
 	 */
-	public function __construct(Request $request)
+	public function __construct(Application $application,
+		Request $request,
+	)
 	{
-		$this->_app = app();
+		$this->_app = $application;
 		$this->_config = $this->_app->getConfig();
 		
 		$this->_request = $request;

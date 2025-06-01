@@ -3,11 +3,11 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
+use Ovos\ArrayObject;
+use Ovos\Container\Inject;
+use Ovos\Service\Streams as Service;
 use Ovos\View;
 use Ovos\View\Helper;
-use Ovos\Service\Streams as Service;
-
-use function Ovos\services;
 
 /**
  * Streams
@@ -18,6 +18,32 @@ use function Ovos\services;
 class Streams extends Helper
 {
 	/**
+	 * @var ArrayObject
+	 */
+	protected ArrayObject $_config;
+
+	/**
+	 * @var ?Service
+	 */
+	protected ?Service $_streamsService;
+	
+	/**
+	 * @param ?Service $streamsService
+	 * @param ArrayObject $config
+	 */
+	public function __construct(
+		#[Inject(Service::SYMBOL)] ?Service $streamsService,
+		#[Inject('config')]
+		ArrayObject $config,
+	)
+	{
+		parent::__construct();
+		
+		$this->_streamsService = $streamsService;
+		$this->_config = $config;
+	}
+	
+	/**
 	 * @return self
 	 */
 	public function streams(): self
@@ -26,19 +52,11 @@ class Streams extends Helper
 	}
 	
 	/**
-	 * @return Service
+	 * @return ?Service
 	 */
-	public function get(): Service
+	public function get(): ?Service
 	{
-		return services()->streams;
-	}
-	
-	/**
-	 * @return bool
-	 */
-	public function isRegistered(): bool
-	{
-		return services()->isRegistered(Service::SYMBOL);
+		return $this->_streamsService;
 	}
 	
 	/**
@@ -46,8 +64,8 @@ class Streams extends Helper
 	 */
 	public function getRequests(): array
 	{
-		return $this->isRegistered()
-			? $this->get()->getRequests()
+		return $this->_streamsService !== null
+			? $this->_streamsService->getRequests()
 			: [];
 	}
 	
@@ -56,7 +74,7 @@ class Streams extends Helper
 	 */
 	public function __toString()
 	{
-		if($this->_app->getConfig()->system->profilers->enabled === false)
+		if($this->_config->system->profilers->enabled === false)
 		{
 			return '';
 		}

@@ -3,10 +3,10 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
+use Ovos\Container\Inject;
+use Ovos\Service\Auth;
 use Ovos\View\Helper;
 use Models\User as Model;
-
-use function Ovos\services;
 
 /**
  * User
@@ -17,10 +17,28 @@ use function Ovos\services;
 class User extends Helper
 {
 	/**
+	 * @var Auth
+	 */
+	protected Auth $_authService;
+	
+	/**
+	 * @param Auth $authService
+	 */
+	public function __construct(
+		#[Inject(Auth::SYMBOL)] Auth $authService,
+	)
+	{
+		parent::__construct();
+		
+		$this->_authService = $authService;
+	}	
+	
+	/**
 	 * @return ?Model
 	 */
 	public function user(): ?Model
 	{
-		return services()->auth->getUser();
+		return $this->_authService
+			?->getUser();
 	}
 }

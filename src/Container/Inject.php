@@ -15,22 +15,22 @@ use Attribute;
 class Inject
 {
 	/**
-	 * @var string 
+	 * @var ?string
 	 */
-	protected string $_key;
+	protected ?string $_key = null;
 	
 	/**
-	* @param string $key
+	* @param ?string $key
 	*/
-	public function __construct(string $key)
+	public function __construct(?string $key = null)
 	{
 		$this->_key = $key;
 	}
 	
 	/**
-	* @return string
+	* @return ?string
 	*/
-	public function getKey(): string
+	public function getKey(): ?string
 	{
 		return $this->_key;
 	}

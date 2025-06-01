@@ -19,6 +19,19 @@ use function method_exists;
 class Dispatcher
 {
 	/**
+	 * @var Container
+	 */
+	protected Container $_container;
+	
+	/**
+	 * @param Container $container
+	 */
+	public function __construct(Container $container)
+	{
+		$this->_container = $container;
+	}
+	
+	/**
 	 * @param Request $request
 	 *
 	 * @return ?Response
@@ -39,8 +52,9 @@ class Dispatcher
 		}
 		
 		/** @var Controller $controller */
-		$controller = new $controllerClassNs;
-		if(!is_subclass_of($controller, 'Ovos\Controller'))
+		$controller = $this->_container
+			->getClass($controllerClassNs, $controllerClassNs);
+		if($controller instanceof Controller === false)
 		{
 			throw new NotFoundException('A controller has to extend a "Ovos\Controller" class.');
 		}

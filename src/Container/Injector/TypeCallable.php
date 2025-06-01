@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Container\Entry;
+namespace Ovos\Container\Injector;
 
 use Ovos\Container;
-use Ovos\Container\Entry;
-
-use Closure;
+use Ovos\Container\Injector;
+use Ovos\Container\Traits\TraitParameters;
+use Ovos\Container\Traits\TraitCallable;
 
 /**
  * TypeCallable
@@ -14,12 +14,10 @@ use Closure;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class TypeCallable extends Entry
+class TypeCallable extends Injector
 {
-	/**
-	 * @var Closure
-	 */
-	protected Closure $_callable;
+	use TraitParameters;
+	use TraitCallable;
 	
 	/**
 	 * @param callable $callable
@@ -29,29 +27,8 @@ class TypeCallable extends Entry
 		array $parameters = [],
 	)
 	{
-		parent::__construct($parameters);
-		
+		$this->setParameters($parameters);
 		$this->setCallable($callable);
-	}
-	
-	/**
-	 * @param callable $callable
-	 *
-	 * @return self
-	 */
-	public function setCallable(callable $callable): self
-	{
-		$this->_callable = $callable;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return Closure
-	 */
-	public function getCallable(): Closure
-	{
-		return $this->_callable;
 	}
 	
 	/**
@@ -59,7 +36,7 @@ class TypeCallable extends Entry
 	 *
 	 * @return object
 	 */
-	public function resolve(Container $container): object
+	public function inject(Container $container): object
 	{
 		// no resolution whatsoever except for access to the container
 		// inside the anonymous function

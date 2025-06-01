@@ -4,8 +4,9 @@ declare(strict_types=1);
 namespace Ovos\Container\Register;
 
 use Ovos\Container\Register;
+use Ovos\Container\Traits\TraitCallable;
+use Ovos\Container\Traits\TraitParameters;
 use Attribute;
-use Closure;
 
 /**
  * TypeCallable
@@ -16,10 +17,8 @@ use Closure;
 #[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_PARAMETER)]
 class TypeCallable extends Register
 {
-	/**
-	 * @var Closure
-	 */
-	protected Closure $_callable;
+	use TraitParameters;
+	use TraitCallable;
 	
 	/**
 	 * @param callable $callable
@@ -29,28 +28,7 @@ class TypeCallable extends Register
 		array $parameters = [],
 	)
 	{
-		parent::__construct($parameters);
-		
+		$this->setParameters($parameters);
 		$this->setCallable($callable);
-	}
-	
-	/**
-	 * @param callable $callable
-	 *
-	 * @return self
-	 */
-	public function setCallable(callable $callable): self
-	{
-		$this->_callable = $callable;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return Closure
-	 */
-	public function getCallable(): Closure
-	{
-		return $this->_callable;
 	}
 }

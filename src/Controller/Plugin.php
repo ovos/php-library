@@ -4,11 +4,13 @@ declare(strict_types=1);
 namespace Ovos\Controller;
 
 use Ovos\Application;
+use Ovos\Container;
 use Ovos\Controller;
 use Ovos\Request;
 use Ovos\Exception\RuntimeException;
 
 use function Ovos\app;
+use function Ovos\container;
 
 /**
  * Plugin
@@ -18,6 +20,11 @@ use function Ovos\app;
  */
 abstract class Plugin
 {
+	/**
+	 * @var Container
+	 */
+	protected Container $_container;
+	
 	/**
 	 * @var Application
 	 */
@@ -39,35 +46,14 @@ abstract class Plugin
 	protected bool $_enabled = true;
 	
 	/**
-	 * @var array
-	 */
-	protected array $_dependsOn = [];
-	
-	/**
 	 */
 	public function __construct()
 	{
-		$this->_app = app();
+		$this->_container = container();
+		$this->_app = $this->_container->get(Application::class);
+		
 		$this->_request = $this->_app->getRequest();
 		$this->_controller = $this->_app->getRequest()->getControllerInstance();
-		
-		$this->_dependsOn();
-	}
-	
-	/**
-	 * @throws RuntimeException
-	 */
-	protected function _dependsOn(): void
-	{
-		foreach($this->_dependsOn as $symbol)
-		{
-			if($this->getController()->hasPlugin($symbol) === false)
-			{
-				// just scream that we need it
-				throw new RuntimeException('"%s" plugin depends on "%s" plugin.',
-					static::getSymbol(), $symbol);
-			}
-		}
 	}
 	
 	/**
@@ -101,7 +87,10 @@ abstract class Plugin
 	/**
 	 * @return string
 	 */
-	abstract public static function getSymbol(): string;
+	public static function getSymbol(): string
+	{
+		return static::SYMBOL;
+	}
 	
 	/**
 	 * @return void

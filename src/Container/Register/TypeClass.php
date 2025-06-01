@@ -4,8 +4,9 @@ declare(strict_types=1);
 namespace Ovos\Container\Register;
 
 use Ovos\Container\Register;
+use Ovos\Container\Traits\TraitInitializer;
+use Ovos\Container\Traits\TraitParameters;
 use Attribute;
-use Closure;
 
 /**
  * TypeClass
@@ -16,10 +17,8 @@ use Closure;
 #[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_PARAMETER)]
 class TypeClass extends Register
 {
-	/**
-	 * @var ?Closure
-	 */
-	protected ?Closure $_initializer = null;
+	use TraitParameters;
+	use TraitInitializer;
 	
 	/**
 	 * @param array $parameters
@@ -29,28 +28,7 @@ class TypeClass extends Register
 		?callable $initializer = null,
 	)
 	{
-		parent::__construct($parameters);
-		
+		$this->setParameters($parameters);
 		$this->setInitializer($initializer);
-	}
-	
-	/**
-	 * @param ?callable $initializer
-	 *
-	 * @return self
-	 */
-	public function setInitializer(?callable $initializer): self
-	{
-		$this->_initializer = $initializer;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return ?Closure
-	 */
-	public function getInitializer(): ?Closure
-	{
-		return $this->_initializer;
 	}
 }

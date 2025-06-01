@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Container\Entry;
+namespace Ovos\Container\Injector;
 
 use Ovos\Container;
 
@@ -16,9 +16,9 @@ class TypeLazy extends TypeClass
 	/**
 	 * @param Container $container
 	 *
-	 * @return ?object
+	 * @return object
 	 */
-	public function resolve(Container $container): ?object
+	public function inject(Container $container): object
 	{
 		$reflector = $this->getReflector();
 		$parameters = $this->getParameters();
@@ -29,7 +29,7 @@ class TypeLazy extends TypeClass
 			// will be only called once, we can declare it as static
 			$initializer = static function(object $proxy) use ($container, $reflector, $parameters)
 			{
-				$instanceArgs = $container->resolveConstructor($reflector, $parameters);
+				$instanceArgs = $container->injectConstructor($reflector, $parameters);
 				$container->resolveProperties($reflector, $proxy, lazy: true);
 				
 				return $reflector->newInstanceArgs($instanceArgs);

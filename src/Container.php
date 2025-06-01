@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Container\Entry;
+use Ovos\Container\Injector;
 use Ovos\Container\Inject;
 use Ovos\Container\Injected;
 use Ovos\Container\Register;
@@ -19,7 +19,7 @@ use ReflectionNamedType;
 use ReflectionUnionType;
 use ReflectionProperty;
 
-use function array_map;
+use function array_keys;
 use function count;
 
 /**
@@ -31,9 +31,9 @@ use function count;
 class Container
 {
 	/**
-	 * @var Entry[]
+	 * @var Injector[]
 	 */
-	protected array $_entries = [];
+	protected array $_injectors = [];
 	
 	/**
 	 * @var object[]
@@ -46,7 +46,7 @@ class Container
 	protected array $_reflectors = [];
 	
 	/**
-	 * Register class
+	 * Register a class
 	 *
 	 * @param string $key
 	 * @param string $class
@@ -61,12 +61,43 @@ class Container
 		?callable $initializer = null,
 	): self
 	{
-		$this->_entries[$key] = new Entry\TypeClass($class,
+		if(isset($this->_injectors[$key])) // already registered
+		{
+			return $this;
+		}
+		
+		$this->_injectors[$key] = new Injector\TypeClass($class,
 			$parameters,
 			$initializer,
 		);
 		
 		return $this;
+	}
+	
+	/**
+	 * Get a class and register it if needed
+	 *
+	 * @param string $key
+	 * @param string $class
+	 * @param array $parameters
+	 * @param ?callable $initializer
+	 *
+	 * @return object
+	 */
+	public function getClass(string $key,
+		string $class,
+		array $parameters = [],
+		?callable $initializer = null,
+	): object
+	{
+		if(($resolved = $this->resolve($key)) !== null)
+		{
+			return $resolved;
+		}
+		
+		return $this
+			->registerClass($key, $class, $parameters, $initializer)
+			->get($key);
 	}
 	
 	/**
@@ -85,6 +116,11 @@ class Container
 		?callable $initializer = null,
 	): self
 	{
+		if(isset($this->_injectors[$key])) // already registered
+		{
+			return $this;
+		}
+		
 		// compatibility with pre 8.4
 		if(PHP_VERSION_ID < 84000)
 		{
@@ -95,12 +131,38 @@ class Container
 			);
 		}
 		
-		$this->_entries[$key] = new Entry\TypeLazy($class,
+		$this->_injectors[$key] = new Injector\TypeLazy($class,
 			$parameters,
 			$initializer,
 		);
 		
 		return $this;
+	}
+	
+	/**
+	 * Get a lazy object and register it if needed
+	 *
+	 * @param string $key
+	 * @param string $class
+	 * @param array $parameters
+	 * @param ?callable $initializer
+	 *
+	 * @return object
+	 */
+	public function getLazy(string $key,
+		string $class,
+		array $parameters = [],
+		?callable $initializer = null,
+	): object
+	{
+		if(($resolved = $this->resolve($key)) !== null)
+		{
+			return $resolved;
+		}
+		
+		return $this
+			->registerLazy($key, $class, $parameters, $initializer)
+			->get($key);
 	}
 	
 	/**
@@ -117,11 +179,40 @@ class Container
 		array $parameters = [],
 	): self
 	{
-		$this->_entries[$key] = new Entry\TypeCallable($callable,
+		if(isset($this->_injectors[$key])) // already registered
+		{
+			return $this;
+		}
+		
+		$this->_injectors[$key] = new Injector\TypeCallable($callable,
 			$parameters,
 		);
 		
 		return $this;
+	}
+	
+	/**
+	 * Get a callable and register it if needed
+	 *
+	 * @param string $key
+	 * @param callable $callable
+	 * @param array $parameters
+	 *
+	 * @return object
+	 */
+	public function getCallable(string $key,
+		callable $callable,
+		array $parameters = [],
+	): object
+	{
+		if(($resolved = $this->resolve($key)) !== null)
+		{
+			return $resolved;
+		}
+		
+		return $this
+			->registerCallable($key, $callable, $parameters)
+			->get($key);
 	}
 	
 	/**
@@ -130,19 +221,49 @@ class Container
 	 *
 	 * @param string $key
 	 * @param object $object
+	 * @param ?callable $initializer
 	 *
 	 * @return self
 	 */
-	public function registerObject(string $key, object $object): self
+	public function registerObject(string $key,
+		object $object,
+		?callable $initializer = null,
+	): self
 	{
-		$this->_resolved[$key] = $object;
+		if(isset($this->_injectors[$key])) // already registered
+		{
+			return $this;
+		}
+		
+		$this->_injectors[$key] = new Injector\TypeObject($object,
+			$initializer,
+		);
 		
 		return $this;
 	}
 	
 	/**
-	 * Register an instance or a lazy object
-	 * No need to resolve dependencies
+	 * Get an object and register it if needed
+	 *
+	 * @param string $key
+	 * @param object $object
+	 *
+	 * @return ?object
+	 */
+	public function getObject(string $key, object $object): ?object
+	{
+		if(($resolved = $this->resolve($key)) !== null)
+		{
+			return $resolved;
+		}
+		
+		return $this
+			->registerObject($key, $object)
+			->get($key);
+	}
+	
+	/**
+	 * Register any value without resolving dependencies
 	 *
 	 * @param string $key
 	 * @param mixed $value
@@ -151,9 +272,35 @@ class Container
 	 */
 	public function registerValue(string $key, mixed $value): self
 	{
-		$this->_resolved[$key] = $value;
+		if(isset($this->_injectors[$key])) // already registered
+		{
+			return $this;
+		}
+		
+		$this->_injectors[$key] = $value;
+		$this->_resolved[$key] = &$this->_injectors[$key];
 		
 		return $this;
+	}
+	
+	/**
+	 * Get a value and register it if needed
+	 *
+	 * @param string $key
+	 * @param mixed $value
+	 *
+	 * @return mixed
+	 */
+	public function getValue(string $key, mixed $value): mixed
+	{
+		if(($resolved = $this->resolve($key)) !== null)
+		{
+			return $resolved;
+		}
+		
+		return $this
+			->registerValue($key, $value)
+			->get($key);
 	}
 	
 	/**
@@ -161,56 +308,67 @@ class Container
 	 *
 	 * @param string $key
 	 *
-	 * @return ?object
+	 * @return mixed
 	 */
-	public function get(string $key): ?object
+	public function get(string $key): mixed
+	{
+		if(($resolved = $this->resolve($key)) === null)
+		{
+			throw new Exception('Dependency "%s" not registered.');
+		}
+		
+		return $resolved;
+	}
+	
+	/**
+	 * @param string $key
+	 *
+	 * @return mixed
+	 */
+	public function resolve(string $key): mixed
 	{
 		if(isset($this->_resolved[$key]))
 		{
 			return $this->_resolved[$key];
 		}
-		if(isset($this->_entries[$key])
-			&& ($resolved = $this->resolve($this->_entries[$key])) !== null
-		)
+		
+		if(isset($this->_injectors[$key]) === false)
 		{
-			$this->_resolved[$key] = $resolved;
+			return null;
+		}
+			
+		if(($this->_injectors[$key] instanceof Injector) === false)
+		{
+			return null;
 		}
 		
-		return $this->_resolved[$key] ?? null;
+		return $this->_resolved[$key]
+			= $this->inject($this->_injectors[$key]);
 	}
 	
 	/**
-	 * Resolves dependencies in constructor
+	 * Injects in constructor
 	 * or marked with #[Inject] attribute
+	 * Does not register the resolver in the container
 	 *
-	 * @param Entry $entry
+	 * @param Injector $injector
 	 *
-	 * @return ?object
+	 * @return object
 	 */
-	public function resolve(Entry $entry): ?object
+	public function inject(Injector $injector): object
 	{
-		if($entry instanceof Entry\TypeLazy)
-		{
-			return $entry->resolve($this);
-		}
-		if($entry instanceof Entry\TypeClass)
-		{
-			return $entry->resolve($this);
-		}
-		if($entry instanceof Entry\TypeCallable)
-		{
-			return $entry->resolve($this);
-		}
-		
-		return null;
+		return $injector->inject($this);
 	}
 	
 	/**
+	 * Inject constructor parameters
+	 * 
 	 * @param ReflectionClass $reflector
 	 * @param array $values
+	 *
 	 * @return array
 	 */
-	public function resolveConstructor(ReflectionClass $reflector,
+	public function injectConstructor(ReflectionClass $reflector,
 		array $values = [],
 	): array
 	{
@@ -219,26 +377,45 @@ class Container
 			return [];
 		}
 		
-		$parameters = $constructor->getParameters();
-		
-		return array_map
-		(
-			function(ReflectionParameter $parameter) use ($values)
+		$parameters = [];
+		foreach($constructor->getParameters() as $parameter)
+		{
+			if(($resolved
+				= $this->_injectParameter($parameter, $values)) === null)
 			{
-				$resolved = $this->_resolveValueByName($parameter->getName(),
-					$values)
-					?? $this->_resolveValueByKey($parameter)
-					?? $this->_resolveValueByType($parameter);
-				
-				if($resolved !== null)
-				{
-					return $this->_processAttributes($parameter, $resolved);
-				}
-				
-				return null;
-			},
-			$parameters
-		);
+				continue;
+			}
+			
+			$parameters[$parameter->getName()] = $resolved;
+		}
+		
+		return $parameters;
+	}
+	
+	/**
+	 * Inject a single constructor parameter
+	 * 
+	 * @param ReflectionParameter $parameter
+	 * @param array $values
+	 *
+	 * @return mixed
+	 */
+	protected function _injectParameter(
+		ReflectionParameter $parameter,
+		array $values = [],
+	): mixed
+	{
+		$resolved = $this->_injectValueByName($parameter->getName(),
+			$values)
+			?? $this->_injectValueByKey($parameter)
+			?? $this->_injectValueByType($parameter);
+		
+		if($resolved !== null)
+		{
+			return $this->_processAttributes($parameter, $resolved);
+		}
+		
+		return null;
 	}
 	
 	/**
@@ -249,7 +426,7 @@ class Container
 	 *
 	 * @return mixed
 	 */
-	protected function _resolveValueByName(string $parameterName,
+	protected function _injectValueByName(string $parameterName,
 		array $parameters): mixed
 	{
 		if(array_key_exists($parameterName, $parameters) !== false)
@@ -265,38 +442,46 @@ class Container
 	 *
 	 * @return mixed
 	 */
-	protected function _resolveValueByKey(
+	protected function _injectValueByKey(
 		ReflectionProperty|ReflectionParameter $property,
 	): mixed
 	{
 		$attributes = $property->getAttributes(Inject::class);
-		foreach($attributes as $attribute)
+		if(count($attributes) === 0)
 		{
-			$arguments = $attribute->getArguments();
-			if(count($arguments) === 0)
-			{
-				continue;
-			}
-			
-			$key = $arguments[0]; // does not have to be a type, may be also just a key
-			if(($object = $this->get($key)) !== null)
-			{
-				return $object;
-			}
+			return null;
 		}
 		
-		return null;
+		$arguments = $attributes[0]->getArguments();
+		if(count($arguments) === 0)
+		{
+			return null;
+		}
+		
+		$object = $this->_resolveTypes($arguments);
+		
+		// return an object if we managed to resolve it
+		if($object !== null)
+		{
+			return $object;
+		}
+		
+		// could not be resolved,
+		// try to autoregister with the key
+		return $this->_injectValueByType($property, $arguments[0]);
 	}
 	
 	/**
 	 * Match parameters by type (and resolve them)
 	 *
 	 * @param ReflectionProperty|ReflectionParameter $property
+	 * @param ?string $key
 	 *
 	 * @return mixed
 	 */
-	protected function _resolveValueByType(
+	protected function _injectValueByType(
 		ReflectionProperty|ReflectionParameter $property,
+		?string $key = null,
 	): mixed
 	{
 		$propertyType = $property->getType();
@@ -311,15 +496,7 @@ class Container
 			return null;
 		}
 		
-		$object = null;
-		foreach($types as $type)
-		{
-			// take the first one that we could resolve
-			if(($object = $this->get($type)) !== null)
-			{
-				break;
-			}
-		}
+		$object = $this->_resolveTypes($types);
 		
 		// return an object if we managed to resolve it
 		if($object !== null)
@@ -327,21 +504,53 @@ class Container
 			return $object;
 		}
 		
+		$key = $key ?? $types[0];
+		
 		// could not be resolved,
 		// try to autoregister with the first type
-		return $this->_register($property, $types[0]);
+		return $this->_register($property, $key, $types[0]);
 	}
 	
 	/**
-	 * Try to automatically register the entry
+	 * Resolve a list of types (return the first matching object)
+	 * 
+	 * @param array $types
+	 *
+	 * @return ?object
+	 */
+	protected function _resolveTypes(
+		array $types,
+	): ?object
+	{
+		if(count($types) === 0)
+		{
+			return null;
+		}
+		
+		foreach($types as $type)
+		{
+			// take the first one that we could resolve
+			if(($object = $this->resolve($type)) !== null)
+			{
+				return $object;
+			}
+		}
+		
+		return null;
+	}
+	
+	/**
+	 * Try to automatically register the resolver
 	 * 
 	 * @param ReflectionProperty|ReflectionParameter $property
+	 * @param string $key
 	 * @param string $type
 	 *
 	 * @return ?object
 	 */
 	public function _register(
 		ReflectionProperty|ReflectionParameter $property,
+		string $key,
 		string $type,
 	): ?object
 	{
@@ -349,8 +558,8 @@ class Container
 			ReflectionAttribute::IS_INSTANCEOF);
 		if(count($attributes) === 0)
 		{
-			$this->registerClass($type, $type);
-			return $this->get($type);
+			$this->registerClass($key, $type);
+			return $this->get($key);
 		}
 		
 		$attribute = $attributes[0];
@@ -359,38 +568,40 @@ class Container
 		if($attributeName === TypeClass::class)
 		{
 			$instance = $attribute->newInstance();
-			$this->registerClass($type, $type,
+			$this->registerClass($key, $type,
 				$instance->getParameters(),
 				$instance->getInitializer(),
 			);
-			return $this->get($type);
+			return $this->get($key);
 		}
 		
 		if($attributeName === TypeLazy::class)
 		{
 			$instance = $attribute->newInstance();
-			$this->registerLazy($type, $type,
+			$this->registerLazy($key, $type,
 				$instance->getParameters(),
 				$instance->getInitializer(),
 			);
-			return $this->get($type);
+			return $this->get($key);
 		}
 		
 		if($attributeName === TypeCallable::class)
 		{
 			/** @var TypeCallable $instance */
 			$instance = $attribute->newInstance();
-			$this->registerCallable($type,
+			$this->registerCallable($key,
 				$instance->getCallable(),
 				$instance->getParameters(),
 			);
-			return $this->get($type);
+			return $this->get($key);
 		}
 		
 		return null;
 	}
 	
 	/**
+	 * Loop properties and return only the own types
+	 * 
 	 * @param ?ReflectionType $propertyType
 	 *
 	 * @return array
@@ -411,7 +622,7 @@ class Container
 			}
 		}
 		else if($propertyType instanceof ReflectionNamedType
-			|| $propertyType->isBuiltin() === false)
+			&& $propertyType->isBuiltin() === false)
 		{
 			$types[] = $propertyType->getName();
 		}
@@ -420,6 +631,8 @@ class Container
 	}
 	
 	/**
+	 * Resolve object's properties
+	 * 
 	 * @param ReflectionClass $reflector
 	 * @param object $object
 	 * @param bool $lazy
@@ -433,24 +646,26 @@ class Container
 	{
 		foreach($reflector->getProperties() as $property)
 		{
-			$attributesInject = $property->getAttributes(Container\Inject::class);
-			if(count($attributesInject) === 0)
+			$attributes = $property->getAttributes(Inject::class);
+			if(count($attributes) === 0)
 			{
 				continue;
 			}
 			
-			$resolved = $this->_resolveValueByKey($property)
-				?? $this->_resolveValueByType($property);
+			$resolved = $this->_injectValueByKey($property)
+				?? $this->_injectValueByType($property);
 			
 			if($resolved !== null)
 			{
 				$resolved = $this->_processAttributes($property, $resolved);
-				$this->_inject($property, $object, $resolved, $lazy);
+				$this->_injectValue($property, $object, $resolved, $lazy);
 			}
 		}
 	}
 	
 	/**
+	 * Process optional attributes
+	 * 
 	 * @param ReflectionProperty|ReflectionParameter $property
 	 * @param mixed $resolved
 	 *
@@ -473,6 +688,8 @@ class Container
 	}
 	
 	/**
+	 * Set a value on an object's property
+	 * 
 	 * @param ReflectionProperty $property
 	 * @param object $object
 	 * @param mixed $resolved
@@ -480,7 +697,7 @@ class Container
 	 *
 	 * @return void
 	 */
-	protected function _inject(ReflectionProperty $property,
+	protected function _injectValue(ReflectionProperty $property,
 		object $object,
 		mixed $resolved,
 		bool $lazy,
@@ -513,7 +730,15 @@ class Container
 	 */
 	public function isRegistered(string $key): bool
 	{
-		return isset($this->_entries[$key]);
+		return isset($this->_injectors[$key]);
+	}
+	
+	/**
+	 * @return array
+	 */
+	public function __debugInfo(): array
+	{
+		return array_keys($this->_injectors);
 	}
 }
 
@@ -526,6 +751,7 @@ function container(): Container
 	if($container === null)
 	{
 		$container = new Container;
+		$container->registerObject(Container::class, $container);
 	}
 	
 	return $container;

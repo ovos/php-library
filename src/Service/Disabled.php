@@ -24,14 +24,6 @@ class Disabled extends Service
 	protected bool $_enabled = false;
 	
 	/**
-	 * @return string
-	 */
-	public function getSymbol(): string
-	{
-		return self::SYMBOL;
-	}
-	
-	/**
 	 * @param string $name
 	 * @param array $arguments
 	 */

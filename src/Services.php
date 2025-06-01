@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Service\Disabled;
 use Ovos\Service\Memory;
 use Ovos\Service\Benchmark;
 use Ovos\Service\Events;
@@ -18,7 +17,7 @@ use Ovos\Service\Database;
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
- * 
+ *
  * @property Memory $memory
  * @property Benchmark $benchmark
  * @property Events $events
@@ -36,11 +35,6 @@ class Services
 	protected Container $_container;
 	
 	/**
-	 * @var Service[]
-	 */
-	protected static array $_items = []; // static in case of changing instance with newInstance (after loading the config)
-	
-	/**
 	 * @param Container $container
 	 */
 	public function __construct(Container $container)
@@ -49,75 +43,62 @@ class Services
 	}
 	
 	/**
-	 * @param string $symbol
-	 * @param ?callable $registerCallback
+	 * @deprecated
+	 * 
+	 * @return ?self
+	 */
+	public static function getInstance(): ?self
+	{
+		return container()->get(static::class);
+	}
+	
+	/**
+	 * @param string $key
+	 * @param ?string $registerClass
 	 *
 	 * @return ?Service
 	 */
 	public function get(
-		string $symbol,
-		?callable $registerCallback = null,
+		string $key,
+		?string $registerClass = null,
 	): ?Service
 	{
-		$service = null;
-		// check if a service is registered
-		if(isset(self::$_items[$symbol]))
+		$service = $this->_container->get($key);
+		
+		if($service === null
+			&& $registerClass !== null)
 		{
-			$service = self::$_items[$symbol];
-		}
-		// check if we should register it
-		else if($registerCallback !== null)
-		{
-			$service = $registerCallback();
-			$this->register($service, $symbol);
+			$this->register($registerClass, $key);
+			$service = $this->_container->get($key);
 		}
 		
-		// if the service is registered and is not disabled
-		if($service !== null
-			&& $service->isEnabled())
-		{
-			return $service;
-		}
-		
-		return new Disabled;
+		return $service;
 	}
 	
 	/**
-	 * @param string $symbol
+	 * @param string $key
 	 *
 	 * @return ?Service
 	 */
-	public function __get(string $symbol): ?Service
+	public function __get(string $key): ?Service
 	{
-		return $this->get($symbol);
+		return $this->get($key);
 	}
 	
 	/**
-	 * @param Service $service
-	 * @param ?string $symbol
+	 * @param string $serviceClass
+	 * @param ?string $key
 	 *
 	 * @return self
 	 */
-	public function register(Service $service, ?string $symbol = null): self
+	public function register(string $serviceClass,
+		?string $key = null,
+	): self
 	{
-		if($symbol === null)
-		{
-			$symbol = $service->getSymbol();
-		}
-		
-		self::$_items[$symbol] = $service;
+		/** @var Service $serviceClass */
+		$serviceClass::register($this->_container, $key);
 		
 		return $this;
-	}
-	
-	/**
-	 * @param string $symbol
-	 *
-	 * @return bool
-	 */
-	public function isRegistered(string $symbol): bool
-	{
-		return isset(self::$_items[$symbol]);
 	}
 	
 	/**
@@ -125,15 +106,7 @@ class Services
 	 */
 	public function getConfig(): ArrayObject
 	{
-		return $this->_container->get('config')
+		return $this->_container->get(Application::KEY_CONFIG)
 			->system->services;
-	}
-	
-	/**
-	 * @return array
-	 */
-	public function toArray(): array
-	{
-		return self::$_items;
 	}
 }

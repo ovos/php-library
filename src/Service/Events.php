@@ -40,19 +40,9 @@ class Events extends Service implements Countable, Iterator
 	protected array $_events = [];
 	
 	/**
-	 * @return string
-	 */
-	public function getSymbol(): string
-	{
-		return self::SYMBOL;
-	}
-	
-	/**
 	 */
 	public function __construct()
 	{
-		parent::__construct();
-		
 		$this->initErrorHandlers();
 	}
 	

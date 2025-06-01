@@ -15,6 +15,13 @@ use function array_keys;
 abstract class Model
 {
 	/**
+	 * Container
+	 *
+	 * @var Container
+	 */
+	protected Container $_container;
+
+	/**
 	 * Application
 	 *
 	 * @var Application
@@ -51,7 +58,8 @@ abstract class Model
 	 */
 	public function __wakeup()
 	{
-		$this->_app = app();
+		$this->_container = container();
+		$this->_app = $this->_container->get(Application::class);
 		$this->_config = $this->_app->getConfig();
 	}
 	

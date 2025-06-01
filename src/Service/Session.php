@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\ArrayObject;
+use Ovos\Container;
+use Ovos\Container\Inject;
 use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Ovos\Service;
@@ -12,6 +14,11 @@ use function array_key_exists;
 use function ini_set;
 use function session_cache_limiter;
 use function session_get_cookie_params;
+use function session_name;
+use function session_regenerate_id;
+use function session_set_cookie_params;
+use function session_start;
+use function session_write_close;
 
 /**
  * Session
@@ -52,20 +59,29 @@ class Session extends Service
 	protected array $_session = [];
 	
 	/**
-	 * @return string
+	 * @param Container $container
+	 * @param ?string $key
+	 *
+	 * @return void
 	 */
-	public function getSymbol(): string
+	public static function register(Container $container,
+		?string $key = null,
+	): void
 	{
-		return self::SYMBOL;
+		$key = $key ?? static::SYMBOL;
+		$container->registerClass($key, static::class);
 	}
 	
 	/**
+	 * @param ArrayObject $config
+	 *
+	 * @throws Exception
 	 */
-	public function __construct()
+	public function __construct(
+		#[Inject('config')] ArrayObject $config,
+	)
 	{
-		parent::__construct();
-		
-		$this->_config = $this->_app->getConfig();
+		$this->_config = $config;
 		if($this->_config->cookies === null)
 		{
 			throw new Exception('"cookies" config section is missing.');

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
+use Ovos\Container\Inject;
+use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Service;
 use Ovos\ArrayObject;
 use Ovos\Stream\Request;
@@ -43,20 +45,15 @@ class Streams extends Service
 	protected array $_requests = [];
 	
 	/**
-	 * @return string
+	 * @param ArrayObject $config
 	 */
-	public function getSymbol(): string
+	public function __construct(
+		#[Inject('config')]
+		#[InjectArrayObject('streams')]
+		ArrayObject $config,
+	)
 	{
-		return self::SYMBOL;
-	}
-	
-	/**
-	 */
-	public function __construct()
-	{
-		parent::__construct();
-		
-		$this->_config = $this->_app->getConfig()->get('streams');
+		$this->_config = $config;
 		
 		$this->_defaultContextOptions = [
 			'http' => [

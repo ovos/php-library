@@ -25,14 +25,6 @@ class Auth extends Service
 	protected ?User $_user = null;
 	
 	/**
-	 * @return string
-	 */
-	public function getSymbol(): string
-	{
-		return self::SYMBOL;
-	}
-	
-	/**
 	 * @param ?User $user
 	 *
 	 * @return self
