@@ -428,9 +428,9 @@ abstract class Mysql extends Store
 			$query->limit($limit);
 		}
 		
-		if($limit !== null)
+		if($offset !== null)
 		{
-			$query->offset($limit);
+			$query->offset($offset);
 		}
 		
 		if($groupBy)
@@ -619,7 +619,7 @@ abstract class Mysql extends Store
 	}
 	
 	/**
-	 * Removed all characters which can break AGAINST (... IN BOOLEAN MODE) queries
+	 * Removed all characters that can break AGAINST (... IN BOOLEAN MODE) queries
 	 * 
 	 * @param string $query
 	 *
