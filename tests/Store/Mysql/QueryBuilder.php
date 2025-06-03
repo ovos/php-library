@@ -74,10 +74,13 @@ class QueryBuilder extends Test
 	
 	public function delete(): bool
 	{
-		$query = $this->_queryBuilder->delete('id = :id');
+		$query = $this->_queryBuilder->delete('active = 0', 
+			'role = :role'
+		);
 		
 		return $query->getSql() === 'DELETE FROM tests'
-			. PHP_EOL . 'WHERE id = :id'
+			. PHP_EOL . 'WHERE active = 0'
+			. PHP_EOL . 'AND role = :role'
 			. PHP_EOL;
 	}
 	
