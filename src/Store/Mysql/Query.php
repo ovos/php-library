@@ -3,6 +3,12 @@ declare(strict_types=1);
 
 namespace Ovos\Store\Mysql;
 
+use Ovos\Store\Mysql\Query\Condition;
+
+use function count;
+use function is_callable;
+use function implode;
+
 /**
  * Query
  *
@@ -11,6 +17,20 @@ namespace Ovos\Store\Mysql;
  */
 abstract class Query
 {
+	/**#@+
+	 * Condition constants
+	 */
+	public const string CONDITION_TYPE_DEFAULT = 'default';
+	public const string CONDITION_TYPE_NESTED = 'nested';
+	public const string CONDITION_OPERATOR_AND = 'AND';
+	public const string CONDITION_OPERATOR_OR = 'OR';
+	/**#@-*/
+	
+	/**
+	 * @var string
+	 */
+	public const string INDENT = "\t";
+	
 	/**
 	 * @var string
 	 */
@@ -21,16 +41,21 @@ abstract class Query
 	 */
 	protected array $_columns = [];
 	
-	/**
-	 * @var array
-	 */
-	protected array $_conditions = [];
+	 /**
+	  * @var array
+	  */
+	 protected array $_conditions = [];
 	
-	/**
-	 * @param string $table
-	 */
-	public function __construct(string $table)
-	{
+	 /**
+	  * @var string
+	  */
+	 protected string $_conditionOperator = Condition::OPERATOR_AND;
+	
+	 /**
+	  * @param string $table
+	  */
+	 public function __construct(string $table)
+	 {
 		$this->setTable($table);
 	}
 	
@@ -59,34 +84,133 @@ abstract class Query
 	 */
 	abstract public function getSql(): string;
 	
+	/**
+	 * @return string
+	 */
 	public function __toString(): string
 	{
 		return $this->getSql();
 	}
 	
 	/**
-	 * @param string ...$conditions
+	 * @param string|callable $condition
+	 * @param mixed ...$additionalConditions
 	 *
 	 * @return self
 	 */
-	public function where(string ...$conditions): self
+	public function where(
+		string|callable $condition,
+		mixed ...$additionalConditions,
+	): self
 	{
-		foreach($conditions as $condition)
+		if(is_callable($condition)
+			&& $nestedCondition= $this->_getNestedCondition($condition))
 		{
-			$this->_conditions[] = $condition;
+			$this->_conditions[] = $nestedCondition;
+			
+			return $this;
+		}
+		
+		$this->_conditions[] = $condition;
+		
+		if(count($additionalConditions) === 0)
+		{
+			return $this;
+		}
+		
+		foreach($additionalConditions as $additionalCondition)
+		{
+			$this->_conditions[] = $additionalCondition;
 		}
 		
 		return $this;
 	}
 	
 	/**
-	 * @param string ...$conditions
+	 * @param callable $condition
+	 * @param string $operator
+	 *
+	 * @return ?Condition
+	 */
+	protected function _getNestedCondition(
+		callable $condition,
+		string $operator = Condition::OPERATOR_AND,
+	): ?Condition
+	{
+		$nestedQuery = clone $this;
+		$nestedQuery->_conditions = [];
+		$nestedQuery->_conditionOperator = Condition::OPERATOR_AND;
+		
+		$condition($nestedQuery);
+		
+		if(count($nestedQuery->_conditions) === 0)
+		{
+			return null;
+		}
+		
+		return new Condition
+		(
+			Condition::TYPE_NESTED,
+			$operator,
+			nested: $nestedQuery->_conditions
+		);
+	}
+	
+	/**
+	 * @param string|callable $condition
+	 * @param mixed ...$additionalConditions
 	 *
 	 * @return self
 	 */
-	public function andWhere(string ...$conditions): self
+	public function andWhere(
+		string|callable $condition,
+		mixed ...$additionalConditions,
+	): self
 	{
-		return $this->where(...$conditions);
+		return $this->where($condition, ...$additionalConditions);
+	}
+	
+	/**
+	 * @param string|callable $condition
+	 * @param mixed ...$additionalConditions
+	 *
+	 * @return self
+	 */
+	public function orWhere(
+		string|callable $condition,
+		mixed ...$additionalConditions,
+	): self
+	{
+		if(is_callable($condition)
+			&& $nestedCondition= $this->_getNestedCondition($condition,
+			Condition::OPERATOR_OR))
+		{
+			$this->_conditions[] = $nestedCondition;
+			
+			return $this;
+		}
+		
+		$this->_conditions[] = new Condition
+		(
+			Condition::TYPE_DEFAULT,
+			Condition::OPERATOR_OR,
+			$condition,
+		);
+		
+		if(!empty($additionalConditions))
+		{
+			foreach($additionalConditions as $additionalCondition)
+			{
+				$this->_conditions[] = new Condition
+				(
+					Condition::TYPE_DEFAULT,
+					Condition::OPERATOR_OR,
+					$additionalCondition
+				);
+			}
+		}
+		
+		return $this;
 	}
 	
 	/**
@@ -102,8 +226,11 @@ abstract class Query
 			return $this;
 		}
 		
-		$this->_conditions[] = $field
-			. ' IN (' . implode(', ', $values) . ')';
+		$condition = $field
+			. ' IN ('
+			. implode(', ', $values)
+			. ')';
+		$this->_conditions[] = $condition;
 		
 		return $this;
 	}
@@ -132,8 +259,12 @@ abstract class Query
 			return $this;
 		}
 		
-		$this->_conditions[] = $field
-			. ' NOT IN (' . implode(', ', $values) . ')';
+		$condition = $field
+			. ' NOT IN ('
+			. implode(', ', $values) 
+			. ')';
+		
+		$this->_conditions[] = $condition;
 		
 		return $this;
 	}
@@ -147,5 +278,81 @@ abstract class Query
 	public function andWhereNotIn(string $field, array $values): self
 	{
 		return $this->whereNotIn($field, $values);
+	}
+	
+	/**
+	 * @param string $field
+	 * @param array $values
+	 *
+	 * @return self
+	 */
+	public function orWhereNotIn(string $field, array $values): self
+	{
+		if(count($values) === 0)
+		{
+			return $this;
+		}
+		
+		$condition = $field
+			. ' NOT IN ('
+			. implode(', ', $values)
+			. ')';
+		$this->_conditions[] = new Condition
+		(
+			Condition::TYPE_DEFAULT,
+			Condition::OPERATOR_OR,
+			$condition,
+		);
+		
+		return $this;
+	}
+	
+	/**
+	 * Helper method to build SQL for conditions
+	 *
+	 * @param array $conditions
+	 * @param string $glue
+	 * 
+	 * @return string
+	 */
+	protected function _getConditionsSql(array $conditions,
+		string $glue = PHP_EOL,
+	): string
+	{
+		$sql = [];
+		
+		foreach($conditions as $condition)
+		{
+			if($condition instanceof Condition)
+			{
+				// nested condition
+				if($condition->type === Condition::TYPE_NESTED
+					&& count($condition->nested)
+				)
+				{
+					$subConditionSql = $this->_getConditionsSql($condition->nested, ' ');
+					
+					$nestedSql = '(' . $subConditionSql . ')';
+					
+					$sql[] = $sql === []
+						? $nestedSql
+						: $condition->operator . ' ' . $nestedSql;
+				}
+				// single condition
+				elseif($condition->type === Condition::TYPE_DEFAULT)
+				{
+					$sql[] = $condition->operator . ' ' . $condition->condition;
+				}
+			}
+			else
+			{
+				// simple string condition
+				$sql[] = $sql === []
+					? $condition
+					: Condition::OPERATOR_AND . ' ' . $condition;
+			}
+		}
+		
+		return implode($glue, $sql);
 	}
 }

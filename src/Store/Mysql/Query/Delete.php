@@ -5,8 +5,6 @@ namespace Ovos\Store\Mysql\Query;
 
 use Ovos\Store\Mysql\Query;
 
-use function implode;
-
 /**
  * Delete
  *
@@ -24,7 +22,7 @@ class Delete extends Query
 		
 		if($this->_conditions !== [])
 		{
-			$sql.= 'WHERE ' . implode(PHP_EOL . 'AND ', $this->_conditions) . PHP_EOL;
+			$sql.= 'WHERE ' . $this->_getConditionsSql($this->_conditions) . PHP_EOL;
 		}
 		
 		return $sql;
