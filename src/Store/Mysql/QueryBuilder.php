@@ -39,14 +39,18 @@ class QueryBuilder
 	}
 	
 	/**
-	 * @param string ...$conditions
+	 * @param string|callable $condition
+	 * @param mixed ...$additionalConditions
 	 *
 	 * @return Delete
 	 */
-	public function delete(string ...$conditions): Delete
+	public function delete(
+		string|callable $condition,
+		mixed ...$additionalConditions,
+	): Delete
 	{
 		$query = new Delete($this->_table);
-		$query->where(...$conditions);
+		$query->where($condition, ...$additionalConditions);
 		
 		return $query;
 	}

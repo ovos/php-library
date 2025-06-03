@@ -24,11 +24,11 @@ class Terminal
 	/**
 	 * @return ?string
 	 */
-	public static function readLine(): null|string
+	public static function readLine(): ?string
 	{
 		$line = stream_get_line(STDIN, 1024, PHP_EOL);
 		
-		if($line === '')
+		if($line === false || $line === '')
 		{
 			return null;
 		}
@@ -50,7 +50,7 @@ class Terminal
 		
 		if(PHP_SAPI === self::SAPI_CLI)
 		{
-			// echo before output buffer is sent, used by readLine
+			// echo before the output buffer is sent, used by readLine
 			fwrite(STDOUT, $message);
 		}
 		else
@@ -60,7 +60,7 @@ class Terminal
 	}
 	
 	/**
-	 * Parses color markers and returns formatted message
+	 * Parses color markers and returns a formatted message
 	 * 
 	 * @param string $message
 	 * @param bool $markup

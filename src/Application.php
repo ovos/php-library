@@ -260,7 +260,7 @@ class Application
 	protected function _init(): self
 	{
 		self::$instance = $this->getContainer()
-			->registerValue(__CLASS__, $this)
+			->registerValue(__CLASS__, $this, true)
 			->get(__CLASS__);
 		
 		$this->_container

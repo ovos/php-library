@@ -52,6 +52,7 @@ class Container
 	 * @param string $class
 	 * @param array $parameters
 	 * @param ?callable $initializer
+	 * @param bool $overwrite
 	 *
 	 * @return self
 	 */
@@ -59,9 +60,11 @@ class Container
 		string $class,
 		array $parameters = [],
 		?callable $initializer = null,
+		bool $overwrite = false,
 	): self
 	{
-		if(isset($this->_injectors[$key])) // already registered
+		if(isset($this->_injectors[$key]) // already registered
+			&& $overwrite === false)
 		{
 			return $this;
 		}
@@ -107,16 +110,19 @@ class Container
 	 * @param string $class
 	 * @param array $parameters
 	 * @param ?callable $initializer
-	 *
+	 * @param bool $overwrite
+	 * 
 	 * @return self
 	 */
 	public function registerLazy(string $key,
 		string $class,
 		array $parameters = [],
 		?callable $initializer = null,
+		bool $overwrite = false,
 	): self
 	{
-		if(isset($this->_injectors[$key])) // already registered
+		if(isset($this->_injectors[$key]) // already registered
+			&& $overwrite === false)
 		{
 			return $this;
 		}
@@ -171,15 +177,18 @@ class Container
 	 * @param string $key
 	 * @param callable $callable
 	 * @param array $parameters
+	 * @param bool $overwrite
 	 *
 	 * @return self
 	 */
 	public function registerCallable(string $key,
 		callable $callable,
 		array $parameters = [],
+		bool $overwrite = false,
 	): self
 	{
-		if(isset($this->_injectors[$key])) // already registered
+		if(isset($this->_injectors[$key]) // already registered
+			&& $overwrite === false)
 		{
 			return $this;
 		}
@@ -222,15 +231,18 @@ class Container
 	 * @param string $key
 	 * @param object $object
 	 * @param ?callable $initializer
+	 * @param bool $overwrite
 	 *
 	 * @return self
 	 */
 	public function registerObject(string $key,
 		object $object,
 		?callable $initializer = null,
+		bool $overwrite = false,
 	): self
 	{
-		if(isset($this->_injectors[$key])) // already registered
+		if(isset($this->_injectors[$key]) // already registered
+			&& $overwrite === false)
 		{
 			return $this;
 		}
@@ -267,12 +279,17 @@ class Container
 	 *
 	 * @param string $key
 	 * @param mixed $value
+	 * @param bool $overwrite
 	 *
 	 * @return self
 	 */
-	public function registerValue(string $key, mixed $value): self
+	public function registerValue(string $key,
+		mixed $value,
+		bool $overwrite = false,
+	): self
 	{
-		if(isset($this->_injectors[$key])) // already registered
+		if(isset($this->_injectors[$key])// already registered
+			&& $overwrite === false)
 		{
 			return $this;
 		}

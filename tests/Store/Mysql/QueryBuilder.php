@@ -18,12 +18,12 @@ class QueryBuilder extends Test
 	 * @var BaseQueryBuilder
 	 */
 	protected BaseQueryBuilder $_queryBuilder;
-
+	
 	public function __construct()
 	{
 		$this->_queryBuilder = new BaseQueryBuilder('tests'); 
 	}
-
+	
 	public function select(): bool
 	{
 		$query = $this->_queryBuilder->select('t.id, t.name, t.created_at')
@@ -55,7 +55,7 @@ class QueryBuilder extends Test
 	{
 		$query = $this->_queryBuilder->update(name: 'name', modified_at: 'NOW()')
 			->where('finished_at IS NULL');
-			
+		
 		return $query->getSql() === 'UPDATE tests'
 			. PHP_EOL . 'SET name = name, modified_at = NOW()'
 			. PHP_EOL . 'WHERE finished_at IS NULL'
@@ -74,10 +74,85 @@ class QueryBuilder extends Test
 	
 	public function delete(): bool
 	{
-		$query = $this->_queryBuilder->delete('id = :id');
+		$query = $this->_queryBuilder->delete('active = 0', 
+			'role = :role'
+		);
 		
 		return $query->getSql() === 'DELETE FROM tests'
-			. PHP_EOL . 'WHERE id = :id'
+			. PHP_EOL . 'WHERE active = 0'
+			. PHP_EOL . 'AND role = :role'
 			. PHP_EOL;
+	}
+	
+	public function whereNested(): bool
+	{
+		$query = $this->_queryBuilder->select('id, name, role, active, created_at')
+			->where('created_at > NOW() - INTERVAL 1 MONTH')
+			->where(function($query)
+			{
+				$query
+					->where('active = 1')
+					->orWhere(function($query)
+					{
+						$query
+							->where('active = 0')
+							->where('role = "admin"');
+					});
+			});
+		
+		return $query->getSql() === 'SELECT id, name, role, active, created_at'
+			. PHP_EOL . 'FROM tests'
+			. PHP_EOL . 'WHERE created_at > NOW() - INTERVAL 1 MONTH'
+			. PHP_EOL . 'AND (active = 1 OR (active = 0 AND role = "admin"))'
+			. PHP_EOL;
+	}
+	
+	public function whereAdditional(): bool
+	{
+		// using multiple conditions with where()
+		$query1 = $this->_queryBuilder->select('id, name, email')
+			->where('active = 1', 'created_at > NOW() - INTERVAL 1 MONTH', 'role = "user"');
+		
+		$expected1 = 'SELECT id, name, email'
+			. PHP_EOL . 'FROM tests'
+			. PHP_EOL . 'WHERE active = 1'
+			. PHP_EOL . 'AND created_at > NOW() - INTERVAL 1 MONTH'
+			. PHP_EOL . 'AND role = "user"'
+			. PHP_EOL;
+		
+		// using multiple conditions with orWhere()
+		$query2 = $this->_queryBuilder->select('id, name, email')
+			->where('active = 1')
+			->orWhere('role = "admin"', 'role = "manager"', 'role = "supervisor"');
+		
+		$expected2 = 'SELECT id, name, email'
+			. PHP_EOL . 'FROM tests'
+			. PHP_EOL . 'WHERE active = 1'
+			. PHP_EOL . 'OR role = "admin"'
+			. PHP_EOL . 'OR role = "manager"'
+			. PHP_EOL . 'OR role = "supervisor"'
+			. PHP_EOL;
+		
+		// combining where() with additionalConditions and nested conditions
+		$query3 = $this->_queryBuilder->select('id, name, email')
+			->where('active = 1', 'verified = 1')
+			->where(function($query)
+			{
+				$query
+					->where('role = "user"')
+					->orWhere('has_access = 1', 'is_special = 1');
+			});
+		
+		$expected3 = 'SELECT id, name, email'
+			. PHP_EOL . 'FROM tests'
+			. PHP_EOL . 'WHERE active = 1'
+			. PHP_EOL . 'AND verified = 1'
+			. PHP_EOL . 'AND (role = "user" OR has_access = 1 OR is_special = 1)'
+			. PHP_EOL;
+		
+		return $query1->getSql() === $expected1
+			&& $query2->getSql() === $expected2
+			&& $query3->getSql() === $expected3
+		;
 	}
 }

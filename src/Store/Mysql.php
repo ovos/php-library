@@ -6,11 +6,12 @@ namespace Ovos\Store;
 use Ovos\Exception;
 use Ovos\Model\Mysql as Model;
 use Ovos\Store;
+use Ovos\Store\Mysql\Query;
+use Ovos\Store\Mysql\QueryBuilder;
+use Ovos\Service\Database;
 use Ovos\Pdo\Expression;
 use PDO;
 use PDOStatement;
-use Ovos\Store\Mysql\Query;
-use Ovos\Store\Mysql\QueryBuilder;
 use Closure;
 
 use function Ovos\services;
@@ -62,7 +63,9 @@ abstract class Mysql extends Store
 		if($this->_source === null)
 		{
 			// get database connection
-			$this->_source = services()->database->get($this->_sourceName);
+			$this->_source = $this->_container
+				->get(Database::SYMBOL)
+				->get($this->_sourceName);
 		}
 		
 		return $this->_source;
@@ -238,11 +241,11 @@ abstract class Mysql extends Store
 	
 	/**
 	 * @param Model|array $fields
-	 * @param false $sets
+	 * @param bool $sets
 	 *
 	 * @return array
 	 */
-	public function getQueryValues(Model|array $fields, $sets = false): array
+	public function getQueryValues(Model|array $fields, bool $sets = false): array
 	{
 		$values = [];
 		
@@ -428,9 +431,9 @@ abstract class Mysql extends Store
 			$query->limit($limit);
 		}
 		
-		if($limit !== null)
+		if($offset !== null)
 		{
-			$query->offset($limit);
+			$query->offset($offset);
 		}
 		
 		if($groupBy)
@@ -473,7 +476,7 @@ abstract class Mysql extends Store
 	public function fetchGrouped(PDOStatement $statement, string $class): array
 	{
 		$result = $statement->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP, $class); // group by first column
-		return array_map(fn($row) => reset($row), $result);
+		return array_map(static fn($row) => reset($row), $result);
 	}
 	
 	/**
@@ -619,7 +622,7 @@ abstract class Mysql extends Store
 	}
 	
 	/**
-	 * Removed all characters which can break AGAINST (... IN BOOLEAN MODE) queries
+	 * Removed all characters that can break AGAINST (... IN BOOLEAN MODE) queries
 	 * 
 	 * @param string $query
 	 *

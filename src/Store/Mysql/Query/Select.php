@@ -19,7 +19,7 @@ class Select extends Query
 	 * @var ?string
 	 */
 	protected ?string $_alias = null;
-
+	
 	/**
 	 * @var array
 	 */
@@ -78,7 +78,7 @@ class Select extends Query
 		
 		if($this->_conditions !== [])
 		{
-			$sql.= 'WHERE ' . implode(PHP_EOL . 'AND ', $this->_conditions) . PHP_EOL;
+			$sql.= 'WHERE ' . $this->_getConditionsSql($this->_conditions) . PHP_EOL;
 		}
 		
 		if($this->_groupBy !== [])
@@ -100,7 +100,7 @@ class Select extends Query
 		{
 			$sql.= 'LIMIT ' . $this->_limit . PHP_EOL;
 		}
-			
+		
 		if($this->_offset !== null)
 		{
 			$sql.= 'OFFSET ' . $this->_offset . PHP_EOL;
@@ -140,7 +140,7 @@ class Select extends Query
 		
 		return $this;
 	}
-	
+
 	/**
 	 * @param string $alias
 	 *
