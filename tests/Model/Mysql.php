@@ -29,7 +29,7 @@ class Mysql extends Test
 	 * @var object
 	 */
 	protected object $_model; 
-
+	
 	public function __construct()
 	{
 		$this->_store = (new class() extends Store
@@ -51,7 +51,7 @@ class Mysql extends Test
 			}
 		};
 		$this->_model::$store = $this->_store;
-	
+		
 		$this->_store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -66,7 +66,7 @@ class Mysql extends Test
 			ENGINE = InnoDB;
 		');
 	}
-
+	
 	public function modified(): bool
 	{
 		$this->_store->source()->exec('
@@ -114,7 +114,7 @@ class Mysql extends Test
 		
 		return count(array_diff($export, $compare)) === 0;
 	}
-		
+	
 	public function filterIn(): bool
 	{
 		$this->_store->source()->exec('
@@ -138,7 +138,7 @@ class Mysql extends Test
 		
 		return count(array_diff($export, $compare)) === 0;
 	}
-			
+	
 	public function filterOut(): bool
 	{
 		$this->_store->source()->exec('

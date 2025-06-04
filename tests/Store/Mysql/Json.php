@@ -27,7 +27,7 @@ class Json extends Test
 	 * @var object
 	 */
 	protected object $_model; 
-
+	
 	public function __construct()
 	{
 		$this->_store = (new class() extends Store
@@ -49,14 +49,14 @@ class Json extends Test
 			}
 		};
 		$this->_model::$store = $this->_store;
-	
+		
 		$this->_store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				object JSON NOT NULL,
 				PRIMARY KEY (id)
 			)
-			ENGINE = InnoDB;	
+			ENGINE = InnoDB;
 		');
 	}
 	

@@ -21,7 +21,7 @@ class Mysql extends Test
 	 * @var object
 	 */
 	protected object $_store;
-
+	
 	public function __construct()
 	{
 		$this->_store = (new class() extends Store
@@ -44,7 +44,7 @@ class Mysql extends Test
 			ENGINE = InnoDB;
 		');
 	}
-
+	
 	public function reporter(): bool
 	{
 		$this->_store->source()->exec('
