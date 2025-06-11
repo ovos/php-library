@@ -31,7 +31,7 @@ class User extends Helper
 		parent::__construct();
 		
 		$this->_authService = $authService;
-	}	
+	}
 	
 	/**
 	 * @return ?Model
