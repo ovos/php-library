@@ -430,6 +430,16 @@ class FormElement extends Helper
 	}
 	
 	/**
+	 * @param string $attribute
+	 *
+	 * @return null|int|string
+	 */
+	public function getAttribute(string $attribute): null|int|string
+	{
+		return $this->_attributes[$attribute] ?? null;
+	}
+	
+	/**
 	 * @param array $attributes
 	 * 
 	 * @return self
