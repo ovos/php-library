@@ -67,10 +67,16 @@ class Json extends Test
 	 */
 	public function mysqlBug(): bool
 	{
-		$url = 'https://test.com';
+		$subObject = new stdClass;
+		$subObject->name = 'test';
+		$subObject->number = 1;
+		$subObject->boolean = true;
+		$subObject->array = ['first', 'second'];
+		
 		$object = new stdClass;
-		$object->url = $url;
+		$object->url = 'https://test.com';
 		$object->array = [1, 2, 3];
+		$object->subObject = $subObject;
 		
 		$modelInstance = new $this->_model;
 		$modelInstance->object = $object;
