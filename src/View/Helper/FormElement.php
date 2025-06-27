@@ -93,6 +93,26 @@ class FormElement extends Helper
 	/**
 	 * @var array
 	 */
+	protected array $_inputAttributes = [];
+	
+	/**
+	 * @var ?Closure
+	 */
+	protected ?Closure $_inputAttributesCallback = null;
+	
+	/**
+	 * @var array
+	 */
+	protected array $_optionAttributes = [];
+	
+	/**
+	 * @var ?Closure
+	 */
+	protected ?Closure $_optionAttributesCallback = null;
+	
+	/**
+	 * @var array
+	 */
 	protected array $_options = [];
 	
 	/**
@@ -430,6 +450,16 @@ class FormElement extends Helper
 	}
 	
 	/**
+	 * @param string $attribute
+	 *
+	 * @return null|int|string
+	 */
+	public function getAttribute(string $attribute): null|int|string
+	{
+		return $this->_attributes[$attribute] ?? null;
+	}
+	
+	/**
 	 * @param array $attributes
 	 * 
 	 * @return self
@@ -468,6 +498,136 @@ class FormElement extends Helper
 	public function getAttributesCallback(): ?Closure
 	{
 		return $this->_attributesCallback;
+	}
+	
+	/* Input Attributes */
+	/**
+	 * @param string $attribute
+	 * @param int|string $value
+	 *
+	 * @return self
+	 */
+	public function setInputAttribute(string $attribute, int|string $value): self
+	{
+		$this->_inputAttributes[$attribute] = $value;
+		
+		return $this;
+	}
+	
+	/**
+	 * @param string $attribute
+	 *
+	 * @return null|int|string
+	 */
+	public function getInputAttribute(string $attribute): null|int|string
+	{
+		return $this->_inputAttributes[$attribute] ?? null;
+	}
+	
+	/**
+	 * @param array $attributes
+	 * 
+	 * @return self
+	 */
+	public function setInputAttributes(array $attributes): self
+	{
+		$this->_inputAttributes = $attributes;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return array
+	 */
+	public function getInputAttributes(): array
+	{
+		return $this->_inputAttributes;
+	}
+	
+	/* Input Attributes callback */
+	/**
+	 * @param ?Closure $inputAttributesCallback
+	 * 
+	 * @return self
+	 */
+	public function setInputAttributesCallback(?Closure $inputAttributesCallback): self
+	{
+		$this->_inputAttributesCallback = $inputAttributesCallback;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ?Closure
+	 */
+	public function getInputAttributesCallback(): ?Closure
+	{
+		return $this->_inputAttributesCallback;
+	}
+	
+	/* Option Attributes */
+	/**
+	 * @param string $attribute
+	 * @param int|string $value
+	 *
+	 * @return self
+	 */
+	public function setOptionAttribute(string $attribute, int|string $value): self
+	{
+		$this->_optionAttributes[$attribute] = $value;
+		
+		return $this;
+	}
+	
+	/**
+	 * @param string $attribute
+	 *
+	 * @return null|int|string
+	 */
+	public function getOptionAttribute(string $attribute): null|int|string
+	{
+		return $this->_optionAttributes[$attribute] ?? null;
+	}
+	
+	/**
+	 * @param array $attributes
+	 * 
+	 * @return self
+	 */
+	public function setOptionAttributes(array $attributes): self
+	{
+		$this->_optionAttributes = $attributes;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return array
+	 */
+	public function getOptionAttributes(): array
+	{
+		return $this->_optionAttributes;
+	}
+	
+	/* Option Attributes callback */
+	/**
+	 * @param ?Closure $optionAttributesCallback
+	 * 
+	 * @return self
+	 */
+	public function setOptionAttributesCallback(?Closure $optionAttributesCallback): self
+	{
+		$this->_optionAttributesCallback = $optionAttributesCallback;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return ?Closure
+	 */
+	public function getOptionAttributesCallback(): ?Closure
+	{
+		return $this->_optionAttributesCallback;
 	}
 	
 	/* Option */

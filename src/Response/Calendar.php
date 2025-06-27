@@ -4,12 +4,12 @@ declare(strict_types=1);
 namespace Ovos\Response;
 
 /**
- * Csv
+ * Calendar
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Csv extends Html
+class Calendar extends Html
 {
 	/**
 	 * Construct
@@ -20,7 +20,7 @@ class Csv extends Html
 	{
 		parent::__construct($response);
 		
-		$this->setHeader('Content-Type', 'text/csv; charset=utf-8');
+		$this->setHeader('Content-Type', 'text/calendar; charset=utf-8');
 	}
 	
 	/**

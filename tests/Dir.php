@@ -20,14 +20,14 @@ class Dir extends Test
 	protected string $_dir = __DIR__
 		. DIRECTORY_SEPARATOR . 'Dir'
 		. DIRECTORY_SEPARATOR;
-
+	
 	public function copyFiles(): bool
 	{
 		$copy = $this->_dir . 'copy';
 		$copy2 = $this->_dir . 'copy2';
 		BaseDir::create($copy2);
 		BaseDir::copyFiles($copy, $copy2);
-
+		
 		$copyFiles = array_keys(BaseDir::getFiles($copy));
 		$copy2Files = array_keys(BaseDir::getFiles($copy2));
 		BaseDir::remove($copy2);
@@ -62,7 +62,7 @@ class Dir extends Test
 					0 => 'file1.txt',
 				],
 				0 => 'file1.txt',
-				1 => 'file2.txt',				
+				1 => 'file2.txt',
 			],
 			'dir2' => [
 				0 => 'file1.txt',
@@ -81,7 +81,7 @@ class Dir extends Test
 		}
 		
 		return $result;
-	}	
+	}
 	
 	public function getFiles(): bool
 	{
