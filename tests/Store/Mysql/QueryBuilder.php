@@ -84,6 +84,19 @@ class QueryBuilder extends Test
 			. PHP_EOL;
 	}
 	
+	public function deleteWhere(): bool
+	{
+		$query = $this->_queryBuilder
+			->delete()
+			->where('active = 0', 
+			'role = :role');
+			
+		return $query->getSql() === 'DELETE FROM tests'
+			. PHP_EOL . 'WHERE active = 0'
+			. PHP_EOL . 'AND role = :role'
+			. PHP_EOL;
+	}
+	
 	public function whereNested(): bool
 	{
 		$query = $this->_queryBuilder->select('id, name, role, active, created_at')

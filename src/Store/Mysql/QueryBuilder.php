@@ -39,18 +39,21 @@ class QueryBuilder
 	}
 	
 	/**
-	 * @param string|callable $condition
+	 * @param null|string|callable $condition
 	 * @param mixed ...$additionalConditions
 	 *
 	 * @return Delete
 	 */
 	public function delete(
-		string|callable $condition,
+		null|string|callable $condition = null,
 		mixed ...$additionalConditions,
 	): Delete
 	{
 		$query = new Delete($this->_table);
-		$query->where($condition, ...$additionalConditions);
+		if($condition !== null)
+		{
+			$query->where($condition, ...$additionalConditions);
+		}
 		
 		return $query;
 	}

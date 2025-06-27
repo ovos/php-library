@@ -18,7 +18,7 @@ class Router extends Test
 	{
 		$firstParam = true;
 		$secondParam = false;
-	
+		
 		$controller = new RouterTestController;
 		$controller->dispatch('test', [
 			$firstParam, $secondParam
@@ -32,7 +32,7 @@ class Router extends Test
 	{
 		$firstParam = true;
 		$secondParam = false;
-	
+		
 		$controller = new RouterTestController;
 		$controller->dispatch('test', [
 			'firstParam', $firstParam,
@@ -41,13 +41,13 @@ class Router extends Test
 		
 		return $firstParam === $controller->firstParam
 			&& $secondParam === $controller->secondParam;
-	}	
+	}
 	
 	public function parametersNamedSkipOptional(): bool
 	{
 		$firstParam = false;
 		$secondParam = false;
-	
+		
 		$controller = new RouterTestController;
 		$controller->dispatch('test', [
 			'secondParam', $secondParam
@@ -61,7 +61,7 @@ class Router extends Test
 	{
 		$firstParam = true;
 		$secondParam = false;
-	
+		
 		$controller = new RouterTestController;
 		$controller->dispatch('test', [
 			$firstParam, 'secondParam', $secondParam
@@ -72,12 +72,11 @@ class Router extends Test
 	}
 }
 
-
 class RouterTestController extends Controller
 {
 	public bool $firstParam;
 	public bool $secondParam;
-
+	
 	public function test(
 		bool $firstParam = false,
 		bool $secondParam = true): void

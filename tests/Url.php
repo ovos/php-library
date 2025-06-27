@@ -44,7 +44,7 @@ class Url extends Test
 		$url->add('param' , 'two');
 		
 		return 'test/param/two/' === $url->getUrl(true);
-	}	
+	}
 	
 	public function setLast()
 	{

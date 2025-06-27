@@ -147,7 +147,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	protected int $_jsonSerializeFilterMode = self::FILTER_MODE_OUT;
 	
 	/**
-	 * @param array|null $properties
+	 * @param ?array $properties
 	 */
 	public function __construct(?array $properties = null)
 	{
