@@ -742,7 +742,8 @@ class Application
 				);
 			}
 			
-			$services->register($serviceClass);
+			$services->register($serviceClass::SYMBOL, $serviceClass)
+				->get($serviceClass::SYMBOL);
 		}
 		
 		return $this;

@@ -38,16 +38,15 @@ abstract class Service
 	protected bool $_enabled = true;
 	
 	/**
-	 * @param Container $container
-	 * @param ?string $key
+	 * @param string $key
+ 	 * @param Container $container
 	 *
 	 * @return void
 	 */
-	public static function register(Container $container,
-		?string $key = null,
+	public static function register(string $key,
+		Container $container,
 	): void
 	{
-		$key = $key ?? static::SYMBOL;
 		$container->registerClass($key, static::class);
 	}
 	

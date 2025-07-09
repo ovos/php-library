@@ -59,20 +59,6 @@ class Session extends Service
 	protected array $_session = [];
 	
 	/**
-	 * @param Container $container
-	 * @param ?string $key
-	 *
-	 * @return void
-	 */
-	public static function register(Container $container,
-		?string $key = null,
-	): void
-	{
-		$key = $key ?? static::SYMBOL;
-		$container->registerClass($key, static::class);
-	}
-	
-	/**
 	 * @param ArrayObject $config
 	 *
 	 * @throws Exception

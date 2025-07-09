@@ -86,17 +86,17 @@ class Services
 	}
 	
 	/**
-	 * @param string $serviceClass
-	 * @param ?string $key
+	 * @param string $key
+ 	 * @param string $serviceClass
 	 *
 	 * @return self
 	 */
-	public function register(string $serviceClass,
-		?string $key = null,
+	public function register(string $key,
+		string $serviceClass,
 	): self
 	{
 		/** @var Service $serviceClass */
-		$serviceClass::register($this->_container, $key);
+		$serviceClass::register($key, $this->_container);
 		
 		return $this;
 	}
