@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Container;
 
 use Attribute;
+use Ovos\ArrayObject as BaseArrayObject;
 
 /**
  * ArrayObject
@@ -37,6 +38,7 @@ class ArrayObject implements Injected
 	
 	public function process(object $object): mixed
 	{
+		/** @var $object BaseArrayObject */
 		return $object->getPath($this->_path);
 	}
 }
