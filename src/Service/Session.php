@@ -3,12 +3,12 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
+use Ovos\Service;
 use Ovos\ArrayObject;
 use Ovos\Container;
 use Ovos\Container\Inject;
 use Ovos\Exception;
 use Ovos\Redis\Connection;
-use Ovos\Service;
 
 use function array_key_exists;
 use function ini_set;
