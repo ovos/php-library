@@ -147,7 +147,7 @@ class Element
 		$value = $this->_form
 			->getRawValue($this->_id);
 		
-		// return default value, if no other value is present
+		// return the default value, if no other value is present
 		// do not filter it, we assume it's in filtered state
 		if($value === null
 			&& $default === true)
@@ -156,8 +156,8 @@ class Element
 				->getDefaultValue($this->_id);
 		}
 		
-		// if default value was not requested, process our value & cache it for future calls
-		// some filters also process null values (for example casting to int)
+		// if a default value was not requested, process our value & cache it for future calls
+		// some filters also process null values (for example, casting to int)
 		if($this->_value === null)
 		{
 			if(is_array($value))

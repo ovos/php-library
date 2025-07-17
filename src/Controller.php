@@ -394,7 +394,7 @@ class Controller
 		
 		foreach($group->controllers as $controller)
 		{
-			// if controller matches (begins with the same name)
+			// if the controller matches (begins with the same name)
 			if(str_starts_with($currentController, $controller) === false)
 			{
 				continue;
@@ -470,13 +470,13 @@ class Controller
 	}
 	
 	/**
-	 * @param null|ArrayObject $plugins
+	 * @param ?ArrayObject $plugins
 	 * 
 	 * @return self
 	 * 
 	 * @throws RuntimeException
 	 */
-	protected function _loadPluginsFromConfig(null|ArrayObject $plugins): self
+	protected function _loadPluginsFromConfig(?ArrayObject $plugins): self
 	{
 		if($plugins === null)
 		{
@@ -494,6 +494,7 @@ class Controller
 				throw new RuntimeException('Plugin class does not exist "%s".', $pluginClass);
 			}
 			
+			/** @var Plugin $instance */
 			$instance = $this->_container
 				->inject(new TypeClass($pluginClass));
 			$this->addPlugin($instance);
