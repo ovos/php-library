@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Environment\Parser;
+
 /**
  * ArrayObject
  *
@@ -76,9 +78,9 @@ class Environment
 	 * @return array
 	 */
 	/**
-	 * Parsing callback for yaml tag.
+	 * Parsing callback for YAML tag.
 	 * 
-	 * @param mixed $value Data from yaml file
+	 * @param mixed $value Data from the YAML file
 	 * @param string $tag Tag that triggered callback
 	 * @param int $flags Scalar entity style (see YAML_*_SCALAR_STYLE)
 	 * 
@@ -86,12 +88,19 @@ class Environment
 	 */
 	public function getYamlTag(mixed $value, string $tag, int $flags): mixed
 	{
+		$default = null;
+		if(str_contains($value, '|'))
+		{
+			[$value, $default] = explode('|', $value);
+			$default = Parser::parseValue($default);
+		}
+		
 		if(isset($this->_flat[$value]))
 		{
 			return $this->_flat[$value];
 		}
 		
-		return null;
+		return $default;
 	}
 	
 	/**

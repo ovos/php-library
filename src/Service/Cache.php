@@ -59,14 +59,14 @@ class Cache extends Service
 	}
 	
 	/**
+	 * @param string $key
 	 * @param Container $container
-	 * @param ?string $key
 	 *
 	 * @return void
 	 * @throws Exception
 	 */
-	public static function register(Container $container,
-		?string $key = null,
+	public static function register(string $key,
+		Container $container,
 	): void
 	{
 		$class = static::class;
@@ -82,7 +82,6 @@ class Cache extends Service
 			$class = Disabled::class;
 		}
 		
-		$key = $key ?? static::SYMBOL;
 		$container->registerClass($key, $class, [
 			'config' => $config->cache,
 		]);

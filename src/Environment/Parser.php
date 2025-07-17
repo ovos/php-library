@@ -27,4 +27,57 @@ class Parser
 		
 		return $result;
 	}
+	
+	/**
+	 * This method simulates the behavior of INI_SCANNER_TYPED option
+	 * It can be used to parse values coming from other sources than an INI file
+	 * We use it to parse a default value specified next to !ENV YAML tags,
+	 * which identify specific entries in .env file
+	 * 
+	 * @param string $value
+	 *
+	 * @return mixed
+	 */
+	public static function parseValue(string $value,
+	): mixed
+	{
+		// convert to lowercase for case-insensitive keyword matching later
+		$lowerValue = strtolower($value);
+		
+		// attempt to parse as an integer
+		// this must be done before checking boolean/null keywords to ensure
+		// numeric strings like "0" or "1" are treated as integers, not booleans
+		$intValue = filter_var($value, FILTER_VALIDATE_INT);
+		if($intValue !== false)
+		{
+			return $intValue;
+		}
+		
+		// attempt to parse as a float
+		// this comes after int parsing, as an integer is also a float
+		$floatValue = filter_var($value, FILTER_VALIDATE_FLOAT);
+		if($floatValue !== false)
+		{
+			return $floatValue;
+		}
+		
+		// handle specific boolean and null keywords (case-insensitive)
+		switch($lowerValue)
+		{
+			case 'true':
+			case 'on':
+			case 'yes':
+				return true;
+			case 'false':
+			case 'off':
+			case 'no':
+			case 'none': // crucial: 'none' is explicitly converted to false
+				return false;
+			case 'null': // explicitly convert 'null' string to PHP's null
+				return null;
+		}
+		
+		// if no specific type conversion was successful, return the original string
+		return $value;
+	}
 }
