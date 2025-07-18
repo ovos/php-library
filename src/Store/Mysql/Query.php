@@ -93,34 +93,31 @@ abstract class Query
 	}
 	
 	/**
-	 * @param string|callable $condition
-	 * @param mixed ...$additionalConditions
+	 * @param string|callable ...$conditions
 	 *
 	 * @return self
 	 */
 	public function where(
-		string|callable $condition,
-		mixed ...$additionalConditions,
+		string|callable ...$conditions,
 	): self
 	{
-		if(is_callable($condition)
-			&& $nestedCondition= $this->_getNestedCondition($condition))
+		$count = count($conditions);
+		if($count === 0)
+		{
+			return $this;
+		}
+		
+		if(is_callable($conditions[0])
+			&& $nestedCondition = $this->_getNestedCondition($conditions[0]))
 		{
 			$this->_conditions[] = $nestedCondition;
 			
 			return $this;
 		}
 		
-		$this->_conditions[] = $condition;
-		
-		if(count($additionalConditions) === 0)
+		foreach($conditions as $condition)
 		{
-			return $this;
-		}
-		
-		foreach($additionalConditions as $additionalCondition)
-		{
-			$this->_conditions[] = $additionalCondition;
+			$this->_conditions[] = $condition;
 		}
 		
 		return $this;
@@ -157,32 +154,34 @@ abstract class Query
 	}
 	
 	/**
-	 * @param string|callable $condition
-	 * @param mixed ...$additionalConditions
+	 * @param string|callable ...$conditions
 	 *
 	 * @return self
 	 */
 	public function andWhere(
-		string|callable $condition,
-		mixed ...$additionalConditions,
+		string|callable ...$conditions,
 	): self
 	{
-		return $this->where($condition, ...$additionalConditions);
+		return $this->where(...$conditions);
 	}
 	
 	/**
-	 * @param string|callable $condition
-	 * @param mixed ...$additionalConditions
+	 * @param string|callable ...$conditions
 	 *
 	 * @return self
 	 */
 	public function orWhere(
-		string|callable $condition,
-		mixed ...$additionalConditions,
+		string|callable ...$conditions,
 	): self
 	{
-		if(is_callable($condition)
-			&& $nestedCondition= $this->_getNestedCondition($condition,
+		$count = count($conditions);
+		if($count === 0)
+		{
+			return $this;
+		}
+		
+		if(is_callable($conditions[0])
+			&& $nestedCondition= $this->_getNestedCondition($conditions[0],
 			Condition::OPERATOR_OR))
 		{
 			$this->_conditions[] = $nestedCondition;
@@ -190,24 +189,14 @@ abstract class Query
 			return $this;
 		}
 		
-		$this->_conditions[] = new Condition
-		(
-			Condition::TYPE_DEFAULT,
-			Condition::OPERATOR_OR,
-			$condition,
-		);
-		
-		if(!empty($additionalConditions))
+		foreach($conditions as $condition)
 		{
-			foreach($additionalConditions as $additionalCondition)
-			{
-				$this->_conditions[] = new Condition
-				(
-					Condition::TYPE_DEFAULT,
-					Condition::OPERATOR_OR,
-					$additionalCondition
-				);
-			}
+			$this->_conditions[] = new Condition
+			(
+				Condition::TYPE_DEFAULT,
+				Condition::OPERATOR_OR,
+				$condition,
+			);
 		}
 		
 		return $this;
