@@ -64,7 +64,7 @@ class Services
 		?string $registerClass = null,
 	): ?Service
 	{
-		$service = $this->_container->get($key);
+		$service = $this->_container->resolve($key);
 		
 		if($service === null)
 		{
