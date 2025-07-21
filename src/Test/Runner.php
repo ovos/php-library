@@ -112,6 +112,8 @@ class Runner
 		}
 		catch(Throwable $throwable)
 		{
+			$this->measurement->stop();
+			
 			// catch for later (see below)
 			// & assign for the reporter
 			$test->result = Test::RESULT_FAILED;
