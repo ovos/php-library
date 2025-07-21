@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Service\Disabled;
 use Ovos\Service\Memory;
 use Ovos\Service\Benchmark;
 use Ovos\Service\Events;
@@ -63,12 +64,19 @@ class Services
 		?string $registerClass = null,
 	): ?Service
 	{
-		$service = $this->_container->get($key);
+		$service = $this->_container->resolve($key);
 		
-		if($service === null
-			&& $registerClass !== null)
+		if($service === null)
 		{
-			$this->register($registerClass, $key);
+			if($registerClass !== null)
+			{
+				$this->register($key, $registerClass);
+			}
+			else
+			{
+				$this->register($key, Disabled::class);
+			}
+			
 			$service = $this->_container->get($key);
 		}
 		

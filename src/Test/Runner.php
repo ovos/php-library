@@ -66,15 +66,15 @@ class Runner
 			/** @var Test $test */
 			$this->test = ($test = $this->class->newInstance());
 			
+			if(is_subclass_of($test, 'Ovos\Test') === false)
+			{
+				throw new NotFoundException('A class has to extend a "Ovos\Test" class.');
+			}
+			
 			// if the test is disabled, skip it
 			if($test->isDisabled())
 			{
 				return $test->result = Test::RESULT_SKIPPED;
-			}
-			
-			if(is_subclass_of($test, 'Ovos\Test') === false)
-			{
-				throw new NotFoundException('A class has to extend a "Ovos\Test" class.');
 			}
 			
 			// prepare - called before each test method
@@ -83,7 +83,7 @@ class Runner
 				$prepare = $this->class->getMethod('prepare');
 				$prepare->invoke($test);
 			}
-				
+			
 			$this->measurement = new Measurement;
 			$this->measurement->start();
 			
@@ -112,10 +112,10 @@ class Runner
 		}
 		catch(Throwable $throwable)
 		{
-			// catch for later (see below)
-			// & assign for the reporter
-			$test->result = Test::RESULT_FAILED;
-			$this->throwable = $throwable;
+			if($this->measurement !== null)
+			{
+				$this->measurement->stop();
+			}
 			
 			throw $throwable;
 		}
