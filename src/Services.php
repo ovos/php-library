@@ -70,11 +70,11 @@ class Services
 		{
 			if($registerClass !== null)
 			{
-				$this->register($registerClass, $key);
+				$this->register($key, $registerClass);
 			}
 			else
 			{
-				$this->register(Disabled::class, $key);
+				$this->register($key, Disabled::class);
 			}
 			
 			$service = $this->_container->get($key);
