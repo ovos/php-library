@@ -57,7 +57,7 @@ class ShellCommand
 		
 		// remove newlines and convert single quotes to double to prevent errors
 		$command = str_replace(["\n", "\r", "'"], ['', '', '"'], $command);
-		// replace multiple spaces with single space
+		// replace multiple spaces with a single space
 		$command = preg_replace('~(\s){2,}~', ' ', $command);
 		
 		$this->_command = $command;

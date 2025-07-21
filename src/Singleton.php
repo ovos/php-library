@@ -30,7 +30,7 @@ trait Singleton
 	}
 	
 	/**
-	 * Clears old instance and creates a new one
+	 * Clears an old instance and creates a new one
 	 * 
 	 * @return self
 	 */

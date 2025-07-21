@@ -17,15 +17,16 @@ class Test
 	/**#@+
 	 * Result constants
 	 */
-	public const int RESULT_FAILED = 0;
-	public const int RESULT_PASSED = 1;
-	public const int RESULT_SKIPPED = 2;
+	public const string RESULT_COMPLETED = 'completed';
+	public const string RESULT_PASSED = 'passed';
+	public const string RESULT_FAILED = 'failed';
+	public const string RESULT_SKIPPED = 'skipped';
 	/**#@-*/
 	
 	/**
-	 * @var int
+	 * @var string
 	 */
-	public int $result = self::RESULT_FAILED;
+	public string $result = self::RESULT_COMPLETED;
 	
 	/**
 	 * @var ?Throwable

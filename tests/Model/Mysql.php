@@ -193,7 +193,7 @@ class Mysql extends Test
 	 * Called by runner after the test method was called
 	 */
 	#[Internal]
-	public function cleanUp()
+	public function finalize()
 	{
 		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
 	}

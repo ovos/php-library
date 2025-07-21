@@ -47,6 +47,7 @@ class Cache extends Store
 	 */
 	public const string GROUP_DEFAULT = 'core';
 	public const string GROUP_TESTS = 'tests';
+	public const string GROUP_BENCHMARKS = 'benchmarks';
 	/**#@-*/
 	
 	/**
