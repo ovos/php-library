@@ -74,7 +74,8 @@ class Services
 			}
 			else
 			{
-				$this->register($key, Disabled::class);
+				$class = Disabled::class;
+				$this->register($key, $class);
 			}
 			
 			$service = $this->_container->get($key);
