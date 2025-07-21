@@ -119,7 +119,7 @@ abstract class Migration
 		
 		$source->beginTransaction();
 		$result = $source->exec($sql);
-		if($source->inTransaction()) // e.g. CREATE TABLE does not start a transaction in MySQL
+		if($source->inTransaction()) // e.g., CREATE TABLE does not start a transaction in MySQL
 		{
 			$source->commit();
 		}
