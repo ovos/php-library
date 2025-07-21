@@ -113,6 +113,7 @@ class Events extends Service implements Countable, Iterator
 	 */
 	public function handleException(Throwable $exception): void
 	{
+		echo $exception->getMessage();
 		$this->add($exception);
 		$this->log($exception);
 	}
