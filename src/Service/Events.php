@@ -126,13 +126,9 @@ class Events extends Service implements Countable, Iterator
 	 */
 	public function log(...$event): self
 	{
-		// do not log if the logger is not registered (ci)
-		if(($logger = services()->logger) === null)
-		{
-			return $this;
-		}
+		services()->logger->log(...$event);
 		
-		$logger->log(...$event);
+		return $this;
 	}
 	
 	/**
