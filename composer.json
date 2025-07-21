@@ -34,9 +34,7 @@
   "prefer-stable": true,
   "autoload": {
     "psr-4": {
-      "Ovos\\": "src",
-      "Tests\\": "tests",
-      "Benchmarks\\": "benchmarks"
+      "Ovos\\": "src"
     },
     "files": [
       "src/Container.php"
