@@ -40,7 +40,7 @@ class Client
 		if(self::$_protocol === null)
 		{
 			/**
-			 * REQUEST_SCHEME is available since Apache 2.4.16, but only on servers with direct TLS connections
+			 * REQUEST_SCHEME have been available since Apache 2.4.16, but only on servers with direct TLS connections
 			 * - not present on servers with load-balancer + TLS offloading
 			 * (TLS offloaded at the load-balancer and then forwarded to the worker-nodes via http)
 			 * 
@@ -79,13 +79,13 @@ class Client
 			
 			// check headers sent by proxies
 			
-			// sometimes proxy sends original IP in this header
+			// sometimes proxy sends the original IP in this header
 			if(!empty($_SERVER['HTTP_CLIENT_IP']))
 			{
 				$ips[] = $_SERVER['HTTP_CLIENT_IP'];
 			}
 			
-			// sometimes proxy sends original IP in this header, sometimes with proxy IP following it
+			// sometimes proxy sends the original IP in this header, sometimes with proxy IP following it
 			if(!empty($_SERVER['HTTP_X_FORWARDED_FOR']))
 			{
 				$ips = array_merge($ips, explode(', ', $_SERVER['HTTP_X_FORWARDED_FOR']));

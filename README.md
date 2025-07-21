@@ -35,6 +35,28 @@ Host ovos.php-library
 git require ovos/php-library
 ```
 
+### CLI commands
+#### Clear cache
+* `php cli.php system cache clear`  
+clears all types of active cache
+#### Stats
+* `php cli.php system stats free-space`  
+displays free space on server
+#### Collectors (garbage, logs)
+* `php cli.php system collector`  
+invokes all configured (in config) collectors
+#### Migrations
+* `php cli.php migrations run`  
+runs migrations  
+* `php cli.php migrations rollback`  
+rollbacks migrations
+#### Tests
+* `php cli.php tests run`  
+runs tests
+#### Benchmarks
+* `php cli.php benchmarks run`  
+runs benchmarks
+
 ### Useful information
 
 #### Useful redis commands

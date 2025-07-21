@@ -55,16 +55,12 @@ class Runner
 	}
 	
 	/**
-	 * @return int
+	 * @return string
 	 *
 	 * @throws NotFoundException
 	 */
-	public function run(): int
+	public function run(): string
 	{
-		$this->measurement = new Measurement;
-		$this->measurement->start();
-		
-		$throwable = null;
 		try
 		{
 			/** @var Test $test */
@@ -81,32 +77,48 @@ class Runner
 				throw new NotFoundException('A class has to extend a "Ovos\Test" class.');
 			}
 			
-			if((bool)$this->method->invoke($test) === true)
+			// prepare - called before each test method
+			if($this->class->hasMethod('prepare'))
 			{
-				$test->result = Test::RESULT_PASSED;
+				$prepare = $this->class->getMethod('prepare');
+				$prepare->invoke($test);
+			}
+				
+			$this->measurement = new Measurement;
+			$this->measurement->start();
+			
+			$invokeResult = $this->method->invoke($test);
+			
+			$this->measurement->stop();
+			
+			if(is_bool($invokeResult))
+			{
+				$test->result = $invokeResult
+					? Test::RESULT_PASSED
+					: Test::RESULT_FAILED;
+			}
+			// test may be also completed without setting status as passed/failed
+			else
+			{
+				$test->result = Test::RESULT_COMPLETED;
+			}
+			
+			// finalize - called after each test method
+			if($this->class->hasMethod('finalize'))
+			{
+				$finalize = $this->class->getMethod('finalize');
+				$finalize->invoke($test);
 			}
 		}
 		catch(Throwable $throwable)
 		{
 			// catch for later (see below)
 			// & assign for the reporter
+			$test->result = Test::RESULT_FAILED;
 			$this->throwable = $throwable;
-		}
-		
-		// clean up
-		if($this->class->hasMethod('cleanUp'))
-		{
-			$cleanUp = $this->class->getMethod('cleanUp');
-			$cleanUp->invoke($test);
-		}
-		
-		// throw after cleanup
-		if($throwable)
-		{
+			
 			throw $throwable;
 		}
-		
-		$this->measurement->stop();
 		
 		return $test->result;
 	}

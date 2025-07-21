@@ -331,7 +331,7 @@ class Container
 	{
 		if(($resolved = $this->resolve($key)) === null)
 		{
-			throw new Exception('Dependency "%s" not registered.');
+			throw new Exception('Dependency "%s" not registered.', $key);
 		}
 		
 		return $resolved;
