@@ -62,8 +62,6 @@ class Redis extends Test
 	
 	public function delete(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		
 		$this->_store->set($key, 'test');
@@ -76,8 +74,6 @@ class Redis extends Test
 	
 	public function storeArray(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		$array = [
 			'stored' => true,
@@ -98,8 +94,6 @@ class Redis extends Test
 	
 	public function getAllTags(): bool
 	{
-		$this->initStore();
-		
 		$tags1 = ['tag1', 'tag2'];
 		$tags2 = ['tag3'];
 		
@@ -124,8 +118,6 @@ class Redis extends Test
 	
 	public function getIdsMatchingAnyTags(): bool
 	{
-		$this->initStore();
-		
 		$tags1 = ['tag1', 'tag2'];
 		$tags2 = ['tag3'];
 		
@@ -149,8 +141,6 @@ class Redis extends Test
 	
 	public function addTags(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		$tags = ['tag1', 'tag2'];
 		$newTags = ['tag1', 'tag2', 'tag3'];
@@ -172,8 +162,6 @@ class Redis extends Test
 	
 	public function removeTags(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		$tags = ['tag1', 'tag2', 'tag3'];
 		$newTags = ['tag1', 'tag2'];
@@ -195,8 +183,6 @@ class Redis extends Test
 	
 	public function invalidateTags(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		$tags = ['tag1', 'tag2'];
 		$this->_store->set($key, 'test', tags: $tags);
@@ -216,7 +202,6 @@ class Redis extends Test
 	
 	public function cleanTags(): bool
 	{
-		$this->initStore();
 		$this->_store->setCleanTags(true);
 		
 		$key = 'item';
@@ -240,8 +225,6 @@ class Redis extends Test
 	
 	public function collectGarbage(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		$tags = ['tag1'];
 		
@@ -269,8 +252,6 @@ class Redis extends Test
 	
 	public function clear(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		$array = [
 			'stored' => true,

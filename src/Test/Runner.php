@@ -3,12 +3,17 @@ declare(strict_types=1);
 
 namespace Ovos\Test;
 
-use Ovos\Measurement;
 use Ovos\Test;
-use Ovos\Exception\NotFoundException;
+use Ovos\Exception\InvalidException\InvalidClassException;
 use ReflectionClass;
 use ReflectionMethod;
 use Throwable;
+
+use function count;
+use function array_map;
+use function in_array;
+use function is_subclass_of;
+use function is_bool;
 
 /**
  * Runner
@@ -19,62 +24,136 @@ use Throwable;
 class Runner
 {
 	/**
+	 * @var string
+	 */
+	public const string METHOD_ATTRIBUTE_INTERNAL = Internal::class;
+	
+	/**
 	 * @var ReflectionClass
 	 */
 	public ReflectionClass $class;
 	
 	/**
-	 * @var ReflectionMethod
-	 */
-	public ReflectionMethod $method;
-	
-	/**
-	 * @var ?Measurement
-	 */
-	public ?Measurement $measurement = null;
-	
-	/**
 	 * @var ?Test 
 	 */
-	public ?Test $test = null;
+	protected ?Test $_test = null;
 	
 	/**
-	 * @var ?Throwable 
+	 * @var array
 	 */
-	public ?Throwable $throwable = null;
+	protected array $_testMethods = [];
+	
+	/**
+	 * @var Result[] 
+	 */
+	protected array $_results = [];
+	
+	/**
+	 * @var ?string
+	 */
+	protected ?string $_skipClass = null;
+	
+	/**
+	 * @var ?string
+	 */
+	protected ?string $_skipMethod = null;
 	
 	/**
 	 * @param ReflectionClass $class
-	 * @param ReflectionMethod $method
 	 */
-	public function __construct(ReflectionClass $class, 
-		ReflectionMethod $method)
+	public function __construct(ReflectionClass $class)
 	{
 		$this->class = $class;
-		$this->method = $method;
+		$this->_testMethods = $this->_getTestMethods();
+		
+		foreach($this->_testMethods as $method)
+		{
+			$this->_results[] = new Result($class, $method);
+		}
 	}
 	
 	/**
-	 * @return string
+	 * @param ?string $skipClass
 	 *
-	 * @throws NotFoundException
+	 * @return self
 	 */
-	public function run(): string
+	public function skipClass(?string $skipClass): self
 	{
-		try
+		$this->_skipClass = $skipClass;
+		
+		return $this;
+	}
+	
+	/**
+	 * @param ?string $skipMethod
+	 *
+	 * @return self
+	 */
+	public function skipMethod(?string $skipMethod): self
+	{
+		$this->_skipMethod = $skipMethod;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return Result[]
+	 */
+	public function run(): array
+	{
+		// skip the entire class
+		if($this->_skipClass !== null
+			&& $this->_skipClass === $this->getClassName())
 		{
-			/** @var Test $test */
-			$this->test = ($test = $this->class->newInstance());
-			
-			if(is_subclass_of($test, 'Ovos\Test') === false)
+			foreach($this->_results as $result)
 			{
-				throw new NotFoundException('A class has to extend a "Ovos\Test" class.');
+				// set SKIPPED on all results
+				$result->setResult(Result::RESULT_SKIPPED);
 			}
 			
-			// if the test is disabled, skip it
-			if($test->isDisabled())
+			return $this->_results;
+		}
+		
+		// construct
+		try
+		{
+			$test = $this->getTestInstance();
+		}
+		catch(Throwable $throwable)
+		{
+			foreach($this->_results as $result)
 			{
-				return $test->result = Test::RESULT_SKIPPED;
+				$result->setThrowable($throwable);
+				// set FAILED on all results
+				$result->setResult(Result::RESULT_FAILED);
+			}
+			
+			return $this->_results;
+		}
+		
+		// if the test is disabled, set SKIPPED on all results
+		if($test->isDisabled())
+		{
+			foreach($this->_results as $result)
+			{
+				$result->setResult(Result::RESULT_SKIPPED);
+				$result->setReason($test->getReason());
+			}
+			
+			return $this->_results;
+		}
+		
+		// instance successfully constructed, 
+		// each public method will have its own result
+		foreach($this->_results as $result)
+		{
+			// skip the method
+			if($this->_skipMethod !== null
+				&& $this->_skipMethod === $result->getMethodName())
+			{
+				$result->setResult(Result::RESULT_SKIPPED);
+				
+				return $this->_results;
 			}
 			
 			// prepare - called before each test method
@@ -84,23 +163,34 @@ class Runner
 				$prepare->invoke($test);
 			}
 			
-			$this->measurement = new Measurement;
-			$this->measurement->start();
-			
-			$invokeResult = $this->method->invoke($test);
-			
-			$this->measurement->stop();
-			
-			if(is_bool($invokeResult))
+			// call a single method
+			try
 			{
-				$test->result = $invokeResult
-					? Test::RESULT_PASSED
-					: Test::RESULT_FAILED;
+				$result->startMeasurement();
+				
+				$invokeResult = $result->method->invoke($test);
+				
+				if(is_bool($invokeResult))
+				{
+					$result->setResult($invokeResult
+						? Result::RESULT_PASSED
+						: Result::RESULT_FAILED
+					);	
+				}
+				// test may be also completed without setting status as passed/failed
+				else
+				{
+					$result->setResult(Result::RESULT_COMPLETED);
+				}
 			}
-			// test may be also completed without setting status as passed/failed
-			else
+			catch(Throwable $throwable)
 			{
-				$test->result = Test::RESULT_COMPLETED;
+				$result->setThrowable($throwable);
+				$result->setResult(Result::RESULT_FAILED);
+			}
+			finally
+			{
+				$result->stopMeasurement();
 			}
 			
 			// finalize - called after each test method
@@ -110,17 +200,94 @@ class Runner
 				$finalize->invoke($test);
 			}
 		}
+		
+		// deconstruct
+		try
+		{
+			$test->deconstruct();
+		}
 		catch(Throwable $throwable)
 		{
-			if($this->measurement !== null)
+			foreach($this->_results as $result)
 			{
-				$this->measurement->stop();
+				$result->setThrowable($throwable);
+				$result->setResult(Result::RESULT_FAILED);
 			}
 			
-			throw $throwable;
+			return $this->_results;
 		}
 		
-		return $test->result;
+		return $this->_results;
+	}
+	
+	/**
+	 * @return Test
+	 */
+	public function getTestInstance(): Test
+	{
+		if($this->_test === null)
+		{
+			/** @var Test $test */
+			$this->_test = ($test = $this->class->newInstance());
+			
+			if(is_subclass_of($this->_test , 'Ovos\Test') === false)
+			{
+				throw new InvalidClassException('A class has to extend a "Ovos\Test" class.');
+			}
+		}
+		
+		return $this->_test;
+	}
+	
+	/**
+	 * @return array
+	 */
+	protected function _getTestMethods(): array
+	{
+		$methods = [];
+		$publicMethods = $this->class->getMethods(ReflectionMethod::IS_PUBLIC);
+		
+		foreach($publicMethods as $method)
+		{
+			if($method->isConstructor()
+				|| $method->isDestructor()
+			)
+			{
+				continue;
+			}
+			
+			$methodAttributes = $method->getAttributes();
+			$methodAttributesArray = array_map(fn($attribute) => $attribute->getName(), $methodAttributes);
+			if(in_array(self::METHOD_ATTRIBUTE_INTERNAL, $methodAttributesArray, true))
+			{
+				continue;
+			}
+			
+			$methods[] = $method;
+		}
+		
+		return $methods;
+	}
+	
+	public function getCount(): int
+	{
+		return count($this->_results);
+	}
+	
+	/**
+	 * @return Result[]
+	 */
+	public function getResults(): array
+	{
+		return $this->_results;
+	}
+	
+	/**
+	 * @return string
+	 */
+	public function getClassName(): string
+	{
+		return $this->class->name;
 	}
 	
 	/**
@@ -128,7 +295,7 @@ class Runner
 	 */
 	public function __toString()
 	{
-		return $this->method->class . '::' . $this->method->name;
+		return $this->class->name;
 	}
 }
 

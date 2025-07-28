@@ -40,8 +40,9 @@ class Redisearch extends Test
 		$currentClass = (new ReflectionClass($this))->getShortName();
 		if($storeClass !== $currentClass)
 		{
-			$this->reason = sprintf('"store" is set to "%s".', $storeClass);
-			$this->setIsDisabled(true);
+			$this->setIsDisabled(true,
+				sprintf('"store" is set to "%s".', $storeClass)
+			);
 		}
 	}
 	
@@ -72,8 +73,6 @@ class Redisearch extends Test
 	
 	public function delete(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		
 		$this->_store->set($key, 'test');
@@ -86,7 +85,6 @@ class Redisearch extends Test
 	
 	public function storeArray(): bool
 	{
-		$this->initStore();
 		$this->_store->indexRebuild();
 		
 		$key = 'item';
@@ -109,7 +107,6 @@ class Redisearch extends Test
 	
 	public function invalidateTags(): bool
 	{
-		$this->initStore();
 		$this->_store->indexRebuild();
 		
 		$key = 'item';
@@ -132,7 +129,6 @@ class Redisearch extends Test
 	
 	public function clear(): bool
 	{
-		$this->initStore();
 		$this->_store->indexRebuild();
 		
 		$key = 'item';

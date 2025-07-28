@@ -8,7 +8,6 @@ use Ovos\Benchmark;
 use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
 use Ovos\Store\Redis as RedisStore;
-use Ovos\Test;
 use Ovos\Test\Internal;
 
 use function Ovos\config;
@@ -42,18 +41,12 @@ class Redis extends Benchmark
 	 */
 	protected int $_tagsPerItem = 20;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_prefix;
-	
 	public function __construct()
 	{
 		$this->_config = config()->cache;
 	}
 	
-	#[Internal]
-	public function initStore(): void
+	protected function _initStore(): void
 	{
 		$connection = new Connection($this->_config->persistent);
 		if($connection->connect() === false)
@@ -76,8 +69,7 @@ class Redis extends Benchmark
 		);
 	}
 	
-	#[Internal]
-	public function fill(): void
+	protected function _fill(): void
 	{
 		$tags = [];
 		for($i = 1; $i <= $this->_tagsPerItem; $i++)
@@ -95,10 +87,10 @@ class Redis extends Benchmark
 	 * Called by the runner before each test method
 	 */
 	#[Internal]
-	public function prepare()
+	public function prepare(): void
 	{
-		$this->initStore();
-		$this->fill();
+		$this->_initStore();
+		$this->_fill();
 	}
 	
 	public function invalidateTags(): void
@@ -111,7 +103,7 @@ class Redis extends Benchmark
 	 * Called by the runner after each test method
 	 */
 	#[Internal]
-	public function finalize()
+	public function finalize(): void
 	{
 		$this->_store->clear();
 	}
