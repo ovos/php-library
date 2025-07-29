@@ -51,12 +51,12 @@ class Runner
 	/**
 	 * @var ?string
 	 */
-	protected ?string $_skipClass = null;
+	protected ?string $_filterClass = null;
 	
 	/**
 	 * @var ?string
 	 */
-	protected ?string $_skipMethod = null;
+	protected ?string $_filterMethod = null;
 	
 	/**
 	 * @param ReflectionClass $class
@@ -73,25 +73,25 @@ class Runner
 	}
 	
 	/**
-	 * @param ?string $skipClass
+	 * @param ?string $filterClass
 	 *
 	 * @return self
 	 */
-	public function skipClass(?string $skipClass): self
+	public function filterClass(?string $filterClass): self
 	{
-		$this->_skipClass = $skipClass;
+		$this->_filterClass = $filterClass;
 		
 		return $this;
 	}
 	
 	/**
-	 * @param ?string $skipMethod
+	 * @param ?string $filterMethod
 	 *
 	 * @return self
 	 */
-	public function skipMethod(?string $skipMethod): self
+	public function filterMethod(?string $filterMethod): self
 	{
-		$this->_skipMethod = $skipMethod;
+		$this->_filterMethod = $filterMethod;
 		
 		return $this;
 	}
@@ -102,8 +102,9 @@ class Runner
 	public function run(): array
 	{
 		// skip the entire class
-		if($this->_skipClass !== null
-			&& $this->_skipClass === $this->getClassName())
+		if($this->_filterClass !== null
+			&& $this->_filterClass !== $this->getClassName()
+		)
 		{
 			foreach($this->_results as $result)
 			{
@@ -147,13 +148,14 @@ class Runner
 		// each public method will have its own result
 		foreach($this->_results as $result)
 		{
-			// skip the method
-			if($this->_skipMethod !== null
-				&& $this->_skipMethod === $result->getMethodName())
+			// skip the method, only if the class is not specified or matches the current class
+			if($this->_filterMethod !== null
+				&& $this->_filterMethod !== $result->getMethodName()
+			)
 			{
 				$result->setResult(Result::RESULT_SKIPPED);
 				
-				return $this->_results;
+				continue;
 			}
 			
 			// prepare - called before each test method
@@ -167,7 +169,6 @@ class Runner
 			try
 			{
 				$result->startMeasurement();
-				
 				$invokeResult = $result->method->invoke($test);
 				
 				if(is_bool($invokeResult))
@@ -175,7 +176,7 @@ class Runner
 					$result->setResult($invokeResult
 						? Result::RESULT_PASSED
 						: Result::RESULT_FAILED
-					);	
+					);
 				}
 				// test may be also completed without setting status as passed/failed
 				else
