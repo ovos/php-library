@@ -111,7 +111,6 @@ class Redisearch extends Benchmark
 		$this->_store->invalidateTags($tags);
 	}
 	
-	
 	/**
 	 * Called by the runner after each test method
 	 */
