@@ -150,6 +150,6 @@ class Redisearch extends Test
 	#[Internal]
 	public function deconstruct(): void
 	{
-		$this->_store->indexDrop();
+		$this->_store->indexDrop($this->_store->getType());
 	}
 }
