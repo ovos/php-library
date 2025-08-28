@@ -8,6 +8,7 @@ use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
 use Ovos\Store\Redisearch as RedisStore;
 use Ovos\Test;
+use Ovos\Test\Internal;
 use RedisException;
 use ReflectionClass;
 
@@ -141,5 +142,14 @@ class Redisearch extends Test
 		$result = $this->_store->get($key);
 		
 		return $result === null;
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	public function deconstruct(): void
+	{
+		$this->_store->indexDrop();
 	}
 }
