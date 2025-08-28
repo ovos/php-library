@@ -137,7 +137,7 @@ class Container extends Test
 	}
 	
 	/**
-	 * @return ArrayObject
+	 * @return BaseArrayObject
 	 */
 	protected function _getExampleArrayObject(): BaseArrayObject
 	{
@@ -184,7 +184,7 @@ class Container extends Test
 		return $instance->config->offsetGet('username') === 'root';
 	}
 	
-	public function attribuesAutomaticRegistrationParameters(): bool
+	public function attributesAutomaticRegistrationParameters(): bool
 	{
 		$container = new BaseContainer;
 		$container->registerClass(Service1::class,
@@ -197,7 +197,7 @@ class Container extends Test
 			&& $instance->dependency2 instanceof Dependency2;
 	}
 	
-	public function attribuesAutomaticRegistrationProperties(): bool
+	public function attributesAutomaticRegistrationProperties(): bool
 	{
 		$container = new BaseContainer;
 		$container->registerClass(Service4::class,
@@ -210,7 +210,7 @@ class Container extends Test
 			&& $instance->dependency2 instanceof Dependency2;
 	}
 	
-	public function attribuesAutomaticNoRegistrationProperties(): bool
+	public function attributesAutomaticNoRegistrationProperties(): bool
 	{
 		$container = new BaseContainer;
 		$container->registerClass(Service5::class,
@@ -223,7 +223,7 @@ class Container extends Test
 			&& $instance->dependency2 === null;
 	}
 	
-	public function attribuesAutomaticRegistrationParameterKey(): bool
+	public function attributesAutomaticRegistrationParameterKey(): bool
 	{
 		$container = new BaseContainer;
 		$container->registerClass(Service6::class,

@@ -190,10 +190,19 @@ class Mysql extends Test
 	}
 	
 	/**
-	 * Called by runner after the test method was called
+	 * Called by the runner after each test method
 	 */
 	#[Internal]
-	public function finalize()
+	public function finalize(): void
+	{
+		$this->_store->source()->exec('TRUNCATE TABLE tests');
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	public function deconstruct(): void
 	{
 		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
 	}

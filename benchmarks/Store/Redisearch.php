@@ -8,7 +8,6 @@ use Ovos\Benchmark;
 use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
 use Ovos\Store\Redisearch as RedisStore;
-use Ovos\Test;
 use Ovos\Test\Internal;
 use RedisException;
 use ReflectionClass;
@@ -52,13 +51,13 @@ class Redisearch extends Benchmark
 		$currentClass = (new ReflectionClass($this))->getShortName();
 		if($storeClass !== $currentClass)
 		{
-			$this->reason = sprintf('"store" is set to "%s".', $storeClass);
-			$this->setIsDisabled(true);
+			$this->setIsDisabled(true,
+				sprintf('"store" is set to "%s".', $storeClass)
+			);
 		}
 	}
 	
-	#[Internal]	
-	public function initStore(): void
+	protected function _initStore(): void
 	{
 		$connection = new Connection($this->_config->persistent);
 		if($connection->connect() === false)
@@ -81,8 +80,7 @@ class Redisearch extends Benchmark
 		);
 	}
 	
-	#[Internal]
-	public function fill(): void
+	protected function _fill(): void
 	{
 		$tags = [];
 		for($i = 1; $i <= $this->_tagsPerItem; $i++)
@@ -100,11 +98,11 @@ class Redisearch extends Benchmark
 	 * Called by the runner before each test method
 	 */
 	#[Internal]
-	public function prepare()
+	public function prepare(): void
 	{
-		$this->initStore();
+		$this->_initStore();
 		$this->_store->indexRebuild();
-		$this->fill();
+		$this->_fill();
 	}
 	
 	public function invalidateTags(): void
@@ -117,7 +115,7 @@ class Redisearch extends Benchmark
 	 * Called by the runner after each test method
 	 */
 	#[Internal]
-	public function finalize()
+	public function finalize(): void
 	{
 		$this->_store->clear();
 	}

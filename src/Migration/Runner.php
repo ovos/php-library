@@ -5,7 +5,7 @@ namespace Ovos\Migration;
 
 use Ovos\Migration;
 use Ovos\Measurement;
-use Ovos\Exception\NotFoundException;
+use Ovos\Exception\InvalidException\InvalidClassException;
 use ReflectionClass;
 
 use function is_subclass_of;
@@ -59,7 +59,7 @@ class Runner
 		$migration = $this->class->newInstance($this->class);
 		if(is_subclass_of($migration, 'Ovos\Migration') === false)
 		{
-			throw new NotFoundException('A class has to extend a "Ovos\Migration" class.');
+			throw new InvalidClassException('A class has to extend a "Ovos\Migration" class.');
 		}
 		
 		$migration->{$direction}();
