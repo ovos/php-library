@@ -43,7 +43,7 @@ class Formatter
 	[
 		self::COLOR_RESET => "\33[0m",
 		self::COLOR_BLACK => "\33[0;30m",
-		self::COLOR_GRAY => "\33[0;37m",
+		self::COLOR_GRAY => "\33[38;5;246m",
 		self::COLOR_DARKGRAY => "\33[1;30m",
 		self::COLOR_BLUE => "\33[1;34m",
 		self::COLOR_DARKBLUE => "\33[0;34m",

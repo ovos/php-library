@@ -288,7 +288,7 @@ class Container
 		bool $overwrite = false,
 	): self
 	{
-		if(isset($this->_injectors[$key])// already registered
+		if(isset($this->_injectors[$key]) // already registered
 			&& $overwrite === false)
 		{
 			return $this;

@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Test\Internal;
-use Throwable;
 
 /**
  * Test
@@ -12,59 +11,33 @@ use Throwable;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Test
+abstract class Test
 {
-	/**#@+
-	 * Result constants
-	 */
-	public const string RESULT_COMPLETED = 'completed';
-	public const string RESULT_PASSED = 'passed';
-	public const string RESULT_FAILED = 'failed';
-	public const string RESULT_SKIPPED = 'skipped';
-	/**#@-*/
-	
-	/**
-	 * @var string
-	 */
-	public string $result = self::RESULT_COMPLETED;
-	
-	/**
-	 * @var ?Throwable
-	 */
-	public ?Throwable $throwable = null;
-	
-	/**
-	 * @var ?string
-	 */
-	public ?string $reason = null;
-	
 	/**
 	 * @var bool
 	 */
 	protected bool $_isDisabled = false;
 	
 	/**
+	 * @var ?string
+	 */
+	protected ?string $_reason = null;
+	
+	/**
+	 * @param bool $isDisabled
 	 * @param ?string $reason
 	 *
 	 * @return self
 	 */
-	#[Internal] 
-	public function setReason(?string $reason): self
-	{
-		$this->reason = $reason;
-		
-		return $this;
-	}
-	
-	/**
-	 * @param bool $isDisabled
-	 *
-	 * @return self
-	 */
 	#[Internal]
-	public function setIsDisabled(bool $isDisabled): self
+	public function setIsDisabled
+	(
+		bool $isDisabled,
+		?string $reason = null,
+	): self
 	{
 		$this->_isDisabled = $isDisabled;
+		$this->_reason = $reason;
 		
 		return $this;
 	}
@@ -76,5 +49,38 @@ class Test
 	public function isDisabled(): bool
 	{
 		return $this->_isDisabled;
+	}
+	
+	/**
+	 * @return ?string
+	 */
+	#[Internal]
+	public function getReason(): ?string
+	{
+		return $this->_reason;
+	}
+	
+	/**
+	 * Called by the runner before each test method
+	 */
+	#[Internal]
+	public function prepare(): void
+	{
+	}
+	
+	/**
+	 * Called by the runner after each test method
+	 */
+	#[Internal]
+	public function finalize(): void
+	{
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	public function deconstruct(): void
+	{
 	}
 }

@@ -8,6 +8,7 @@ use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
 use Ovos\Store\Redisearch as RedisStore;
 use Ovos\Test;
+use Ovos\Test\Internal;
 use RedisException;
 use ReflectionClass;
 
@@ -40,8 +41,9 @@ class Redisearch extends Test
 		$currentClass = (new ReflectionClass($this))->getShortName();
 		if($storeClass !== $currentClass)
 		{
-			$this->reason = sprintf('"store" is set to "%s".', $storeClass);
-			$this->setIsDisabled(true);
+			$this->setIsDisabled(true,
+				sprintf('"store" is set to "%s".', $storeClass)
+			);
 		}
 	}
 	
@@ -72,8 +74,6 @@ class Redisearch extends Test
 	
 	public function delete(): bool
 	{
-		$this->initStore();
-		
 		$key = 'item';
 		
 		$this->_store->set($key, 'test');
@@ -86,7 +86,6 @@ class Redisearch extends Test
 	
 	public function storeArray(): bool
 	{
-		$this->initStore();
 		$this->_store->indexRebuild();
 		
 		$key = 'item';
@@ -109,7 +108,6 @@ class Redisearch extends Test
 	
 	public function invalidateTags(): bool
 	{
-		$this->initStore();
 		$this->_store->indexRebuild();
 		
 		$key = 'item';
@@ -132,7 +130,6 @@ class Redisearch extends Test
 	
 	public function clear(): bool
 	{
-		$this->initStore();
 		$this->_store->indexRebuild();
 		
 		$key = 'item';
@@ -145,5 +142,14 @@ class Redisearch extends Test
 		$result = $this->_store->get($key);
 		
 		return $result === null;
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	public function deconstruct(): void
+	{
+		$this->_store->indexDrop($this->_store->getType());
 	}
 }
