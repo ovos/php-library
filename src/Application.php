@@ -181,7 +181,7 @@ class Application
 		}
 		catch(RuntimeException $exception)
 		{
-			services()->events->add($exception);
+			$this->getServices()->events->add($exception);
 		}
 	}
 	
@@ -754,7 +754,8 @@ class Application
 	 */
 	public function getServices(): Services
 	{
-		return $this->_container->get(Services::class);
+		return $this->_container
+			->getClass(Services::class, Services::class);
 	}
 	
 	/**
@@ -766,7 +767,7 @@ class Application
 	{
 		if($error = error_get_last())
 		{
-			services()->events->handleError(
+			$this->getServices()->handleError(
 				$error['type'],
 				$error['message'],
 				$error['file'],
@@ -776,7 +777,7 @@ class Application
 		// get the response to be sent
 		$response = $this->getResponse();
 		
-		$hasEvents = services()->events->count() > 0;
+		$hasEvents = $this->getServices()->events->count() > 0;
 		
 		// handle erroneous response
 		if($hasEvents)
@@ -787,7 +788,7 @@ class Application
 				if($this->getConfig()->system->debug)
 				{
 					$errors = [];
-					foreach(services()->events as $event)
+					foreach($this->getServices()->events as $event)
 					{
 						/** @var $event Exception|Error */
 						$errors[] = $event->__toString();
@@ -821,7 +822,7 @@ class Application
 				}
 				catch(Throwable $throwable)
 				{
-					services()->events->log($throwable);
+					$this->getServices()->events->log($throwable);
 				}
 			}
 		}
@@ -833,7 +834,7 @@ class Application
 		}
 		catch(Throwable $throwable)
 		{
-			services()->events->log($throwable);
+			$this->getServices()->events->log($throwable);
 		}
 		
 		if($hasEvents)
