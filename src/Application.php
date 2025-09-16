@@ -782,6 +782,9 @@ class Application
 		// handle erroneous response
 		if($hasEvents)
 		{
+			// set default error code that can be overwritten by the events controller
+			$response->setHttpCode(500);
+			
 			/// JSON
 			if($this->getResponse() instanceof Response\Json)
 			{
