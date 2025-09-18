@@ -70,11 +70,6 @@ class Apcu extends Cache
 		{
 			$string = substr($string, 3);
 		}
-		else
-		{
-			$string = ltrim($string, '~'); // linux home
-			$string = ltrim($string, DIRECTORY_SEPARATOR);
-		}
 		
 		$string = str_replace([
 			'/',
