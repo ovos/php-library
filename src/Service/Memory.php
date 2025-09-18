@@ -33,7 +33,11 @@ class Memory extends Service
 	{
 		if($this->_store === null)
 		{
-			$this->_store = new Apcu(str_replace([':', DIRECTORY_SEPARATOR], '', BASE_DIR) . '_');
+			$home = getenv('HOME', true);
+			$baseDirHomeless = $home === false
+				? BASE_DIR
+				: substr(BASE_DIR, strlen($home));
+			$this->_store = new Apcu(Apcu::pathToId($baseDirHomeless)); // path as prefix
 		}
 		
 		return $this->_store;

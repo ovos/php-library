@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\View\Helper;
 
 use Ovos\Service\Memory;
+use Ovos\Store\Apcu;
 use Ovos\View\Helper;
 use Ovos\Dir;
 use Ovos\Services;
@@ -75,7 +76,7 @@ class Asset extends Helper
 		
 		// fetch mtime from memory
 		$store = $this->_memoryService->getStore();
-		$cacheId = str_replace('/', '', $this->_asset);
+		$cacheId = $store->pathToId($this->_asset); // a static method accessed from the instance
 		if($mDate = $store->get($cacheId))
 		{
 			return $this->_asset . '?' . $mDate;

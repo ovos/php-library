@@ -6,6 +6,7 @@ namespace Ovos\Environment;
 use Ovos\Environment;
 use Ovos\Service\Memory;
 use Ovos\Container\Inject;
+use Ovos\Store\Apcu;
 
 use function basename;
 
@@ -42,9 +43,9 @@ class Loader
 		?string $cacheId = null
 	): ?Environment
 	{
-		$cacheId = ($cacheId ?? basename($file));
-		
 		$store = $this->_memoryService->getStore();
+		
+		$cacheId = ($cacheId ?? $store->pathToId($file));
 		if(($value = $store->get($cacheId)))
 		{
 			return $value;

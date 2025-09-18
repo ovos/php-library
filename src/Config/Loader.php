@@ -48,12 +48,17 @@ class Loader
 		?string $cacheId = null
 	): ?ArrayObject
 	{
+		$store = $this->_memoryService->getStore();
+		
 		$rootSection = $environment->getEnv();
 		$mTime = filemtime($file);
-		$cacheId = ($cacheId ?? basename($file)) . '_'
-			. str_replace('-', '_', $rootSection);
 		
-		$store = $this->_memoryService->getStore();
+		if($cacheId === null)
+		{
+			$fileId = $store->pathToId(basename($file));
+			$cacheId = $store->prefix($rootSection, $fileId);
+		}
+		
 		if(($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)
 		{
