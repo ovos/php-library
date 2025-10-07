@@ -330,9 +330,7 @@ class Redis extends Cache
 		);
 		
 		$functions = str_replace('[prefix]',
-			$this->_functionPrefix !== null
-				? $this->_functionPrefix
-				: '',
+			$this->_functionPrefix ?? '',
 			$functions,
 		);
 		
