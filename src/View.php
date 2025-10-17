@@ -197,7 +197,7 @@ class View
 	public static function getHelperClass(string $name): string
 	{
 		$systemConfig = container()
-			->get(Application::KEY_CONFIG)
+			->get(Application::CONTAINER_KEY_CONFIG)
 			->system;
 		$name = ucfirst($name);
 		

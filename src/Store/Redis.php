@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\ArrayObject;
+use Ovos\Store\Cache\Queue;
+use Ovos\Store\Cache\SetCallback;
 use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Redis as BaseRedis;
@@ -20,6 +22,9 @@ use function array_slice;
 use function array_unique;
 use function array_merge;
 use function array_diff;
+use function str_replace;
+use function bin2hex;
+use function random_bytes;
 
 /**
  * Redis
@@ -27,7 +32,7 @@ use function array_diff;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redis extends Cache
+class Redis extends Queue
 {
 	/**#@+
 	 * Separators
@@ -45,6 +50,8 @@ class Redis extends Cache
 	 */
 	public const string KEY_DATA = 'data';
 	public const string KEY_TAGS = 'tags';
+	public const string KEY_LOCK = 'lock';
+	public const string KEY_CHANNEL = 'channel';
 	/**#@-*/
 	
 	/**#@+
@@ -100,6 +107,14 @@ class Redis extends Cache
 	protected array $_librariesLoaded = [];
 	
 	/**
+	 * An array of unique values for any active locks,
+	 * indexed by the prefixed cache id
+	 * 
+	 * @var array
+	 */
+	protected array $_queueLocks = [];
+	
+	/**
 	 * @param string $prefix
 	 * @param Connection $connection
 	 * @param ArrayObject $config
@@ -123,6 +138,11 @@ class Redis extends Cache
 		if($storeOptions = $this->_config->offsetGet('store_options'))
 		{
 			$this->setStoreOptions($storeOptions);
+		}
+		
+		if($queue = $this->_config->offsetGet('queue'))
+		{
+			$this->setQueue($queue);
 		}
 	}
 	/**
@@ -495,36 +515,185 @@ class Redis extends Cache
 	
 	/**
 	 * @param string $key
+	 * @param ?SetCallback $set
+	 * @param bool $queue
+	 * @param ?int $queueLockTtlMs
 	 *
 	 * @return null|mixed
 	 */
-	public function get(string $key): mixed
+	public function get(
+		string $key,
+		?SetCallback $set = null,
+		bool $queue = false,
+		?int $queueLockTtlMs = null,
+	): mixed
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return null;
+			return $set ? $set->getCallback()() : null;
 		}
+		
+		$id = $this->prefix($key, $this->getType());
 		
 		try
 		{
-			$id = $this->prefix($key, $this->getType());
 			$value = $client->hGet(
 				$id,
 				self::KEY_DATA,
 			);
-			if($value === false)
+			if($value !== false)
 			{
-				return null;
+				return $this->unserialize($this->decompress($value));
 			}
-			
-			return $this->unserialize($this->decompress($value));
 		}
 		catch(RedisException $exception)
 		{
 			$this->log($exception);
+			
+			return $set ? $set->getCallback()() : null;
 		}
 		
-		return null;
+		// cache miss, queue logic begins
+		return $this->_queue($client, $id, $key, $set, $queue, $queueLockTtlMs);
+	}
+	
+	/**
+	 * @param BaseRedis $client
+	 * @param string $id
+	 * @param string $key
+	 * @param ?SetCallback $set
+	 * @param bool $queue
+	 * @param ?int $queueLockTtlMs
+	 *
+	 * @return mixed
+	 */
+	protected function _queue(
+		BaseRedis $client,
+		string $id,
+		string $key,
+		?SetCallback $set = null,
+		bool $queue = false,
+		?int $queueLockTtlMs = null,
+	): mixed
+	{
+		if($this->_queueEnabled === false
+			|| ($queue === false && $set === null))
+		{
+			return null;
+		}
+		
+		$lockKey = $this->prefix(self::KEY_LOCK, $id);
+		$channelName = $this->prefix(self::KEY_CHANNEL, $id);
+		$lockValue = bin2hex(random_bytes(16));
+		$queueLockTtlMs = $queueLockTtlMs ?? $this->_queueLockTtlMs;
+		
+		// try to acquire a distributed lock
+		$lockAcquired = $client->set($lockKey, $lockValue, [
+			'NX',
+			'PX' => $queueLockTtlMs,
+		]);
+		
+		if($lockAcquired)
+		{
+			// lock acquired. Store it internally for _releaseActiveLock()
+			return $this->_lockAcquired($key, $id, $lockValue, $set);
+		}
+		
+		// lock not acquired
+		for($attempt = 0; $attempt < $this->_queueWaitAttempts; $attempt++)
+		{
+			// set read timeout to the requested queue lock TTL
+			$this->_connection->toggleReadTimeout(
+				Connection::TIMEOUT_READ_CUSTOM, 
+				$queueLockTtlMs / 1000,
+				false
+			);
+			
+			try
+			{
+				// block and wait for a message on the channel or a timeout (when no message is received)
+				$client->subscribe([$channelName], function($client, $channelName, $message)
+				{
+					$client->unsubscribe([$channelName]);
+				});
+			}
+			// we got no message, redis responded with "RedisException: read error on connection"
+			catch(RedisException $exception)
+			{
+				$client->unsubscribe([$channelName]);
+			}
+			finally
+			{
+				// restore the default read timeout
+				$this->_connection->toggleReadTimeout();
+			}
+			
+			// either we got the message or we timed out
+			// check if data is already there
+			try
+			{
+				$value = $client->hGet(
+					$id,
+					self::KEY_DATA,
+				);
+				if($value !== false)
+				{
+					return $this->unserialize($this->decompress($value));
+				}
+				
+				// check if the lock still exists
+				if($client->exists($lockKey) === false)
+				{
+					// try to acquire a distributed lock
+					$lockAcquired = $client->set($lockKey, $lockValue, [
+						'NX',
+						'PX' => $queueLockTtlMs,
+					]);
+					
+					if($lockAcquired)
+					{
+						// lock acquired. Store it internally for _releaseActiveLock()
+						return $this->_lockAcquired($key, $id, $lockValue, $set);
+					}
+				}
+			}
+			catch(RedisException $exception)
+			{
+				$this->log($exception);
+			}
+			// if the lock still exists, or we failed to acquire it, loop to wait again
+		}
+		
+		// we tried, time to fetch the data ourselves
+		return $set ? $set->getCallback()() : null;
+	}
+	
+	/**
+	 * @param string $key
+	 * @param string $id
+	 * @param string $lockValue
+	 * @param ?SetCallback $set
+	 * 
+	 * @return mixed
+	 */
+	protected function _lockAcquired(
+		string $key,
+		string $id,
+		string $lockValue,
+		?SetCallback $set = null,
+	): mixed
+	{
+		// lock acquired. Store it internally for _releaseActiveLock()
+		$this->_queueLocks[$id] = $lockValue;
+		
+		if($set === null)
+		{
+			return null;
+		}
+		
+		$value = $set->getCallback()();
+		$this->set($key, $value, $set->getTtl(), $set->getTags());
+		return $value;
 	}
 	
 	/**
@@ -593,9 +762,10 @@ class Redis extends Cache
 			return false;
 		}
 		
+		$id = $this->prefix($key, $this->getType());
+		
 		try
 		{
-			$id = $this->prefix($key, $this->getType());
 			$value = $this->compress($this->serialize($value));
 			
 			$currentTags = $this->_getCurrentTags($client, $id);
@@ -680,8 +850,79 @@ class Redis extends Cache
 		{
 			$this->log($exception);
 		}
+		finally
+		{
+			$this->_releaseActiveLock($key, $id);
+		}
 		
 		return false;
+	}
+	
+	/**
+	 * @param string $key
+	 * @param string $id
+	 *
+	 * @return bool
+	 */
+	protected function _releaseActiveLock(
+		string $key,
+		string $id,
+	): bool
+	{
+		if($this->_queueEnabled === false)
+		{
+			return false;
+		}
+		
+		if(array_key_exists($id, $this->_queueLocks) === false)
+		{
+			return false;
+		}
+		
+		$lockValue = $this->_queueLocks[$id];
+		unset($this->_queueLocks[$id]);
+		
+		$lockKey = $this->prefix(self::KEY_LOCK, $id);
+		$channelName = $this->prefix(self::KEY_CHANNEL, $id);
+		
+		// atomically release the lock and notify any waiters using the Lua script
+		return (bool)$this->_functionCall('cache_release_lock_and_publish',
+			[$lockKey, $channelName],
+			[$lockValue],
+		);
+	}
+	
+	/**
+	 * This function should be used for long-running processes
+	 * which hold the lock for longer than default lock TTL
+	 * 
+	 * @param string $key
+	 * @param ?int $ttlMs
+	 *
+	 * @return bool
+	 */
+	public function renewLock(string $key, ?int $ttlMs = null): bool
+	{
+		if($this->_queueEnabled === false)
+		{
+			return false;
+		}
+		
+		$id = $this->prefix($key, $this->getType());
+		
+		if(array_key_exists($id, $this->_queueLocks) === false)
+		{
+			return false;
+		}
+		
+		$lockKey = $this->prefix(self::KEY_LOCK, $id);
+		$lockValue = $this->_queueLocks[$key];
+		$ttl = $ttlMs ?? $this->_queueLockTtlMs;
+		
+		return (bool)$this->_functionCall('cache_renew_lock',
+			[$lockKey],
+			[$lockValue, $ttl],
+		);
 	}
 	
 	/**

@@ -114,7 +114,7 @@ class Services
 	 */
 	public function getConfig(): ArrayObject
 	{
-		return $this->_container->get(Application::KEY_CONFIG)
+		return $this->_container->get(Application::CONTAINER_KEY_CONFIG)
 			->system->services;
 	}
 }

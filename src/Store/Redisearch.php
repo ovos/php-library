@@ -52,9 +52,10 @@ class Redisearch extends Redis
 			return false;
 		}
 		
+		$id = $this->prefix($key, $this->getType());
+		
 		try
 		{
-			$id = $this->prefix($key, $this->getType());
 			$value = $this->compress($this->serialize($value));
 			
 			$client->clearLastError();
@@ -83,6 +84,10 @@ class Redisearch extends Redis
 		catch(RedisException $exception)
 		{
 			$this->log($exception);
+		}
+		finally
+		{
+			$this->_releaseActiveLock($key, $id);
 		}
 		
 		return false;

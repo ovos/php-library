@@ -39,6 +39,7 @@ class Connection
 	 */
 	public const string TIMEOUT_READ = 'read';
 	public const string TIMEOUT_READ_LONG = 'long';
+	public const string TIMEOUT_READ_CUSTOM = 'custom';
 	/**#@-*/
 	
 	/**
@@ -231,10 +232,16 @@ class Connection
 	 * Can be used to extend and restore timeout to the original value
 	 * 
 	 * @param string $timeout
+	 * @param ?float $timeoutValue
+	 * @param bool $luaScript
 	 *
 	 * @return bool
 	 */
-	public function toggleReadTimeout(string $timeout = self::TIMEOUT_READ): bool
+	public function toggleReadTimeout(
+		string $timeout = self::TIMEOUT_READ,
+		?float $timeoutValue = null,
+		bool $luaScript = true,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -244,14 +251,19 @@ class Connection
 		$readTimeout = match($timeout)
 		{
 			self::TIMEOUT_READ_LONG => $this->_readTimeoutLong,
+			self::TIMEOUT_READ_CUSTOM => $timeoutValue,
 			default => $this->_readTimeout,
 		};
 		
 		$client->setOption(BaseRedis::OPT_READ_TIMEOUT, $readTimeout);
-		$client->config('SET', 
-			'lua-time-limit',
-			(string)($readTimeout * 1000) // ms
-		);
+		
+		if($luaScript)
+		{
+			$client->config('SET', 
+				'lua-time-limit',
+				(string)($readTimeout * 1000) // ms
+			);
+		}
 		
 		return true;
 	}
@@ -310,6 +322,14 @@ class Connection
 		}
 		
 		return true;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function disconnect(): bool
+	{
+		return $this->_client->close();
 	}
 	
 	/**

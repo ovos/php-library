@@ -5,6 +5,7 @@ namespace Ovos\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Exception;
+use Ovos\Store\Cache\SetCallback;
 use APCUIterator;
 
 use function is_string;
@@ -98,15 +99,19 @@ class Apcu extends Cache
 	
 	/**
 	 * @param string $key
+	 * @param ?SetCallback $set
 	 *
 	 * @return null|mixed
 	 */
-	public function get(string $key): mixed
+	public function get(
+		string $key,
+		?SetCallback $set = null,
+	): mixed
 	{
 		$value = apcu_fetch($this->prefix($key));
 		if($value === false)
 		{
-			return null;
+			return $set ? $set->getCallback()() : null;
 		}
 		
 		return $this->unserialize($this->decompress($value));
