@@ -54,6 +54,35 @@ class Apcu extends Cache
 	}
 	
 	/**
+	 * Returns "id" to be used as cache id form a path string
+	 * For example: /home/user/my-file.txt -> user-my-file-txt
+	 * or C:\Users\User\Desktop\my-file.txt -> user-my-file-txt
+	 *
+	 * @param string $string
+	 *
+	 * @return string
+	 */
+	public static function pathToId(string $string): string
+	{
+		$string = mb_strtolower($string);
+		
+		if(substr($string, 1, 2) === ':\\') // windows drive
+		{
+			$string = substr($string, 3);
+		}
+		
+		$string = str_replace([
+			'/',
+			'\\',
+			'.', // dot
+		], '-', $string);
+		
+		$string = trim($string, '-');
+		
+		return $string;
+	}
+	
+	/**
 	 * @param string $key
 	 * @param mixed $value
 	 * @param int $ttl

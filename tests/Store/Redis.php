@@ -8,6 +8,7 @@ use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
 use Ovos\Store\Redis as RedisStore;
 use Ovos\Test;
+use Ovos\Test\Internal;
 
 use function Ovos\config;
 use function sprintf;
@@ -26,6 +27,11 @@ class Redis extends Test
 	protected ArrayObject $_config;
 	
 	/**
+	 * @var ?Connection
+	 */
+	protected ?Connection $_connection = null;
+	
+	/**
 	 * @var ?RedisStore
 	 */
 	protected ?RedisStore $_store = null;
@@ -33,12 +39,9 @@ class Redis extends Test
 	public function __construct()
 	{
 		$this->_config = config()->cache;
-	}
-	
-	public function initStore(): bool
-	{
-		$connection = new Connection($this->_config->persistent);
-		if($connection->connect() === false)
+		
+		$this->_connection = new Connection($this->_config->persistent);
+		if($this->_connection->connect() === false)
 		{
 			throw new RedisException
 			(
@@ -48,15 +51,30 @@ class Redis extends Test
 				)
 			);
 		}
-		
+	}
+	
+	protected function _initStore(): void
+	{
 		$this->_store = new RedisStore
 		(
 			$this->_config->prefix,
-			$connection,
+			$this->_connection,
 			$this->_config->persistent,
 			Cache::GROUP_TESTS
 		);
-		
+	}
+	
+	/**
+	 * Called by the runner before each test method
+	 */
+	#[Internal]
+	public function prepare(): void
+	{
+		$this->_initStore();
+	}
+	
+	public function store(): bool
+	{
 		return true;
 	}
 	
@@ -262,5 +280,14 @@ class Redis extends Test
 		$result = $this->_store->get($key);
 		
 		return $result === null;
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	public function deconstruct(): void
+	{
+		$this->_connection->disconnect();
 	}
 }

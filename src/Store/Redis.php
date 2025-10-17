@@ -35,6 +35,11 @@ class Redis extends Cache
 	public const string SEPARATOR_FUNCTION = '_';
 	/**#@-*/
 	
+	/**
+	 * @var ?string 
+	 */
+	protected ?string $_functionPrefix = null;
+	
 	/**#@+
 	 * Keys
 	 */
@@ -119,6 +124,37 @@ class Redis extends Cache
 		{
 			$this->setStoreOptions($storeOptions);
 		}
+	}
+	/**
+	 * @param ?string $prefix
+	 *
+	 * @return self
+	 */
+	public function setPrefix(?string $prefix = null): self
+	{
+		$this->_prefix = $prefix;
+		$this->_functionPrefix = str_replace(
+			[self::SEPARATOR_PREFIX, '-'], 
+			[self::SEPARATOR_FUNCTION, self::SEPARATOR_FUNCTION],
+			$prefix,
+		);
+		
+		return $this;
+	}
+	
+	/**
+	 * @param string $key
+	 * @param ?string $prefix
+	 * @param string $separator
+	 *
+	 * @return string
+	 */
+	public function functionPrefix(string $key,
+		?string $prefix = null,
+		string $separator = self::SEPARATOR_FUNCTION
+	): string
+	{
+		return ($prefix ?: $this->_functionPrefix) . $separator . $key;
 	}
 	
 	/**
@@ -241,6 +277,8 @@ class Redis extends Cache
 	
 	/**
 	 * Ensures that a library of scripts is loaded into redis
+	 * Library name and functions cannot use ":" character in their names (this includes also the prefix):
+	 * "ERR Library names can only contain letters, numbers, or underscores(_) and must be at least one character"
 	 * 
 	 * @param string $libraryName
 	 * @param string $libraryFile
@@ -255,7 +293,7 @@ class Redis extends Cache
 		bool $replace = false
 	): bool
 	{
-		$libraryName = $this->prefix($libraryName, separator: self::SEPARATOR_FUNCTION);
+		$libraryName = $this->functionPrefix($libraryName);
 		
 		if(isset($this->_librariesLoaded[$libraryName])
 			&& $this->_librariesLoaded[$libraryName] === true
@@ -290,13 +328,12 @@ class Redis extends Cache
 		$functions = file_get_contents(__DIR__
 			. DIRECTORY_SEPARATOR . $libraryFile,
 		);
-		if($this->_prefix !== null)
-		{
-			$functions = str_replace('[prefix]',
-				$this->_prefix,
-				$functions,
-			);
-		}
+		
+		$functions = str_replace('[prefix]',
+			$this->_functionPrefix ?? '',
+			$functions,
+		);
+		
 		$library = "#!lua name=" . $libraryName . PHP_EOL . PHP_EOL
 			. $functions;
 		
@@ -352,7 +389,7 @@ class Redis extends Cache
 			? 'fcall_ro'
 			: 'fcall'
 		;
-		$functionName = $this->prefix($function, separator: self::SEPARATOR_FUNCTION);
+		$functionName = $this->functionPrefix($function);
 		
 		$result = $this->_connection->slowLog([$client, $call], $functionName, $keys, $args);
 		

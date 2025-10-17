@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Translator;
 
 use Ovos\ArrayObject;
-use Ovos\Strings;
+use Ovos\Store\Apcu;
 
 use function Ovos\services;
 use function file_exists;
@@ -47,11 +47,12 @@ class CachedAdapter
 			return;
 		}
 		
+		$store = services()->cache->getPerishableStore();
+		
 		$mTime = filemtime($filename);
 		$path = substr($filename, strlen(BASE_DIR));
-		$cacheId = Strings::slugify($path);
+		$cacheId = $store->pathToId($path); // a static method accessed from the instance
 		
-		$store = services()->cache->getPerishableStore();
 		if(($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)
 		{
