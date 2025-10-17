@@ -29,6 +29,11 @@ class Redisearch extends Test
 	protected ArrayObject $_config;
 	
 	/**
+	 * @var ?Connection
+	 */
+	protected ?Connection $_connection = null;
+	
+	/**
 	 * @var ?RedisStore
 	 */
 	protected ?RedisStore $_store = null;
@@ -45,12 +50,9 @@ class Redisearch extends Test
 				sprintf('"store" is set to "%s".', $storeClass)
 			);
 		}
-	}
-	
-	public function initStore(): bool
-	{
-		$connection = new Connection($this->_config->persistent);
-		if($connection->connect() === false)
+		
+		$this->_connection = new Connection($this->_config->persistent);
+		if($this->_connection->connect() === false)
 		{
 			throw new RedisException
 			(
@@ -60,15 +62,30 @@ class Redisearch extends Test
 				)
 			);
 		}
-		
+	}
+	
+	protected function _initStore(): void
+	{
 		$this->_store = new RedisStore
 		(
 			$this->_config->prefix,
-			$connection,
+			$this->_connection,
 			$this->_config->persistent,
 			Cache::GROUP_TESTS
 		);
-		
+	}
+	
+	/**
+	 * Called by the runner before each test method
+	 */
+	#[Internal]
+	public function prepare(): void
+	{
+		$this->_initStore();
+	}
+	
+	public function store(): bool
+	{
 		return true;
 	}
 	
@@ -151,5 +168,6 @@ class Redisearch extends Test
 	public function deconstruct(): void
 	{
 		$this->_store->indexDrop($this->_store->getType());
+		$this->_connection->disconnect();
 	}
 }
