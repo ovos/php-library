@@ -349,7 +349,7 @@ class Dir
 		bool $skipHidden = true,
 		?callable $skipCallback = null,
 		?callable $filenameCallback = null,
-		int $filter = self::FILTER_FILES,
+		int $filter = self::FILTER_DIRECTORIES,
 	): array
 	{
 		return self::getTree(...func_get_args());
@@ -386,7 +386,7 @@ class Dir
 			/**
 			 * @var SplFileInfo $file
 			 */
-			if($filter && $filter === self::FILTER_FILES
+			if($filter && $filter === self::FILTER_DIRECTORIES
 				&& $file->isFile())
 			{
 				continue;
@@ -463,7 +463,8 @@ class Dir
 			/**
 			 * @var SplFileInfo $file
 			 */
-			if($filter && $file->isDir() === ($filter === self::FILTER_FILES))
+			if($filter && $filter === self::FILTER_FILES
+				&& $file->isDir())
 			{
 				continue;
 			}
