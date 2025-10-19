@@ -87,7 +87,7 @@ class Redisearch extends Redis
 		}
 		finally
 		{
-			$this->_releaseActiveLock($key, $id);
+			$this->releaseActiveLock($key, $id);
 		}
 		
 		return false;

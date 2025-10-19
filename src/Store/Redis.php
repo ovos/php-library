@@ -4,10 +4,11 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Store\Cache\Queue;
-use Ovos\Store\Cache\SetCallback;
+use Ovos\Store\Cache\Tags;
 use Ovos\Exception;
 use Ovos\Redis\Connection;
+use Closure;
+use Throwable;
 use Redis as BaseRedis;
 use RedisException;
 
@@ -32,7 +33,7 @@ use function random_bytes;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redis extends Queue
+class Redis extends Tags
 {
 	/**#@+
 	 * Separators
@@ -105,6 +106,27 @@ class Redis extends Queue
 	 * @var array
 	 */
 	protected array $_librariesLoaded = [];
+
+	/**#@+
+	 * Queue (MemoLock) configuration
+	 */
+	
+	/**
+	 * @var bool
+	 */ 
+	protected bool $_queueEnabled = false;
+	
+	/**
+	 * @var int
+	 */
+	protected int $_queueLockTtlMs = 2000;
+	
+	/**
+	 * @var int
+	 */
+	protected int $_queueWaitAttempts = 3;
+	
+	/**#@-*/
 	
 	/**
 	 * An array of unique values for any active locks,
@@ -145,6 +167,7 @@ class Redis extends Queue
 			$this->setQueue($queue);
 		}
 	}
+	
 	/**
 	 * @param ?string $prefix
 	 *
@@ -158,6 +181,64 @@ class Redis extends Queue
 			[self::SEPARATOR_FUNCTION, self::SEPARATOR_FUNCTION],
 			$prefix,
 		);
+		
+		return $this;
+	}
+	
+	/**
+	 * @param Connection $connection
+	 *
+	 * @return self
+	 */
+	public function setConnection(Connection $connection): self
+	{
+		$this->_connection = $connection;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return Connection
+	 */
+	public function getConnection(): Connection
+	{
+		return $this->_connection;
+	}
+	
+	/**
+	 * @param ArrayObject $options
+	 *
+	 * @return self
+	 */
+	public function setStoreOptions(ArrayObject $options): self
+	{
+		if(($cleanTags = $options->offsetGet('clean_tags')) !== null) // true or false
+		{
+			$this->setCleanTags($cleanTags);
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * @param ArrayObject $config
+	 *
+	 * @return self
+	 */
+	public function setQueue(ArrayObject $config): self
+	{
+		if(($enabled = $config->offsetGet('enabled')) !== null) // true or false
+		{
+			$this->_queueEnabled = $enabled;
+		}
+		if(($lockTtlMs = $config->offsetGet('lock_ttl_ms')) !== null)
+		{
+			$this->_queueLockTtlMs = $lockTtlMs;
+		}
+		if(($waitAttempts = $config->offsetGet('wait_attempts')) !== null)
+		{
+			$this->_queueWaitAttempts = $waitAttempts;
+		}
 		
 		return $this;
 	}
@@ -203,21 +284,6 @@ class Redis extends Queue
 	}
 	
 	/**
-	 * @param ArrayObject $options
-	 *
-	 * @return self
-	 */
-	public function setStoreOptions(ArrayObject $options): self
-	{
-		if(($cleanTags = $options->offsetGet('clean_tags')) !== null) // true or false
-		{
-			$this->setCleanTags($cleanTags);
-		}
-		
-		return $this;
-	}
-	
-	/**
 	 * @param bool $cleanTags
 	 *
 	 * @return self
@@ -235,26 +301,6 @@ class Redis extends Queue
 	public function getCleanTags(): bool
 	{
 		return $this->_cleanTags;
-	}
-	
-	/**
-	 * @param Connection $connection
-	 *
-	 * @return self
-	 */
-	public function setConnection(Connection $connection): self
-	{
-		$this->_connection = $connection;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return Connection
-	 */
-	public function getConnection(): Connection
-	{
-		return $this->_connection;
 	}
 	
 	/**
@@ -515,22 +561,26 @@ class Redis extends Queue
 	
 	/**
 	 * @param string $key
-	 * @param ?SetCallback $set
-	 * @param bool $queue
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 * @param array $tags
+	 * @param bool $willSet
 	 * @param ?int $queueLockTtlMs
 	 *
 	 * @return null|mixed
 	 */
 	public function get(
 		string $key,
-		?SetCallback $set = null,
-		bool $queue = false,
+		?Closure $setCallback = null,
+		int $ttl = 0,
+		array $tags = [],
+		bool $willSet = false,
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return $set ? $set->getCallback()() : null;
+			return $this->callSetCallback($setCallback);
 		}
 		
 		$id = $this->prefix($key, $this->getType());
@@ -550,36 +600,85 @@ class Redis extends Queue
 		{
 			$this->log($exception);
 			
-			return $set ? $set->getCallback()() : null;
+			return $this->callSetCallback($setCallback);
 		}
 		
 		// cache miss, queue logic begins
-		return $this->_queue($client, $id, $key, $set, $queue, $queueLockTtlMs);
+		return $this->_queue(
+			$client,
+			$key,
+			$id,
+			$setCallback,
+			$ttl,
+			$tags,
+			$willSet,
+			$queueLockTtlMs,
+		);
+	}
+	
+	/**
+	 * @param string $key
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 * @param array $tags
+	 *
+	 * @return mixed
+	 */
+	public function setFromCallback(
+		string $key,
+		?Closure $setCallback,
+		int $ttl = 0,
+		array $tags = [],
+	): mixed
+	{
+		if($setCallback === null)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$value = $setCallback();
+			
+			$this->set($key, $value, $ttl, $tags);
+		}
+		catch(Throwable $throwable)
+		{
+			$this->releaseActiveLock($key);
+			
+			throw $throwable;
+		}
+		
+		return $value;
 	}
 	
 	/**
 	 * @param BaseRedis $client
-	 * @param string $id
 	 * @param string $key
-	 * @param ?SetCallback $set
-	 * @param bool $queue
+	 * @param string $id
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 * @param array $tags
+	 * @param bool $willSet
 	 * @param ?int $queueLockTtlMs
 	 *
 	 * @return mixed
 	 */
 	protected function _queue(
 		BaseRedis $client,
-		string $id,
 		string $key,
-		?SetCallback $set = null,
-		bool $queue = false,
+		string $id,
+		?Closure $setCallback = null,
+		int $ttl = 0,
+		array $tags = [],
+		bool $willSet = false,
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
 		if($this->_queueEnabled === false
-			|| ($queue === false && $set === null))
+			|| ($setCallback === null && $willSet === false))
 		{
-			return null;
+			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
 		}
 		
 		$lockKey = $this->prefix(self::KEY_LOCK, $id);
@@ -595,18 +694,25 @@ class Redis extends Queue
 		
 		if($lockAcquired)
 		{
-			// lock acquired. Store it internally for _releaseActiveLock()
-			return $this->_lockAcquired($key, $id, $lockValue, $set);
+			// lock acquired, store it internally for releaseActiveLock()
+			return $this->_lockAcquired($key,
+				$id,
+				$lockValue,
+				$setCallback,
+				$ttl,
+				$tags,
+			);
 		}
 		
 		// lock not acquired
+		$waitTimeMs = $queueLockTtlMs;
 		for($attempt = 0; $attempt < $this->_queueWaitAttempts; $attempt++)
 		{
 			// set read timeout to the requested queue lock TTL
 			$this->_connection->toggleReadTimeout(
 				Connection::TIMEOUT_READ_CUSTOM, 
-				$queueLockTtlMs / 1000,
-				false
+				$waitTimeMs / 1000, // milliseconds to seconds
+				false,
 			);
 			
 			try
@@ -621,6 +727,7 @@ class Redis extends Queue
 			catch(RedisException $exception)
 			{
 				$client->unsubscribe([$channelName]);
+				$waitTimeMs /= 2; // shorten the wait time on the next attempt
 			}
 			finally
 			{
@@ -628,7 +735,7 @@ class Redis extends Queue
 				$this->_connection->toggleReadTimeout();
 			}
 			
-			// either we got the message or we timed out
+			// either we got the message or we timed-out
 			// check if data is already there
 			try
 			{
@@ -652,8 +759,14 @@ class Redis extends Queue
 					
 					if($lockAcquired)
 					{
-						// lock acquired. Store it internally for _releaseActiveLock()
-						return $this->_lockAcquired($key, $id, $lockValue, $set);
+						// lock acquired, store it internally for releaseActiveLock()
+						return $this->_lockAcquired($key,
+							$id,
+							$lockValue,
+							$setCallback,
+							$ttl,
+							$tags,
+						);
 					}
 				}
 			}
@@ -665,35 +778,31 @@ class Redis extends Queue
 		}
 		
 		// we tried, time to fetch the data ourselves
-		return $set ? $set->getCallback()() : null;
+		return $this->callSetCallback($setCallback);
 	}
 	
 	/**
 	 * @param string $key
 	 * @param string $id
 	 * @param string $lockValue
-	 * @param ?SetCallback $set
-	 * 
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 * @param array $tags
+	 *
 	 * @return mixed
 	 */
 	protected function _lockAcquired(
 		string $key,
 		string $id,
 		string $lockValue,
-		?SetCallback $set = null,
+		?Closure $setCallback = null,
+		int $ttl = 0,
+		array $tags = [],
 	): mixed
 	{
-		// lock acquired. Store it internally for _releaseActiveLock()
 		$this->_queueLocks[$id] = $lockValue;
 		
-		if($set === null)
-		{
-			return null;
-		}
-		
-		$value = $set->getCallback()();
-		$this->set($key, $value, $set->getTtl(), $set->getTags());
-		return $value;
+		return $this->setFromCallback($key, $setCallback, $ttl, $tags);
 	}
 	
 	/**
@@ -783,7 +892,7 @@ class Redis extends Queue
 			$args = [$id, self::KEY_DATA, $value];
 			if(count($tags))
 			{
-				array_push($args, 
+				array_push($args,
 					self::KEY_TAGS,
 					implode(',', $tags)
 				);
@@ -807,7 +916,7 @@ class Redis extends Queue
 				
 				// add the id to the list of each tag
 				$client->hSet($tagId,
-					$key, 
+					$key,
 					null,
 				);
 				
@@ -852,26 +961,36 @@ class Redis extends Queue
 		}
 		finally
 		{
-			$this->_releaseActiveLock($key, $id);
+			$this->releaseActiveLock($key, $id);
 		}
 		
 		return false;
 	}
 	
 	/**
+	 * This function can be used to release a lock acquired by
+	 * the get(), for example, when an exception is caught,
+	 * and we know that save() won't be called
+	 * This will enable other processes to acquire the lock faster
+	 * 
 	 * @param string $key
-	 * @param string $id
+	 * @param ?string $id
 	 *
 	 * @return bool
 	 */
-	protected function _releaseActiveLock(
+	public function releaseActiveLock(
 		string $key,
-		string $id,
+		?string $id = null,
 	): bool
 	{
 		if($this->_queueEnabled === false)
 		{
 			return false;
+		}
+		
+		if($id === null)
+		{
+			$id = $this->prefix($key, $this->getType());
 		}
 		
 		if(array_key_exists($id, $this->_queueLocks) === false)
@@ -916,12 +1035,12 @@ class Redis extends Queue
 		}
 		
 		$lockKey = $this->prefix(self::KEY_LOCK, $id);
-		$lockValue = $this->_queueLocks[$key];
-		$ttl = $ttlMs ?? $this->_queueLockTtlMs;
+		$lockValue = $this->_queueLocks[$id];
+		$ttlMs = $ttlMs ?? $this->_queueLockTtlMs;
 		
 		return (bool)$this->_functionCall('cache_renew_lock',
 			[$lockKey],
-			[$lockValue, $ttl],
+			[$lockValue, $ttlMs],
 		);
 	}
 	

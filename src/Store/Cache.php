@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\Store;
-use Ovos\Store\Cache\SetCallback;
 use Ovos\ArrayObject;
+use Closure;
 
 use function is_array;
 use function is_object;
@@ -251,14 +251,55 @@ abstract class Cache extends Store
 	
 	/**
 	 * @param string $key
-	 * @param ?SetCallback $set
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
 	 *
 	 * @return null|mixed
 	 */
 	abstract public function get(
 		string $key,
-		?SetCallback $set = null,
+		?Closure $setCallback = null,
+		int $ttl = 0,
 	): mixed;
+	
+	/**
+	 * @param string $key
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 *
+	 * @return mixed
+	 */
+	public function setFromCallback(
+		string $key,
+		?Closure $setCallback,
+		int $ttl = 0,
+	): mixed
+	{
+		if($setCallback === null)
+		{
+			return null;
+		}
+		
+		$value = $setCallback();
+		$this->set($key, $value, $ttl);
+		
+		return $value;
+	}
+	
+	/**
+	 * @param ?Closure $setCallback
+	 *
+	 * @return null|mixed
+	 */
+	public function callSetCallback(?Closure $setCallback = null): mixed
+	{
+		if($setCallback === null)
+		{
+			return null;
+		}
+		
+		return $setCallback();
+	}
 	
 	/**
 	 * @param string $key

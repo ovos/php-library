@@ -12,6 +12,8 @@ use Ovos\Test\Internal;
 
 use function Ovos\config;
 use function sprintf;
+use function count;
+use function array_diff;
 
 /**
  * Redis
@@ -143,11 +145,12 @@ class Redis extends Test
 		$this->_store->set('item2', 'test', tags: $tags2);
 		$this->_store->set('item3', 'test', tags: $tags1);
 		
+		// may return more ids (the list was not garbage collected
 		$ids = $this->_store->getIdsMatchingAnyTags(['tag1']);
 		
 		try
 		{
-			return $ids === ['item1', 'item3'];
+			return count(array_diff(['item1', 'item3'], $ids)) === 0; // all the items are present in $ids
 		}
 		finally
 		{
