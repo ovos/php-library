@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Test;
 
 use Ovos\Test;
+use Ovos\Test\Exception\SkipException;
 use Ovos\Exception\InvalidException\InvalidClassException;
 use ReflectionClass;
 use ReflectionMethod;
@@ -169,19 +170,27 @@ class Runner
 			try
 			{
 				$result->startMeasurement();
-				$invokeResult = $result->method->invoke($test);
-				
-				if(is_bool($invokeResult))
+				try
 				{
-					$result->setResult($invokeResult
-						? Result::RESULT_PASSED
-						: Result::RESULT_FAILED
-					);
+					$invokeResult = $result->method->invoke($test);
+					
+					if(is_bool($invokeResult))
+					{
+						$result->setResult($invokeResult
+							? Result::RESULT_PASSED
+							: Result::RESULT_FAILED
+						);
+					}
+					// test may be also completed without setting status as passed/failed
+					else
+					{
+						$result->setResult(Result::RESULT_COMPLETED);
+					}
 				}
-				// test may be also completed without setting status as passed/failed
-				else
+				catch(SkipException $exception)
 				{
-					$result->setResult(Result::RESULT_COMPLETED);
+					$result->setResult(Result::RESULT_SKIPPED);
+					$result->setReason($exception->getMessage());
 				}
 			}
 			catch(Throwable $throwable)
@@ -233,7 +242,8 @@ class Runner
 			
 			if(is_subclass_of($this->_test , 'Ovos\Test') === false)
 			{
-				throw new InvalidClassException('A class has to extend a "Ovos\Test" class.');
+				throw new InvalidClassException(
+					'A class has to extend a "Ovos\Test" class.');
 			}
 		}
 		
@@ -246,7 +256,8 @@ class Runner
 	protected function _getTestMethods(): array
 	{
 		$methods = [];
-		$publicMethods = $this->class->getMethods(ReflectionMethod::IS_PUBLIC);
+		$publicMethods = $this->class
+			->getMethods(ReflectionMethod::IS_PUBLIC);
 		
 		foreach($publicMethods as $method)
 		{
@@ -258,8 +269,13 @@ class Runner
 			}
 			
 			$methodAttributes = $method->getAttributes();
-			$methodAttributesArray = array_map(fn($attribute) => $attribute->getName(), $methodAttributes);
-			if(in_array(self::METHOD_ATTRIBUTE_INTERNAL, $methodAttributesArray, true))
+			$methodAttributesArray = array_map(
+				fn($attribute) => $attribute->getName(), $methodAttributes);
+			if(in_array(
+				self::METHOD_ATTRIBUTE_INTERNAL,
+				$methodAttributesArray, 
+				true
+			))
 			{
 				continue;
 			}

@@ -49,6 +49,8 @@ class Redisearch extends Test
 			$this->setIsDisabled(true,
 				sprintf('"store" is set to "%s".', $storeClass)
 			);
+			
+			return;
 		}
 		
 		$this->_connection = new Connection($this->_config->persistent);

@@ -40,6 +40,15 @@ class Queue extends Test
 	{
 		$this->_config = config()->cache;
 		
+		if($this->_config->getPath(['persistent', 'queue', 'enabled']) !== true)
+		{
+			$this->setIsDisabled(true,
+				sprintf('"queue" is not enabled in cache config.')
+			);
+			
+			return;
+		}
+		
 		$this->_connection = new Connection($this->_config->persistent);
 		if($this->_connection->connect() === false)
 		{
