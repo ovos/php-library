@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Store;
 
+use Ovos\Store\Redis\Cache;
 use RedisException;
 
 use function in_array;
@@ -18,7 +19,7 @@ use function count;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redisearch extends Redis
+class Redisearch extends Cache
 {
 	/**#@+
 	 * Libraries
