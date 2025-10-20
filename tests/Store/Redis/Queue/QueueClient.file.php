@@ -93,6 +93,9 @@ class QueueClient extends Controller\Cli
 				{
 					return;
 				}
+				
+				sleep(1);
+				
 				$id = $store->prefix(self::KEY_ITEM_COUNTER, $store->getType());
 				$client->incr($id);
 				$client->expire($id, 30);

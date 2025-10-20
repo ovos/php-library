@@ -180,6 +180,7 @@ class Queue extends Test
 			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
 			{
 				$this->_store->renewLock(self::KEY_ITEM);
+				$this->_store->set(self::KEY_ITEM, 'value'); // to release the lock
 			}
 			
 			return true;
