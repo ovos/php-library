@@ -26,7 +26,7 @@ class QueueClient extends Controller\Cli
 	/**
 	 * @var string
 	 */
-	public const string KEY_ITEM = 'item2';
+	public const string KEY_ITEM = 'item';
 	
 	/**
 	 * @var string
@@ -52,20 +52,31 @@ class QueueClient extends Controller\Cli
 	{
 		parent::__construct();
 		
-		$this->_config = config()->cache;
+		$config = config();
+		$config->system->profilers->enabled = false;
+		
+		$this->_config = $config->cache;
 		
 		$this->_connection = new Connection($this->_config->persistent);
 		if($this->_connection->connect() === false)
 		{
-			exit(0);
+			throw new RedisException
+			(
+				sprintf('Could not connect to redis server "%s" on port "%s".',
+					$this->_store->getConfig()->host,
+					$this->_store->getConfig()->port,
+				)
+			);
 		}
+		
+		$group = $_SERVER['argv'][1] ?? Cache::GROUP_TESTS;
 		
 		$this->_store = new Redis
 		(
 			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
-			Cache::GROUP_TESTS,
+			$group,
 		);
 	}
 	
