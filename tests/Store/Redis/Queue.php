@@ -9,6 +9,7 @@ use Ovos\Store\Cache;
 use Ovos\Store\Redis as RedisStore;
 use Ovos\Test;
 use Ovos\Test\Internal;
+use RedisException;
 
 use function Ovos\config;
 use function sprintf;
@@ -21,6 +22,16 @@ use function sprintf;
  */
 class Queue extends Test
 {
+	/**
+	 * @var string
+	 */
+	public const string KEY_ITEM = 'item';
+	
+	/**
+	 * @var string
+	 */
+	public const string KEY_ITEM_COUNTER = 'item:counter';
+	
 	/**
 	 * @var ArrayObject
 	 */
@@ -69,7 +80,7 @@ class Queue extends Test
 			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
-			Cache::GROUP_TESTS
+			Cache::GROUP_TESTS,
 		);
 	}
 	
@@ -84,33 +95,30 @@ class Queue extends Test
 	
 	public function set(): bool
 	{
-		$key = 'item';
-		
 		try
 		{
-			if($this->_store->get($key, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
 			{
-				$this->_store->set($key, 'test');
+				$this->_store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get($key);
+			$exists = $this->_store->get(self::KEY_ITEM);
 			
 			return $exists !== null;
 		}
 		finally
 		{
-			$this->_store->delete($key);
+			$this->_store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function setCallback(): bool
 	{
-		$key = 'item';
 		$value = 'test';
 		
 		try
 		{
-			$result = $this->_store->get($key,
+			$result = $this->_store->get(self::KEY_ITEM,
 				setCallback: fn() => $value,
 			);
 			
@@ -118,72 +126,129 @@ class Queue extends Test
 		}
 		finally
 		{
-			$this->_store->delete($key);
+			$this->_store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function setCallbackWithTags(): bool
 	{
-		$key = 'item';
 		$value = 'test';
 		$tags = ['tag1', 'tag2'];
 		
 		try
 		{
-			$value = $this->_store->get($key,
+			$value = $this->_store->get(self::KEY_ITEM,
 				setCallback: fn() => $value,
-				tags: $tags
+				tags: $tags,
 			);
 			
-			$result = $this->_store->getTags($key);
+			$result = $this->_store->getTags(self::KEY_ITEM);
 			
 			return $result === $tags; // have the same key/value pairs in the same order and of the same types.
 		}
 		finally
 		{
-			$this->_store->delete($key);
+			$this->_store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function releaseActiveLock(): bool
 	{
-		$key = 'item';
-		
 		try
 		{
-			if($this->_store->get($key, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
 			{
-				$this->_store->releaseActiveLock($key);
+				$this->_store->releaseActiveLock(self::KEY_ITEM);
 			}
 			
 			$lockKey = $this->_store
-				->prefix(RedisStore::KEY_LOCK, $key);
+				->prefix(RedisStore::KEY_LOCK, self::KEY_ITEM);
 			
 			return $this->_store->getClient()
 				->exists($lockKey) === 0;
 		}
 		finally
 		{
-			$this->_store->delete($key);
+			$this->_store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function renewLock(): bool
 	{
-		$key = 'item';
-		
 		try
 		{
-			if($this->_store->get($key, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
 			{
-				$this->_store->renewLock($key);
+				$this->_store->renewLock(self::KEY_ITEM);
 			}
 			
 			return true;
 		}
 		finally
 		{
-			$this->_store->delete($key);
+			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function queue(): bool
+	{
+		$phpBinary = config()->getPath(['cli', 'executable']);
+		$phpBinary = $phpBinary ?? 'php';
+		$command = sprintf('%s %s', $phpBinary,
+			__DIR__ . DIRECTORY_SEPARATOR
+			. 'Queue' . DIRECTORY_SEPARATOR
+			. 'QueueClient.file.php'
+		);
+		
+		try
+		{
+			$processes = [];
+			for($i = 0; $i < 5; $i++)
+			{
+				$process = proc_open($command, [], $pipes[]);
+				if(is_resource($process))
+				{
+					$processes[] = $process;
+				}
+			}
+			
+			// wait for all processes to finish
+			$running = true;
+			while($running)
+			{
+				$running = false;
+				foreach($processes as $process)
+				{
+					if(is_resource($process) === false)
+					{
+						continue;
+					}
+					
+					$status = proc_get_status($process);
+					if($status['running'])
+					{
+						$running = true;
+						usleep(10000); // wait 10ms before checking again
+					}
+					else
+					{
+						proc_close($process);
+					}
+				}
+			}
+			
+			$id = $this->_store->prefix(self::KEY_ITEM_COUNTER,
+				$this->_store->getType()
+			);
+			
+			$count = $this->_store->getClient()->get($id);
+			
+			return (int)$count === 1;
+		}
+		finally
+		{
+			$this->_store->delete(self::KEY_ITEM);
+			$this->_store->delete(self::KEY_ITEM_COUNTER);
 		}
 	}
 	

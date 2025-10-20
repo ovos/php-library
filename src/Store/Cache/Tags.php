@@ -49,7 +49,7 @@ abstract class Tags extends Cache
 			return null;
 		}
 		
-		$value = $setCallback();
+		$value = $setCallback($this);
 		$this->set($key, $value, $ttl, $tags);
 		
 		return $value;

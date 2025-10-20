@@ -544,7 +544,7 @@ abstract class Cache extends Tags
 		
 		try
 		{
-			$value = $setCallback();
+			$value = $setCallback($this);
 			
 			$this->set($key, $value, $ttl, $tags);
 		}

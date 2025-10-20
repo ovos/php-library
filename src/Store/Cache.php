@@ -280,7 +280,7 @@ abstract class Cache extends Store
 			return null;
 		}
 		
-		$value = $setCallback();
+		$value = $setCallback($this);
 		$this->set($key, $value, $ttl);
 		
 		return $value;
@@ -298,7 +298,7 @@ abstract class Cache extends Store
 			return null;
 		}
 		
-		return $setCallback();
+		return $setCallback($this);
 	}
 	
 	/**
