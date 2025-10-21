@@ -47,7 +47,7 @@ class Application
 	/**#@+
 	 * Container constants
 	 */
-	public const string KEY_CONFIG = 'config';
+	public const string CONTAINER_KEY_CONFIG = 'config';
 	/**#@-*/
 	
 	/**
@@ -298,7 +298,7 @@ class Application
 		);
 		$this->_container
 			->registerObject(Environment::class, $this->_environment)
-			->registerObject(self::KEY_CONFIG, $this->_config);
+			->registerObject(self::CONTAINER_KEY_CONFIG, $this->_config);
 		
 		return $this;
 	}
@@ -704,7 +704,7 @@ class Application
 			->registerCallable(Services::class,
 			function(Container $container)
 			{
-				$servicesClass = $container->get(self::KEY_CONFIG)
+				$servicesClass = $container->get(self::CONTAINER_KEY_CONFIG)
 					->system->services->container;
 				if($servicesClass !== null)
 				{

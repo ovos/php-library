@@ -1,37 +1,42 @@
 <?php
 declare(strict_types=1);
 
-namespace Benchmarks\Store;
+namespace Benchmarks\Store\Redis;
 
 use Ovos\ArrayObject;
 use Ovos\Benchmark;
 use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
-use Ovos\Store\Redisearch as RedisStore;
+use Ovos\Store\Redis as RedisStore;
 use Ovos\Test\Internal;
+use Tests\Store\Redis\Queue as QueueTests;
 use RedisException;
-use ReflectionClass;
 
 use function Ovos\config;
 use function sprintf;
 
 /**
- * Redisearch
+ * Queue
  *
  * @package Bechmarks
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redisearch extends Benchmark
+class Queue extends Benchmark
 {
 	/**
-	 * @var int
+	 * @var string
 	 */
-	public const int ITEMS = 10000;
+	public const string KEY_ITEM = 'item';
+	
+	/**
+	 * @var string
+	 */
+	public const string KEY_ITEM_COUNTER = 'item:counter';
 	
 	/**
 	 * @var int
 	 */
-	public const int TAGS_PER_ITEM = 20;
+	public const int CLIENTS = 100;
 	
 	/**
 	 * @var ArrayObject
@@ -51,15 +56,6 @@ class Redisearch extends Benchmark
 	public function __construct()
 	{
 		$this->_config = config()->cache;
-		
-		$storeClass = $this->_config->persistent->store;
-		$currentClass = (new ReflectionClass($this))->getShortName();
-		if($storeClass !== $currentClass)
-		{
-			$this->setIsDisabled(true,
-				sprintf('"store" is set to "%s".', $storeClass)
-			);
-		}
 		
 		$this->_connection = new Connection($this->_config->persistent);
 		if($this->_connection->connect() === false)
@@ -85,20 +81,6 @@ class Redisearch extends Benchmark
 		);
 	}
 	
-	protected function _fill(): void
-	{
-		$tags = [];
-		for($i = 1; $i <= self::TAGS_PER_ITEM; $i++)
-		{
-			$tags[] = 'tag' . $i;
-		}
-		
-		for($i = 1; $i <= self::ITEMS; $i++)
-		{
-			$this->_store->set('item' . $i, 'test', tags: $tags);
-		}
-	}
-	
 	/**
 	 * Called by the runner before each test method
 	 */
@@ -106,14 +88,38 @@ class Redisearch extends Benchmark
 	public function prepare(): void
 	{
 		$this->_initStore();
-		$this->_store->indexRebuild();
-		$this->_fill();
 	}
 	
-	public function invalidateTags(): void
+	public function queue(): bool
 	{
-		$tags = ['tag1', 'tag2'];
-		$this->_store->invalidateTags($tags);
+		$phpBinary = config()->getPath(['cli', 'executable']);
+		$phpBinary = $phpBinary ?? 'php';
+		$command = sprintf('%s %s %s', $phpBinary,
+			dirname(__DIR__, 3) . DIRECTORY_SEPARATOR
+			. 'tests' . DIRECTORY_SEPARATOR
+			. 'Store' . DIRECTORY_SEPARATOR
+			. 'Redis' . DIRECTORY_SEPARATOR
+			. 'Queue' . DIRECTORY_SEPARATOR
+			. 'QueueClient.file.php',
+			Cache::GROUP_BENCHMARKS,
+		);
+		
+		try
+		{
+			QueueTests::parallel($command, self::CLIENTS);
+			
+			$id = $this->_store->prefix(self::KEY_ITEM_COUNTER,
+				$this->_store->getType()
+			);
+			
+			$count = $this->_store->getClient()->get($id);
+			return (int)$count === 1;
+		}
+		finally
+		{
+			$this->_store->delete(self::KEY_ITEM);
+			$this->_store->delete(self::KEY_ITEM_COUNTER);
+		}
 	}
 	
 	/**

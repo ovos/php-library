@@ -38,6 +38,10 @@ production: &production
         - Cache # cache
         - Database # database
   
+  # cli
+  cli:
+    executable: php
+  
   # mysql
   database: &database
     type: mysql
@@ -61,9 +65,16 @@ production: &production
       read_timeout: 1
       database: !ENV CACHE-PERSISTENT[DATABASE]
       store: Redis # Redis or Redisearch
+      store_options:
+        clean_tags: no
       compression:
         enabled: yes
         threshold: 2048
+      # cache queueing
+      queue:
+        enabled: yes
+        lock_ttl_ms: 2000
+        wait_attempts: 3
 
 development: &development
   <<: *production

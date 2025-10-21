@@ -4,8 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Exception;
-use Ovos\Redis\Connection;
+use Ovos\Store\Redis\Cache;
 use Redis as BaseRedis;
 use RedisException;
 
@@ -13,66 +12,24 @@ use function is_int;
 use function count;
 use function explode;
 use function implode;
-use function file_get_contents;
-use function ceil;
 use function array_push;
-use function array_slice;
 use function array_unique;
 use function array_merge;
 use function array_diff;
 
 /**
  * Redis
- *
+ * 
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Redis extends Cache
 {
-	/**#@+
-	 * Separators
-	 */
-	public const string SEPARATOR_FUNCTION = '_';
-	/**#@-*/
-	
-	/**
-	 * @var ?string 
-	 */
-	protected ?string $_functionPrefix = null;
-	
-	/**#@+
-	 * Keys
-	 */
-	public const string KEY_DATA = 'data';
-	public const string KEY_TAGS = 'tags';
-	/**#@-*/
-	
-	/**#@+
-	 * Statuses
-	 * Used for rawCommand, which returns strings instead of boolean values when OPT_REPLY_LITERAL is enabled
-	 * @see https://github.com/phpredis/phpredis/issues/1550
-	 */
-	public const string STATUS_OK = 'OK';
-	/**#@-*/
-	
 	/**
 	 * Types
 	 */
-	public const string TYPE_ITEMS = 'items';
 	public const string TYPE_TAGS = 'tags';
 	/**#@-*/
-	
-	/**
-	 * Redis connection
-	 *
-	 * @var Connection
-	 */
-	protected Connection $_connection;
-	
-	/**
-	 * @var int
-	 */
-	protected int $_multiMode = BaseRedis::PIPELINE;
 	
 	/**
 	 * Maintain clean tags = remove ids of invalidated items while invalidating them.
@@ -82,105 +39,6 @@ class Redis extends Cache
 	 * @var bool
 	 */
 	protected bool $_cleanTags = false;
-	
-	/**#@+
-	 * Libraries
-	 */
-	/**
-	 * The array of function libraries used by this lass
-	 */
-	public const array LIBRARIES = [
-		'cache' => 'Lua' . DIRECTORY_SEPARATOR . 'Cache.lua',
-	];
-	/**#@-*/
-	
-	/**
-	 * @var array
-	 */
-	protected array $_librariesLoaded = [];
-	
-	/**
-	 * @param string $prefix
-	 * @param Connection $connection
-	 * @param ArrayObject $config
-	 * @param ?string $group
-	 */
-	public function __construct
-	(
-		string $prefix,
-		Connection $connection,
-		ArrayObject $config,
-		?string $group = null,
-	)
-	{
-		parent::__construct();
-		
-		$this->setPrefix($prefix);
-		$this->setConnection($connection);
-		$this->setConfig($config);
-		$this->setGroup($group);
-		
-		if($storeOptions = $this->_config->offsetGet('store_options'))
-		{
-			$this->setStoreOptions($storeOptions);
-		}
-	}
-	/**
-	 * @param ?string $prefix
-	 *
-	 * @return self
-	 */
-	public function setPrefix(?string $prefix = null): self
-	{
-		$this->_prefix = $prefix;
-		$this->_functionPrefix = str_replace(
-			[self::SEPARATOR_PREFIX, '-'], 
-			[self::SEPARATOR_FUNCTION, self::SEPARATOR_FUNCTION],
-			$prefix,
-		);
-		
-		return $this;
-	}
-	
-	/**
-	 * @param string $key
-	 * @param ?string $prefix
-	 * @param string $separator
-	 *
-	 * @return string
-	 */
-	public function functionPrefix(string $key,
-		?string $prefix = null,
-		string $separator = self::SEPARATOR_FUNCTION
-	): string
-	{
-		return ($prefix ?: $this->_functionPrefix) . $separator . $key;
-	}
-	
-	/**
-	 * @param Connection $connection
-	 * @param ArrayObject $config
-	 *
-	 * @return self
-	 * @throws Exception
-	 */
-	public static function fromConfig(Connection $connection,
-		ArrayObject $config,
-	): self
-	{
-		if($config->offsetExists('prefix') === false)
-		{
-			throw new Exception('"cache: prefix" is a required config value.');
-		}
-		
-		return new self
-		(
-			$config->prefix,
-			$connection,
-			$config->persistent,
-			self::GROUP_DEFAULT,
-		);
-	}
 	
 	/**
 	 * @param ArrayObject $options
@@ -215,230 +73,6 @@ class Redis extends Cache
 	public function getCleanTags(): bool
 	{
 		return $this->_cleanTags;
-	}
-	
-	/**
-	 * @param Connection $connection
-	 *
-	 * @return self
-	 */
-	public function setConnection(Connection $connection): self
-	{
-		$this->_connection = $connection;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return Connection
-	 */
-	public function getConnection(): Connection
-	{
-		return $this->_connection;
-	}
-	
-	/**
-	 * @return ?BaseRedis
-	 */
-	public function getClient(): ?BaseRedis
-	{
-		return $this->_connection->getClient();
-	}
-	
-	/**
-	 * @param string $type
-	 *
-	 * @return string
-	 */
-	public function getType(string $type = self::TYPE_ITEMS): string
-	{
-		return $this->prefix($type, $this->getGroup());
-	}
-	
-	/**
-	 * Ensures that all the libraries of scripts are loaded into redis
-	 * 
-	 * @param bool $replace
-	 *
-	 * @return bool
-	 */
-	public function loadLibraries(bool $replace = false): bool
-	{
-		foreach(static::LIBRARIES as $libraryName => $libraryFile)
-		{
-			if($this->loadLibrary($libraryName, $libraryFile, $replace) === false)
-			{
-				return false;
-			}
-		}
-		
-		return true;
-	}
-	
-	/**
-	 * Ensures that a library of scripts is loaded into redis
-	 * Library name and functions cannot use ":" character in their names (this includes also the prefix):
-	 * "ERR Library names can only contain letters, numbers, or underscores(_) and must be at least one character"
-	 * 
-	 * @param string $libraryName
-	 * @param string $libraryFile
-	 * @param bool $replace
-	 * 
-	 * @return bool
-	 */
-	public function loadLibrary
-	(
-		string $libraryName,
-		string $libraryFile,
-		bool $replace = false
-	): bool
-	{
-		$libraryName = $this->functionPrefix($libraryName);
-		
-		if(isset($this->_librariesLoaded[$libraryName])
-			&& $this->_librariesLoaded[$libraryName] === true
-			&& $replace === false)
-		{
-			return true;
-		}
-		
-		if(($client = $this->getClient()) === null)
-		{
-			return false;
-		}
-		
-		// if we force a replacement, no need to detect if a library is loaded
-		if($replace === false)
-		{
-			$list = $client->function('list', 'libraryname', $libraryName);
-			
-			if($list !== false
-				&& isset($list[0])
-				&& $list[0]['library_name'] === $libraryName
-			)
-			{
-				$this->_librariesLoaded[$libraryName] = true;
-				
-				return true;
-			}
-		}
-		
-		$client->clearLastError();
-		
-		$functions = file_get_contents(__DIR__
-			. DIRECTORY_SEPARATOR . $libraryFile,
-		);
-		
-		$functions = str_replace('[prefix]',
-			$this->_functionPrefix ?? '',
-			$functions,
-		);
-		
-		$library = "#!lua name=" . $libraryName . PHP_EOL . PHP_EOL
-			. $functions;
-		
-		$libraryLoaded = $replace
-			? $client->function('load', 'replace', $library)
-			: $client->function('load', $library);
-		
-		if($error = $client->getLastError())
-		{
-			throw new RedisException($error);
-		}
-		
-		if($libraryLoaded === $libraryName)
-		{
-			$this->_librariesLoaded[$libraryName] = true;
-			
-			return true;
-		}
-		
-		return false;
-	}
-	
-	/**
-	 * @param string $function
-	 * @param array $keys
-	 * @param array $args
-	 * @param bool $readOnly
-	 * @param bool $long
-	 *
-	 * @return mixed
-	 */
-	protected function _functionCall(
-		string $function,
-		array $keys = [],
-		array $args = [],
-		bool $readOnly = false,
-		bool $long = false,
-	): mixed
-	{
-		if(($client = $this->getClient()) === null)
-		{
-			return false;
-		}
-		
-		$this->loadLibraries();
-		
-		if($long)
-		{
-			$this->_connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
-		}
-		
-		$call = $readOnly
-			? 'fcall_ro'
-			: 'fcall'
-		;
-		$functionName = $this->functionPrefix($function);
-		
-		$result = $this->_connection->slowLog([$client, $call], $functionName, $keys, $args);
-		
-		if($long)
-		{
-			$this->_connection->toggleReadTimeout();
-		}
-		
-		return $result;
-	}
-	
-	/**
-	 * @param string $function
-	 * @param array $keys
-	 * @param array $args
-	 * @param bool $readOnly
-	 * @param bool $long
-	 * @param int $batchSize
-	 * 
-	 * @return void
-	 */
-	protected function _batchFunctionCall(
-		string $function,
-		array $keys = [],
-		array $args = [],
-		bool $readOnly = false,
-		bool $long = false,
-		int $batchSize = 1000,
-	): void
-	{
-		if($long)
-		{
-			// an extended timeout will be valid through all calls of the batch
-			$this->_connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
-		}
-		
-		$countKeys = count($keys);
-		$totalBatches = (int)ceil($countKeys / $batchSize);
-		
-		for($batch = 0; $batch < $totalBatches; $batch++)
-		{
-			$keysBatch = array_slice($keys, $batch * $batchSize, $batchSize);
-			$this->_functionCall($function, $keysBatch, $args, $readOnly);
-		}
-		
-		if($long)
-		{
-			$this->_connection->toggleReadTimeout();
-		}
 	}
 	
 	/**
@@ -484,40 +118,6 @@ class Redis extends Cache
 			$id = $this->prefix($key, $this->getType());
 			
 			return $this->_getCurrentTags($client, $id);
-		}
-		catch(RedisException $exception)
-		{
-			$this->log($exception);
-		}
-		
-		return null;
-	}
-	
-	/**
-	 * @param string $key
-	 *
-	 * @return null|mixed
-	 */
-	public function get(string $key): mixed
-	{
-		if(($client = $this->getClient()) === null)
-		{
-			return null;
-		}
-		
-		try
-		{
-			$id = $this->prefix($key, $this->getType());
-			$value = $client->hGet(
-				$id,
-				self::KEY_DATA,
-			);
-			if($value === false)
-			{
-				return null;
-			}
-			
-			return $this->unserialize($this->decompress($value));
 		}
 		catch(RedisException $exception)
 		{
@@ -593,9 +193,10 @@ class Redis extends Cache
 			return false;
 		}
 		
+		$id = $this->prefix($key, $this->getType());
+		
 		try
 		{
-			$id = $this->prefix($key, $this->getType());
 			$value = $this->compress($this->serialize($value));
 			
 			$currentTags = $this->_getCurrentTags($client, $id);
@@ -613,7 +214,7 @@ class Redis extends Cache
 			$args = [$id, self::KEY_DATA, $value];
 			if(count($tags))
 			{
-				array_push($args, 
+				array_push($args,
 					self::KEY_TAGS,
 					implode(',', $tags)
 				);
@@ -637,7 +238,7 @@ class Redis extends Cache
 				
 				// add the id to the list of each tag
 				$client->hSet($tagId,
-					$key, 
+					$key,
 					null,
 				);
 				
@@ -679,6 +280,10 @@ class Redis extends Cache
 		catch(RedisException $exception)
 		{
 			$this->log($exception);
+		}
+		finally
+		{
+			$this->releaseActiveLock($key, $id);
 		}
 		
 		return false;
@@ -827,41 +432,6 @@ class Redis extends Cache
 	}
 	
 	/**
-	 * Throws exception on purpose, this method is not meant to be used by normal users
-	 * 
-	 * @return bool|int
-	 */
-	public function clear(): bool|int
-	{
-		if(($client = $this->getClient()) === null)
-		{
-			return false;
-		}
-		
-		$group = $this->getGroup();
-		$prefix = $this->prefix('*', $group);
-		$count = 0;
-		
-		$client->clearLastError();
-		
-		$result = $this->_functionCall('cache_clear', [], [
-			$prefix,
-		], long: true);
-		
-		if(is_int($result))
-		{
-			$count = $result;
-		}
-		
-		if($error = $client->getLastError())
-		{
-			throw new RedisException($error);
-		}
-		
-		return $count;
-	}
-	
-	/**
 	 * Returns a list of all tags
 	 * 
 	 * @return array
@@ -954,19 +524,5 @@ class Redis extends Cache
 		}
 		
 		return $count;
-	}
-	
-	/**
-	 * Logs events (messages/errors/exceptions)
-	 *
-	 * @param mixed ...$event
-	 *
-	 * @return self
-	 */
-	public function log(...$event): self
-	{
-		$this->_connection->log(...$event);
-		
-		return $this;
 	}
 }

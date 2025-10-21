@@ -62,7 +62,7 @@ jobs:
           tools: composer:v2
           coverage: none
           #ini-values: display_errors=off, log_errors=on
-          extensions: :xdebug, curl, fileinfo, gd, gettext, gmp, intl, imap, ldap, mbstring, exif, mysqli, openssl, pdo_mysql, soap, sockets, sodium, sqlite3, pdo_sqlite, redis, yaml, apcu, opcache
+          extensions: :xdebug, curl, fileinfo, gd, gettext, intl, mbstring, openssl, pdo_mysql, sockets, sodium, redis, yaml, apcu, opcache
       
       - name: Copy .env
         run: |

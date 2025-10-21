@@ -5,6 +5,7 @@ namespace Ovos\Store;
 
 use Ovos\Store;
 use Ovos\ArrayObject;
+use Closure;
 
 use function is_array;
 use function is_object;
@@ -22,7 +23,7 @@ use function gzuncompress;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Cache extends Store
+abstract class Cache extends Store
 {
 	/**
 	 * Prefixes
@@ -247,4 +248,69 @@ class Cache extends Store
 		
 		return $value;
 	}
+	
+	/**
+	 * @param string $key
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 *
+	 * @return null|mixed
+	 */
+	abstract public function get(
+		string $key,
+		?Closure $setCallback = null,
+		int $ttl = 0,
+	): mixed;
+	
+	/**
+	 * @param string $key
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 *
+	 * @return mixed
+	 */
+	public function setFromCallback(
+		string $key,
+		?Closure $setCallback,
+		int $ttl = 0,
+	): mixed
+	{
+		if($setCallback === null)
+		{
+			return null;
+		}
+		
+		$value = $setCallback($this);
+		$this->set($key, $value, $ttl);
+		
+		return $value;
+	}
+	
+	/**
+	 * @param ?Closure $setCallback
+	 *
+	 * @return null|mixed
+	 */
+	public function callSetCallback(?Closure $setCallback = null): mixed
+	{
+		if($setCallback === null)
+		{
+			return null;
+		}
+		
+		return $setCallback($this);
+	}
+	
+	/**
+	 * @param string $key
+	 * @param mixed $value
+	 * @param int $ttl
+	 *
+	 * @return bool
+	 */
+	abstract public function set(
+		string $key,
+		mixed $value,
+		int $ttl = 0,
+	): bool;
 }

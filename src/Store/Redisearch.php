@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Store;
 
+use Ovos\Store\Redis\Cache;
 use RedisException;
 
 use function in_array;
@@ -18,7 +19,7 @@ use function count;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redisearch extends Redis
+class Redisearch extends Cache
 {
 	/**#@+
 	 * Libraries
@@ -52,9 +53,10 @@ class Redisearch extends Redis
 			return false;
 		}
 		
+		$id = $this->prefix($key, $this->getType());
+		
 		try
 		{
-			$id = $this->prefix($key, $this->getType());
 			$value = $this->compress($this->serialize($value));
 			
 			$client->clearLastError();
@@ -83,6 +85,10 @@ class Redisearch extends Redis
 		catch(RedisException $exception)
 		{
 			$this->log($exception);
+		}
+		finally
+		{
+			$this->releaseActiveLock($key, $id);
 		}
 		
 		return false;
