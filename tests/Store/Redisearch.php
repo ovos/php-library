@@ -46,7 +46,9 @@ class Redisearch extends Test
 	public function __construct()
 	{
 		$this->_config = config()->cache;
+		$this->_config->persistent->database = 0;
 		
+		/*
 		$storeClass = $this->_config->persistent->store;
 		$currentClass = (new ReflectionClass($this))->getShortName();
 		if($storeClass !== $currentClass)
@@ -57,6 +59,7 @@ class Redisearch extends Test
 			
 			return;
 		}
+		*/
 		
 		$this->_connection = new Connection($this->_config->persistent);
 		if($this->_connection->connect() === false)
