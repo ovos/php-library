@@ -24,6 +24,11 @@ use function sprintf;
 class Redisearch extends Test
 {
 	/**
+	 * @var string
+	 */
+	public const string KEY_ITEM = 'item';
+	
+	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;
@@ -49,6 +54,8 @@ class Redisearch extends Test
 			$this->setIsDisabled(true,
 				sprintf('"store" is set to "%s".', $storeClass)
 			);
+			
+			return;
 		}
 		
 		$this->_connection = new Connection($this->_config->persistent);
@@ -71,7 +78,7 @@ class Redisearch extends Test
 			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
-			Cache::GROUP_TESTS
+			Cache::GROUP_TESTS,
 		);
 	}
 	
@@ -91,12 +98,10 @@ class Redisearch extends Test
 	
 	public function delete(): bool
 	{
-		$key = 'item';
+		$this->_store->set(self::KEY_ITEM, 'test');
+		$this->_store->delete(self::KEY_ITEM);
 		
-		$this->_store->set($key, 'test');
-		$this->_store->delete($key);
-		
-		$exists = $this->_store->get($key);
+		$exists = $this->_store->get(self::KEY_ITEM);
 		
 		return $exists === null;
 	}
@@ -105,13 +110,12 @@ class Redisearch extends Test
 	{
 		$this->_store->indexRebuild();
 		
-		$key = 'item';
 		$array = [
 			'stored' => true
 		];
 		
-		$this->_store->set($key, $array);
-		$array = $this->_store->get($key);
+		$this->_store->set(self::KEY_ITEM, $array);
+		$array = $this->_store->get(self::KEY_ITEM);
 		
 		try
 		{
@@ -119,7 +123,7 @@ class Redisearch extends Test
 		}
 		finally
 		{
-			$this->_store->delete($key);
+			$this->_store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -127,13 +131,12 @@ class Redisearch extends Test
 	{
 		$this->_store->indexRebuild();
 		
-		$key = 'item';
 		$tags = ['tag1', 'tag2'];
 		
-		$this->_store->set($key, 'test', tags: $tags);
+		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
 		$this->_store->invalidateTags([$tags[0]]);
 		
-		$result = $this->_store->get($key);
+		$result = $this->_store->get(self::KEY_ITEM);
 		
 		try
 		{
@@ -141,7 +144,7 @@ class Redisearch extends Test
 		}
 		finally
 		{
-			$this->_store->delete($key);
+			$this->_store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -149,14 +152,13 @@ class Redisearch extends Test
 	{
 		$this->_store->indexRebuild();
 		
-		$key = 'item';
 		$array = [
 			'stored' => true
 		];
 		
-		$this->_store->set($key, $array);
+		$this->_store->set(self::KEY_ITEM, $array);
 		$this->_store->clear();
-		$result = $this->_store->get($key);
+		$result = $this->_store->get(self::KEY_ITEM);
 		
 		return $result === null;
 	}

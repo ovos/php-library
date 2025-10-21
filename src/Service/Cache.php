@@ -11,6 +11,7 @@ use Ovos\Redis\Connection;
 use Ovos\Service;
 use Ovos\Store\Apcu;
 use Ovos\Store\Redis;
+use Ovos\Store\Redis\Cache as RedisCache;
 use Ovos\Store\Redisearch;
 
 /**
@@ -39,9 +40,9 @@ class Cache extends Service
 	protected ?Connection $_persistentConnection = null;
 	
 	/**
-	 * @var ?Redis
+	 * @var ?RedisCache
 	 */
-	protected ?Redis $_persistentStore = null;
+	protected ?RedisCache $_persistentStore = null;
 	
 	/**
 	 * @var ?Apcu
@@ -71,7 +72,7 @@ class Cache extends Service
 	{
 		$class = static::class;
 		
-		$config = $container->get(Application::KEY_CONFIG);
+		$config = $container->get(Application::CONTAINER_KEY_CONFIG);
 		if($config->cache === null)
 		{
 			throw new Exception('"cache" config section is missing.');
@@ -94,7 +95,6 @@ class Cache extends Service
 	{
 		if($this->_persistentConnection === null)
 		{
-			// move to container when DI is available
 			$this->_persistentConnection = $this->_container
 				->getValue(Connection::class, new Connection($this->_config->persistent));
 			if($this->_persistentConnection->connect() === false)

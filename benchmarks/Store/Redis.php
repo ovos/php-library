@@ -9,6 +9,7 @@ use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
 use Ovos\Store\Redis as RedisStore;
 use Ovos\Test\Internal;
+use RedisException;
 
 use function Ovos\config;
 use function sprintf;
@@ -22,34 +23,36 @@ use function sprintf;
 class Redis extends Benchmark
 {
 	/**
+	 * @var int
+	 */
+	public const int ITEMS = 10000;
+	
+	/**
+	 * @var int
+	 */
+	public const int TAGS_PER_ITEM = 20;
+	
+	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;
+	
+	/**
+	 * @var ?Connection
+	 */
+	protected ?Connection $_connection = null;
 	
 	/**
 	 * @var ?RedisStore
 	 */
 	protected ?RedisStore $_store = null;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_items = 10000;
-	
-	/**
-	 * @var int
-	 */
-	protected int $_tagsPerItem = 20;
-	
 	public function __construct()
 	{
 		$this->_config = config()->cache;
-	}
-	
-	protected function _initStore(): void
-	{
-		$connection = new Connection($this->_config->persistent);
-		if($connection->connect() === false)
+		
+		$this->_connection = new Connection($this->_config->persistent);
+		if($this->_connection->connect() === false)
 		{
 			throw new RedisException
 			(
@@ -59,25 +62,28 @@ class Redis extends Benchmark
 				)
 			);
 		}
-		
+	}
+	
+	protected function _initStore(): void
+	{
 		$this->_store = new RedisStore
 		(
 			$this->_config->prefix,
-			$connection,
+			$this->_connection,
 			$this->_config->persistent,
-			Cache::GROUP_BENCHMARKS
+			Cache::GROUP_BENCHMARKS,
 		);
 	}
 	
 	protected function _fill(): void
 	{
 		$tags = [];
-		for($i = 1; $i <= $this->_tagsPerItem; $i++)
+		for($i = 1; $i <= self::TAGS_PER_ITEM; $i++)
 		{
 			$tags[] = 'tag' . $i;
 		}
 		
-		for($i = 1; $i <= $this->_items; $i++)
+		for($i = 1; $i <= self::ITEMS; $i++)
 		{
 			$this->_store->set('item' . $i, 'test', tags: $tags);
 		}
@@ -106,5 +112,14 @@ class Redis extends Benchmark
 	public function finalize(): void
 	{
 		$this->_store->clear();
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	public function deconstruct(): void
+	{
+		$this->_connection->disconnect();
 	}
 }

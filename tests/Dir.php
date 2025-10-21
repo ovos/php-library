@@ -19,6 +19,7 @@ class Dir extends Test
 	 */
 	protected string $_dir = __DIR__
 		. DIRECTORY_SEPARATOR . 'Dir'
+		. DIRECTORY_SEPARATOR . 'files'
 		. DIRECTORY_SEPARATOR;
 	
 	public function copyFiles(): bool
