@@ -263,6 +263,7 @@ class Runner
 		{
 			if($method->isConstructor()
 				|| $method->isDestructor()
+				|| $method->isStatic()
 			)
 			{
 				continue;

@@ -9,6 +9,7 @@ use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
 use Ovos\Store\Redis as RedisStore;
 use Ovos\Test\Internal;
+use Tests\Store\Redis\Queue as QueueTests;
 use RedisException;
 
 use function Ovos\config;
@@ -105,40 +106,7 @@ class Queue extends Benchmark
 		
 		try
 		{
-			$processes = [];
-			for($i = 0; $i < self::CLIENTS; $i++)
-			{
-				$process = proc_open($command, [], $pipes[]);
-				if(is_resource($process))
-				{
-					$processes[] = $process;
-				}
-			}
-			
-			// wait for all processes to finish
-			$running = true;
-			while($running)
-			{
-				$running = false;
-				foreach($processes as $process)
-				{
-					if(is_resource($process) === false)
-					{
-						continue;
-					}
-					
-					$status = proc_get_status($process);
-					if($status['running'])
-					{
-						$running = true;
-						usleep(10000); // wait 10ms before checking again
-					}
-					else
-					{
-						proc_close($process);
-					}
-				}
-			}
+			QueueTests::parallel($command, self::CLIENTS);
 			
 			$id = $this->_store->prefix(self::KEY_ITEM_COUNTER,
 				$this->_store->getType()

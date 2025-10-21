@@ -33,6 +33,11 @@ class Queue extends Test
 	public const string KEY_ITEM_COUNTER = 'item:counter';
 	
 	/**
+	 * @var int
+	 */
+	public const int CLIENTS = 3;
+	
+	/**
 	 * @var ArrayObject
 	 */
 	protected ArrayObject $_config;
@@ -204,40 +209,7 @@ class Queue extends Test
 		
 		try
 		{
-			$processes = [];
-			for($i = 0; $i < 3; $i++)
-			{
-				$process = proc_open($command, [], $pipes[]);
-				if(is_resource($process))
-				{
-					$processes[] = $process;
-				}
-			}
-			
-			// wait for all processes to finish
-			$running = true;
-			while($running)
-			{
-				$running = false;
-				foreach($processes as $process)
-				{
-					if(is_resource($process) === false)
-					{
-						continue;
-					}
-					
-					$status = proc_get_status($process);
-					if($status['running'])
-					{
-						$running = true;
-						usleep(10000); // wait 10ms before checking again
-					}
-					else
-					{
-						proc_close($process);
-					}
-				}
-			}
+			self::parallel($command, self::CLIENTS);
 			
 			$id = $this->_store->prefix(self::KEY_ITEM_COUNTER,
 				$this->_store->getType()
@@ -251,6 +223,44 @@ class Queue extends Test
 		{
 			$this->_store->delete(self::KEY_ITEM);
 			$this->_store->delete(self::KEY_ITEM_COUNTER);
+		}
+	}
+	
+	public static function parallel(string $command, int $amount): void
+	{
+		$processes = [];
+		for($i = 0; $i < $amount; $i++)
+		{
+			$process = proc_open($command, [], $pipes[]);
+			if(is_resource($process))
+			{
+				$processes[] = $process;
+			}
+		}
+		
+		// wait for all processes to finish
+		$running = true;
+		while($running)
+		{
+			$running = false;
+			foreach($processes as $process)
+			{
+				if(is_resource($process) === false)
+				{
+					continue;
+				}
+				
+				$status = proc_get_status($process);
+				if($status['running'])
+				{
+					$running = true;
+					usleep(10000); // wait 10ms before checking again
+				}
+				else
+				{
+					proc_close($process);
+				}
+			}
 		}
 	}
 	
