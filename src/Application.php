@@ -771,7 +771,8 @@ class Application
 				$error['type'],
 				$error['message'],
 				$error['file'],
-				$error['line']);
+				$error['line'],
+			);
 		}
 		
 		// get the response to be sent

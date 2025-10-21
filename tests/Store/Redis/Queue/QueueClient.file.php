@@ -21,6 +21,13 @@ define('BASE_DIR', dirname(__DIR__, 7) . DIRECTORY_SEPARATOR);
 // include bootstrap initialization
 require_once BASE_DIR . 'init.php';
 
+// define custom configs dir for cases where the tests are not run 
+// within the application, but, for example, in the CI
+if(is_dir(Application::CONFIGS_DIR) === false)
+{
+	define('CONFIGS_DIR', BASE_DIR);
+}
+
 class QueueClient extends Controller\Cli
 {
 	/**
