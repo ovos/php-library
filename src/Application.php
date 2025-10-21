@@ -767,7 +767,7 @@ class Application
 	{
 		if($error = error_get_last())
 		{
-			$this->getServices()->handleError(
+			$this->getServices()->events->handleError(
 				$error['type'],
 				$error['message'],
 				$error['file'],
@@ -782,7 +782,7 @@ class Application
 		// handle erroneous response
 		if($hasEvents)
 		{
-			// set default error code that can be overwritten by the events controller
+			// set a default error code that can be overwritten by the events controller
 			$response->setHttpCode(500);
 			
 			/// JSON
