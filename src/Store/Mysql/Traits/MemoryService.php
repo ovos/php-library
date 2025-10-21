@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Store\Traits;
+namespace Ovos\Store\Mysql\Traits;
 
 use Ovos\Service\Memory;
 use Ovos\Services;

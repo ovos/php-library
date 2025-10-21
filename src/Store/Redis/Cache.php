@@ -89,7 +89,7 @@ abstract class Cache extends Tags
 	 * @var array
 	 */
 	protected array $_librariesLoaded = [];
-
+	
 	/**#@+
 	 * Queue (MemoLock) configuration
 	 */
@@ -624,10 +624,12 @@ abstract class Cache extends Tags
 			try
 			{
 				// block and wait for a message on the channel or a timeout (when no message is received)
-				$client->subscribe([$channelName], function($client, $channelName, $message)
-				{
-					$client->unsubscribe([$channelName]);
-				});
+				$client->subscribe([$channelName],
+					function($client, $channelName, $message)
+					{
+						$client->unsubscribe([$channelName]);
+					}
+				);
 			}
 			// we got no message, redis responded with "RedisException: read error on connection"
 			catch(RedisException $exception)
