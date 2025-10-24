@@ -44,8 +44,6 @@ abstract class Cache extends Tags
 	 */
 	public const string KEY_DATA = 'data';
 	public const string KEY_TAGS = 'tags';
-	public const string KEY_LOCK = 'lock';
-	public const string KEY_CHANNEL = 'channel';
 	/**#@-*/
 	
 	/**#@+
@@ -60,6 +58,8 @@ abstract class Cache extends Tags
 	 * Types
 	 */
 	public const string TYPE_ITEMS = 'items';
+	public const string TYPE_LOCK = 'lock';
+	public const string TYPE_CHANNEL = 'channel';
 	/**#@-*/
 	
 	/**
@@ -480,7 +480,7 @@ abstract class Cache extends Tags
 		?Closure $setCallback = null,
 		int $ttl = 0,
 		array $tags = [],
-		bool $willSet = false,
+		bool $willSet = true,
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
@@ -577,7 +577,7 @@ abstract class Cache extends Tags
 		?Closure $setCallback = null,
 		int $ttl = 0,
 		array $tags = [],
-		bool $willSet = false,
+		bool $willSet = true,
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
@@ -587,8 +587,8 @@ abstract class Cache extends Tags
 			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
 		}
 		
-		$lockKey = $this->prefix(self::KEY_LOCK, $id);
-		$channelName = $this->prefix(self::KEY_CHANNEL, $id);
+		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
+		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		$lockValue = bin2hex(random_bytes(16));
 		$queueLockTtlMs = $queueLockTtlMs ?? $this->_queueLockTtlMs;
 		
@@ -747,8 +747,8 @@ abstract class Cache extends Tags
 		$lockValue = $this->_queueLocks[$id];
 		unset($this->_queueLocks[$id]);
 		
-		$lockKey = $this->prefix(self::KEY_LOCK, $id);
-		$channelName = $this->prefix(self::KEY_CHANNEL, $id);
+		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
+		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		
 		// atomically release the lock and notify any waiters using the Lua script
 		return (bool)$this->_functionCall('cache_release_lock_and_publish',
@@ -780,7 +780,7 @@ abstract class Cache extends Tags
 			return false;
 		}
 		
-		$lockKey = $this->prefix(self::KEY_LOCK, $id);
+		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
 		$lockValue = $this->_queueLocks[$id];
 		$ttlMs = $ttlMs ?? $this->_queueLockTtlMs;
 		

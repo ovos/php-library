@@ -102,7 +102,7 @@ class Queue extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM) === null)
 			{
 				$this->_store->set(self::KEY_ITEM, 'test');
 			}
@@ -161,13 +161,13 @@ class Queue extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM) === null)
 			{
 				$this->_store->releaseActiveLock(self::KEY_ITEM);
 			}
 			
 			$lockKey = $this->_store
-				->prefix(RedisStore::KEY_LOCK, self::KEY_ITEM);
+				->prefix(RedisStore::TYPE_LOCK, self::KEY_ITEM);
 			
 			return $this->_store->getClient()
 				->exists($lockKey) === 0;
@@ -182,7 +182,7 @@ class Queue extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM) === null)
 			{
 				$this->_store->renewLock(self::KEY_ITEM);
 				$this->_store->set(self::KEY_ITEM, 'value'); // to release the lock
