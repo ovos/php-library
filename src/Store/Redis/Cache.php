@@ -611,13 +611,13 @@ abstract class Cache extends Tags
 		}
 		
 		// lock not acquired
-		$waitTimeMs = $queueLockTtlMs;
+		$waitTimeMs = $waitTimeJitterMs = $queueLockTtlMs;
 		for($attempt = 0; $attempt < $this->_queueWaitAttempts; $attempt++)
 		{
 			// set read timeout to the requested queue lock TTL
 			$this->_connection->toggleReadTimeout(
 				Connection::TIMEOUT_READ_CUSTOM, 
-				$waitTimeMs / 1000, // milliseconds to seconds
+				$waitTimeJitterMs / 1000, // milliseconds to seconds
 				false,
 			);
 			
@@ -635,7 +635,10 @@ abstract class Cache extends Tags
 			catch(RedisException $exception)
 			{
 				$client->unsubscribe([$channelName]);
-				$waitTimeMs /= 2; // shorten the wait time on the next attempt
+				// shorten the wait time on the next attempt
+				$waitTimeMs/= 2;
+				// add jitter to the wait time (0-50%)
+				$waitTimeJitterMs = $waitTimeMs + random_int(0, (int)($waitTimeMs * 0.5));
 			}
 			finally
 			{
