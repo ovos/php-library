@@ -258,17 +258,11 @@ abstract class Cache extends Tags
 		string $separator = self::SEPARATOR_FUNCTION
 	): string
 	{
-		if($prefix !== null)
-		{
-			return $prefix . $separator . $key;
-		}
+		$prefix = $prefix ?? $this->_functionPrefix;
 		
-		if($this->_functionPrefix !== null)
-		{
-			return $this->_functionPrefix . $separator . $key;
-		}
-		
-		return $key;
+		return $prefix !== null
+			? $prefix . $separator . $key
+			: $key;
 	}
 	
 	/**
@@ -276,7 +270,6 @@ abstract class Cache extends Tags
 	 * @param ArrayObject $config
 	 *
 	 * @return self
-	 * @throws Exception
 	 */
 	public static function fromConfig(Connection $connection,
 		ArrayObject $config,
