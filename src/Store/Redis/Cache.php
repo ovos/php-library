@@ -224,7 +224,7 @@ abstract class Cache extends Tags
 	/**
 	 * @param bool $enabled
 	 *
-	 * @return $this
+	 * @return self
 	 */
 	public function setQueueEnabled(bool $enabled): self
 	{
