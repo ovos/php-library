@@ -107,7 +107,7 @@ class Queue extends Test
 				$this->_store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get(self::KEY_ITEM);
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null;
 		}
@@ -116,6 +116,54 @@ class Queue extends Test
 			$this->_store->delete(self::KEY_ITEM);
 		}
 	}
+	
+	public function setManualOverride(): bool
+	{
+		$queueEnabled = $this->_store->isQueueEnabled();
+		
+		try
+		{
+			$this->_store->setQueueEnabled(false);
+			if($this->_store->get(self::KEY_ITEM, queue: true) === null)
+			{
+				$this->_store->set(self::KEY_ITEM, 'test');
+			}
+			
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			
+			return $exists !== null;
+		}
+		finally
+		{
+			$this->_store->setQueueEnabled($queueEnabled);
+			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function setManual(): bool
+	{
+		$queueEnabled = $this->_store->isQueueEnabled();
+		
+		try
+		{
+			$this->_store->setQueueEnabled(false);
+			if($this->_store->get(self::KEY_ITEM) === null)
+			{
+				$this->_store->queue(self::KEY_ITEM); // manual queue call
+				$this->_store->set(self::KEY_ITEM, 'test');
+			}
+			
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			
+			return $exists !== null;
+		}
+		finally
+		{
+			$this->_store->setQueueEnabled($queueEnabled);
+			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
 	
 	public function setCallback(): bool
 	{

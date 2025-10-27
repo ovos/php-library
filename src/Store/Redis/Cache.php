@@ -222,6 +222,26 @@ abstract class Cache extends Tags
 	}
 	
 	/**
+	 * @param bool $enabled
+	 *
+	 * @return $this
+	 */
+	public function setQueueEnabled(bool $enabled): self
+	{
+		$this->_queueEnabled = $enabled;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function isQueueEnabled(): bool
+	{
+		return $this->_queueEnabled;
+	}
+	
+	/**
 	 * @param string $key
 	 * @param ?string $prefix
 	 * @param string $separator
@@ -470,8 +490,8 @@ abstract class Cache extends Tags
 	 * @param ?Closure $setCallback
 	 * @param int $ttl
 	 * @param array $tags
-	 * @param bool $willSet
-	 * @param ?int $queueLockTtlMs
+	 * @param bool $queue override for the config switch
+	 * @param ?int $queueLockTtlMs override for the config value
 	 *
 	 * @return null|mixed
 	 */
@@ -480,7 +500,7 @@ abstract class Cache extends Tags
 		?Closure $setCallback = null,
 		int $ttl = 0,
 		array $tags = [],
-		bool $willSet = true,
+		?bool $queue = null,
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
@@ -517,7 +537,7 @@ abstract class Cache extends Tags
 			$setCallback,
 			$ttl,
 			$tags,
-			$willSet,
+			$queue,
 			$queueLockTtlMs,
 		);
 	}
@@ -559,14 +579,52 @@ abstract class Cache extends Tags
 	}
 	
 	/**
+	 * @param string $key
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 * @param array $tags
+	 * @param bool $queue override for the config switch
+	 * @param ?int $queueLockTtlMs override for the config value
+	 *
+	 * @return mixed
+	 */
+	public function queue(
+		string $key,
+		?Closure $setCallback = null,
+		int $ttl = 0,
+		array $tags = [],
+		?bool $queue = null,
+		?int $queueLockTtlMs = null,
+	): mixed
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return $this->callSetCallback($setCallback);
+		}
+		
+		$id = $this->prefix($key, $this->getType());
+		
+		return $this->_queue(
+			$client,
+			$key,
+			$id,
+			$setCallback,
+			$ttl,
+			$tags,
+			$queue,
+			$queueLockTtlMs,
+		);
+	}
+	
+	/**
 	 * @param BaseRedis $client
 	 * @param string $key
 	 * @param string $id
 	 * @param ?Closure $setCallback
 	 * @param int $ttl
 	 * @param array $tags
-	 * @param bool $willSet
-	 * @param ?int $queueLockTtlMs
+	 * @param bool $queue override for the config switch
+	 * @param ?int $queueLockTtlMs override for the config value
 	 *
 	 * @return mixed
 	 */
@@ -577,12 +635,14 @@ abstract class Cache extends Tags
 		?Closure $setCallback = null,
 		int $ttl = 0,
 		array $tags = [],
-		bool $willSet = true,
+		?bool $queue = null,
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
-		if($this->_queueEnabled === false
-			|| ($setCallback === null && $willSet === false))
+		if(
+			($this->_queueEnabled === false || $queue === false)
+			&& $setCallback === null
+		)
 		{
 			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
 		}

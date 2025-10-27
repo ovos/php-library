@@ -91,7 +91,7 @@ class Redis extends Test
 		$this->_store->set(self::KEY_ITEM, 'test');
 		$this->_store->delete(self::KEY_ITEM);
 		
-		$exists = $this->_store->get(self::KEY_ITEM);
+		$exists = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		return $exists === null;
 	}
@@ -103,7 +103,7 @@ class Redis extends Test
 		];
 		
 		$this->_store->set(self::KEY_ITEM, $array);
-		$array = $this->_store->get(self::KEY_ITEM);
+		$array = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		try
 		{
@@ -209,7 +209,7 @@ class Redis extends Test
 		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
 		$this->_store->invalidateTags([$tags[0]]);
 		
-		$result = $this->_store->get(self::KEY_ITEM, willSet: false);
+		$result = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		try
 		{
@@ -277,7 +277,7 @@ class Redis extends Test
 		
 		$this->_store->set(self::KEY_ITEM, $array);
 		$this->_store->clear();
-		$result = $this->_store->get(self::KEY_ITEM, willSet: false);
+		$result = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		return $result === null;
 	}
