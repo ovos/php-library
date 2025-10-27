@@ -127,17 +127,17 @@ abstract class Cache extends Tags
 	 */
 	public function __construct
 	(
-		string $prefix,
 		Connection $connection,
 		ArrayObject $config,
+		?string $prefix = null,
 		?string $group = null,
 	)
 	{
 		parent::__construct();
 		
-		$this->setPrefix($prefix);
 		$this->setConnection($connection);
 		$this->setConfig($config);
+		$this->setPrefix($prefix);
 		$this->setGroup($group);
 		
 		if($storeOptions = $this->_config->offsetGet('store_options'))
@@ -159,11 +159,16 @@ abstract class Cache extends Tags
 	public function setPrefix(?string $prefix = null): self
 	{
 		$this->_prefix = $prefix;
-		$this->_functionPrefix = str_replace(
-			[self::SEPARATOR_PREFIX, '-'], 
-			[self::SEPARATOR_FUNCTION, self::SEPARATOR_FUNCTION],
-			$prefix,
-		);
+		
+		if($prefix !== null)
+		{
+			$this->_functionPrefix = str_replace
+			(
+				[self::SEPARATOR_PREFIX, '-'],
+				[self::SEPARATOR_FUNCTION, self::SEPARATOR_FUNCTION],
+				$prefix,
+			);
+		}
 		
 		return $this;
 	}
@@ -253,7 +258,17 @@ abstract class Cache extends Tags
 		string $separator = self::SEPARATOR_FUNCTION
 	): string
 	{
-		return ($prefix ?: $this->_functionPrefix) . $separator . $key;
+		if($prefix !== null)
+		{
+			return $prefix . $separator . $key;
+		}
+		
+		if($this->_functionPrefix !== null)
+		{
+			return $this->_functionPrefix . $separator . $key;
+		}
+		
+		return $key;
 	}
 	
 	/**
@@ -267,16 +282,11 @@ abstract class Cache extends Tags
 		ArrayObject $config,
 	): self
 	{
-		if($config->offsetExists('prefix') === false)
-		{
-			throw new Exception('"cache: prefix" is a required config value.');
-		}
-		
 		return new static
 		(
-			$config->prefix,
 			$connection,
 			$config->persistent,
+			$config->prefix,
 			self::GROUP_DEFAULT,
 		);
 	}
@@ -374,7 +384,9 @@ abstract class Cache extends Tags
 		);
 		
 		$functions = str_replace('[prefix]',
-			$this->_functionPrefix ?? '',
+			$this->_functionPrefix
+				? $this->_functionPrefix . self::SEPARATOR_FUNCTION
+				: '',
 			$functions,
 		);
 		

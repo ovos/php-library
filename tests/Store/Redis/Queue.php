@@ -82,9 +82,9 @@ class Queue extends Test
 	{
 		$this->_store = new RedisStore
 		(
-			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
+			$this->_config->prefix,
 			Cache::GROUP_TESTS,
 		);
 	}

@@ -6,7 +6,7 @@
 -- Splits a set of items into batches, returning a function iterator
 -- Each iteration returns (from, to) indexes for a slice of the collection
 -- Has to be used for unpack() calls due to a limit of 8000 arguments
-local function [prefix]_cache_batches(n, batch_size)
+local function [prefix]cache_batches(n, batch_size)
 	batch_size = batch_size or 7500
 	local i = 0
 	
@@ -19,10 +19,10 @@ local function [prefix]_cache_batches(n, batch_size)
 		end
 	end
 end
-redis.register_function('[prefix]_cache_batches', [prefix]_cache_batches)
+redis.register_function('[prefix]cache_batches', [prefix]cache_batches)
 
 -- Splits a string by a given delimiter
-local function [prefix]_cache_split_string(str, delimiter)
+local function [prefix]cache_split_string(str, delimiter)
 	local result = {}
 	local start = 1
 	local delim_length = #delimiter
@@ -39,10 +39,10 @@ local function [prefix]_cache_split_string(str, delimiter)
 	
 	return result
 end
-redis.register_function('[prefix]_cache_split_string', [prefix]_cache_split_string)
+redis.register_function('[prefix]cache_split_string', [prefix]cache_split_string)
 
 -- Scans redis for keys matching a specified prefix and processes them with a callback
-local function [prefix]_cache_scan_keys(prefix, count, callback)
+local function [prefix]cache_scan_keys(prefix, count, callback)
 	local cursor = '0'
 	repeat
 		local results = redis.call('SCAN', cursor, 'MATCH', prefix .. '*', 'COUNT', count)
@@ -52,10 +52,10 @@ local function [prefix]_cache_scan_keys(prefix, count, callback)
 		end
 	until cursor == '0'
 end
-redis.register_function('[prefix]_cache_scan_keys', [prefix]_cache_scan_keys)
+redis.register_function('[prefix]cache_scan_keys', [prefix]cache_scan_keys)
 
 -- Scans a redis hash for fields using HSCAN and processes them with a callback
-local function [prefix]_cache_hscan_keys(hash_key, count, callback)
+local function [prefix]cache_hscan_keys(hash_key, count, callback)
 	local cursor = '0'
 	repeat
 		local results = redis.call('HSCAN', hash_key, cursor, 'COUNT', count, 'NOVALUES')
@@ -65,16 +65,16 @@ local function [prefix]_cache_hscan_keys(hash_key, count, callback)
 		end
 	until cursor == '0'
 end
-redis.register_function('[prefix]_cache_hscan_keys', [prefix]_cache_hscan_keys)
+redis.register_function('[prefix]cache_hscan_keys', [prefix]cache_hscan_keys)
 
 -- Returns a list of all tags (suffix extracted from matching keys)
-local function [prefix]_cache_get_tags(keys, args)
+local function [prefix]cache_get_tags(keys, args)
 	local prefix = args[1]
 	local prefix_tag_ids = prefix .. args[2]
 	local prefix_tag_ids_length = string.len(prefix_tag_ids)
 	local tags = {}
 	
-	[prefix]_cache_scan_keys(prefix_tag_ids, 5000, function(full_tag_key)
+	[prefix]cache_scan_keys(prefix_tag_ids, 5000, function(full_tag_key)
 		-- Strip the prefix to get the actual tag name
 		local tag = string.sub(full_tag_key, prefix_tag_ids_length + 1)
 		table.insert(tags, tag)
@@ -85,13 +85,13 @@ end
 -- https://redis.io/docs/latest/develop/interact/programmability/functions-intro/
 redis.register_function
 {
-	function_name = '[prefix]_cache_get_tags',
-	callback = [prefix]_cache_get_tags,
+	function_name = '[prefix]cache_get_tags',
+	callback = [prefix]cache_get_tags,
 	flags = {'no-writes'}
 }
 
 -- Returns a list of all ids in a given tag
-local function [prefix]_cache_get_ids_by_tag(keys, args)
+local function [prefix]cache_get_ids_by_tag(keys, args)
 	local prefix = args[1]
 	local tag = args[2]
 	local prefix_tag_ids = prefix .. args[3]
@@ -101,7 +101,7 @@ local function [prefix]_cache_get_ids_by_tag(keys, args)
 		return ids
 	end
 	
-	[prefix]_cache_hscan_keys(prefix_tag_ids .. tag, 5000, function(field)
+	[prefix]cache_hscan_keys(prefix_tag_ids .. tag, 5000, function(field)
 		table.insert(ids, field)
 	end)
 	
@@ -110,13 +110,13 @@ end
 -- https://redis.io/docs/latest/develop/interact/programmability/functions-intro/
 redis.register_function
 {
-	function_name = '[prefix]_cache_get_ids_by_tag',
-	callback = [prefix]_cache_get_ids_by_tag,
+	function_name = '[prefix]cache_get_ids_by_tag',
+	callback = [prefix]cache_get_ids_by_tag,
 	flags = {'no-writes'}
 }
 
 -- Unlink (remove) items by their ids and remove references from all tags
-local function [prefix]_cache_unlink_clean_tags(keys, args)
+local function [prefix]cache_unlink_clean_tags(keys, args)
 	local ids = keys
 	local prefix = args[1]
 	local prefix_ids = prefix .. args[2]
@@ -130,7 +130,7 @@ local function [prefix]_cache_unlink_clean_tags(keys, args)
 		
 		if item_tags then -- not false = item & hash field exist
 			if item_tags ~= '' then -- not an empty string
-				local tags = [prefix]_cache_split_string(item_tags, ',')
+				local tags = [prefix]cache_split_string(item_tags, ',')
 				for i, tag in ipairs(tags) do
 					redis.call('HDEL', prefix_tag_ids .. tag, id)
 				end
@@ -144,10 +144,10 @@ local function [prefix]_cache_unlink_clean_tags(keys, args)
 	
 	return 1
 end
-redis.register_function('[prefix]_cache_unlink_clean_tags', [prefix]_cache_unlink_clean_tags)
+redis.register_function('[prefix]cache_unlink_clean_tags', [prefix]cache_unlink_clean_tags)
 
 -- Unlink items by a given tag only if they match provided ids
-local function [prefix]_cache_unlink_ids_by_tag(keys, args)
+local function [prefix]cache_unlink_ids_by_tag(keys, args)
 	local ids = keys
 	local prefix = args[1]
 	local tag = args[2]
@@ -166,7 +166,7 @@ local function [prefix]_cache_unlink_ids_by_tag(keys, args)
 	
 	-- collect all ids from the tag
 	local all_tag_ids = {}
-	[prefix]_cache_hscan_keys(prefix_tag_ids .. tag, 5000, function(id)
+	[prefix]cache_hscan_keys(prefix_tag_ids .. tag, 5000, function(id)
 		table.insert(all_tag_ids, id)
 	end)
 	
@@ -189,17 +189,17 @@ local function [prefix]_cache_unlink_ids_by_tag(keys, args)
 	
 	-- remove the ids from the tag hash in batches
 	if #rems > 0 then
-		for from, to in [prefix]_cache_batches(#rems) do
+		for from, to in [prefix]cache_batches(#rems) do
 			redis.call('HDEL', prefix_tag_ids .. tag, unpack(rems, from, to))
 		end
 	end
 	
 	return 1
 end
-redis.register_function('[prefix]_cache_unlink_ids_by_tag', [prefix]_cache_unlink_ids_by_tag)
+redis.register_function('[prefix]cache_unlink_ids_by_tag', [prefix]cache_unlink_ids_by_tag)
 
 -- Unlink all items from a given tag (removes every ID that tag references)
-local function [prefix]_cache_unlink_by_tag(keys, args)
+local function [prefix]cache_unlink_by_tag(keys, args)
 	local prefix = args[1]
 	local tag = args[2]
 	local prefix_ids = prefix .. args[3]
@@ -211,7 +211,7 @@ local function [prefix]_cache_unlink_by_tag(keys, args)
 	
 	-- unlink every id matching input ids for the given tag
 	local rems = {}
-	[prefix]_cache_hscan_keys(prefix_tag_ids .. tag, 5000, function(id)
+	[prefix]cache_hscan_keys(prefix_tag_ids .. tag, 5000, function(id)
 		-- save for removal after the loop
 		table.insert(rems, id)
 		-- remove the id itself
@@ -220,51 +220,51 @@ local function [prefix]_cache_unlink_by_tag(keys, args)
 	
 	-- remove the ids from the tag hash in batches
 	if #rems > 0 then
-		for from, to in [prefix]_cache_batches(#rems) do
+		for from, to in [prefix]cache_batches(#rems) do
 			redis.call('HDEL', prefix_tag_ids .. tag, unpack(rems, from, to))
 		end
 	end
 	
 	return 1
 end
-redis.register_function('[prefix]_cache_unlink_by_tag', [prefix]_cache_unlink_by_tag)
+redis.register_function('[prefix]cache_unlink_by_tag', [prefix]cache_unlink_by_tag)
 
 -- Unlink all items and all tags (full cleanup)
-local function [prefix]_cache_unlink_all(keys, args)
+local function [prefix]cache_unlink_all(keys, args)
 	local prefix = args[1]
 	local prefix_ids = prefix .. args[2]
 	local prefix_tag_ids = prefix .. args[3]
 	
 	-- unlink every ID
 	local ids = {}
-	[prefix]_cache_scan_keys(prefix_ids, 5000, function(key)
+	[prefix]cache_scan_keys(prefix_ids, 5000, function(key)
 		table.insert(ids, key)
 	end)
 	
 	if #ids > 0 then
-		for from, to in [prefix]_cache_batches(#ids) do
+		for from, to in [prefix]cache_batches(#ids) do
 			redis.call('UNLINK', unpack(ids, from, to))
 		end
 	end
 	
 	-- unlink every tag
 	local tags = {}
-	[prefix]_cache_scan_keys(prefix_tag_ids, 5000, function(tag_key)
+	[prefix]cache_scan_keys(prefix_tag_ids, 5000, function(tag_key)
 		table.insert(tags, tag_key)
 	end)
 	
 	if #tags > 0 then
-		for from, to in [prefix]_cache_batches(#tags) do
+		for from, to in [prefix]cache_batches(#tags) do
 			redis.call('UNLINK', unpack(tags, from, to))
 		end
 	end
 	
 	return #ids, #tags
 end
-redis.register_function('[prefix]_cache_unlink_all', [prefix]_cache_unlink_all)
+redis.register_function('[prefix]cache_unlink_all', [prefix]cache_unlink_all)
 
 -- Removes references from a tag that no longer has valid items
-local function [prefix]_cache_clean_tag(keys, args)
+local function [prefix]cache_clean_tag(keys, args)
 	local prefix = args[1]
 	local tag = args[2]
 	local prefix_ids = prefix .. args[3]
@@ -277,7 +277,7 @@ local function [prefix]_cache_clean_tag(keys, args)
 	local rems = {}
 	
 	-- loop the tag
-	[prefix]_cache_hscan_keys(prefix_tag_ids .. tag, 1000, function(id)
+	[prefix]cache_hscan_keys(prefix_tag_ids .. tag, 1000, function(id)
 		-- Check if the ID still exists in the main items hash
 		if redis.call('EXISTS', prefix_ids .. id) == 0 then
 			table.insert(rems, id)
@@ -286,41 +286,41 @@ local function [prefix]_cache_clean_tag(keys, args)
 		
 	-- remove hash keys which no longer exist
 	if #rems > 0 then
-		for from, to in [prefix]_cache_batches(#rems) do
+		for from, to in [prefix]cache_batches(#rems) do
 			redis.call('HDEL', prefix_tag_ids .. tag, unpack(rems, from, to))
 		end
 	end
 	
 	return #rems -- return count of deleted ids
 end
-redis.register_function('[prefix]_cache_clean_tag', [prefix]_cache_clean_tag)
+redis.register_function('[prefix]cache_clean_tag', [prefix]cache_clean_tag)
 
 -- Removes all items matching a prefix
 -- (used to "flush" the database, but only the prefixed items)
-local function [prefix]_cache_clear(keys, args)
+local function [prefix]cache_clear(keys, args)
 	local prefix = args[1]
 	
 	-- unlink every ID
 	local count = 0
 	
 	local ids = {}
-	[prefix]_cache_scan_keys(prefix, 5000, function(key)
+	[prefix]cache_scan_keys(prefix, 5000, function(key)
 		table.insert(ids, key)
 	end)
 	
 	if #ids > 0 then
 		count = count + #ids
-		for from, to in [prefix]_cache_batches(#ids) do -- security measure, not really needed with 5000 batch size
+		for from, to in [prefix]cache_batches(#ids) do -- security measure, not really needed with 5000 batch size
 			redis.call('UNLINK', unpack(ids, from, to))
 		end
 	end
 	
 	return count -- return count of deleted ids
 end
-redis.register_function('[prefix]_cache_clear', [prefix]_cache_clear)
+redis.register_function('[prefix]cache_clear', [prefix]cache_clear)
 
 -- Renew a lock if we still own it
-local function [prefix]_cache_renew_lock(keys, args)
+local function [prefix]cache_renew_lock(keys, args)
 	local lock_key = keys[1]
 	local lock_value = args[1]
 	local new_ttl_ms = args[2]
@@ -335,10 +335,10 @@ local function [prefix]_cache_renew_lock(keys, args)
 	-- we lost the lock, signal failure
 	return 0
 end
-redis.register_function('[prefix]_cache_renew_lock', [prefix]_cache_renew_lock)
+redis.register_function('[prefix]cache_renew_lock', [prefix]cache_renew_lock)
 
 -- Release a lock and publish a notification
-local function [prefix]_cache_release_lock_and_publish(keys, args)
+local function [prefix]cache_release_lock_and_publish(keys, args)
 	local lock_key = keys[1]
 	local channel = keys[2]
 	local lock_value = args[1]
@@ -353,4 +353,4 @@ local function [prefix]_cache_release_lock_and_publish(keys, args)
 	
 	return 0
 end
-redis.register_function('[prefix]_cache_release_lock_and_publish', [prefix]_cache_release_lock_and_publish)
+redis.register_function('[prefix]cache_release_lock_and_publish', [prefix]cache_release_lock_and_publish)

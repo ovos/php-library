@@ -80,9 +80,9 @@ class QueueClient extends Controller\Cli
 		
 		$this->_store = new Redis
 		(
-			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
+			$this->_config->prefix,
 			$group,
 		);
 	}
