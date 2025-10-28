@@ -125,11 +125,6 @@ class Cache extends Service
 	{
 		if($this->_persistentStore === null)
 		{
-			if($this->_config->offsetExists('prefix') === false)
-			{
-				throw new Exception('"cache: prefix" is a required config value.');
-			}
-			
 			/** @var Redis $storeClass */
 			$storeClass = 'Ovos\Store\\'
 				. ($this->_config->persistent->store ?? 'Redis');
