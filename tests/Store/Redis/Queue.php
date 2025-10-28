@@ -164,7 +164,6 @@ class Queue extends Test
 		}
 	}
 	
-	
 	public function setCallback(): bool
 	{
 		$value = 'test';
@@ -241,6 +240,46 @@ class Queue extends Test
 		finally
 		{
 			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function immediateSet(): bool
+	{
+		$value = 'test';
+		
+		try
+		{
+			$result = $this->_store->get(self::KEY_ITEM,
+				setCallback: fn() => $value,
+				queue: false,
+			);
+			
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			
+			return $exists !== null
+				&& $result === $value;
+		}
+		finally
+		{
+			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function noAction(): bool
+	{
+		try
+		{
+			$result = $this->_store->get(self::KEY_ITEM,
+				queue: false,
+			);
+			
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			
+			return $exists === null
+				&& $result === null;
+		}
+		finally
+		{
 		}
 	}
 	

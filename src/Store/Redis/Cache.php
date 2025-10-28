@@ -588,7 +588,6 @@ abstract class Cache extends Tags
 	 * @param ?Closure $setCallback
 	 * @param int $ttl
 	 * @param array $tags
-	 * @param bool $queue override for the config switch
 	 * @param ?int $queueLockTtlMs override for the config value
 	 *
 	 * @return mixed
@@ -598,7 +597,6 @@ abstract class Cache extends Tags
 		?Closure $setCallback = null,
 		int $ttl = 0,
 		array $tags = [],
-		?bool $queue = null,
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
@@ -616,7 +614,7 @@ abstract class Cache extends Tags
 			$setCallback,
 			$ttl,
 			$tags,
-			$queue,
+			true,
 			$queueLockTtlMs,
 		);
 	}
@@ -644,9 +642,8 @@ abstract class Cache extends Tags
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
-		if(
-			($this->_queueEnabled === false || $queue === false)
-			&& $setCallback === null
+		if(($this->_queueEnabled === false && $queue !== true)
+			|| ($this->_queueEnabled === true && $queue === false)
 		)
 		{
 			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
@@ -797,11 +794,6 @@ abstract class Cache extends Tags
 		?string $id = null,
 	): bool
 	{
-		if($this->_queueEnabled === false)
-		{
-			return false;
-		}
-		
 		if($id === null)
 		{
 			$id = $this->prefix($key, $this->getType());
