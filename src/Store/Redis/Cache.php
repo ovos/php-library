@@ -589,6 +589,7 @@ abstract class Cache extends Tags
 	 * @param int $ttl
 	 * @param array $tags
 	 * @param ?int $queueLockTtlMs override for the config value
+	 * @param bool $lockOnly
 	 *
 	 * @return mixed
 	 */
@@ -598,6 +599,7 @@ abstract class Cache extends Tags
 		int $ttl = 0,
 		array $tags = [],
 		?int $queueLockTtlMs = null,
+		bool $lockOnly = false,
 	): mixed
 	{
 		if(($client = $this->getClient()) === null)
@@ -616,6 +618,7 @@ abstract class Cache extends Tags
 			$tags,
 			true,
 			$queueLockTtlMs,
+			$lockOnly,
 		);
 	}
 	
@@ -628,7 +631,8 @@ abstract class Cache extends Tags
 	 * @param array $tags
 	 * @param bool $queue override for the config switch
 	 * @param ?int $queueLockTtlMs override for the config value
-	 *
+	 * @param bool $lockOnly
+	 * 
 	 * @return mixed
 	 */
 	protected function _queue(
@@ -640,6 +644,7 @@ abstract class Cache extends Tags
 		array $tags = [],
 		?bool $queue = null,
 		?int $queueLockTtlMs = null,
+		bool $lockOnly = false,
 	): mixed
 	{
 		if(($this->_queueEnabled === false && $queue !== true)
@@ -709,16 +714,19 @@ abstract class Cache extends Tags
 			}
 			
 			// either we got the message or we timed-out
-			// check if data is already there
 			try
 			{
-				$value = $client->hGet(
-					$id,
-					self::KEY_DATA,
-				);
-				if($value !== false)
+				if($lockOnly === false)
 				{
-					return $this->unserialize($this->decompress($value));
+					// check if data is already there
+					$value = $client->hGet(
+						$id,
+						self::KEY_DATA,
+					);
+					if($value !== false)
+					{
+						return $this->unserialize($this->decompress($value));
+					}
 				}
 				
 				// check if the lock still exists

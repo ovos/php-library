@@ -213,8 +213,10 @@ class Queue extends Test
 				$this->_store->releaseActiveLock(self::KEY_ITEM);
 			}
 			
+			$id = $this->_store
+				->prefix(self::KEY_ITEM, $this->_store->getType());
 			$lockKey = $this->_store
-				->prefix(RedisStore::TYPE_LOCK, self::KEY_ITEM);
+				->prefix(RedisStore::TYPE_LOCK, $id);
 			
 			return $this->_store->getClient()
 				->exists($lockKey) === 0;
@@ -277,6 +279,32 @@ class Queue extends Test
 			
 			return $exists === null
 				&& $result === null;
+		}
+		finally
+		{
+		}
+	}
+	
+	public function lockOnly(): bool
+	{
+		$id = $this->_store
+			->prefix(self::KEY_ITEM, $this->_store->getType());
+		$lockKey = $this->_store
+			->prefix(RedisStore::TYPE_LOCK, $id);
+		
+		try
+		{
+			$this->_store->queue(self::KEY_ITEM, lockOnly: true);
+			
+			$exists = $this->_store->getClient()
+				->exists($lockKey) === 1;
+			
+			$this->_store->releaseActiveLock(self::KEY_ITEM);
+			
+			$existsNot = $this->_store->getClient()
+				->exists($lockKey) === 0;
+			
+			return $exists && $existsNot;
 		}
 		finally
 		{
