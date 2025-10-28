@@ -82,9 +82,9 @@ class Queue extends Test
 	{
 		$this->_store = new RedisStore
 		(
-			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
+			$this->_config->prefix,
 			Cache::GROUP_TESTS,
 		);
 	}
@@ -102,17 +102,64 @@ class Queue extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM) === null)
 			{
 				$this->_store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get(self::KEY_ITEM);
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null;
 		}
 		finally
 		{
+			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function setManualOverride(): bool
+	{
+		$queueEnabled = $this->_store->isQueueEnabled();
+		
+		try
+		{
+			$this->_store->setQueueEnabled(false);
+			if($this->_store->get(self::KEY_ITEM, queue: true) === null)
+			{
+				$this->_store->set(self::KEY_ITEM, 'test');
+			}
+			
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			
+			return $exists !== null;
+		}
+		finally
+		{
+			$this->_store->setQueueEnabled($queueEnabled);
+			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function setManual(): bool
+	{
+		$queueEnabled = $this->_store->isQueueEnabled();
+		
+		try
+		{
+			$this->_store->setQueueEnabled(false);
+			if($this->_store->get(self::KEY_ITEM) === null)
+			{
+				$this->_store->queue(self::KEY_ITEM); // manual queue call
+				$this->_store->set(self::KEY_ITEM, 'test');
+			}
+			
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			
+			return $exists !== null;
+		}
+		finally
+		{
+			$this->_store->setQueueEnabled($queueEnabled);
 			$this->_store->delete(self::KEY_ITEM);
 		}
 	}
@@ -161,13 +208,15 @@ class Queue extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM) === null)
 			{
 				$this->_store->releaseActiveLock(self::KEY_ITEM);
 			}
 			
+			$id = $this->_store
+				->prefix(self::KEY_ITEM, $this->_store->getType());
 			$lockKey = $this->_store
-				->prefix(RedisStore::KEY_LOCK, self::KEY_ITEM);
+				->prefix(RedisStore::TYPE_LOCK, $id);
 			
 			return $this->_store->getClient()
 				->exists($lockKey) === 0;
@@ -182,7 +231,7 @@ class Queue extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM, willSet: true) === null)
+			if($this->_store->get(self::KEY_ITEM) === null)
 			{
 				$this->_store->renewLock(self::KEY_ITEM);
 				$this->_store->set(self::KEY_ITEM, 'value'); // to release the lock
@@ -193,6 +242,72 @@ class Queue extends Test
 		finally
 		{
 			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function immediateSet(): bool
+	{
+		$value = 'test';
+		
+		try
+		{
+			$result = $this->_store->get(self::KEY_ITEM,
+				setCallback: fn() => $value,
+				queue: false,
+			);
+			
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			
+			return $exists !== null
+				&& $result === $value;
+		}
+		finally
+		{
+			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function noAction(): bool
+	{
+		try
+		{
+			$result = $this->_store->get(self::KEY_ITEM,
+				queue: false,
+			);
+			
+			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			
+			return $exists === null
+				&& $result === null;
+		}
+		finally
+		{
+		}
+	}
+	
+	public function lockOnly(): bool
+	{
+		$id = $this->_store
+			->prefix(self::KEY_ITEM, $this->_store->getType());
+		$lockKey = $this->_store
+			->prefix(RedisStore::TYPE_LOCK, $id);
+		
+		try
+		{
+			$this->_store->queue(self::KEY_ITEM, lockOnly: true);
+			
+			$exists = $this->_store->getClient()
+				->exists($lockKey) === 1;
+			
+			$this->_store->releaseActiveLock(self::KEY_ITEM);
+			
+			$existsNot = $this->_store->getClient()
+				->exists($lockKey) === 0;
+			
+			return $exists && $existsNot;
+		}
+		finally
+		{
 		}
 	}
 	

@@ -85,7 +85,11 @@ abstract class Cache extends Store
 		string $separator = self::SEPARATOR_PREFIX
 	): string
 	{
-		return ($prefix ?: $this->_prefix) . $separator . $key;
+		$prefix = $prefix ?? $this->_prefix;
+		
+		return $prefix !== null
+			? $prefix . $separator . $key
+			: $key;
 	}
 	
 	/**

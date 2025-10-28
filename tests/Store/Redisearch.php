@@ -46,7 +46,9 @@ class Redisearch extends Test
 	public function __construct()
 	{
 		$this->_config = config()->cache;
+		$this->_config->persistent->database = 0;
 		
+		/*
 		$storeClass = $this->_config->persistent->store;
 		$currentClass = (new ReflectionClass($this))->getShortName();
 		if($storeClass !== $currentClass)
@@ -57,6 +59,7 @@ class Redisearch extends Test
 			
 			return;
 		}
+		*/
 		
 		$this->_connection = new Connection($this->_config->persistent);
 		if($this->_connection->connect() === false)
@@ -75,9 +78,9 @@ class Redisearch extends Test
 	{
 		$this->_store = new RedisStore
 		(
-			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
+			$this->_config->prefix,
 			Cache::GROUP_TESTS,
 		);
 	}
@@ -101,7 +104,7 @@ class Redisearch extends Test
 		$this->_store->set(self::KEY_ITEM, 'test');
 		$this->_store->delete(self::KEY_ITEM);
 		
-		$exists = $this->_store->get(self::KEY_ITEM);
+		$exists = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		return $exists === null;
 	}
@@ -115,7 +118,7 @@ class Redisearch extends Test
 		];
 		
 		$this->_store->set(self::KEY_ITEM, $array);
-		$array = $this->_store->get(self::KEY_ITEM);
+		$array = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		try
 		{
@@ -136,7 +139,7 @@ class Redisearch extends Test
 		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
 		$this->_store->invalidateTags([$tags[0]]);
 		
-		$result = $this->_store->get(self::KEY_ITEM);
+		$result = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		try
 		{
@@ -158,7 +161,7 @@ class Redisearch extends Test
 		
 		$this->_store->set(self::KEY_ITEM, $array);
 		$this->_store->clear();
-		$result = $this->_store->get(self::KEY_ITEM);
+		$result = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		return $result === null;
 	}

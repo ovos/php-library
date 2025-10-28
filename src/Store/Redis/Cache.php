@@ -44,8 +44,6 @@ abstract class Cache extends Tags
 	 */
 	public const string KEY_DATA = 'data';
 	public const string KEY_TAGS = 'tags';
-	public const string KEY_LOCK = 'lock';
-	public const string KEY_CHANNEL = 'channel';
 	/**#@-*/
 	
 	/**#@+
@@ -60,6 +58,8 @@ abstract class Cache extends Tags
 	 * Types
 	 */
 	public const string TYPE_ITEMS = 'items';
+	public const string TYPE_LOCK = 'lock';
+	public const string TYPE_CHANNEL = 'channel';
 	/**#@-*/
 	
 	/**
@@ -89,7 +89,7 @@ abstract class Cache extends Tags
 	 * @var array
 	 */
 	protected array $_librariesLoaded = [];
-
+	
 	/**#@+
 	 * Queue (MemoLock) configuration
 	 */
@@ -127,17 +127,17 @@ abstract class Cache extends Tags
 	 */
 	public function __construct
 	(
-		string $prefix,
 		Connection $connection,
 		ArrayObject $config,
+		?string $prefix = null,
 		?string $group = null,
 	)
 	{
 		parent::__construct();
 		
-		$this->setPrefix($prefix);
 		$this->setConnection($connection);
 		$this->setConfig($config);
+		$this->setPrefix($prefix);
 		$this->setGroup($group);
 		
 		if($storeOptions = $this->_config->offsetGet('store_options'))
@@ -159,11 +159,16 @@ abstract class Cache extends Tags
 	public function setPrefix(?string $prefix = null): self
 	{
 		$this->_prefix = $prefix;
-		$this->_functionPrefix = str_replace(
-			[self::SEPARATOR_PREFIX, '-'], 
-			[self::SEPARATOR_FUNCTION, self::SEPARATOR_FUNCTION],
-			$prefix,
-		);
+		
+		if($prefix !== null)
+		{
+			$this->_functionPrefix = str_replace
+			(
+				[self::SEPARATOR_PREFIX, '-'],
+				[self::SEPARATOR_FUNCTION, self::SEPARATOR_FUNCTION],
+				$prefix,
+			);
+		}
 		
 		return $this;
 	}
@@ -222,6 +227,26 @@ abstract class Cache extends Tags
 	}
 	
 	/**
+	 * @param bool $enabled
+	 *
+	 * @return self
+	 */
+	public function setQueueEnabled(bool $enabled): self
+	{
+		$this->_queueEnabled = $enabled;
+		
+		return $this;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function isQueueEnabled(): bool
+	{
+		return $this->_queueEnabled;
+	}
+	
+	/**
 	 * @param string $key
 	 * @param ?string $prefix
 	 * @param string $separator
@@ -233,7 +258,11 @@ abstract class Cache extends Tags
 		string $separator = self::SEPARATOR_FUNCTION
 	): string
 	{
-		return ($prefix ?: $this->_functionPrefix) . $separator . $key;
+		$prefix = $prefix ?? $this->_functionPrefix;
+		
+		return $prefix !== null
+			? $prefix . $separator . $key
+			: $key;
 	}
 	
 	/**
@@ -241,22 +270,16 @@ abstract class Cache extends Tags
 	 * @param ArrayObject $config
 	 *
 	 * @return self
-	 * @throws Exception
 	 */
 	public static function fromConfig(Connection $connection,
 		ArrayObject $config,
 	): self
 	{
-		if($config->offsetExists('prefix') === false)
-		{
-			throw new Exception('"cache: prefix" is a required config value.');
-		}
-		
 		return new static
 		(
-			$config->prefix,
 			$connection,
 			$config->persistent,
+			$config->prefix,
 			self::GROUP_DEFAULT,
 		);
 	}
@@ -354,7 +377,9 @@ abstract class Cache extends Tags
 		);
 		
 		$functions = str_replace('[prefix]',
-			$this->_functionPrefix ?? '',
+			$this->_functionPrefix
+				? $this->_functionPrefix . self::SEPARATOR_FUNCTION
+				: '',
 			$functions,
 		);
 		
@@ -470,8 +495,8 @@ abstract class Cache extends Tags
 	 * @param ?Closure $setCallback
 	 * @param int $ttl
 	 * @param array $tags
-	 * @param bool $willSet
-	 * @param ?int $queueLockTtlMs
+	 * @param bool $queue override for the config switch
+	 * @param ?int $queueLockTtlMs override for the config value
 	 *
 	 * @return null|mixed
 	 */
@@ -480,7 +505,7 @@ abstract class Cache extends Tags
 		?Closure $setCallback = null,
 		int $ttl = 0,
 		array $tags = [],
-		bool $willSet = false,
+		?bool $queue = null,
 		?int $queueLockTtlMs = null,
 	): mixed
 	{
@@ -517,7 +542,7 @@ abstract class Cache extends Tags
 			$setCallback,
 			$ttl,
 			$tags,
-			$willSet,
+			$queue,
 			$queueLockTtlMs,
 		);
 	}
@@ -559,15 +584,55 @@ abstract class Cache extends Tags
 	}
 	
 	/**
+	 * @param string $key
+	 * @param ?Closure $setCallback
+	 * @param int $ttl
+	 * @param array $tags
+	 * @param ?int $queueLockTtlMs override for the config value
+	 * @param bool $lockOnly
+	 *
+	 * @return mixed
+	 */
+	public function queue(
+		string $key,
+		?Closure $setCallback = null,
+		int $ttl = 0,
+		array $tags = [],
+		?int $queueLockTtlMs = null,
+		bool $lockOnly = false,
+	): mixed
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return $this->callSetCallback($setCallback);
+		}
+		
+		$id = $this->prefix($key, $this->getType());
+		
+		return $this->_queue(
+			$client,
+			$key,
+			$id,
+			$setCallback,
+			$ttl,
+			$tags,
+			true,
+			$queueLockTtlMs,
+			$lockOnly,
+		);
+	}
+	
+	/**
 	 * @param BaseRedis $client
 	 * @param string $key
 	 * @param string $id
 	 * @param ?Closure $setCallback
 	 * @param int $ttl
 	 * @param array $tags
-	 * @param bool $willSet
-	 * @param ?int $queueLockTtlMs
-	 *
+	 * @param bool $queue override for the config switch
+	 * @param ?int $queueLockTtlMs override for the config value
+	 * @param bool $lockOnly
+	 * 
 	 * @return mixed
 	 */
 	protected function _queue(
@@ -577,18 +642,20 @@ abstract class Cache extends Tags
 		?Closure $setCallback = null,
 		int $ttl = 0,
 		array $tags = [],
-		bool $willSet = false,
+		?bool $queue = null,
 		?int $queueLockTtlMs = null,
+		bool $lockOnly = false,
 	): mixed
 	{
-		if($this->_queueEnabled === false
-			|| ($setCallback === null && $willSet === false))
+		if(($this->_queueEnabled === false && $queue !== true)
+			|| ($this->_queueEnabled === true && $queue === false)
+		)
 		{
 			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
 		}
 		
-		$lockKey = $this->prefix(self::KEY_LOCK, $id);
-		$channelName = $this->prefix(self::KEY_CHANNEL, $id);
+		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
+		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		$lockValue = bin2hex(random_bytes(16));
 		$queueLockTtlMs = $queueLockTtlMs ?? $this->_queueLockTtlMs;
 		
@@ -611,29 +678,34 @@ abstract class Cache extends Tags
 		}
 		
 		// lock not acquired
-		$waitTimeMs = $queueLockTtlMs;
+		$waitTimeMs = $waitTimeJitterMs = $queueLockTtlMs;
 		for($attempt = 0; $attempt < $this->_queueWaitAttempts; $attempt++)
 		{
 			// set read timeout to the requested queue lock TTL
 			$this->_connection->toggleReadTimeout(
 				Connection::TIMEOUT_READ_CUSTOM, 
-				$waitTimeMs / 1000, // milliseconds to seconds
+				$waitTimeJitterMs / 1000, // milliseconds to seconds
 				false,
 			);
 			
 			try
 			{
 				// block and wait for a message on the channel or a timeout (when no message is received)
-				$client->subscribe([$channelName], function($client, $channelName, $message)
-				{
-					$client->unsubscribe([$channelName]);
-				});
+				$client->subscribe([$channelName],
+					function($client, $channelName, $message)
+					{
+						$client->unsubscribe([$channelName]);
+					}
+				);
 			}
 			// we got no message, redis responded with "RedisException: read error on connection"
 			catch(RedisException $exception)
 			{
 				$client->unsubscribe([$channelName]);
-				$waitTimeMs /= 2; // shorten the wait time on the next attempt
+				// shorten the wait time on the next attempt
+				$waitTimeMs/= 2;
+				// add jitter to the wait time (0-50%)
+				$waitTimeJitterMs = $waitTimeMs + random_int(0, (int)($waitTimeMs * 0.5));
 			}
 			finally
 			{
@@ -642,16 +714,19 @@ abstract class Cache extends Tags
 			}
 			
 			// either we got the message or we timed-out
-			// check if data is already there
 			try
 			{
-				$value = $client->hGet(
-					$id,
-					self::KEY_DATA,
-				);
-				if($value !== false)
+				if($lockOnly === false)
 				{
-					return $this->unserialize($this->decompress($value));
+					// check if data is already there
+					$value = $client->hGet(
+						$id,
+						self::KEY_DATA,
+					);
+					if($value !== false)
+					{
+						return $this->unserialize($this->decompress($value));
+					}
 				}
 				
 				// check if the lock still exists
@@ -727,11 +802,6 @@ abstract class Cache extends Tags
 		?string $id = null,
 	): bool
 	{
-		if($this->_queueEnabled === false)
-		{
-			return false;
-		}
-		
 		if($id === null)
 		{
 			$id = $this->prefix($key, $this->getType());
@@ -745,8 +815,8 @@ abstract class Cache extends Tags
 		$lockValue = $this->_queueLocks[$id];
 		unset($this->_queueLocks[$id]);
 		
-		$lockKey = $this->prefix(self::KEY_LOCK, $id);
-		$channelName = $this->prefix(self::KEY_CHANNEL, $id);
+		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
+		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		
 		// atomically release the lock and notify any waiters using the Lua script
 		return (bool)$this->_functionCall('cache_release_lock_and_publish',
@@ -778,7 +848,7 @@ abstract class Cache extends Tags
 			return false;
 		}
 		
-		$lockKey = $this->prefix(self::KEY_LOCK, $id);
+		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
 		$lockValue = $this->_queueLocks[$id];
 		$ttlMs = $ttlMs ?? $this->_queueLockTtlMs;
 		
