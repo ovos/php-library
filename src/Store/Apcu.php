@@ -43,11 +43,6 @@ class Apcu extends Cache
 	 */
 	public static function fromConfig(ArrayObject $config): self
 	{
-		if($config->offsetExists('prefix') === false)
-		{
-			throw new Exception('"cache: prefix" is a required config value.');
-		}
-		
 		$instance = new self($config->prefix);
 		$instance->setConfig($config->perishable);
 		

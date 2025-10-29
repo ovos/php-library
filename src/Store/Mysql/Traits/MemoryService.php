@@ -30,17 +30,17 @@ trait MemoryService
 	}
 	
 	/**
-	 * @param ?string $cache
+	 * @param ?string $cacheKey
 	 *
 	 * @return bool
 	 */
-	public function invalidateCache(?string $cache = null): bool
+	public function invalidateMemory(?string $cacheKey = null): bool
 	{
 		$store = $this->_memoryService->getStore();
 		$cacheId = self::TABLE;
-		if($cache !== null)
+		if($cacheKey !== null)
 		{
-			$cacheId .= '_' . $cache;
+			$cacheId .= '_' . $cacheKey;
 		}
 		
 		return $store->delete($cacheId);
