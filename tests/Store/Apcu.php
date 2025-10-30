@@ -1,27 +1,25 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Store\Redis;
+namespace Tests\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
-use Ovos\Store\Redis as Store;
+use Ovos\Store\Apcu as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Parallel;
-use RedisException;
 
 use function Ovos\config;
 use function sprintf;
 
 /**
- * Queue
+ * Apcu
  *
  * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
-class Queue extends Test
+class Apcu extends Test
 {
 	/**
 	 * @var string
@@ -44,11 +42,6 @@ class Queue extends Test
 	protected ArrayObject $_config;
 	
 	/**
-	 * @var ?Connection
-	 */
-	protected ?Connection $_connection = null;
-	
-	/**
 	 * @var ?Store
 	 */
 	protected ?Store $_store = null;
@@ -57,7 +50,7 @@ class Queue extends Test
 	{
 		$this->_config = config()->cache;
 		
-		if($this->_config->getPath(['persistent', 'queue', 'enabled']) !== true)
+		if($this->_config->getPath(['perishable', 'queue', 'enabled']) !== true)
 		{
 			$this->setIsDisabled(true,
 				sprintf('"queue" is not enabled in cache config.')
@@ -65,27 +58,12 @@ class Queue extends Test
 			
 			return;
 		}
-		
-		$this->_connection = new Connection($this->_config->persistent);
-		if($this->_connection->connect() === false)
-		{
-			throw new RedisException
-			(
-				sprintf('Could not connect to redis server "%s" on port "%s".',
-					$this->_store->getConfig()->host,
-					$this->_store->getConfig()->port,
-				)
-			);
-		}
 	}
 	
 	protected function _initStore(): void
 	{
-		$this->_store = new Store
-		(
-			$this->_connection,
-			$this->_config->persistent,
-			$this->_config->prefix,
+		$this->_store = Store::fromConfig(
+			$this->_config,
 			Cache::GROUP_TESTS,
 		);
 	}
@@ -183,28 +161,6 @@ class Queue extends Test
 		}
 	}
 	
-	public function setCallbackWithTags(): bool
-	{
-		$value = 'test';
-		$tags = ['tag1', 'tag2'];
-		
-		try
-		{
-			$value = $this->_store->get(self::KEY_ITEM,
-				setCallback: fn() => $value,
-				tags: $tags,
-			);
-			
-			$result = $this->_store->getTags(self::KEY_ITEM);
-			
-			return $result === $tags; // have the same key/value pairs in the same order and of the same types.
-		}
-		finally
-		{
-			$this->_store->delete(self::KEY_ITEM);
-		}
-	}
-	
 	public function releaseActiveLock(): bool
 	{
 		try
@@ -215,12 +171,11 @@ class Queue extends Test
 			}
 			
 			$id = $this->_store
-				->prefix(self::KEY_ITEM, $this->_store->getType());
+				->prefix(self::KEY_ITEM, $this->_store->getGroup());
 			$lockKey = $this->_store
 				->prefix(Store::TYPE_LOCK, $id);
 			
-			return $this->_store->getClient()
-				->exists($lockKey) === 0;
+			return apcu_exists($lockKey) === false;
 		}
 		finally
 		{
@@ -289,7 +244,8 @@ class Queue extends Test
 	public function lockOnly(): bool
 	{
 		$id = $this->_store
-			->prefix(self::KEY_ITEM, $this->_store->getType());
+			->prefix(self::KEY_ITEM, $this->_store->getGroup());
+		
 		$lockKey = $this->_store
 			->prefix(Store::TYPE_LOCK, $id);
 		
@@ -297,48 +253,16 @@ class Queue extends Test
 		{
 			$this->_store->queue(self::KEY_ITEM, lockOnly: true);
 			
-			$exists = $this->_store->getClient()
-				->exists($lockKey) === 1;
+			$exists = apcu_exists($lockKey) === true;
 			
 			$this->_store->releaseActiveLock(self::KEY_ITEM);
 			
-			$existsNot = $this->_store->getClient()
-				->exists($lockKey) === 0;
+			$existsNot = apcu_exists($lockKey)=== false;
 			
 			return $exists && $existsNot;
 		}
 		finally
 		{
-		}
-	}
-	
-	public function queue(): bool
-	{
-		$phpBinary = config()->getPath(['cli', 'executable']);
-		$phpBinary = $phpBinary ?? 'php';
-		$command = sprintf('%s %s %s', $phpBinary,
-			__DIR__ . DIRECTORY_SEPARATOR
-			. 'Queue' . DIRECTORY_SEPARATOR
-			. 'QueueClient.file.php',
-			Cache::GROUP_TESTS,
-		);
-		
-		try
-		{
-			Parallel::run($command, self::CLIENTS);
-			
-			$id = $this->_store->prefix(self::KEY_ITEM_COUNTER,
-				$this->_store->getType()
-			);
-			
-			$count = $this->_store->getClient()->get($id);
-			
-			return (int)$count === 1;
-		}
-		finally
-		{
-			$this->_store->delete(self::KEY_ITEM);
-			$this->_store->delete(self::KEY_ITEM_COUNTER);
 		}
 	}
 	
@@ -349,6 +273,5 @@ class Queue extends Test
 	public function deconstruct(): void
 	{
 		$this->_store->clear();
-		$this->_connection->disconnect();
 	}
 }

@@ -105,11 +105,16 @@ abstract class Cache extends Store
 	}
 	
 	/**
-	 * @return string
+	 * @return ?string
 	 */
-	public function getGroup(): string
+	public function getGroup(): ?string
 	{
-		return $this->prefix($this->_group);
+		if($this->_group !== null)
+		{
+			return $this->prefix($this->_group);
+		}
+		
+		return null;
 	}
 	
 	/**

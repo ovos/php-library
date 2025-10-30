@@ -6,7 +6,7 @@ namespace Tests\Store;
 use Ovos\ArrayObject;
 use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
-use Ovos\Store\Redis as RedisStore;
+use Ovos\Store\Redis as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use RedisException;
@@ -40,9 +40,9 @@ class Redis extends Test
 	protected ?Connection $_connection = null;
 	
 	/**
-	 * @var ?RedisStore
+	 * @var ?Store
 	 */
-	protected ?RedisStore $_store = null;
+	protected ?Store $_store = null;
 	
 	public function __construct()
 	{
@@ -63,7 +63,7 @@ class Redis extends Test
 	
 	protected function _initStore(): void
 	{
-		$this->_store = new RedisStore
+		$this->_store = new Store
 		(
 			$this->_connection,
 			$this->_config->persistent,

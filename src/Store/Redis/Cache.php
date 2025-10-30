@@ -12,13 +12,15 @@ use Throwable;
 use Redis as BaseRedis;
 use RedisException;
 
+use function array_slice;
+use function array_key_exists;
+use function bin2hex;
+use function ceil;
 use function count;
 use function file_get_contents;
-use function ceil;
-use function array_slice;
-use function str_replace;
-use function bin2hex;
+use function is_int;
 use function random_bytes;
+use function str_replace;
 
 /**
  * Cache
@@ -120,9 +122,9 @@ abstract class Cache extends Tags
 	protected array $_queueLocks = [];
 	
 	/**
-	 * @param string $prefix
 	 * @param Connection $connection
 	 * @param ArrayObject $config
+	 * @param ?string $prefix
 	 * @param ?string $group
 	 */
 	public function __construct
@@ -268,11 +270,13 @@ abstract class Cache extends Tags
 	/**
 	 * @param Connection $connection
 	 * @param ArrayObject $config
+	 * @param ?string $group
 	 *
 	 * @return self
 	 */
 	public static function fromConfig(Connection $connection,
 		ArrayObject $config,
+		?string $group = null,
 	): self
 	{
 		return new static
@@ -280,7 +284,7 @@ abstract class Cache extends Tags
 			$connection,
 			$config->persistent,
 			$config->prefix,
-			self::GROUP_DEFAULT,
+			$group ?? self::GROUP_DEFAULT,
 		);
 	}
 	
@@ -552,42 +556,6 @@ abstract class Cache extends Tags
 	 * @param ?Closure $setCallback
 	 * @param int $ttl
 	 * @param array $tags
-	 *
-	 * @return mixed
-	 */
-	public function setFromCallback(
-		string $key,
-		?Closure $setCallback,
-		int $ttl = 0,
-		array $tags = [],
-	): mixed
-	{
-		if($setCallback === null)
-		{
-			return null;
-		}
-		
-		try
-		{
-			$value = $setCallback($this);
-			
-			$this->set($key, $value, $ttl, $tags);
-		}
-		catch(Throwable $throwable)
-		{
-			$this->releaseActiveLock($key);
-			
-			throw $throwable;
-		}
-		
-		return $value;
-	}
-	
-	/**
-	 * @param string $key
-	 * @param ?Closure $setCallback
-	 * @param int $ttl
-	 * @param array $tags
 	 * @param ?int $queueLockTtlMs override for the config value
 	 * @param bool $lockOnly
 	 *
@@ -783,7 +751,16 @@ abstract class Cache extends Tags
 	{
 		$this->_queueLocks[$id] = $lockValue;
 		
-		return $this->setFromCallback($key, $setCallback, $ttl, $tags);
+		try
+		{
+			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
+		}
+		catch(Throwable $throwable)
+		{
+			$this->releaseActiveLock($key);
+			
+			throw $throwable;
+		}
 	}
 	
 	/**
@@ -836,11 +813,6 @@ abstract class Cache extends Tags
 	 */
 	public function renewLock(string $key, ?int $ttlMs = null): bool
 	{
-		if($this->_queueEnabled === false)
-		{
-			return false;
-		}
-		
 		$id = $this->prefix($key, $this->getType());
 		
 		if(array_key_exists($id, $this->_queueLocks) === false)

@@ -1,12 +1,23 @@
 <?php
 
-namespace Ovos;
+namespace Tests\Store\Redis\Queue;
 
+use Ovos\Application;
+use Ovos\ArrayObject;
+use Ovos\Controller;
 use Ovos\Redis\Connection;
 use Ovos\Store\Cache;
-use Ovos\Store\Redis;
-use Ovos\Store\Redis\Cache as RedisCache;
+use Ovos\Store\Redis as Store;
 use RedisException;
+
+use function Ovos\config;
+use function dirname;
+use function define;
+use function is_dir;
+use function getmypid;
+use function microtime;
+use function sleep;
+use function sprintf;
 
 /**
  * Tool for testing cache queue
@@ -51,9 +62,9 @@ class QueueClient extends Controller\Cli
 	protected Connection $_connection;
 	
 	/**
-	 * @var Redis
+	 * @var Store
 	 */
-	protected Redis $_store;
+	protected Store $_store;
 	
 	public function __construct()
 	{
@@ -78,7 +89,7 @@ class QueueClient extends Controller\Cli
 		
 		$group = $_SERVER['argv'][1] ?? Cache::GROUP_TESTS;
 		
-		$this->_store = new Redis
+		$this->_store = new Store
 		(
 			$this->_connection,
 			$this->_config->persistent,
@@ -93,7 +104,7 @@ class QueueClient extends Controller\Cli
 	public function run(): void
 	{
 		$result = $this->_store->get(self::KEY_ITEM,
-			setCallback: function(RedisCache $store)
+			setCallback: function(Store $store)
 			{
 				$client = $store->getClient();
 				if($client === null)
@@ -103,7 +114,10 @@ class QueueClient extends Controller\Cli
 				
 				sleep(1);
 				
-				$id = $store->prefix(self::KEY_ITEM_COUNTER, $store->getType());
+				$id = $store->prefix(self::KEY_ITEM_COUNTER,
+					$store->getType()
+				);
+				
 				$client->incr($id);
 				$client->expire($id, 30);
 				

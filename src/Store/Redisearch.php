@@ -97,13 +97,13 @@ class Redisearch extends Cache
 	/**
 	 * @param string $key
 	 *
-	 * @return null|bool
+	 * @return bool
 	 */
-	public function delete(string $key): null|bool
+	public function delete(string $key): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return null;
+			return false;
 		}
 		
 		try

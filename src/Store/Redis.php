@@ -8,14 +8,15 @@ use Ovos\Store\Redis\Cache;
 use Redis as BaseRedis;
 use RedisException;
 
-use function is_int;
-use function count;
-use function explode;
-use function implode;
 use function array_push;
 use function array_unique;
 use function array_merge;
 use function array_diff;
+use function count;
+use function explode;
+use function implode;
+use function is_int;
+use function is_array;
 
 /**
  * Redis
@@ -130,13 +131,13 @@ class Redis extends Cache
 	/**
 	 * @param string $key
 	 *
-	 * @return null|bool
+	 * @return bool
 	 */
-	public function delete(string $key): null|bool
+	public function delete(string $key): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return null;
+			return false;
 		}
 		
 		try
@@ -270,6 +271,8 @@ class Redis extends Cache
 			if($error = $client->getLastError())
 			{
 				$this->log($error);
+				
+				return false;
 			}
 			
 			if(is_array($result))
@@ -303,7 +306,7 @@ class Redis extends Cache
 		
 		if(count($tags) === 0)
 		{
-			return false;
+			return true;
 		}
 		
 		$group = $this->getGroup() . self::SEPARATOR_PREFIX;
@@ -313,6 +316,10 @@ class Redis extends Cache
 		try
 		{
 			$ids = $this->getIdsMatchingAnyTags($tags);
+			if(count($ids) === 0)
+			{
+				return true;
+			}
 			
 			$client->clearLastError();
 			
@@ -505,7 +512,7 @@ class Redis extends Cache
 					$typeTags,
 				], long: true);
 				
-				if(is_int($count))
+				if(is_int($result))
 				{
 					$count+= $result;
 				}
