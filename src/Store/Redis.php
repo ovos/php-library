@@ -315,30 +315,30 @@ class Redis extends Cache
 		
 		try
 		{
-			$ids = $this->getIdsMatchingAnyTags($tags);
-			if(count($ids) === 0)
-			{
-				return true;
-			}
-			
-			$client->clearLastError();
-			
 			// this is an option functionality, which is not required
 			// at the cost of speed on invalidation; it keeps a database smaller (clean)
 			// by removing ids from tags
 			if($this->_cleanTags === true)
 			{
-				$this->_batchFunctionCall('cache_unlink_clean_tags', $ids, [
-					$group,
-					$typeItems,
-					$typeTags,
-					self::KEY_TAGS,
-				], long: true);
-			}
-			
-			if($error = $client->getLastError())
-			{
-				$this->log($error);
+				$ids = $this->getIdsMatchingAnyTags($tags);
+				$countIds = count($ids);
+				
+				if($countIds)
+				{
+					$client->clearLastError();
+					
+					$this->_batchFunctionCall('cache_unlink_clean_tags', $ids, [
+						$group,
+						$typeItems,
+						$typeTags,
+						self::KEY_TAGS,
+					], long: true);
+					
+					if($error = $client->getLastError())
+					{
+						$this->log($error);
+					}
+				}
 			}
 			
 			$client->clearLastError();
