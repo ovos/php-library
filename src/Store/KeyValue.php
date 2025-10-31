@@ -18,12 +18,12 @@ use function gzcompress;
 use function gzuncompress;
 
 /**
- * Cache
+ * KeyValue
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Cache extends Store
+abstract class KeyValue extends Store
 {
 	/**
 	 * Prefixes

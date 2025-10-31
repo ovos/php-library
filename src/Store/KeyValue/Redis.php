@@ -1,15 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Store\Redis;
+namespace Ovos\Store\KeyValue;
 
 use Ovos\ArrayObject;
-use Ovos\Exception;
 use Ovos\Redis\Connection;
-use Ovos\Store\Cache\Tags;
 use Closure;
 use Throwable;
-use Redis as BaseRedis;
+use Redis as RedisClient;
 use RedisException;
 
 use function array_slice;
@@ -23,12 +21,12 @@ use function random_bytes;
 use function str_replace;
 
 /**
- * Cache
+ * KeyValue
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Cache extends Tags
+abstract class Redis extends Tags
 {
 	/**#@+
 	 * Separators
@@ -74,7 +72,7 @@ abstract class Cache extends Tags
 	/**
 	 * @var int
 	 */
-	protected int $_multiMode = BaseRedis::PIPELINE;
+	protected int $_multiMode = RedisClient::PIPELINE;
 	
 	/**#@+
 	 * Libraries
@@ -83,7 +81,9 @@ abstract class Cache extends Tags
 	 * The array of function libraries used by this lass
 	 */
 	public const array LIBRARIES = [
-		'cache' => 'Lua' . DIRECTORY_SEPARATOR . 'Cache.lua',
+		'store' =>
+			'Lua'
+			. DIRECTORY_SEPARATOR . 'Redis.lua',
 	];
 	/**#@-*/
 	
@@ -289,9 +289,9 @@ abstract class Cache extends Tags
 	}
 	
 	/**
-	 * @return ?BaseRedis
+	 * @return ?RedisClient
 	 */
-	public function getClient(): ?BaseRedis
+	public function getClient(): ?RedisClient
 	{
 		return $this->_connection->getClient();
 	}
@@ -377,6 +377,7 @@ abstract class Cache extends Tags
 		$client->clearLastError();
 		
 		$functions = file_get_contents(__DIR__
+			. DIRECTORY_SEPARATOR . 'Redis'
 			. DIRECTORY_SEPARATOR . $libraryFile,
 		);
 		
@@ -591,7 +592,7 @@ abstract class Cache extends Tags
 	}
 	
 	/**
-	 * @param BaseRedis $client
+	 * @param RedisClient $client
 	 * @param string $key
 	 * @param string $id
 	 * @param ?Closure $setCallback
@@ -604,7 +605,7 @@ abstract class Cache extends Tags
 	 * @return mixed
 	 */
 	protected function _queue(
-		BaseRedis $client,
+		RedisClient $client,
 		string $key,
 		string $id,
 		?Closure $setCallback = null,
@@ -796,7 +797,7 @@ abstract class Cache extends Tags
 		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		
 		// atomically release the lock and notify any waiters using the Lua script
-		return (bool)$this->_functionCall('cache_release_lock_and_publish',
+		return (bool)$this->_functionCall('store_release_lock_and_publish',
 			[$lockKey, $channelName],
 			[$lockValue],
 		);
@@ -824,7 +825,7 @@ abstract class Cache extends Tags
 		$lockValue = $this->_queueLocks[$id];
 		$ttlMs = $ttlMs ?? $this->_queueLockTtlMs;
 		
-		return (bool)$this->_functionCall('cache_renew_lock',
+		return (bool)$this->_functionCall('store_renew_lock',
 			[$lockKey],
 			[$lockValue, $ttlMs],
 		);
@@ -848,7 +849,7 @@ abstract class Cache extends Tags
 		
 		$client->clearLastError();
 		
-		$result = $this->_functionCall('cache_clear', [], [
+		$result = $this->_functionCall('store_clear', [], [
 			$prefix,
 		], long: true);
 		

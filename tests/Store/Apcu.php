@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Tests\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Store\Cache;
+use Ovos\Store\KeyValue;
 use Ovos\Store\Apcu as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
@@ -64,7 +64,7 @@ class Apcu extends Test
 	{
 		$this->_store = Store::fromConfig(
 			$this->_config,
-			Cache::GROUP_TESTS,
+			KeyValue::GROUP_TESTS,
 		);
 	}
 	

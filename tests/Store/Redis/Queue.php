@@ -5,7 +5,7 @@ namespace Tests\Store\Redis;
 
 use Ovos\ArrayObject;
 use Ovos\Redis\Connection;
-use Ovos\Store\Cache;
+use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
@@ -86,7 +86,7 @@ class Queue extends Test
 			$this->_connection,
 			$this->_config->persistent,
 			$this->_config->prefix,
-			Cache::GROUP_TESTS,
+			KeyValue::GROUP_TESTS,
 		);
 	}
 	
@@ -317,10 +317,10 @@ class Queue extends Test
 		$phpBinary = config()->getPath(['cli', 'executable']);
 		$phpBinary = $phpBinary ?? 'php';
 		$command = sprintf('%s %s %s', $phpBinary,
-			__DIR__ . DIRECTORY_SEPARATOR
-			. 'Queue' . DIRECTORY_SEPARATOR
-			. 'QueueClient.file.php',
-			Cache::GROUP_TESTS,
+			__DIR__
+			. DIRECTORY_SEPARATOR . 'Queue'
+			. DIRECTORY_SEPARATOR . 'QueueClient.file.php',
+			KeyValue::GROUP_TESTS,
 		);
 		
 		try

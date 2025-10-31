@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Store;
 
-use Ovos\Store\Redis\Cache;
+use Ovos\Store\KeyValue\Redis as Store;
 use RedisException;
 
 use function in_array;
@@ -19,7 +19,7 @@ use function count;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redisearch extends Cache
+class Redisearch extends Store
 {
 	/**#@+
 	 * Libraries
@@ -28,8 +28,12 @@ class Redisearch extends Cache
 	 * The array of function libraries used by this lass
 	 */
 	public const array LIBRARIES = [
-		'cache' => 'Lua' . DIRECTORY_SEPARATOR . 'Cache.lua',
-		'cache_search' => 'Lua' . DIRECTORY_SEPARATOR . 'CacheSearch.lua',
+		'store' =>
+			'Lua'
+			. DIRECTORY_SEPARATOR . 'Redis.lua',
+		'store_search' =>
+			'Lua'
+			. DIRECTORY_SEPARATOR . 'Redisearch.lua',
 	];
 	/**#@-*/
 	
@@ -158,7 +162,7 @@ class Redisearch extends Cache
 			 * We could also reference all matching tags using the following syntax:
 			 * @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}"
 			 */
-			$this->_functionCall('cache_search_unlink_by_tags', [], [
+			$this->_functionCall('store_search_unlink_by_tags', [], [
 				$type,
 				'@tags:{' . implode('|', $tags) . '}', // matches any of the tags
 			]);

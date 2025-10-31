@@ -6,7 +6,7 @@ use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Controller;
 use Ovos\Redis\Connection;
-use Ovos\Store\Cache;
+use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
 use RedisException;
 
@@ -87,7 +87,7 @@ class QueueClient extends Controller\Cli
 			);
 		}
 		
-		$group = $_SERVER['argv'][1] ?? Cache::GROUP_TESTS;
+		$group = $_SERVER['argv'][1] ?? KeyValue::GROUP_TESTS;
 		
 		$this->_store = new Store
 		(

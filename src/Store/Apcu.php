@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Exception;
 use APCUIterator;
 use Closure;
 use Throwable;
@@ -31,7 +30,7 @@ use function mb_strtolower;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Apcu extends Cache
+class Apcu extends KeyValue
 {
 	/**
 	 * Types

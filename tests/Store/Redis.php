@@ -5,7 +5,7 @@ namespace Tests\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Redis\Connection;
-use Ovos\Store\Cache;
+use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
@@ -68,7 +68,7 @@ class Redis extends Test
 			$this->_connection,
 			$this->_config->persistent,
 			$this->_config->prefix,
-			Cache::GROUP_TESTS,
+			KeyValue::GROUP_TESTS,
 		);
 	}
 	

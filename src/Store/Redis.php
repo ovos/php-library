@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Store\Redis\Cache;
-use Redis as BaseRedis;
+use Ovos\Store\KeyValue\Redis as Store;
+use Redis as RedisClient;
 use RedisException;
 
 use function array_push;
@@ -24,7 +24,7 @@ use function is_array;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redis extends Cache
+class Redis extends Store
 {
 	/**
 	 * Types
@@ -77,12 +77,12 @@ class Redis extends Cache
 	}
 	
 	/**
-	 * @param BaseRedis $client
+	 * @param RedisClient $client
 	 * @param string $id
 	 *
 	 * @return array
 	 */
-	protected function _getCurrentTags(BaseRedis $client, string $id): array
+	protected function _getCurrentTags(RedisClient $client, string $id): array
 	{
 		try
 		{
@@ -327,7 +327,7 @@ class Redis extends Cache
 				{
 					$client->clearLastError();
 					
-					$this->_batchFunctionCall('cache_unlink_clean_tags', $ids, [
+					$this->_batchFunctionCall('store_unlink_clean_tags', $ids, [
 						$group,
 						$typeItems,
 						$typeTags,
@@ -345,7 +345,7 @@ class Redis extends Cache
 			
 			foreach($tags as $tag)
 			{
-				$this->_functionCall('cache_unlink_by_tag', [], [
+				$this->_functionCall('store_unlink_by_tag', [], [
 					$group,
 					$tag,
 					$typeItems,
@@ -413,7 +413,7 @@ class Redis extends Cache
 			
 			foreach($tags as $tag)
 			{
-				$results = $this->_functionCall('cache_get_ids_by_tag', [], [
+				$results = $this->_functionCall('store_get_ids_by_tag', [], [
 					$group,
 					$tag,
 					$typeTags,
@@ -458,7 +458,7 @@ class Redis extends Cache
 		{
 			$client->clearLastError();
 			
-			$results = $this->_functionCall('cache_get_tags', [], [
+			$results = $this->_functionCall('store_get_tags', [], [
 				$group,
 				$typeTags,
 			], true);
@@ -505,7 +505,7 @@ class Redis extends Cache
 			
 			foreach($tags as $tag)
 			{
-				$result = $this->_functionCall('cache_clean_tag', [], [
+				$result = $this->_functionCall('store_clean_tag', [], [
 					$group,
 					$tag,
 					$typeItems,

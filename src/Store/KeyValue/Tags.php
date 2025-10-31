@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Store\Cache;
+namespace Ovos\Store\KeyValue;
 
-use Ovos\Store\Cache;
+use Ovos\Store\KeyValue;
 use Closure;
 
 /**
@@ -12,7 +12,7 @@ use Closure;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Tags extends Cache
+abstract class Tags extends KeyValue
 {
 	/**
 	 * @param string $key
