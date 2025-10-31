@@ -205,6 +205,33 @@ class Queue extends Test
 		}
 	}
 	
+	public function setCallbackModifyTags(): bool
+	{
+		$value = 'test';
+		$tags = ['tag1', 'tag2'];
+		
+		try
+		{
+			$value = $this->_store->get(self::KEY_ITEM,
+				setCallback: function($store, $key, &$ttl, &$tags) use ($value)
+				{
+					$tags[] = 'tag3';
+					
+					return $value;
+				},
+				tags: $tags,
+			);
+			
+			$result = $this->_store->getTags(self::KEY_ITEM);
+			
+			return $result !== $tags; // have the same key/value pairs in the same order and of the same types.
+		}
+		finally
+		{
+			$this->_store->delete(self::KEY_ITEM);
+		}
+	}
+	
 	public function releaseActiveLock(): bool
 	{
 		try

@@ -49,7 +49,7 @@ abstract class Tags extends KeyValue
 			return null;
 		}
 		
-		$value = $setCallback($this);
+		$value = $setCallback($this, $key, $ttl, $tags);
 		$this->set($key, $value, $ttl, $tags);
 		
 		return $value;
