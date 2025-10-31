@@ -61,7 +61,7 @@ jobs:
           php-version: ${{ matrix.php-version }}
           tools: composer:v2
           coverage: none
-          #ini-values: display_errors=off, log_errors=on
+          ini-values: apc.enabled=on, apc.enable_cli=on
           extensions: :xdebug, curl, fileinfo, gd, gettext, intl, mbstring, openssl, pdo_mysql, sockets, sodium, redis, yaml, apcu, opcache
       
       - name: Copy .env
