@@ -143,14 +143,14 @@ class Apcu extends Test
 		}
 	}
 	
-	public function setCallback(): bool
+	public function resolver(): bool
 	{
 		$value = 'test';
 		
 		try
 		{
 			$result = $this->_store->get(self::KEY_ITEM,
-				setCallback: fn() => $value,
+				resolver: fn() => $value,
 			);
 			
 			return $result === $value;
@@ -208,7 +208,7 @@ class Apcu extends Test
 		try
 		{
 			$result = $this->_store->get(self::KEY_ITEM,
-				setCallback: fn() => $value,
+				resolver: fn() => $value,
 				queue: false,
 			);
 			

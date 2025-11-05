@@ -224,7 +224,7 @@ class Apcu extends KeyValue
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param bool $queue override for the config switch
 	 * @param ?int $queueLockTtlS override for the config value
@@ -233,7 +233,7 @@ class Apcu extends KeyValue
 	 */
 	public function get(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		?bool $queue = null,
 		?int $queueLockTtlS = null,
@@ -251,7 +251,7 @@ class Apcu extends KeyValue
 		return $this->_queue(
 			$key,
 			$id,
-			$setCallback,
+			$resolver,
 			$ttl,
 			$queue,
 			$queueLockTtlS,
@@ -260,7 +260,7 @@ class Apcu extends KeyValue
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param ?int $queueLockTtlS override for the config value
 	 * @param bool $lockOnly
@@ -269,7 +269,7 @@ class Apcu extends KeyValue
 	 */
 	public function queue(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		?int $queueLockTtlS = null,
 		bool $lockOnly = false,
@@ -280,7 +280,7 @@ class Apcu extends KeyValue
 		return $this->_queue(
 			$key,
 			$id,
-			$setCallback,
+			$resolver,
 			$ttl,
 			true,
 			$queueLockTtlS,
@@ -291,7 +291,7 @@ class Apcu extends KeyValue
 	/**
 	 * @param string $key
 	 * @param string $id
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param bool $queue override for the config switch
 	 * @param ?int $queueLockTtlS override for the config value
@@ -302,7 +302,7 @@ class Apcu extends KeyValue
 	protected function _queue(
 		string $key,
 		string $id,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		?bool $queue = null,
 		?int $queueLockTtlS = null,
@@ -313,7 +313,7 @@ class Apcu extends KeyValue
 			|| ($this->_queueEnabled === true && $queue === false)
 		)
 		{
-			return $this->setFromCallback($key, $setCallback, $ttl);
+			return $this->setFromResolver($key, $resolver, $ttl);
 		}
 		
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
@@ -334,7 +334,7 @@ class Apcu extends KeyValue
 			return $this->_lockAcquired($key,
 				$id,
 				$lockValue,
-				$setCallback,
+				$resolver,
 				$ttl,
 			);
 		}
@@ -376,7 +376,7 @@ class Apcu extends KeyValue
 					return $this->_lockAcquired($key,
 						$id,
 						$lockValue,
-						$setCallback,
+						$resolver,
 						$ttl,
 					);
 				}
@@ -386,14 +386,14 @@ class Apcu extends KeyValue
 		}
 		
 		// we tried, time to fetch the data ourselves
-		return $this->callSetCallback($setCallback);
+		return $this->callResolver($resolver);
 	}
 	
 	/**
 	 * @param string $key
 	 * @param string $id
 	 * @param string $lockValue
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 *
 	 * @return mixed
@@ -402,7 +402,7 @@ class Apcu extends KeyValue
 		string $key,
 		string $id,
 		string $lockValue,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 	): mixed
 	{
@@ -410,7 +410,7 @@ class Apcu extends KeyValue
 		
 		try
 		{
-			return $this->setFromCallback($key, $setCallback, $ttl);
+			return $this->setFromResolver($key, $resolver, $ttl);
 		}
 		catch(Throwable $throwable)
 		{

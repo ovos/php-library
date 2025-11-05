@@ -497,7 +497,7 @@ abstract class Redis extends Tags
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 * @param bool $queue override for the config switch
@@ -507,7 +507,7 @@ abstract class Redis extends Tags
 	 */
 	public function get(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 		?bool $queue = null,
@@ -516,7 +516,7 @@ abstract class Redis extends Tags
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return $this->callSetCallback($setCallback);
+			return $this->callResolver($resolver);
 		}
 		
 		$id = $this->prefix($key, $this->getType());
@@ -536,7 +536,7 @@ abstract class Redis extends Tags
 		{
 			$this->log($exception);
 			
-			return $this->callSetCallback($setCallback);
+			return $this->callResolver($resolver);
 		}
 		
 		// cache miss, queue logic begins
@@ -544,7 +544,7 @@ abstract class Redis extends Tags
 			$client,
 			$key,
 			$id,
-			$setCallback,
+			$resolver,
 			$ttl,
 			$tags,
 			$queue,
@@ -554,7 +554,7 @@ abstract class Redis extends Tags
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 * @param ?int $queueLockTtlMs override for the config value
@@ -564,7 +564,7 @@ abstract class Redis extends Tags
 	 */
 	public function queue(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 		?int $queueLockTtlMs = null,
@@ -573,7 +573,7 @@ abstract class Redis extends Tags
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return $this->callSetCallback($setCallback);
+			return $this->callResolver($resolver);
 		}
 		
 		$id = $this->prefix($key, $this->getType());
@@ -582,7 +582,7 @@ abstract class Redis extends Tags
 			$client,
 			$key,
 			$id,
-			$setCallback,
+			$resolver,
 			$ttl,
 			$tags,
 			true,
@@ -595,7 +595,7 @@ abstract class Redis extends Tags
 	 * @param RedisClient $client
 	 * @param string $key
 	 * @param string $id
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 * @param bool $queue override for the config switch
@@ -608,7 +608,7 @@ abstract class Redis extends Tags
 		RedisClient $client,
 		string $key,
 		string $id,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 		?bool $queue = null,
@@ -620,7 +620,7 @@ abstract class Redis extends Tags
 			|| ($this->_queueEnabled === true && $queue === false)
 		)
 		{
-			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
+			return $this->setFromResolver($key, $resolver, $ttl, $tags);
 		}
 		
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
@@ -640,7 +640,7 @@ abstract class Redis extends Tags
 			return $this->_lockAcquired($key,
 				$id,
 				$lockValue,
-				$setCallback,
+				$resolver,
 				$ttl,
 				$tags,
 			);
@@ -713,7 +713,7 @@ abstract class Redis extends Tags
 						return $this->_lockAcquired($key,
 							$id,
 							$lockValue,
-							$setCallback,
+							$resolver,
 							$ttl,
 							$tags,
 						);
@@ -728,14 +728,14 @@ abstract class Redis extends Tags
 		}
 		
 		// we tried, time to fetch the data ourselves
-		return $this->callSetCallback($setCallback);
+		return $this->callResolver($resolver);
 	}
 	
 	/**
 	 * @param string $key
 	 * @param string $id
 	 * @param string $lockValue
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 *
@@ -745,7 +745,7 @@ abstract class Redis extends Tags
 		string $key,
 		string $id,
 		string $lockValue,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 	): mixed
@@ -754,7 +754,7 @@ abstract class Redis extends Tags
 		
 		try
 		{
-			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
+			return $this->setFromResolver($key, $resolver, $ttl, $tags);
 		}
 		catch(Throwable $throwable)
 		{

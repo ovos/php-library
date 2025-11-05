@@ -16,7 +16,7 @@ abstract class Tags extends KeyValue
 {
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 *
@@ -24,32 +24,32 @@ abstract class Tags extends KeyValue
 	 */
 	abstract public function get(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 	): mixed;
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 *
 	 * @return mixed
 	 */
-	public function setFromCallback(
+	public function setFromResolver(
 		string $key,
-		?Closure $setCallback,
+		?Closure $resolver,
 		int $ttl = 0,
 		array $tags = [],
 	): mixed
 	{
-		if($setCallback === null)
+		if($resolver === null)
 		{
 			return null;
 		}
 		
-		$value = $setCallback($this, $key, $ttl, $tags);
+		$value = $resolver($this, $key, $ttl, $tags);
 		$this->set($key, $value, $ttl, $tags);
 		
 		return $value;

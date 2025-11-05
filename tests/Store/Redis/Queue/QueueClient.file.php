@@ -104,7 +104,7 @@ class QueueClient extends Controller\Cli
 	public function run(): void
 	{
 		$result = $this->_store->get(self::KEY_ITEM,
-			setCallback: function(Store $store)
+			resolver: function(Store $store)
 			{
 				$client = $store->getClient();
 				if($client === null)

@@ -260,54 +260,54 @@ abstract class KeyValue extends Store
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 *
 	 * @return null|mixed
 	 */
 	abstract public function get(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 	): mixed;
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 *
 	 * @return mixed
 	 */
-	public function setFromCallback(
+	public function setFromResolver(
 		string $key,
-		?Closure $setCallback,
+		?Closure $resolver,
 		int $ttl = 0,
 	): mixed
 	{
-		if($setCallback === null)
+		if($resolver === null)
 		{
 			return null;
 		}
 		
-		$value = $setCallback($this);
+		$value = $resolver($this);
 		$this->set($key, $value, $ttl);
 		
 		return $value;
 	}
 	
 	/**
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 *
 	 * @return null|mixed
 	 */
-	public function callSetCallback(?Closure $setCallback = null): mixed
+	public function callResolver(?Closure $resolver = null): mixed
 	{
-		if($setCallback === null)
+		if($resolver === null)
 		{
 			return null;
 		}
 		
-		return $setCallback($this);
+		return $resolver($this);
 	}
 	
 	/**

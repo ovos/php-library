@@ -165,14 +165,14 @@ class Queue extends Test
 		}
 	}
 	
-	public function setCallback(): bool
+	public function resolver(): bool
 	{
 		$value = 'test';
 		
 		try
 		{
 			$result = $this->_store->get(self::KEY_ITEM,
-				setCallback: fn() => $value,
+				resolver: fn() => $value,
 			);
 			
 			return $result === $value;
@@ -183,7 +183,7 @@ class Queue extends Test
 		}
 	}
 	
-	public function setCallbackWithTags(): bool
+	public function resolverWithTags(): bool
 	{
 		$value = 'test';
 		$tags = ['tag1', 'tag2'];
@@ -191,7 +191,7 @@ class Queue extends Test
 		try
 		{
 			$value = $this->_store->get(self::KEY_ITEM,
-				setCallback: fn() => $value,
+				resolver: fn() => $value,
 				tags: $tags,
 			);
 			
@@ -205,7 +205,7 @@ class Queue extends Test
 		}
 	}
 	
-	public function setCallbackModifyTags(): bool
+	public function resolverModifyTags(): bool
 	{
 		$value = 'test';
 		$tags = ['tag1', 'tag2'];
@@ -213,7 +213,7 @@ class Queue extends Test
 		try
 		{
 			$value = $this->_store->get(self::KEY_ITEM,
-				setCallback: function($store, $key, &$ttl, &$tags) use ($value)
+				resolver: function($store, $key, &$ttl, &$tags) use ($value)
 				{
 					$tags[] = 'tag3';
 					
@@ -280,7 +280,7 @@ class Queue extends Test
 		try
 		{
 			$result = $this->_store->get(self::KEY_ITEM,
-				setCallback: fn() => $value,
+				resolver: fn() => $value,
 				queue: false,
 			);
 			
