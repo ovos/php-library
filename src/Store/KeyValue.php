@@ -43,6 +43,16 @@ abstract class KeyValue extends Store
 	 */
 	protected ?string $_prefix = null;
 	
+	/**
+	 * @var bool
+	 */
+	protected bool $_compressionEnabled = true;
+	
+	/**
+	 * @var int
+	 */
+	protected int $_compressionThreshold = 2048;
+	
 	/**#@+
 	 * Type constants
 	 */
@@ -138,6 +148,25 @@ abstract class KeyValue extends Store
 	}
 	
 	/**
+	 * @param ArrayObject $config
+	 *
+	 * @return self
+	 */
+	public function setCompression(ArrayObject $config): self
+	{
+		if(($enabled = $config->offsetGet('enabled')) !== null) // true or false
+		{
+			$this->_compressionEnabled = $enabled;
+		}
+		if(($threshold = $config->offsetGet('threshold')) !== null)
+		{
+			$this->_compressionThreshold = $threshold;
+		}
+		
+		return $this;
+	}
+	
+	/**
 	 * @param null|mixed $value
 	 * 
 	 * @return ?string
@@ -191,14 +220,12 @@ abstract class KeyValue extends Store
 			return null;
 		}
 		
-		if($this->_config === null
-			|| $this->_config->compression->enabled !== true)
+		if($this->_compressionEnabled !== true)
 		{
 			return $value;
 		}
 		
-		if($this->_config->compression->threshold !== null
-			&& strlen($value) < $this->_config->compression->threshold)
+		if(strlen($value) < $this->_compressionThreshold)
 		{
 			return $value;
 		}
@@ -228,8 +255,7 @@ abstract class KeyValue extends Store
 			return null;
 		}
 		
-		if($this->_config === null
-			|| $this->_config->compression->enabled !== true)
+		if($this->_compressionEnabled !== true)
 		{
 			return $value;
 		}

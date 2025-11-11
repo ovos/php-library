@@ -92,10 +92,16 @@ class Apcu extends KeyValue
 		$this->setGroup($group);
 		$this->setConfig($config);
 		
-		if($config !== null
-			&& $queue = $config->offsetGet('queue'))
+		if($config !== null)
 		{
-			$this->setQueue($queue);
+			if($compression = $config->offsetGet('compression'))
+			{
+				$this->setCompression($compression);
+			}
+			if($queue = $config->offsetGet('queue'))
+			{
+				$this->setQueue($queue);
+			}
 		}
 	}
 	

@@ -147,6 +147,11 @@ abstract class Redis extends Tags
 			$this->setStoreOptions($storeOptions);
 		}
 		
+		if($compression = $this->_config->offsetGet('compression'))
+		{
+			$this->setCompression($compression);
+		}
+		
 		if($queue = $this->_config->offsetGet('queue'))
 		{
 			$this->setQueue($queue);
