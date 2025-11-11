@@ -41,7 +41,7 @@ class Apcu extends KeyValue
 	/**
 	 * @var bool
 	 */ 
-	protected bool $_queueEnabled = false;
+	protected bool $_queueEnabled = true;
 	
 	/**
 	 * @var int
