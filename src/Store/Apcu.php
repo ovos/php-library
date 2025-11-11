@@ -76,10 +76,12 @@ class Apcu extends KeyValue
 	/**
 	 * @param ?string $prefix
 	 * @param ?string $group
+	 * @param ?ArrayObject $config
 	 */
 	public function __construct(
 		?string $prefix = null,
 		?string $group = null,
+		?ArrayObject $config = null,
 	)
 	{
 		parent::__construct();
@@ -88,8 +90,9 @@ class Apcu extends KeyValue
 		
 		$this->setPrefix($prefix);
 		$this->setGroup($group);
+		$this->setConfig($config);
 		
-		if($this->_config !== null // only if config was set
+		if($config !== null
 			&& $queue = $this->_config->offsetGet('queue'))
 		{
 			$this->setQueue($queue);
@@ -107,13 +110,12 @@ class Apcu extends KeyValue
 		?string $group = null,
 	): self
 	{
-		$instance = new self(
+		return new self
+		(
 			$config->prefix,
 			$group ?? self::GROUP_DEFAULT,
+			$config->perishable,
 		);
-		$instance->setConfig($config->perishable);
-		
-		return $instance;
 	}
 	
 	/**
