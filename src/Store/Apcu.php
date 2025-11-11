@@ -93,7 +93,7 @@ class Apcu extends KeyValue
 		$this->setConfig($config);
 		
 		if($config !== null
-			&& $queue = $this->_config->offsetGet('queue'))
+			&& $queue = $config->offsetGet('queue'))
 		{
 			$this->setQueue($queue);
 		}
