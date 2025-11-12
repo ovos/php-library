@@ -46,7 +46,7 @@ class Apcu extends KeyValue
 	/**
 	 * @var int
 	 */
-	protected int $_queueLockTtlS = 2;
+	protected int $_queueLockTtlS = 1;
 	
 	/**
 	 * @var int
