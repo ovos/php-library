@@ -209,11 +209,11 @@ abstract class KeyValue extends Store
 	}
 	
 	/**
-	 * @param null|mixed $value
+	 * @param ?string $value
 	 * 
 	 * @return ?string
 	 */
-	public function compress(mixed $value): ?string
+	public function compress(?string $value): ?string
 	{
 		if($value === null)
 		{
@@ -246,9 +246,9 @@ abstract class KeyValue extends Store
 	/**
 	 * @param ?string $value
 	 * 
-	 * @return null|mixed
+	 * @return ?string
 	 */
-	public function decompress(?string $value): mixed
+	public function decompress(?string $value): ?string
 	{
 		if($value === null)
 		{
