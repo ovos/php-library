@@ -500,6 +500,8 @@ class Apcu extends KeyValue
 		{
 			return apcu_store($lockKey, $lockValue, $ttlS);
 		}
+		
+		return false;
 	}
 	
 	/**
