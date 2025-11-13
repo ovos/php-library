@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
+use Ovos\Service\Cache;
 use Ovos\Service\Memory;
 use Ovos\Store\Apcu;
 use Ovos\View\Helper;
@@ -21,9 +22,9 @@ use function Ovos\services;
 class Asset extends Helper
 {
 	/**
-	 * @var Memory
+	 * @var Cache
 	 */
-	protected Memory $_memoryService;
+	protected Cache $_cacheService;
 	
 	/**
 	 * @var string
@@ -36,9 +37,9 @@ class Asset extends Helper
 	{
 		parent::__construct();
 		
-		/** @var Memory $memoryService */
-		$memoryService = $this->_app->getServices()->get(Memory::SYMBOL);
-		$this->_memoryService = $memoryService;
+		/** @var Memory $cacheService */
+		$cacheService = $this->_app->getServices()->get(Cache::SYMBOL);
+		$this->_cacheService = $cacheService;
 	}
 	
 	/**
@@ -75,7 +76,7 @@ class Asset extends Helper
 		$filename = $this->getFilename();
 		
 		// fetch mtime from memory
-		$store = $this->_memoryService->getStore();
+		$store = $this->_cacheService->getPerishableStore();
 		$cacheId = $store->pathToId($this->_asset); // a static method accessed from the instance
 		if($mDate = $store->get($cacheId))
 		{

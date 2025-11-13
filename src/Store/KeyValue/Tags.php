@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Store\Cache;
+namespace Ovos\Store\KeyValue;
 
-use Ovos\Store\Cache;
+use Ovos\Store\KeyValue;
 use Closure;
 
 /**
@@ -12,11 +12,11 @@ use Closure;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Tags extends Cache
+abstract class Tags extends KeyValue
 {
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 *
@@ -24,32 +24,32 @@ abstract class Tags extends Cache
 	 */
 	abstract public function get(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 	): mixed;
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 *
 	 * @return mixed
 	 */
-	public function setFromCallback(
+	public function setFromResolver(
 		string $key,
-		?Closure $setCallback,
+		?Closure $resolver,
 		int $ttl = 0,
 		array $tags = [],
 	): mixed
 	{
-		if($setCallback === null)
+		if($resolver === null)
 		{
 			return null;
 		}
 		
-		$value = $setCallback($this);
+		$value = $resolver($this, $key, $ttl, $tags);
 		$this->set($key, $value, $ttl, $tags);
 		
 		return $value;

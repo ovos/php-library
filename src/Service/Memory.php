@@ -37,7 +37,7 @@ class Memory extends Service
 			$baseDirHomeless = $home === false
 				? BASE_DIR
 				: substr(BASE_DIR, strlen($home));
-			$this->_store = new Apcu(Apcu::pathToId($baseDirHomeless)); // path as prefix
+			$this->_store = new Apcu(Apcu::pathToId($baseDirHomeless)); // path as a prefix
 		}
 		
 		return $this->_store;

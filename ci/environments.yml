@@ -58,6 +58,13 @@ production: &production
       compression:
         enabled: yes
         threshold: 2048
+      # cache queueing
+      queue:
+        enabled: yes
+        lock_ttl_s: 1
+        wait_timeout_s: 2
+        backoff_min_ms: 5
+        backoff_max_ms: 25
     persistent: &cache-persistent
       host: !ENV CACHE-PERSISTENT[HOST]
       port: !ENV CACHE-PERSISTENT[PORT]

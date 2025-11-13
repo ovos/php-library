@@ -1,32 +1,32 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Store\Redis;
+namespace Ovos\Store\KeyValue;
 
 use Ovos\ArrayObject;
-use Ovos\Exception;
 use Ovos\Redis\Connection;
-use Ovos\Store\Cache\Tags;
 use Closure;
 use Throwable;
-use Redis as BaseRedis;
+use Redis as RedisClient;
 use RedisException;
 
+use function array_slice;
+use function array_key_exists;
+use function bin2hex;
+use function ceil;
 use function count;
 use function file_get_contents;
-use function ceil;
-use function array_slice;
-use function str_replace;
-use function bin2hex;
+use function is_int;
 use function random_bytes;
+use function str_replace;
 
 /**
- * Cache
+ * KeyValue
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Cache extends Tags
+abstract class Redis extends Tags
 {
 	/**#@+
 	 * Separators
@@ -72,7 +72,7 @@ abstract class Cache extends Tags
 	/**
 	 * @var int
 	 */
-	protected int $_multiMode = BaseRedis::PIPELINE;
+	protected int $_multiMode = RedisClient::PIPELINE;
 	
 	/**#@+
 	 * Libraries
@@ -81,7 +81,9 @@ abstract class Cache extends Tags
 	 * The array of function libraries used by this lass
 	 */
 	public const array LIBRARIES = [
-		'cache' => 'Lua' . DIRECTORY_SEPARATOR . 'Cache.lua',
+		'store' =>
+			'Lua'
+			. DIRECTORY_SEPARATOR . 'Redis.lua',
 	];
 	/**#@-*/
 	
@@ -120,9 +122,9 @@ abstract class Cache extends Tags
 	protected array $_queueLocks = [];
 	
 	/**
-	 * @param string $prefix
 	 * @param Connection $connection
 	 * @param ArrayObject $config
+	 * @param ?string $prefix
 	 * @param ?string $group
 	 */
 	public function __construct
@@ -143,6 +145,11 @@ abstract class Cache extends Tags
 		if($storeOptions = $this->_config->offsetGet('store_options'))
 		{
 			$this->setStoreOptions($storeOptions);
+		}
+		
+		if($compression = $this->_config->offsetGet('compression'))
+		{
+			$this->setCompression($compression);
 		}
 		
 		if($queue = $this->_config->offsetGet('queue'))
@@ -268,11 +275,13 @@ abstract class Cache extends Tags
 	/**
 	 * @param Connection $connection
 	 * @param ArrayObject $config
+	 * @param ?string $group
 	 *
 	 * @return self
 	 */
 	public static function fromConfig(Connection $connection,
 		ArrayObject $config,
+		?string $group = null,
 	): self
 	{
 		return new static
@@ -280,14 +289,14 @@ abstract class Cache extends Tags
 			$connection,
 			$config->persistent,
 			$config->prefix,
-			self::GROUP_DEFAULT,
+			$group ?? self::GROUP_DEFAULT,
 		);
 	}
 	
 	/**
-	 * @return ?BaseRedis
+	 * @return ?RedisClient
 	 */
-	public function getClient(): ?BaseRedis
+	public function getClient(): ?RedisClient
 	{
 		return $this->_connection->getClient();
 	}
@@ -373,6 +382,7 @@ abstract class Cache extends Tags
 		$client->clearLastError();
 		
 		$functions = file_get_contents(__DIR__
+			. DIRECTORY_SEPARATOR . 'Redis'
 			. DIRECTORY_SEPARATOR . $libraryFile,
 		);
 		
@@ -492,7 +502,7 @@ abstract class Cache extends Tags
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 * @param bool $queue override for the config switch
@@ -502,7 +512,7 @@ abstract class Cache extends Tags
 	 */
 	public function get(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 		?bool $queue = null,
@@ -511,7 +521,7 @@ abstract class Cache extends Tags
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return $this->callSetCallback($setCallback);
+			return $this->callResolver($resolver);
 		}
 		
 		$id = $this->prefix($key, $this->getType());
@@ -531,7 +541,7 @@ abstract class Cache extends Tags
 		{
 			$this->log($exception);
 			
-			return $this->callSetCallback($setCallback);
+			return $this->callResolver($resolver);
 		}
 		
 		// cache miss, queue logic begins
@@ -539,7 +549,7 @@ abstract class Cache extends Tags
 			$client,
 			$key,
 			$id,
-			$setCallback,
+			$resolver,
 			$ttl,
 			$tags,
 			$queue,
@@ -549,43 +559,7 @@ abstract class Cache extends Tags
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
-	 * @param int $ttl
-	 * @param array $tags
-	 *
-	 * @return mixed
-	 */
-	public function setFromCallback(
-		string $key,
-		?Closure $setCallback,
-		int $ttl = 0,
-		array $tags = [],
-	): mixed
-	{
-		if($setCallback === null)
-		{
-			return null;
-		}
-		
-		try
-		{
-			$value = $setCallback($this);
-			
-			$this->set($key, $value, $ttl, $tags);
-		}
-		catch(Throwable $throwable)
-		{
-			$this->releaseActiveLock($key);
-			
-			throw $throwable;
-		}
-		
-		return $value;
-	}
-	
-	/**
-	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 * @param ?int $queueLockTtlMs override for the config value
@@ -595,7 +569,7 @@ abstract class Cache extends Tags
 	 */
 	public function queue(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 		?int $queueLockTtlMs = null,
@@ -604,7 +578,7 @@ abstract class Cache extends Tags
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return $this->callSetCallback($setCallback);
+			return $this->callResolver($resolver);
 		}
 		
 		$id = $this->prefix($key, $this->getType());
@@ -613,7 +587,7 @@ abstract class Cache extends Tags
 			$client,
 			$key,
 			$id,
-			$setCallback,
+			$resolver,
 			$ttl,
 			$tags,
 			true,
@@ -623,10 +597,10 @@ abstract class Cache extends Tags
 	}
 	
 	/**
-	 * @param BaseRedis $client
+	 * @param RedisClient $client
 	 * @param string $key
 	 * @param string $id
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 * @param bool $queue override for the config switch
@@ -636,10 +610,10 @@ abstract class Cache extends Tags
 	 * @return mixed
 	 */
 	protected function _queue(
-		BaseRedis $client,
+		RedisClient $client,
 		string $key,
 		string $id,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 		?bool $queue = null,
@@ -651,7 +625,7 @@ abstract class Cache extends Tags
 			|| ($this->_queueEnabled === true && $queue === false)
 		)
 		{
-			return $this->setFromCallback($key, $setCallback, $ttl, $tags);
+			return $this->setFromResolver($key, $resolver, $ttl, $tags);
 		}
 		
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
@@ -671,7 +645,7 @@ abstract class Cache extends Tags
 			return $this->_lockAcquired($key,
 				$id,
 				$lockValue,
-				$setCallback,
+				$resolver,
 				$ttl,
 				$tags,
 			);
@@ -744,7 +718,7 @@ abstract class Cache extends Tags
 						return $this->_lockAcquired($key,
 							$id,
 							$lockValue,
-							$setCallback,
+							$resolver,
 							$ttl,
 							$tags,
 						);
@@ -759,14 +733,14 @@ abstract class Cache extends Tags
 		}
 		
 		// we tried, time to fetch the data ourselves
-		return $this->callSetCallback($setCallback);
+		return $this->callResolver($resolver);
 	}
 	
 	/**
 	 * @param string $key
 	 * @param string $id
 	 * @param string $lockValue
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 * @param array $tags
 	 *
@@ -776,14 +750,23 @@ abstract class Cache extends Tags
 		string $key,
 		string $id,
 		string $lockValue,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 	): mixed
 	{
 		$this->_queueLocks[$id] = $lockValue;
 		
-		return $this->setFromCallback($key, $setCallback, $ttl, $tags);
+		try
+		{
+			return $this->setFromResolver($key, $resolver, $ttl, $tags);
+		}
+		catch(Throwable $throwable)
+		{
+			$this->releaseActiveLock($key);
+			
+			throw $throwable;
+		}
 	}
 	
 	/**
@@ -819,7 +802,7 @@ abstract class Cache extends Tags
 		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		
 		// atomically release the lock and notify any waiters using the Lua script
-		return (bool)$this->_functionCall('cache_release_lock_and_publish',
+		return (bool)$this->_functionCall('store_release_lock_and_publish',
 			[$lockKey, $channelName],
 			[$lockValue],
 		);
@@ -836,11 +819,6 @@ abstract class Cache extends Tags
 	 */
 	public function renewLock(string $key, ?int $ttlMs = null): bool
 	{
-		if($this->_queueEnabled === false)
-		{
-			return false;
-		}
-		
 		$id = $this->prefix($key, $this->getType());
 		
 		if(array_key_exists($id, $this->_queueLocks) === false)
@@ -852,7 +830,7 @@ abstract class Cache extends Tags
 		$lockValue = $this->_queueLocks[$id];
 		$ttlMs = $ttlMs ?? $this->_queueLockTtlMs;
 		
-		return (bool)$this->_functionCall('cache_renew_lock',
+		return (bool)$this->_functionCall('store_renew_lock',
 			[$lockKey],
 			[$lockValue, $ttlMs],
 		);
@@ -876,7 +854,7 @@ abstract class Cache extends Tags
 		
 		$client->clearLastError();
 		
-		$result = $this->_functionCall('cache_clear', [], [
+		$result = $this->_functionCall('store_clear', [], [
 			$prefix,
 		], long: true);
 		
