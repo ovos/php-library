@@ -257,7 +257,7 @@ class Apcu extends Test
 			
 			$this->_store->releaseActiveLock(self::KEY_ITEM);
 			
-			$existsNot = apcu_exists($lockKey)=== false;
+			$existsNot = apcu_exists($lockKey) === false;
 			
 			return $exists && $existsNot;
 		}
