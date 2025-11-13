@@ -18,12 +18,12 @@ use function gzcompress;
 use function gzuncompress;
 
 /**
- * Cache
+ * KeyValue
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-abstract class Cache extends Store
+abstract class KeyValue extends Store
 {
 	/**
 	 * Prefixes
@@ -42,6 +42,16 @@ abstract class Cache extends Store
 	 * @var ?string 
 	 */
 	protected ?string $_prefix = null;
+	
+	/**
+	 * @var bool
+	 */
+	protected bool $_compressionEnabled = true;
+	
+	/**
+	 * @var int
+	 */
+	protected int $_compressionThreshold = 2048;
 	
 	/**#@+
 	 * Type constants
@@ -105,11 +115,16 @@ abstract class Cache extends Store
 	}
 	
 	/**
-	 * @return string
+	 * @return ?string
 	 */
-	public function getGroup(): string
+	public function getGroup(): ?string
 	{
-		return $this->prefix($this->_group);
+		if($this->_group !== null)
+		{
+			return $this->prefix($this->_group);
+		}
+		
+		return null;
 	}
 	
 	/**
@@ -130,6 +145,25 @@ abstract class Cache extends Store
 	public function getConfig(): ?ArrayObject
 	{
 		return $this->_config;
+	}
+	
+	/**
+	 * @param ArrayObject $config
+	 *
+	 * @return self
+	 */
+	public function setCompression(ArrayObject $config): self
+	{
+		if(($enabled = $config->offsetGet('enabled')) !== null) // true or false
+		{
+			$this->_compressionEnabled = $enabled;
+		}
+		if(($threshold = $config->offsetGet('threshold')) !== null)
+		{
+			$this->_compressionThreshold = $threshold;
+		}
+		
+		return $this;
 	}
 	
 	/**
@@ -175,25 +209,23 @@ abstract class Cache extends Store
 	}
 	
 	/**
-	 * @param null|mixed $value
+	 * @param ?string $value
 	 * 
 	 * @return ?string
 	 */
-	public function compress(mixed $value): ?string
+	public function compress(?string $value): ?string
 	{
 		if($value === null)
 		{
 			return null;
 		}
 		
-		if($this->_config === null
-			|| $this->_config->compression->enabled !== true)
+		if($this->_compressionEnabled !== true)
 		{
 			return $value;
 		}
 		
-		if($this->_config->compression->threshold !== null
-			&& strlen($value) < $this->_config->compression->threshold)
+		if(strlen($value) < $this->_compressionThreshold)
 		{
 			return $value;
 		}
@@ -214,17 +246,16 @@ abstract class Cache extends Store
 	/**
 	 * @param ?string $value
 	 * 
-	 * @return null|mixed
+	 * @return ?string
 	 */
-	public function decompress(?string $value): mixed
+	public function decompress(?string $value): ?string
 	{
 		if($value === null)
 		{
 			return null;
 		}
 		
-		if($this->_config === null
-			|| $this->_config->compression->enabled !== true)
+		if($this->_compressionEnabled !== true)
 		{
 			return $value;
 		}
@@ -255,54 +286,54 @@ abstract class Cache extends Store
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 *
 	 * @return null|mixed
 	 */
 	abstract public function get(
 		string $key,
-		?Closure $setCallback = null,
+		?Closure $resolver = null,
 		int $ttl = 0,
 	): mixed;
 	
 	/**
 	 * @param string $key
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 * @param int $ttl
 	 *
 	 * @return mixed
 	 */
-	public function setFromCallback(
+	public function setFromResolver(
 		string $key,
-		?Closure $setCallback,
+		?Closure $resolver,
 		int $ttl = 0,
 	): mixed
 	{
-		if($setCallback === null)
+		if($resolver === null)
 		{
 			return null;
 		}
 		
-		$value = $setCallback($this);
+		$value = $resolver($this);
 		$this->set($key, $value, $ttl);
 		
 		return $value;
 	}
 	
 	/**
-	 * @param ?Closure $setCallback
+	 * @param ?Closure $resolver
 	 *
 	 * @return null|mixed
 	 */
-	public function callSetCallback(?Closure $setCallback = null): mixed
+	public function callResolver(?Closure $resolver = null): mixed
 	{
-		if($setCallback === null)
+		if($resolver === null)
 		{
 			return null;
 		}
 		
-		return $setCallback($this);
+		return $resolver($this);
 	}
 	
 	/**

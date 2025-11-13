@@ -1,12 +1,12 @@
 --[[
-	Cache Search Functions
+	RediSearch Store Functions
 	@author Marcin Gil <mg@ovos.at>
 ]]
 
 -- Splits a set of items into batches, returning a function iterator
 -- Each iteration returns (from, to) indexes for a slice of the collection
 -- Has to be used for unpack() calls due to a limit of 8000 arguments
-local function [prefix]cache_search_batches(n, batch_size)
+local function store_search_batches(n, batch_size)
 	batch_size = batch_size or 7500
 	local i = 0
 	
@@ -19,15 +19,15 @@ local function [prefix]cache_search_batches(n, batch_size)
 		end
 	end
 end
-redis.register_function('[prefix]cache_search_batches', [prefix]cache_search_batches)
+redis.register_function('[prefix]store_search_batches', store_search_batches)
 
 -- Unlink all items from given tags
--- Removes every ID that refereces any or all of the given tags,
+-- Removes every ID that references any or all of the given tags,
 -- depending on the syntax passed to "tags": 
 -- * any: @tags:{New York|Los Angeles|Barcelona}
 -- * all: @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}"
 -- See https://redis.io/docs/latest/develop/interact/search-and-query/advanced-concepts/tags/
-local function [prefix]cache_search_unlink_by_tags(keys, args)
+local function store_search_unlink_by_tags(keys, args)
 	local index = args[1]
 	local tags = args[2]
 	local batch_size = 10000
@@ -56,10 +56,10 @@ local function [prefix]cache_search_unlink_by_tags(keys, args)
 		
 		-- remove hash keys which no longer exist
 		if #rems > 0 then
-			for from, to in [prefix]cache_search_batches(#rems) do
+			for from, to in store_search_batches(#rems) do
 				redis.call('UNLINK', unpack(rems, from, to))
 			end
 		end
 	end
 end
-redis.register_function('[prefix]cache_search_unlink_by_tags', [prefix]cache_search_unlink_by_tags)	
+redis.register_function('[prefix]store_search_unlink_by_tags', store_search_unlink_by_tags)	

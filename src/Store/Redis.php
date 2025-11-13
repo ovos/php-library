@@ -4,18 +4,19 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Store\Redis\Cache;
-use Redis as BaseRedis;
+use Ovos\Store\KeyValue\Redis as Store;
+use Redis as RedisClient;
 use RedisException;
 
-use function is_int;
-use function count;
-use function explode;
-use function implode;
 use function array_push;
 use function array_unique;
 use function array_merge;
 use function array_diff;
+use function count;
+use function explode;
+use function implode;
+use function is_int;
+use function is_array;
 
 /**
  * Redis
@@ -23,7 +24,7 @@ use function array_diff;
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redis extends Cache
+class Redis extends Store
 {
 	/**
 	 * Types
@@ -76,12 +77,12 @@ class Redis extends Cache
 	}
 	
 	/**
-	 * @param BaseRedis $client
+	 * @param RedisClient $client
 	 * @param string $id
 	 *
 	 * @return array
 	 */
-	protected function _getCurrentTags(BaseRedis $client, string $id): array
+	protected function _getCurrentTags(RedisClient $client, string $id): array
 	{
 		try
 		{
@@ -130,13 +131,13 @@ class Redis extends Cache
 	/**
 	 * @param string $key
 	 *
-	 * @return null|bool
+	 * @return bool
 	 */
-	public function delete(string $key): null|bool
+	public function delete(string $key): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			return null;
+			return false;
 		}
 		
 		try
@@ -270,6 +271,8 @@ class Redis extends Cache
 			if($error = $client->getLastError())
 			{
 				$this->log($error);
+				
+				return false;
 			}
 			
 			if(is_array($result))
@@ -303,7 +306,7 @@ class Redis extends Cache
 		
 		if(count($tags) === 0)
 		{
-			return false;
+			return true;
 		}
 		
 		$group = $this->getGroup() . self::SEPARATOR_PREFIX;
@@ -312,33 +315,37 @@ class Redis extends Cache
 		
 		try
 		{
-			$ids = $this->getIdsMatchingAnyTags($tags);
-			
-			$client->clearLastError();
-			
 			// this is an option functionality, which is not required
 			// at the cost of speed on invalidation; it keeps a database smaller (clean)
 			// by removing ids from tags
 			if($this->_cleanTags === true)
 			{
-				$this->_batchFunctionCall('cache_unlink_clean_tags', $ids, [
-					$group,
-					$typeItems,
-					$typeTags,
-					self::KEY_TAGS,
-				], long: true);
-			}
-			
-			if($error = $client->getLastError())
-			{
-				$this->log($error);
+				$ids = $this->getIdsMatchingAnyTags($tags);
+				$countIds = count($ids);
+				
+				if($countIds)
+				{
+					$client->clearLastError();
+					
+					$this->_batchFunctionCall('store_unlink_clean_tags', $ids, [
+						$group,
+						$typeItems,
+						$typeTags,
+						self::KEY_TAGS,
+					], long: true);
+					
+					if($error = $client->getLastError())
+					{
+						$this->log($error);
+					}
+				}
 			}
 			
 			$client->clearLastError();
 			
 			foreach($tags as $tag)
 			{
-				$this->_functionCall('cache_unlink_by_tag', [], [
+				$this->_functionCall('store_unlink_by_tag', [], [
 					$group,
 					$tag,
 					$typeItems,
@@ -406,7 +413,7 @@ class Redis extends Cache
 			
 			foreach($tags as $tag)
 			{
-				$results = $this->_functionCall('cache_get_ids_by_tag', [], [
+				$results = $this->_functionCall('store_get_ids_by_tag', [], [
 					$group,
 					$tag,
 					$typeTags,
@@ -451,7 +458,7 @@ class Redis extends Cache
 		{
 			$client->clearLastError();
 			
-			$results = $this->_functionCall('cache_get_tags', [], [
+			$results = $this->_functionCall('store_get_tags', [], [
 				$group,
 				$typeTags,
 			], true);
@@ -498,14 +505,14 @@ class Redis extends Cache
 			
 			foreach($tags as $tag)
 			{
-				$result = $this->_functionCall('cache_clean_tag', [], [
+				$result = $this->_functionCall('store_clean_tag', [], [
 					$group,
 					$tag,
 					$typeItems,
 					$typeTags,
 				], long: true);
 				
-				if(is_int($count))
+				if(is_int($result))
 				{
 					$count+= $result;
 				}

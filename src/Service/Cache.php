@@ -10,8 +10,8 @@ use Ovos\Exception;
 use Ovos\Redis\Connection;
 use Ovos\Service;
 use Ovos\Store\Apcu;
+use Ovos\Store\KeyValue\Redis as RedisStore;
 use Ovos\Store\Redis;
-use Ovos\Store\Redis\Cache as RedisCache;
 use Ovos\Store\Redisearch;
 
 /**
@@ -40,9 +40,9 @@ class Cache extends Service
 	protected ?Connection $_persistentConnection = null;
 	
 	/**
-	 * @var ?RedisCache
+	 * @var ?RedisStore
 	 */
-	protected ?RedisCache $_persistentStore = null;
+	protected ?RedisStore $_persistentStore = null;
 	
 	/**
 	 * @var ?Apcu

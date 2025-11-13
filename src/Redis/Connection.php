@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Redis;
 
 use Ovos\ArrayObject;
-use Redis as BaseRedis;
+use Redis as RedisClient;
 use RedisException;
 
 use function Ovos\services;
@@ -30,9 +30,9 @@ class Connection
 	/**
 	 * Redis object
 	 *
-	 * @var ?BaseRedis
+	 * @var ?RedisClient
 	 */
-	protected ?BaseRedis $_client = null;
+	protected ?RedisClient $_client = null;
 	
 	/**#@+
 	 * Timeout constants
@@ -255,7 +255,7 @@ class Connection
 			default => $this->_readTimeout,
 		};
 		
-		$client->setOption(BaseRedis::OPT_READ_TIMEOUT, $readTimeout);
+		$client->setOption(RedisClient::OPT_READ_TIMEOUT, $readTimeout);
 		
 		if($luaScript)
 		{
@@ -280,16 +280,16 @@ class Connection
 			'port' => $port,
 			'connectTimeout' => $this->_connectTimeout,
 		];
-		$this->_client = new BaseRedis($connectionOptions);
+		$this->_client = new RedisClient($connectionOptions);
 		
 		$options = [
-			BaseRedis::OPT_READ_TIMEOUT => $this->_readTimeout,
-			BaseRedis::OPT_SERIALIZER => BaseRedis::SERIALIZER_NONE,
-			BaseRedis::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
-			BaseRedis::OPT_MAX_RETRIES => 0, // do not limit the max retries, let the timeout handle it
-			BaseRedis::OPT_BACKOFF_ALGORITHM => BaseRedis::BACKOFF_ALGORITHM_DECORRELATED_JITTER, // https://github.com/phpredis/phpredis/pull/1993/files
-			BaseRedis::OPT_BACKOFF_BASE => 500, // the minimum delay between retries when backing off
-			BaseRedis::OPT_BACKOFF_CAP => 750, // the maximum delay between replies when backing off
+			RedisClient::OPT_READ_TIMEOUT => $this->_readTimeout,
+			RedisClient::OPT_SERIALIZER => RedisClient::SERIALIZER_NONE,
+			RedisClient::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
+			RedisClient::OPT_MAX_RETRIES => 0, // do not limit the max retries, let the timeout handle it
+			RedisClient::OPT_BACKOFF_ALGORITHM => RedisClient::BACKOFF_ALGORITHM_DECORRELATED_JITTER, // https://github.com/phpredis/phpredis/pull/1993/files
+			RedisClient::OPT_BACKOFF_BASE => 500, // the minimum delay between retries when backing off
+			RedisClient::OPT_BACKOFF_CAP => 750, // the maximum delay between replies when backing off
 		];
 		
 		// set options
@@ -333,9 +333,9 @@ class Connection
 	}
 	
 	/**
-	 * @return ?BaseRedis
+	 * @return ?RedisClient
 	 */
-	public function getClient(): ?BaseRedis
+	public function getClient(): ?RedisClient
 	{
 		return $this->_client;
 	}
