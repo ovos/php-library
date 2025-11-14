@@ -25,7 +25,7 @@ use function gzuncompress;
  */
 abstract class KeyValue extends Store
 {
-	/**
+	/**#@+
 	 * Prefixes
 	 */
 	public const string PREFIX_SERIALIZE = "\x01\xe4";
@@ -54,7 +54,7 @@ abstract class KeyValue extends Store
 	protected int $_compressionThreshold = 2048;
 	
 	/**#@+
-	 * Type constants
+	 * Groups
 	 */
 	public const string GROUP_DEFAULT = 'core';
 	public const string GROUP_TESTS = 'tests';

@@ -21,7 +21,7 @@ use function substr;
 abstract class Migration
 {
 	/**#@+
-	 * Direction
+	 * Directions
 	 */
 	public const string DIRECTION_UP = 'up';
 	public const string DIRECTION_DOWN = 'down';

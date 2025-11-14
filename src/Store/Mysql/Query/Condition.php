@@ -12,7 +12,7 @@ namespace Ovos\Store\Mysql\Query;
 class Condition
 {
 	/**#@+
-	 * Condition constants
+	 * Conditions
 	 */
 	public const string TYPE_DEFAULT = 'default';
 	public const string TYPE_NESTED = 'nested';

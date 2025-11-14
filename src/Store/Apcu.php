@@ -32,7 +32,7 @@ use function mb_strtolower;
  */
 class Apcu extends KeyValue
 {
-	/**
+	/**#@+
 	 * Types
 	 */
 	public const string TYPE_LOCK = 'lock';
@@ -62,8 +62,6 @@ class Apcu extends KeyValue
 	 * @var int
 	 */
 	protected int $_queueBackoffMaxMs = 25;
-	
-	/**#@-*/
 	
 	/**
 	 * An array of unique values for any active locks,

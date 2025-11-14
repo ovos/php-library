@@ -54,7 +54,7 @@ abstract class Redis extends Tags
 	public const string STATUS_OK = 'OK';
 	/**#@-*/
 	
-	/**
+	/**#@+
 	 * Types
 	 */
 	public const string TYPE_ITEMS = 'items';
