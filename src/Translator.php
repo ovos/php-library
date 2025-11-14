@@ -15,7 +15,7 @@ use MessageFormatter;
 class Translator
 {
 	/**#@+
-	 * Translation constants
+	 * Translations
 	 */
 	public const string TRANSLATION_EXT = '.mo';
 	/**#@-*/

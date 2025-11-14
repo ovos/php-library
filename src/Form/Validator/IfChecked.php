@@ -16,7 +16,7 @@ use Ovos\Form\Validator;
 class IfChecked extends Validator
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	public const string ERROR_NOT_CHECKED = 'not_checked';
 	/**#@-*/

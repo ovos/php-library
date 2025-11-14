@@ -14,7 +14,7 @@ use Ovos\Environment\Parser;
 class Environment
 {
 	/**#@+
-	 * Environment constants
+	 * Environments
 	 */
 	public const string ENV_PRODUCTION = 'production';
 	public const string ENV_FILE = '.env';

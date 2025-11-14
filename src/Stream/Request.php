@@ -15,7 +15,7 @@ use Ovos\Measurement;
 class Request
 {
 	/**#@+
-	 * Method constants
+	 * Methods
 	 */
 	public const string METHOD_GET = 'GET';
 	public const string METHOD_POST = 'POST';

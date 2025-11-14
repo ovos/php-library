@@ -27,7 +27,7 @@ class Result
 	public ReflectionMethod $method;
 	
 	/**#@+
-	 * Result constants
+	 * Results
 	 */
 	public const string RESULT_COMPLETED = 'completed';
 	public const string RESULT_PASSED = 'passed';
