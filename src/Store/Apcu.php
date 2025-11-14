@@ -41,10 +41,10 @@ class Apcu extends KeyValue
 	/**#@+
 	 * Queue (MemoLock) configuration
 	 */
-	 
+	
 	/**
 	 * @var bool
-	 */ 
+	 */
 	protected bool $_queueEnabled = true;
 	
 	/**

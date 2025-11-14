@@ -98,7 +98,7 @@ abstract class Redis extends Tags
 	
 	/**
 	 * @var bool
-	 */ 
+	 */
 	protected bool $_queueEnabled = false;
 	
 	/**
