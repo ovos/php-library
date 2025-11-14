@@ -38,6 +38,10 @@ class Apcu extends KeyValue
 	public const string TYPE_LOCK = 'lock';
 	/**#@-*/
 	
+	/**#@+
+	 * Queue (MemoLock) configuration
+	 */
+	 
 	/**
 	 * @var bool
 	 */ 
@@ -62,6 +66,8 @@ class Apcu extends KeyValue
 	 * @var int
 	 */
 	protected int $_queueBackoffMaxMs = 25;
+	
+	/**#@-*/
 	
 	/**
 	 * An array of unique values for any active locks,
