@@ -279,6 +279,12 @@ abstract class KeyValue extends Store
 				default:
 					$value = gzuncompress($compressed);
 			}
+			
+			// decompression failed
+			if($value === false)
+			{
+				return null;
+			}
 		}
 		
 		return $value;
