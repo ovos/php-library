@@ -36,6 +36,17 @@ class Container extends Test
 			&& $instance->value === 'test';
 	}
 	
+	public function getClass(): bool
+	{
+		$container = new BaseContainer;
+		$instance = $container->getClass(Service1::class,
+			parameters: Service1::$parameters,
+		);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
 	public function registerCallable(): bool
 	{
 		$container = new BaseContainer;
@@ -44,7 +55,7 @@ class Container extends Test
 			{
 				return new Service1
 				(
-					new Dependency1,
+					$container->getClass(Dependency1::class),
 					$parameters['value'],
 				);
 			}
@@ -53,61 +64,6 @@ class Container extends Test
 		$instance = $container->get(Service1::class);
 		
 		return $instance->dependency1 instanceof Dependency1
-			&& $instance->value === 'test';
-	}
-	
-	public function registerLazy(): bool
-	{
-		$container = new BaseContainer;
-		$container->registerClass(Dependency1::class, Dependency1::class);
-		$container->registerLazy(Service1::class,
-			Service1::class,
-			Service1::$parameters,
-		);
-		
-		$instance = $container->get(Service1::class);
-		
-		return $instance->dependency1 instanceof Dependency1
-			&& $instance->value === 'test';
-	}
-	
-	public function registerLazyWithCustomInitializer(): bool
-	{
-		$container = new BaseContainer;
-		$container->registerClass(Dependency1::class, Dependency1::class);
-		$container->registerLazy(Service1::class,
-			Service1::class,
-			initializer: function() use ($container)
-			{
-				return new Service1
-				(
-					$container->get(Dependency1::class),
-					Service1::$parameters['value'],
-				);
-			},
-		);
-		
-		$instance = $container->get(Service1::class);
-		
-		return $instance->dependency1 instanceof Dependency1
-			&& $instance->value === 'test';
-	}
-	
-	public function registerLazyWithAnOptionalDependency(): bool
-	{
-		$container = new BaseContainer;
-		$container->registerCallable(Dependency1::class, fn() => new Dependency1);
-		$container->registerCallable(Dependency2::class, fn() => new Dependency2);
-		
-		$container->registerLazy(Service1::class,
-			Service1::class,
-			Service1::$parameters,
-		);
-		
-		$instance = $container->get(Service1::class);
-		
-		return $instance->dependency1 instanceof Dependency1
-			&& $instance->dependency2 instanceof Dependency2
 			&& $instance->value === 'test';
 	}
 	
@@ -136,6 +92,105 @@ class Container extends Test
 			&& $instance->value === 'test';
 	}
 	
+	public function getCallable(): bool
+	{
+		$container = new BaseContainer;
+		$instance = $container->getCallable(Service1::class,
+			function(BaseContainer $container, array $parameters)
+			{
+				return new Service1
+				(
+					$container->getClass(Dependency1::class),
+					$parameters['value'],
+				);
+			}
+		, Service1::$parameters);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
+	public function registerObject(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerObject(Service1::class, new Service1(
+			$container->getClass(Dependency1::class, Dependency1::class),
+			Service1::$parameters['value'],
+		));
+		
+		$instance = $container->get(Service1::class);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
+	public function registerLazy(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerLazy(Dependency1::class);
+		$container->registerLazy(Service1::class,
+			Service1::class,
+			Service1::$parameters,
+		);
+		
+		$instance = $container->get(Service1::class);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
+	public function registerLazyWithCustomInitializer(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Dependency1::class);
+		$container->registerLazy(Service1::class,
+			Service1::class,
+			initializer: function() use ($container)
+			{
+				return new Service1
+				(
+					$container->get(Dependency1::class),
+					Service1::$parameters['value'],
+				);
+			},
+		);
+		
+		$instance = $container->get(Service1::class);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
+	public function registerLazyWithAnOptionalDependency(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerLazy(Dependency1::class);
+		$container->registerLazy(Dependency2::class);
+		
+		$container->registerLazy(Service1::class,
+			Service1::class,
+			Service1::$parameters,
+		);
+		
+		$instance = $container->get(Service1::class);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->dependency2 instanceof Dependency2
+			&& $instance->value === 'test';
+	}
+	
+	public function getLazy(): bool
+	{
+		$container = new BaseContainer;
+		$instance = $container->getLazy(Service1::class,
+			Service1::class,
+			Service1::$parameters,
+		);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
 	/**
 	 * @return BaseArrayObject
 	 */
@@ -159,7 +214,7 @@ class Container extends Test
 		
 		$container = new BaseContainer;
 		$container->registerObject('config', $arrayObject);
-		$container->registerClass(Dependency1::class, Dependency1::class);
+		$container->registerClass(Dependency1::class);
 		$container->registerClass(Service2::class,
 			Service2::class
 		);
