@@ -289,6 +289,19 @@ class Container extends Test
 		
 		return $container->get('dependency1') instanceof Dependency1;
 	}
+	
+	public function mixed(): bool
+	{
+		$container = new BaseContainer;
+		$instance = $container->getClass(Service7::class,
+			Service7::class,
+			Service7::$parameters,
+		);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->dependency2 instanceof Dependency2
+			&& $instance->value === 'test';
+	}
 }
 
 class Service1
@@ -352,6 +365,24 @@ class Service6
 	(
 		#[Inject('dependency1')]
 		public Dependency1 $dependency1,
+	)
+	{
+	}
+}
+
+class Service7
+{
+	public static $parameters = [
+		'value' => 'test',
+	];
+	
+	#[Inject]
+	public Dependency1 $dependency1;
+	
+	public function __construct
+	(
+		public ?string $value = null,
+		public ?Dependency2 $dependency2 = null,
 	)
 	{
 	}
