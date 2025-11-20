@@ -39,7 +39,7 @@ use function array_merge;
 abstract class Mysql extends Model implements Iterator, Countable, JsonSerializable
 {
 	/**#@+
-	 * Export constants
+	 * Exports
 	 */
 	public const int EXPORT_TYPE_STDCLASS = 0;
 	public const int EXPORT_TYPE_ARRAY = 1;
@@ -47,7 +47,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**#@-*/
 	
 	/**#@+
-	 * Filter constants
+	 * Filters
 	 */
 	public const int FILTER_MODE_IN = 0;
 	public const int FILTER_MODE_OUT = 1;

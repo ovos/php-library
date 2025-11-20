@@ -32,15 +32,19 @@ use function mb_strtolower;
  */
 class Apcu extends KeyValue
 {
-	/**
+	/**#@+
 	 * Types
 	 */
 	public const string TYPE_LOCK = 'lock';
 	/**#@-*/
 	
+	/**#@+
+	 * Queue (MemoLock) configuration
+	 */
+	
 	/**
 	 * @var bool
-	 */ 
+	 */
 	protected bool $_queueEnabled = true;
 	
 	/**

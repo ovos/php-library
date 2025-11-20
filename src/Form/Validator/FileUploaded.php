@@ -19,7 +19,7 @@ use function array_search;
 class FileUploaded extends Validator
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	public const string ERROR_INPUT_INVALID = 'upload_input_invalid';
 	public const string ERROR_NO_FILE = 'upload_no_file';

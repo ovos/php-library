@@ -49,7 +49,7 @@ class Container
 	 * Register a class
 	 *
 	 * @param string $key
-	 * @param string $class
+	 * @param ?string $class
 	 * @param array $parameters
 	 * @param ?callable $initializer
 	 * @param bool $overwrite
@@ -57,7 +57,7 @@ class Container
 	 * @return self
 	 */
 	public function registerClass(string $key,
-		string $class,
+		?string $class = null,
 		array $parameters = [],
 		?callable $initializer = null,
 		bool $overwrite = false,
@@ -69,7 +69,8 @@ class Container
 			return $this;
 		}
 		
-		$this->_injectors[$key] = new Injector\TypeClass($class,
+		$this->_injectors[$key] = new Injector\TypeClass(
+			$class ?? $key,
 			$parameters,
 			$initializer,
 		);
@@ -81,14 +82,14 @@ class Container
 	 * Get a class and register it if needed
 	 *
 	 * @param string $key
-	 * @param string $class
+	 * @param ?string $class
 	 * @param array $parameters
 	 * @param ?callable $initializer
 	 *
 	 * @return object
 	 */
 	public function getClass(string $key,
-		string $class,
+		?string $class = null,
 		array $parameters = [],
 		?callable $initializer = null,
 	): object
@@ -99,7 +100,12 @@ class Container
 		}
 		
 		return $this
-			->registerClass($key, $class, $parameters, $initializer)
+			->registerClass(
+				$key,
+				$class ?? $key,
+				$parameters,
+				$initializer,
+			)
 			->get($key);
 	}
 	
@@ -107,7 +113,7 @@ class Container
 	 * Register a lazy object
 	 *
 	 * @param string $key
-	 * @param string $class
+	 * @param ?string $class
 	 * @param array $parameters
 	 * @param ?callable $initializer
 	 * @param bool $overwrite
@@ -115,7 +121,7 @@ class Container
 	 * @return self
 	 */
 	public function registerLazy(string $key,
-		string $class,
+		?string $class = null,
 		array $parameters = [],
 		?callable $initializer = null,
 		bool $overwrite = false,
@@ -130,14 +136,16 @@ class Container
 		// compatibility with pre 8.4
 		if(PHP_VERSION_ID < 84000)
 		{
-			return $this->registerClass($key,
-				$class,
+			return $this->registerClass(
+				$key,
+				$class ?? $key,
 				$parameters,
 				$initializer,
 			);
 		}
 		
-		$this->_injectors[$key] = new Injector\TypeLazy($class,
+		$this->_injectors[$key] = new Injector\TypeLazy(
+			$class ?? $key,
 			$parameters,
 			$initializer,
 		);
@@ -149,14 +157,14 @@ class Container
 	 * Get a lazy object and register it if needed
 	 *
 	 * @param string $key
-	 * @param string $class
+	 * @param ?string $class
 	 * @param array $parameters
 	 * @param ?callable $initializer
 	 *
 	 * @return object
 	 */
 	public function getLazy(string $key,
-		string $class,
+		?string $class = null,
 		array $parameters = [],
 		?callable $initializer = null,
 	): object
@@ -167,7 +175,12 @@ class Container
 		}
 		
 		return $this
-			->registerLazy($key, $class, $parameters, $initializer)
+			->registerLazy(
+				$key,
+				$class ?? $key,
+				$parameters,
+				$initializer,
+			)
 			->get($key);
 	}
 	
@@ -193,7 +206,8 @@ class Container
 			return $this;
 		}
 		
-		$this->_injectors[$key] = new Injector\TypeCallable($callable,
+		$this->_injectors[$key] = new Injector\TypeCallable(
+			$callable,
 			$parameters,
 		);
 		
@@ -220,7 +234,11 @@ class Container
 		}
 		
 		return $this
-			->registerCallable($key, $callable, $parameters)
+			->registerCallable(
+				$key,
+				$callable,
+				$parameters,
+			)
 			->get($key);
 	}
 	
@@ -247,7 +265,8 @@ class Container
 			return $this;
 		}
 		
-		$this->_injectors[$key] = new Injector\TypeObject($object,
+		$this->_injectors[$key] = new Injector\TypeObject(
+			$object,
 			$initializer,
 		);
 		
@@ -270,7 +289,10 @@ class Container
 		}
 		
 		return $this
-			->registerObject($key, $object)
+			->registerObject(
+				$key,
+				$object,
+			)
 			->get($key);
 	}
 	
@@ -316,7 +338,10 @@ class Container
 		}
 		
 		return $this
-			->registerValue($key, $value)
+			->registerValue(
+				$key,
+				$value,
+			)
 			->get($key);
 	}
 	

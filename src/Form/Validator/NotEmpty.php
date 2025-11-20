@@ -15,7 +15,7 @@ use Ovos\Form\Validator;
 class NotEmpty extends Validator
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	public const string ERROR_EMPTY = 'empty';
 	/**#@-*/

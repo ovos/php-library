@@ -18,7 +18,7 @@ use function implode;
 abstract class Query
 {
 	/**#@+
-	 * Condition constants
+	 * Conditions
 	 */
 	public const string CONDITION_TYPE_DEFAULT = 'default';
 	public const string CONDITION_TYPE_NESTED = 'nested';

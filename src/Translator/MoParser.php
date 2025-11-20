@@ -21,16 +21,18 @@ use function strcmp;
 final class MoParser
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	/**
 	 * File does not exist
 	 */
 	public const int ERROR_DOES_NOT_EXIST = 1;
+	
 	/**
 	 * File has bad magic number
 	 */
 	public const int ERROR_BAD_MAGIC = 2;
+	
 	/**
 	 * Error while reading file, probably too short
 	 */

@@ -35,7 +35,7 @@ class Connection
 	protected ?RedisClient $_client = null;
 	
 	/**#@+
-	 * Timeout constants
+	 * Timeouts
 	 */
 	public const string TIMEOUT_READ = 'read';
 	public const string TIMEOUT_READ_LONG = 'long';

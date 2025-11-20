@@ -16,7 +16,7 @@ use Ovos\Form\Validator;
 class SameAs extends Validator
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	public const string ERROR_DIFFERENT = 'different';
 	/**#@-*/
