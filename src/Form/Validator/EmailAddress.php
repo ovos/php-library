@@ -19,7 +19,7 @@ use function sprintf;
 class EmailAddress extends Validator
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	public const string ERROR_INVALID = 'email_invalid';
 	/**#@-*/

@@ -16,7 +16,7 @@ use Ovos\Strings;
 class PasswordStrength extends Validator
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	public const string ERROR_WEAK = 'password_weak';
 	/**#@-*/

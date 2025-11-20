@@ -16,7 +16,7 @@ use Closure;
 class Callback extends Validator
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	public const string ERROR_CALLBACK = 'callback';
 	/**#@-*/

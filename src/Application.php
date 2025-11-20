@@ -38,14 +38,14 @@ class Application
 	public static ?Application $instance = null;
 	
 	/**#@+
-	 * Interface constants
+	 * Interfaces
 	 */
 	public const string INT_HTTP = 'http';
 	public const string INT_CLI = 'cli';
 	/**#@-*/
 	
 	/**#@+
-	 * Container constants
+	 * Container keys
 	 */
 	public const string CONTAINER_KEY_CONFIG = 'config';
 	/**#@-*/

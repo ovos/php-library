@@ -26,7 +26,7 @@ use function is_array;
  */
 class Redis extends Store
 {
-	/**
+	/**#@+
 	 * Types
 	 */
 	public const string TYPE_TAGS = 'tags';

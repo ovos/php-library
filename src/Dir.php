@@ -37,7 +37,7 @@ use function ksort;
 class Dir
 {
 	/**#@+
-	 * Filter constants
+	 * Filters
 	 */
 	public const int FILTER_NONE = 0;
 	public const int FILTER_DIRECTORIES = 1;

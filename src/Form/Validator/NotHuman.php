@@ -15,7 +15,7 @@ use Ovos\Form\Validator;
 class NotHuman extends Validator
 {
 	/**#@+
-	 * Error constants
+	 * Errors
 	 */
 	public const string ERROR_NOT_HUMAN = 'not_human';
 	/**#@-*/
