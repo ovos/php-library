@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Model;
 
 use Ovos\ArrayObject;
+use Ovos\Connections;
 use Ovos\Exception;
 use Ovos\Model;
 use Ovos\Store\Mysql as Store;
@@ -61,7 +62,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * @var string
 	 */
-	protected string $_sourceName = 'database';
+	protected string $_sourceName = 'mysql';
 	
 	/**
 	 * A connection between PHP and a database server
@@ -174,18 +175,14 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		if($this->_source === null)
 		{
-			$this->_initSource();
+			// get database connection
+			$this->_source = $this->_container
+				->getClass(Connections::class)
+				->get($this->_sourceName)
+				->getConnectedClient();
 		}
 		
 		return $this->_source;
-	}
-	
-	/**
-	 */
-	public function _initSource(): void
-	{
-		// get database connection
-		$this->_source = services()->database->get($this->_sourceName);
 	}
 	
 	/**

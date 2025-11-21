@@ -4,8 +4,7 @@ declare(strict_types=1);
 namespace Tests;
 
 use Ovos\ArrayObject as BaseArrayObject;
-use Ovos\Arrays as Arrays;
-use Ovos\Services;
+use Ovos\Arrays;
 use Ovos\Test;
 use Ovos\Container as BaseContainer;
 use Ovos\Container\ArrayObject;

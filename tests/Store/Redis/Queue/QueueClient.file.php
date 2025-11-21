@@ -4,8 +4,11 @@ namespace Tests\Store\Redis\Queue;
 
 use Ovos\Application;
 use Ovos\ArrayObject;
+use Ovos\Connection\Redis as Connection;
+use Ovos\Connections;
+use Ovos\Container\ArrayObject as InjectArrayObject;
+use Ovos\Container\Inject;
 use Ovos\Controller;
-use Ovos\Redis\Connection;
 use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
 use RedisException;
@@ -75,7 +78,10 @@ class QueueClient extends Controller\Cli
 		
 		$this->_config = $config->cache;
 		
-		$this->_connection = new Connection($this->_config->persistent);
+		$this->_connection = $this->_container
+			->getClass(Connections::class)
+			->get($this->_config->persistent->connection);
+		
 		if($this->_connection->connect() === false)
 		{
 			throw new RedisException

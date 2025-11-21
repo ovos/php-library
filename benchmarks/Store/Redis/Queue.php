@@ -5,11 +5,14 @@ namespace Benchmarks\Store\Redis;
 
 use Ovos\ArrayObject;
 use Ovos\Benchmark;
-use Ovos\Redis\Connection;
-use Ovos\Store\Cache;
+use Ovos\Connection\Redis as Connection;
+use Ovos\Connections;
+use Ovos\Container\ArrayObject as InjectArrayObject;
+use Ovos\Container\Inject;
+use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as RedisStore;
 use Ovos\Test\Internal;
-use Tests\Store\Redis\Queue as QueueTests;
+use Ovos\Test\Parallel;
 use RedisException;
 
 use function Ovos\config;
@@ -41,6 +44,8 @@ class Queue extends Benchmark
 	/**
 	 * @var ArrayObject
 	 */
+	#[Inject('config')]
+	#[InjectArrayObject('cache')]
 	protected ArrayObject $_config;
 	
 	/**
@@ -55,9 +60,10 @@ class Queue extends Benchmark
 	
 	public function __construct()
 	{
-		$this->_config = config()->cache;
+		$this->_connection = $this->_container
+			->getClass(Connections::class)
+			->get($this->_config->persistent->connection);
 		
-		$this->_connection = new Connection($this->_config->persistent);
 		if($this->_connection->connect() === false)
 		{
 			throw new RedisException
@@ -74,10 +80,10 @@ class Queue extends Benchmark
 	{
 		$this->_store = new RedisStore
 		(
-			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
-			Cache::GROUP_BENCHMARKS,
+			$this->_config->prefix,
+			KeyValue::GROUP_BENCHMARKS,
 		);
 	}
 	
@@ -101,18 +107,19 @@ class Queue extends Benchmark
 			. 'Redis' . DIRECTORY_SEPARATOR
 			. 'Queue' . DIRECTORY_SEPARATOR
 			. 'QueueClient.file.php',
-			Cache::GROUP_BENCHMARKS,
+			KeyValue::GROUP_BENCHMARKS,
 		);
 		
 		try
 		{
-			QueueTests::parallel($command, self::CLIENTS);
+			Parallel::run($command, self::CLIENTS);
 			
 			$id = $this->_store->prefix(self::KEY_ITEM_COUNTER,
 				$this->_store->getType()
 			);
 			
 			$count = $this->_store->getClient()->get($id);
+			
 			return (int)$count === 1;
 		}
 		finally

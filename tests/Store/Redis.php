@@ -4,14 +4,16 @@ declare(strict_types=1);
 namespace Tests\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Redis\Connection;
+use Ovos\Connection\Redis as Connection;
+use Ovos\Connections;
+use Ovos\Container\ArrayObject as InjectArrayObject;
+use Ovos\Container\Inject;
 use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use RedisException;
 
-use function Ovos\config;
 use function sprintf;
 use function count;
 use function array_diff;
@@ -32,6 +34,8 @@ class Redis extends Test
 	/**
 	 * @var ArrayObject
 	 */
+	#[Inject('config')]
+	#[InjectArrayObject('cache')]
 	protected ArrayObject $_config;
 	
 	/**
@@ -46,9 +50,10 @@ class Redis extends Test
 	
 	public function __construct()
 	{
-		$this->_config = config()->cache;
+		$this->_connection = $this->_container
+			->getClass(Connections::class)
+			->get($this->_config->persistent->connection);
 		
-		$this->_connection = new Connection($this->_config->persistent);
 		if($this->_connection->connect() === false)
 		{
 			throw new RedisException
@@ -280,6 +285,15 @@ class Redis extends Test
 		$result = $this->_store->get(self::KEY_ITEM, queue: false);
 		
 		return $result === null;
+	}
+	
+	/**
+	 * Called by the runner after each test method
+	 */
+	#[Internal]
+	public function finalize(): void
+	{
+		$this->_store->clear();
 	}
 	
 	/**

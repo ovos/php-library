@@ -5,14 +5,16 @@ namespace Benchmarks\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Benchmark;
-use Ovos\Redis\Connection;
-use Ovos\Store\Cache;
+use Ovos\Connection\Redis as Connection;
+use Ovos\Connections;
+use Ovos\Container\ArrayObject as InjectArrayObject;
+use Ovos\Container\Inject;
+use Ovos\Store\KeyValue;
 use Ovos\Store\Redisearch as RedisStore;
 use Ovos\Test\Internal;
 use RedisException;
 use ReflectionClass;
 
-use function Ovos\config;
 use function sprintf;
 
 /**
@@ -36,6 +38,8 @@ class Redisearch extends Benchmark
 	/**
 	 * @var ArrayObject
 	 */
+	#[Inject('config')]
+	#[InjectArrayObject('cache')]
 	protected ArrayObject $_config;
 	
 	/**
@@ -50,8 +54,6 @@ class Redisearch extends Benchmark
 	
 	public function __construct()
 	{
-		$this->_config = config()->cache;
-		
 		$storeClass = $this->_config->persistent->store;
 		$currentClass = (new ReflectionClass($this))->getShortName();
 		if($storeClass !== $currentClass)
@@ -61,7 +63,10 @@ class Redisearch extends Benchmark
 			);
 		}
 		
-		$this->_connection = new Connection($this->_config->persistent);
+		$this->_connection = $this->_container
+			->getClass(Connections::class)
+			->get($this->_config->persistent->connection);
+		
 		if($this->_connection->connect() === false)
 		{
 			throw new RedisException
@@ -78,10 +83,10 @@ class Redisearch extends Benchmark
 	{
 		$this->_store = new RedisStore
 		(
-			$this->_config->prefix,
 			$this->_connection,
 			$this->_config->persistent,
-			Cache::GROUP_BENCHMARKS,
+			$this->_config->prefix,
+			KeyValue::GROUP_BENCHMARKS,
 		);
 	}
 	

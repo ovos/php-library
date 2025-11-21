@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace Tests\Store;
 
 use Ovos\ArrayObject;
-use Ovos\Redis\Connection;
+use Ovos\Connection\Redis as Connection;
+use Ovos\Connections;
+use Ovos\Container\ArrayObject as InjectArrayObject;
+use Ovos\Container\Inject;
 use Ovos\Store\KeyValue;
 use Ovos\Store\Redisearch as Store;
 use Ovos\Test;
@@ -30,6 +33,8 @@ class Redisearch extends Test
 	/**
 	 * @var ArrayObject
 	 */
+	#[Inject('config')]
+	#[InjectArrayObject('cache')]
 	protected ArrayObject $_config;
 	
 	/**
@@ -44,23 +49,13 @@ class Redisearch extends Test
 	
 	public function __construct()
 	{
-		$this->_config = config()->cache;
-		$this->_config->persistent->database = 0;
+		$connections = $this->_container
+			->getClass(Connections::class);
+		$connections->getConfig()->redis->database = 0;
+	
+		$this->_connection = $connections
+			->get($this->_config->persistent->connection);
 		
-		/*
-		$storeClass = $this->_config->persistent->store;
-		$currentClass = (new ReflectionClass($this))->getShortName();
-		if($storeClass !== $currentClass)
-		{
-			$this->setIsDisabled(true,
-				sprintf('"store" is set to "%s".', $storeClass)
-			);
-			
-			return;
-		}
-		*/
-		
-		$this->_connection = new Connection($this->_config->persistent);
 		if($this->_connection->connect() === false)
 		{
 			throw new RedisException
@@ -164,6 +159,15 @@ class Redisearch extends Test
 		
 		return $result === null;
 	}
+	
+	/**
+	 * Called by the runner after each test method
+	 */
+	#[Internal]
+	public function finalize(): void
+	{
+		$this->_store->clear();
+	}	
 	
 	/**
 	 * Called by the runner after all test methods have been invoked

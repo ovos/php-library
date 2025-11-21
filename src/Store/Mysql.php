@@ -4,17 +4,16 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\Exception;
+use Ovos\Connections;
 use Ovos\Model\Mysql as Model;
 use Ovos\Store;
 use Ovos\Store\Mysql\Query;
 use Ovos\Store\Mysql\QueryBuilder;
-use Ovos\Service\Database;
 use Ovos\Pdo\Expression;
 use PDO;
 use PDOStatement;
 use Closure;
 
-use function Ovos\services;
 use function sprintf;
 use function is_bool;
 use function is_integer;
@@ -46,7 +45,7 @@ abstract class Mysql extends Store
 	/**
 	 * @var string
 	 */
-	protected string $_sourceName = 'database';
+	protected string $_sourceName = 'mysql';
 	
 	/**
 	 * A connection between PHP and a database server
@@ -64,8 +63,9 @@ abstract class Mysql extends Store
 		{
 			// get database connection
 			$this->_source = $this->_container
-				->get(Database::SYMBOL)
-				->get($this->_sourceName);
+				->getClass(Connections::class)
+				->get($this->_sourceName)
+				->getConnectedClient();
 		}
 		
 		return $this->_source;
