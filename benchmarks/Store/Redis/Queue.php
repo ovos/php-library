@@ -10,7 +10,7 @@ use Ovos\Connections;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Store\KeyValue;
-use Ovos\Store\Redis as RedisStore;
+use Ovos\Store\Redis as Store;
 use Ovos\Test\Internal;
 use Ovos\Test\Parallel;
 use RedisException;
@@ -54,9 +54,9 @@ class Queue extends Benchmark
 	protected ?Connection $_connection = null;
 	
 	/**
-	 * @var ?RedisStore
+	 * @var ?Store
 	 */
-	protected ?RedisStore $_store = null;
+	protected ?Store $_store = null;
 	
 	public function __construct()
 	{
@@ -78,7 +78,7 @@ class Queue extends Benchmark
 	
 	protected function _initStore(): void
 	{
-		$this->_store = new RedisStore
+		$this->_store = new Store
 		(
 			$this->_connection,
 			$this->_config->persistent,
