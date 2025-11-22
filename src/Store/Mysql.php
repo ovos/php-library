@@ -19,6 +19,11 @@ use function is_bool;
 use function is_integer;
 use function array_keys;
 use function array_map;
+use function array_unique;
+use function array_column;
+use function implode;
+use function preg_replace;
+use function reset;
 
 /**
  * Mysql
@@ -93,7 +98,7 @@ abstract class Mysql extends Store
 		
 		return static::TABLE;
 	}
-		
+	
 	/**
 	 * @return string
 	 */
@@ -110,7 +115,7 @@ abstract class Mysql extends Store
 	/**
 	 * Only used for getSql() calls, never used to query the database
 	 * or fetch results
-	 * 
+	 *
 	 * @return QueryBuilder
 	 */
 	public function query(): QueryBuilder
@@ -375,7 +380,7 @@ abstract class Mysql extends Store
 		
 		$query = $this->query()
 			->select($select);
-			
+		
 		if($alias !== null)
 		{
 			$query->alias($alias);
@@ -475,7 +480,8 @@ abstract class Mysql extends Store
 	 */
 	public function fetchGrouped(PDOStatement $statement, string $class): array
 	{
-		$result = $statement->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP, $class); // group by first column
+		$result = $statement
+			->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP, $class); // group by the first column
 		return array_map(static fn($row) => reset($row), $result);
 	}
 	

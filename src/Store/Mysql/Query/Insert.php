@@ -19,7 +19,7 @@ class Insert extends Query
 {
 	/**
 	 * Meant to be used with prepared statements, that is why string values are not enclosed in quotes
-	 * 
+	 *
 	 * @return string
 	 */
 	public function getSql(): string
@@ -34,7 +34,7 @@ class Insert extends Query
 	/**
 	 * Example usage:
 	 * ->columns(name: ':name', created_at: 'NOW()')
-	 * 
+	 *
 	 * @param string ...$columns
 	 *
 	 * @return self

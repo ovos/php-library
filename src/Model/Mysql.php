@@ -16,7 +16,6 @@ use JsonSerializable;
 use PDO;
 use PDOStatement;
 
-use function Ovos\services;
 use function in_array;
 use function count;
 use function array_key_exists;
@@ -24,9 +23,10 @@ use function reset;
 use function current;
 use function next;
 use function key;
-use function array_values;
 use function array_keys;
-use function array_merge;
+use function array_push;
+use function array_unshift;
+use function is_callable;
 
 /**
  * Mysql
@@ -122,7 +122,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	
 	/**
 	 * A record exists if it was fetched with PK, otherwise it's considered new
-	 * 
+	 *
 	 * @var bool
 	 */
 	protected bool $_exists = false;
@@ -134,10 +134,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	
 	/**
 	 * Filter in or out properties in jsonSerialize
-	 * 
+	 *
 	 * Useful in case of:
-	 * - we do not wish json serialize binary fields (e.g. binary value like POINT in MySQL)
-	 * 
+	 * - we do not wish JSON to serialize binary fields (e.g., binary value like POINT in MySQL)
+	 *
 	 * @var ?array 
 	 */
 	protected ?array $_jsonSerializeFilter = null;
@@ -214,9 +214,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * @param array $filter
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setJsonSerializeFilter(array $filter): self
+	public function setJsonSerializeFilter(array $filter): static
 	{
 		$this->_jsonSerializeFilter = $filter;
 		
@@ -224,11 +224,11 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	}
 	
 	/**
-	 * @param array $filterMode
+	 * @param int $filterMode
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setJsonSerializeFilterMode(int $filterMode): self
+	public function setJsonSerializeFilterMode(int $filterMode): static
 	{
 		$this->_jsonSerializeFilterMode = $filterMode;
 		
@@ -238,14 +238,14 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * Should be used when initializing multiple properties at once.
 	 * The change will not trigger setters
-	 * and will not be recorded as modification.
+	 * and will not be recorded as a modification.
 	 * Used for restoring model's state.
 	 * 
 	 * @param array $properties
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setProperties(array $properties): self
+	public function setProperties(array $properties): static
 	{
 		foreach($properties as $property => $value)
 		{
@@ -266,15 +266,15 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * Should be used to initialize a single property.
 	 * The change will not trigger setters
-	 * and will not be recorded as modification.
+	 * and will not be recorded as a modification.
 	 * Used for restoring model's state.
 	 * 
 	 * @param string $property
 	 * @param mixed $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setProperty(string $property, mixed $value): self
+	public function setProperty(string $property, mixed $value): static
 	{
 		$this->_properties[$property] = $value;
 		
@@ -286,7 +286,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 *
 	 * @return mixed
 	 */
-	public function getProperty($property): mixed
+	public function getProperty(string $property): mixed
 	{
 		if(array_key_exists($property, $this->_properties) === false)
 		{
@@ -297,15 +297,15 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	}
 	
 	/**
-	 * Should be used to modify a single property, while skipping the setters
+	 * Should be used to modify a single property, while skipping the setters;
 	 * The change will be recorded as modification
 	 * 
 	 * @param string $property
 	 * @param mixed $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function modifyProperty(string $property, mixed $value): self
+	public function modifyProperty(string $property, mixed $value): static
 	{
 		if(
 			// property does not exist
@@ -322,7 +322,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		
 		$this->setProperty($property, $value);
 		
-		// record the change on update object
+		// record the change on an update object
 		if($this->_updateObject !== null)
 		{
 			$this->_updateObject->modifyProperty($property, $value);
@@ -337,9 +337,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * 
 	 * @param array $properties
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function modifyProperties(array $properties): self
+	public function modifyProperties(array $properties): static
 	{
 		foreach($properties as $property => $value)
 		{
@@ -353,9 +353,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @param string $property
 	 * @param mixed $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setReference(string $property, mixed $value): self
+	public function setReference(string $property, mixed $value): static
 	{
 		$this->_references[$property] = $value;
 		
@@ -391,9 +391,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @param string $property
 	 * @param mixed $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function reference(string $property, mixed $value = null): self
+	public function reference(string $property, mixed $value = null): static
 	{
 		if($value === null)
 		{
@@ -406,9 +406,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * @param array $modified
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setModified(array $modified): self
+	public function setModified(array $modified): static
 	{
 		$this->_modified = $modified;
 		
@@ -448,9 +448,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function resetModified(): self
+	public function resetModified(): static
 	{
 		$this->_modified = [];
 		
@@ -458,11 +458,11 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	}
 	
 	/**
-	 * @param ?self $updateObject
+	 * @param ?static $updateObject
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setUpdateObject(?self $updateObject): self
+	public function setUpdateObject(?self $updateObject): static
 	{
 		$this->_updateObject = $updateObject;
 		
@@ -470,9 +470,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	}
 	
 	/**
-	 * @return ?self
+	 * @return ?static
 	 */
-	public function getUpdateObject(): ?self
+	public function getUpdateObject(): ?static
 	{
 		return $this->_updateObject;
 	}
@@ -480,9 +480,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	/**
 	 * @param Template $template
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addTemplate(Template $template): self
+	public function addTemplate(Template $template): static
 	{
 		$this->_templates[] = $template;
 		
@@ -502,9 +502,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @param callable $callback
 	 * @param bool $prepend
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addSetter(string $property, callable $callback, bool $prepend = false): self
+	public function addSetter(string $property, callable $callback, bool $prepend = false): static
 	{
 		if(array_key_exists($property, $this->_setters) === false)
 		{
@@ -527,9 +527,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @param string $property
 	 * @param callable $callback
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function removeSetter(string $property, callable $callback): self
+	public function removeSetter(string $property, callable $callback): static
 	{
 		if(array_key_exists($property, $this->_setters) === false) // no setters for this property
 		{
@@ -557,9 +557,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @param callable $callback
 	 * @param bool $prepend
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addGetter(string $property, callable $callback, bool $prepend = false): self
+	public function addGetter(string $property, callable $callback, bool $prepend = false): static
 	{
 		if(array_key_exists($property, $this->_getters) === false)
 		{
@@ -582,9 +582,9 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @param string $property
 	 * @param callable $callback
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function removeGetter(string $property, callable $callback): self
+	public function removeGetter(string $property, callable $callback): static
 	{
 		if(array_key_exists($property, $this->_getters) === false) // no getters for this property
 		{
@@ -613,10 +613,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @param callable $setter
 	 * @param bool $prepend
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function addManipulators(string $property,
-		callable $getter, callable $setter, bool $prepend = false): self
+		callable $getter, callable $setter, bool $prepend = false): static
 	{
 		$this->addGetter($property, $getter, $prepend);
 		$this->addSetter($property, $setter, $prepend);
@@ -688,7 +688,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	
 	/**
 	 * Called also by PDO on FETCH_CLASS
-	 * 
+	 *
 	 * @param string $property
 	 * @param mixed $value
 	 */
@@ -698,14 +698,14 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	}
 	
 	/**
-	 * Should be used to change value on the object
-	 * 
+	 * Should be used to change the value on the object
+	 *
 	 * @param string $property
 	 * @param mixed $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setValue(string $property, mixed $value): self
+	public function setValue(string $property, mixed $value): static
 	{
 		// modify a reference
 		if($reference = $this->getReference($property))
@@ -724,7 +724,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 			foreach($this->_setters[$property] as $callback)
 			{
 				$value = $callback($value, $property, $this);
-			}	
+			}
 		}
 		
 		$this->modifyProperty($property, $value);
@@ -741,7 +741,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		{
 			unset($this->_properties[$property]);
 			
-			// record the change on update object
+			// record the change on an update object
 			if($this->_updateObject !== null)
 			{
 				$this->_updateObject->__unset($property);
@@ -759,7 +759,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * If you wish to restore a persisted instance with no modifications (for example from session),
 	 * set $restore to true or use restore() instead
 	 * Warning: references are not reinstantiated, because there is no information about object's class 
-	 * 
+	 *
 	 * @param object|iterable $source
 	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
 	 * @param int $filterMode filter mode
@@ -806,7 +806,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	
 	/**
 	 * Should be used to recreate the model instance after storing it for example in session 
-	 * 
+	 *
 	 * @param object|iterable $source
 	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
 	 * @param int $filterMode filter mode
@@ -835,10 +835,12 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * Should be used to set multiple values on the object
 	 * The values will be let through the setters
 	 * This method is the optimal way of setting multiple changes on the object from an array
-	 * 
+	 *
 	 * @param array $values
+	 *
+	 * @return static
 	 */
-	public function fromArray(array $values): self
+	public function fromArray(array $values): static
 	{
 		foreach($values as $property => $value)
 		{
@@ -875,10 +877,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	
 	/**
 	 * Exports the object for storage in session or database
-	 * 
+	 *
 	 * Supports filtering, useful in case of:
 	 * - we wish to protect some sensitive values, for example when retuning a JSON object in a response
-	 * 
+	 *
 	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
 	 * @param int $filterMode filter mode
 	 * @param bool $references include references
@@ -926,7 +928,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	 * @param int $filterMode filter mode
 	 * @param int $type
 	 *
-	 * @return stdClass|array
+	 * @return void
 	 */
 	protected function _exportReferences(stdClass $export,
 		?array $filter = null,
@@ -943,7 +945,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 				continue;
 			}
 			
-			// passed as key => children
+			// passed as a key => children
 			$filterReference = $filter !== null && isset($filter[$reference])
 				? $filter[$reference] : null;
 			
@@ -984,10 +986,10 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	}
 	
 	/**
-	 * @param array $filter fields to preserve or skip (depending on the filter mode)
+	 * @param ?array $filter fields to preserve or skip (depending on the filter mode)
 	 * @param int $filterMode filter mode
 	 * @param bool $references include references
-	 * 
+	 *
 	 * @return array
 	 */
 	public function toArray(
@@ -999,7 +1001,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 		return $this->export(
 			filter: $filter,
 			filterMode: $filterMode,
-			references: true,
+			references: $references,
 			type: self::EXPORT_TYPE_ARRAY,
 		);
 	}
@@ -1091,7 +1093,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	{
 		$key = $this->key();
 		
-		return ($key !== null && $key !== false);
+		return $key !== null;
 	}
 	
 	/**
@@ -1294,8 +1296,7 @@ abstract class Mysql extends Model implements Iterator, Countable, JsonSerializa
 	
 	/**
 	 * Can be called only after population by PDO::FETCH_CLASS
-	 * @see https://electrictoolbox.com/php-pdo-fetch-class-gotcha/
-	 * 
+	 *
 	 * @return bool
 	 */
 	protected function _primaryKeysLoaded(): bool
