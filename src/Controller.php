@@ -83,7 +83,7 @@ class Controller
 	{
 		$this->_container = container();
 		$this->_app = $this->_container
-			->getClass(Application::class, Application::class);
+			->getClass(Application::class);
 		
 		$this->_request = $this->_app->getRequest();
 		$this->_request->setControllerInstance($this);

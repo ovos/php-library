@@ -3,16 +3,11 @@ declare(strict_types=1);
 
 namespace Benchmarks\Store;
 
-use Ovos\ArrayObject;
 use Ovos\Benchmark;
-use Ovos\Connection\Redis as Connection;
-use Ovos\Connections;
-use Ovos\Container\ArrayObject as InjectArrayObject;
-use Ovos\Container\Inject;
 use Ovos\Store\KeyValue;
 use Ovos\Store\Redisearch as Store;
 use Ovos\Test\Internal;
-use RedisException;
+use Ovos\Test\Store\TraitRedis;
 use ReflectionClass;
 
 use function sprintf;
@@ -25,6 +20,8 @@ use function sprintf;
  */
 class Redisearch extends Benchmark
 {
+	use TraitRedis;
+	
 	/**
 	 * @var int
 	 */
@@ -36,25 +33,13 @@ class Redisearch extends Benchmark
 	public const int TAGS_PER_ITEM = 20;
 	
 	/**
-	 * @var ArrayObject
-	 */
-	#[Inject('config')]
-	#[InjectArrayObject('cache')]
-	protected ArrayObject $_config;
-	
-	/**
-	 * @var ?Connection
-	 */
-	protected ?Connection $_connection = null;
-	
-	/**
 	 * @var ?Store
 	 */
 	protected ?Store $_store = null;
 	
 	public function __construct()
 	{
-		$storeClass = $this->_config->persistent->store;
+		$storeClass = $this->_cacheConfig->persistent->store;
 		$currentClass = (new ReflectionClass($this))->getShortName();
 		if($storeClass !== $currentClass)
 		{
@@ -63,31 +48,8 @@ class Redisearch extends Benchmark
 			);
 		}
 		
-		$this->_connection = $this->_container
-			->getClass(Connections::class)
-			->get($this->_config->persistent->connection);
-		
-		if($this->_connection->connect() === false)
-		{
-			throw new RedisException
-			(
-				sprintf('Could not connect to redis server "%s" on port "%s".',
-					$this->_store->getConfig()->host,
-					$this->_store->getConfig()->port,
-				)
-			);
-		}
-	}
-	
-	protected function _initStore(): void
-	{
-		$this->_store = new Store
-		(
-			$this->_connection,
-			$this->_config->persistent,
-			$this->_config->prefix,
-			KeyValue::GROUP_BENCHMARKS,
-		);
+		$this->_group = KeyValue::GROUP_BENCHMARKS;
+		$this->_store = $this->_getStore(Store::class);
 	}
 	
 	protected function _fill(): void
@@ -110,7 +72,6 @@ class Redisearch extends Benchmark
 	#[Internal]
 	public function prepare(): void
 	{
-		$this->_initStore();
 		$this->_store->indexRebuild();
 		$this->_fill();
 	}
@@ -128,14 +89,5 @@ class Redisearch extends Benchmark
 	public function finalize(): void
 	{
 		$this->_store->clear();
-	}
-	
-	/**
-	 * Called by the runner after all test methods have been invoked
-	 */
-	#[Internal]
-	public function deconstruct(): void
-	{
-		$this->_connection->disconnect();
 	}
 }

@@ -36,24 +36,38 @@ production: &production
         - Events # handles errors and exceptions
         - Benchmark # measures request speed
         - Cache # cache
-        - Database # database
   
   # cli
   cli:
     executable: php
   
+  # connections
+  connections: &connections
+    mysql:
+      type: mysql
+      host: !ENV MYSQL[HOST]
+      database: !ENV MYSQL[DATABASE]
+      username: !ENV MYSQL[USERNAME]
+      password: !ENV MYSQL[PASSWORD]
+    redis:
+      type: redis
+      host: !ENV REDIS[HOST]
+      port: !ENV REDIS[PORT]
+      database: !ENV REDIS[DATABASE]
+      connect_timeout: 1
+      read_timeout: 1
+      slow_log:
+        enabled: yes
+        threshold: 2.0
+  
   # mysql
   database: &database
-    type: mysql
-    host: !ENV DATABASE[HOST]
-    name: !ENV DATABASE[NAME]
-    username: !ENV DATABASE[USERNAME]
-    password: !ENV DATABASE[PASSWORD]
+    connection: mysql
   
   # cache
   cache: &cache
     enabled: yes
-    prefix: !ENV CACHE-PERSISTENT[PREFIX]
+    prefix: !ENV CACHE[PREFIX]
     perishable: &cache-perishable
       compression:
         enabled: yes
@@ -66,11 +80,7 @@ production: &production
         backoff_min_ms: 5
         backoff_max_ms: 25
     persistent: &cache-persistent
-      host: !ENV CACHE-PERSISTENT[HOST]
-      port: !ENV CACHE-PERSISTENT[PORT]
-      timeout: 10
-      read_timeout: 1
-      database: !ENV CACHE-PERSISTENT[DATABASE]
+      connection: redis
       store: Redis # Redis or Redisearch
       store_options:
         clean_tags: no
