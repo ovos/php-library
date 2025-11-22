@@ -33,7 +33,7 @@ class File extends Element
 	
 	/**
 	 * @param array $types
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setTypes(array $types): self
@@ -77,7 +77,7 @@ class File extends Element
 	
 	/**
 	 * @param string $key
-	 * 
+	 *
 	 * @return bool
 	 */
 	public function __isset(string $key): bool

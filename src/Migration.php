@@ -81,7 +81,7 @@ abstract class Migration
 	
 	/**
 	 * @return int|false
-	 * 
+	 *
 	 * @throws NotFoundException
 	 */
 	public function upSql(): int|false
@@ -91,7 +91,7 @@ abstract class Migration
 	
 	/**
 	 * @return int|false
-	 * 
+	 *
 	 * @throws NotFoundException
 	 */
 	public function downSql(): int|false
@@ -134,7 +134,8 @@ abstract class Migration
 	 */
 	public function getSqlFilepath(string $suffix): ?string
 	{
-		$sqlFile = substr($this->class->getFileName(), 0, -4) . sprintf('_%s.sql', $suffix);
+		$sqlFile = substr($this->class->getFileName(), 0, -4)
+			. sprintf('_%s.sql', $suffix);
 		
 		if(file_exists($sqlFile) === false)
 		{

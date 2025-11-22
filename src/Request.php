@@ -46,7 +46,7 @@ class Request
 	
 	/**
 	 * The controller class
-	 * 
+	 *
 	 * @var string
 	 */
 	protected string $_controllerClass = 'Index';
@@ -58,14 +58,14 @@ class Request
 	
 	/**
 	 * The action
-	 * 
+	 *
 	 * @var string
 	 */
 	protected string $_action = 'index';
 	
 	/**
 	 * The action method
-	 * 
+	 *
 	 * @var string
 	 */
 	protected string $_actionMethod = 'index';
@@ -384,7 +384,7 @@ class Request
 	}
 	
 	/**
-	 * Is the request a Javascript XMLHttpRequest?
+	 * Is the request a JavaScript XMLHttpRequest?
 	 *
 	 * Supports emulated method with X_REQUESTED_WITH POST param
 	 *
@@ -407,7 +407,7 @@ class Request
 	}
 	
 	/**
-	 * Is the application run from HTTP
+	 * Is the application run from HTTP?
 	 *
 	 * @return bool
 	 */
@@ -417,7 +417,7 @@ class Request
 	}
 	
 	/**
-	 * Is the request secure
+	 * Is the request secure?
 	 *
 	 * @return bool
 	 */
@@ -439,7 +439,7 @@ class Request
 	}
 	
 	/**
-	 * Is this a HTTP debug mode
+	 * Is this an HTTP debug mode?
 	 *
 	 * @return bool
 	 */

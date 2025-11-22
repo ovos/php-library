@@ -164,7 +164,7 @@ class Logger extends Service
 		{
 			$append.= 'GET: ' . PHP_EOL
 				. json_encode($_GET, JSON_PRETTY_PRINT) . PHP_EOL;
-		}		
+		}
 		if(!empty($_POST))
 		{
 			$append.= 'POST: ' . PHP_EOL
@@ -181,7 +181,7 @@ class Logger extends Service
 	
 	/**
 	 * @param array $data
-	 * 
+	 *
 	 * @return array
 	 */
 	public function remove(array $data): array
@@ -228,9 +228,13 @@ class Logger extends Service
 			do
 			{
 				$className = get_class($event);
-				if($previous) $className = "\nPrevious " . $className;
+				if($previous)
+				{
+					$className = "\nPrevious " . $className;
+				}
 				$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
-				$output.= $className . ': ' . $event->getMessage() . PHP_EOL . $event->getTraceAsString();
+				$output.= $className . ': ' . $event->getMessage()
+					. PHP_EOL . $event->getTraceAsString();
 				
 				$previous = true;
 			}
@@ -238,9 +242,12 @@ class Logger extends Service
 		}
 		else
 		{
-			$name = $event instanceof Error ? $event->getName() : get_class($event);
+			$name = $event instanceof Error
+				? $event->getName()
+				: get_class($event);
 			$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
-			$output.= $name . ': ' . $event->getMessage() . PHP_EOL . $event->getTraceAsString();
+			$output.= $name . ': ' . $event->getMessage()
+				. PHP_EOL . $event->getTraceAsString();
 		}
 		$output.= PHP_EOL;
 		

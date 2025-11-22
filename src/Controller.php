@@ -340,7 +340,7 @@ class Controller
 	/**
 	 * @param ArrayObject $plugins
 	 * @param ArrayObject $groups
-	 * 
+	 *
 	 * @return ArrayObject
 	 */
 	public function getGroupsPlugins(ArrayObject $plugins,
@@ -378,7 +378,7 @@ class Controller
 	 * @param ArrayObject $plugins
 	 * @param ArrayObject $group
 	 * @param string $currentController
-	 * 
+	 *
 	 * @return ArrayObject
 	 */
 	public function getGroupPlugins(ArrayObject $plugins,
@@ -416,7 +416,7 @@ class Controller
 	/**
 	 * @param ArrayObject $plugins
 	 * @param ArrayObject $controllerPlugins
-	 * 
+	 *
 	 * @return ArrayObject
 	 */
 	public function getControllerPlugins(ArrayObject $plugins,
@@ -471,9 +471,9 @@ class Controller
 	
 	/**
 	 * @param ?ArrayObject $plugins
-	 * 
+	 *
 	 * @return self
-	 * 
+	 *
 	 * @throws RuntimeException
 	 */
 	protected function _loadPluginsFromConfig(?ArrayObject $plugins): self

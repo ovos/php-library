@@ -128,11 +128,19 @@ class Dir
 			return;
 		}
 		
-		$directoryIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
+		$directoryIterator = new RecursiveDirectoryIterator(
+			$path,
+			FilesystemIterator::SKIP_DOTS,
+		);
 		/**
 		 * @var RecursiveDirectoryIterator $iterator
 		 */
-		foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+		foreach(
+			$iterator = new RecursiveIteratorIterator(
+				$directoryIterator,
+				RecursiveIteratorIterator::CHILD_FIRST,
+			) as $file
+		)
 		{
 			/**
 			 * @var SplFileInfo $file
@@ -177,7 +185,7 @@ class Dir
 	}
 	
 	/**
-	 * Remove path of directories if they are empty
+	 * Remove the path of directories if they are empty
 	 *
 	 * @param string $pathToKeep absolute path
 	 * @param string $path relative path
@@ -214,7 +222,7 @@ class Dir
 	}
 	
 	/**
-	 * Moves contents of one directory to another recursively without removing target directory's contents
+	 * Moves contents of one directory to another recursively without removing the target directory's contents
 	 *
 	 * @param string $pathFrom
 	 * @param string $pathTo
@@ -228,19 +236,29 @@ class Dir
 		
 		if(is_dir($pathFrom) && is_dir($pathTo))
 		{
-			$directoryIterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
+			$directoryIterator = new RecursiveDirectoryIterator(
+				$pathFrom,
+				FilesystemIterator::SKIP_DOTS,
+			);
 			/**
 			 * @var RecursiveDirectoryIterator $iterator
 			 */
-			foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+			foreach(
+				$iterator = new RecursiveIteratorIterator(
+					$directoryIterator,
+					RecursiveIteratorIterator::CHILD_FIRST,
+				) as $file
+			)
 			{
 				/**
 				 * @var SplFileInfo $file
 				 */
 				if($file->isFile())
 				{
-					self::create($pathTo . DIRECTORY_SEPARATOR . $iterator->getSubPath());
-					rename((string)$file, $pathTo . DIRECTORY_SEPARATOR . $iterator->getSubPathName());
+					self::create($pathTo
+						. DIRECTORY_SEPARATOR . $iterator->getSubPath());
+					rename((string)$file, $pathTo
+						. DIRECTORY_SEPARATOR . $iterator->getSubPathName());
 				}
 				else
 				{
@@ -274,11 +292,19 @@ class Dir
 		
 		if(is_dir($pathFrom) && is_dir($pathTo))
 		{
-			$directoryIterator = new RecursiveDirectoryIterator($pathFrom, FilesystemIterator::SKIP_DOTS);
+			$directoryIterator = new RecursiveDirectoryIterator(
+				$pathFrom, 
+				FilesystemIterator::SKIP_DOTS,
+			);
 			/**
 			 * @var RecursiveDirectoryIterator $iterator
 			 */
-			foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::SELF_FIRST) as $file)
+			foreach(
+				$iterator = new RecursiveIteratorIterator(
+					$directoryIterator, 
+					RecursiveIteratorIterator::SELF_FIRST,
+				) as $file
+			)
 			{
 				$filename = $filenameCallback
 					? $filenameCallback($file)
@@ -448,11 +474,19 @@ class Dir
 	{
 		$files = [];
 		
-		$directoryIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
+		$directoryIterator = new RecursiveDirectoryIterator(
+			$path,
+			FilesystemIterator::SKIP_DOTS,
+		);
 		/**
 		 * @var RecursiveDirectoryIterator $iterator
 		 */
-		foreach($iterator = new RecursiveIteratorIterator($directoryIterator, RecursiveIteratorIterator::CHILD_FIRST) as $file)
+		foreach(
+			$iterator = new RecursiveIteratorIterator(
+				$directoryIterator, 
+				RecursiveIteratorIterator::CHILD_FIRST,
+			) as $file
+		)
 		{
 			// hidden files, eg. ".gitkeep"
 			if($skipHidden && $file->getFilename()[0] === '.')

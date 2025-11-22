@@ -26,7 +26,6 @@ use Ovos\Service\Database;
  * @property Session $session
  * @property Cookies $cookies
  * @property Cache $cache
- * @property Database $database
  */
 class Services
 {
@@ -95,7 +94,7 @@ class Services
 	
 	/**
 	 * @param string $key
- 	 * @param string $serviceClass
+	 * @param string $serviceClass
 	 *
 	 * @return self
 	 */

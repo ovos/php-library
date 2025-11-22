@@ -94,14 +94,12 @@ class Client
 			// look for the first valid IP
 			foreach($ips as $possibleIp)
 			{
-				if(!preg_match('#^(10|172\.16|192\.168|127\.0)\.#', $possibleIp))
+				if((preg_match('#^(10|172\.16|192\.168|127\.0)\.#', $possibleIp) === false)
+					&& ip2long($possibleIp) !== false)
 				{
-					if(ip2long($possibleIp) !== false)
-					{
-						// valid IP
-						self::$_ip = $possibleIp;
-						break;
-					}
+					// valid IP
+					self::$_ip = $possibleIp;
+					break;
 				}
 			}
 			

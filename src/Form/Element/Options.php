@@ -46,7 +46,7 @@ class Options extends Element
 	
 	/**
 	 * @param array $options
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setOptions(...$options): self
@@ -68,7 +68,7 @@ class Options extends Element
 	 * @param mixed|Option $key
 	 * @param mixed $value
 	 * @param ?object $object
-	 * 
+	 *
 	 * @return self
 	 */
 	public function addOption(
@@ -95,7 +95,7 @@ class Options extends Element
 	
 	/**
 	 * @param array $options
-	 * 
+	 *
 	 * @return self
 	 */
 	public function addOptions(array $options): self
@@ -168,7 +168,7 @@ class Options extends Element
 	
 	/**
 	 * Validate value (or values) against options
-	 * 
+	 *
 	 * @return bool
 	 */
 	public function isValid(): bool

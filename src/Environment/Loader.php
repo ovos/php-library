@@ -45,7 +45,7 @@ class Loader
 	{
 		$store = $this->_memoryService->getStore();
 		
-		$cacheId = ($cacheId ?? $store->pathToId(basename($file)));
+		$cacheId = ($cacheId ?? $store::pathToId(basename($file)));
 		if(($value = $store->get($cacheId)))
 		{
 			return $value;
