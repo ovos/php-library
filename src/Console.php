@@ -55,7 +55,7 @@ class Console
 	}
 	
 	/**
-	 * Adds a message to collection
+	 * Adds a message to a collection
 	 *
 	 * @param mixed $message Message
 	 *

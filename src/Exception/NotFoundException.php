@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Exception;
 
-use Ovos\Exception\RuntimeException;
-
 /**
  * NotFoundException
  *

@@ -190,7 +190,7 @@ class Locale
 	
 	/**
 	 * @param string $language
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setLanguage(string $language): self
@@ -298,7 +298,7 @@ class Locale
 			return $this->locked;
 		}
 		
-		// lock list of controllers exist, check if this controller is within this list
+		// lock list of controllers exists, check if this controller is within this list
 		$currentController = $request->getControllerClass();
 		
 		$locked = true;
@@ -330,7 +330,7 @@ class Locale
 	
 	/**
 	 * @param array $top
-	 * 
+	 *
 	 * @return array
 	 */
 	public function getCountries(array $top = []): array
@@ -357,7 +357,7 @@ class Locale
 		$collator = new Collator($this->getSymbol());
 		$collator->asort($countries);
 		
-		// move selected keys to top
+		// move selected keys to the top
 		foreach(array_reverse($top) as $key)
 		{
 			if(array_key_exists($key, $countries) === false)

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Test;
 
+use Ovos\Container;
+use Ovos\Container\Inject;
 use Ovos\Test;
 use Ovos\Test\Exception\SkipException;
 use Ovos\Exception\InvalidException\InvalidClassException;
@@ -24,6 +26,12 @@ use function is_bool;
  */
 class Runner
 {
+	/**
+	 * @var Container
+	 */
+	#[Inject]
+	protected Container $_container;
+
 	/**
 	 * @var string
 	 */
@@ -238,13 +246,16 @@ class Runner
 		if($this->_test === null)
 		{
 			/** @var Test $test */
-			$this->_test = ($test = $this->class->newInstance());
+			$test = $this->_container
+				->injectClass($this->class->name);
 			
-			if(is_subclass_of($this->_test , 'Ovos\Test') === false)
+			if(is_subclass_of($test, 'Ovos\Test') === false)
 			{
 				throw new InvalidClassException(
 					'A class has to extend a "Ovos\Test" class.');
 			}
+			
+			$this->_test = $test;
 		}
 		
 		return $this->_test;

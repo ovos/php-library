@@ -45,10 +45,10 @@ class Runner
 	
 	/**
 	 * @param string $direction
-	 * 
+	 *
 	 * @return void
 	 *
-	 * @throws NotFoundException
+	 * @throws InvalidClassException
 	 */
 	public function run(string $direction): void
 	{
@@ -59,7 +59,7 @@ class Runner
 		$migration = $this->class->newInstance($this->class);
 		if(is_subclass_of($migration, 'Ovos\Migration') === false)
 		{
-			throw new InvalidClassException('A class has to extend a "Ovos\Migration" class.');
+			throw new InvalidClassException('A class has to extend an "Ovos\Migration" class.');
 		}
 		
 		$migration->{$direction}();

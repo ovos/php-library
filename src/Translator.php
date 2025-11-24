@@ -22,7 +22,7 @@ class Translator
 	
 	/**
 	 * Locale of this instance
-	 * 
+	 *
 	 * @var Locale
 	 */
 	protected Locale $_locale;
@@ -30,7 +30,7 @@ class Translator
 	/**
 	 * Current locale instance to use for this response
 	 * It's possible to use all locales and translate in many languages during the single request
-	 * 
+	 *
 	 * @var ?Locale
 	 */
 	protected static ?Locale $_currentLocale = null;
@@ -88,7 +88,7 @@ class Translator
 			$translationPath = $translationsPath
 				. $this->_locale->getLanguage()
 				. self::TRANSLATION_EXT;
-				
+			
 			if(array_key_exists($translationPath,
 				$this->_translations) === false)
 			{
@@ -133,7 +133,7 @@ class Translator
 	
 	/**
 	 * https://stackoverflow.com/questions/12184978/poedit-doesnt-recognize-n-plurals
-	 * 
+	 *
 	 * @param string $phraseSingular
 	 * @param string $phrasePlural
 	 * @param int $n
@@ -200,10 +200,10 @@ class Translator
 	
 	/**
 	 * @see Zend_Translate_Plural
-	 * Alternative is to parse and eval "Plural-Forms:" header in .mo file
-	 * 
+	 * An alternative is to parse and eval "Plural-Forms:" header in .mo file
+	 *
 	 * Returns the plural definition to use
-	 * 
+	 *
 	 * @param int $number
 	 *
 	 * @return int

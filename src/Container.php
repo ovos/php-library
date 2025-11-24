@@ -36,14 +36,9 @@ class Container
 	protected array $_injectors = [];
 	
 	/**
-	 * @var object[]
+	 * @var array
 	 */
 	protected array $_resolved = [];
-	
-	/**
-	 * @var ReflectionClass[]
-	 */
-	protected array $_reflectors = [];
 	
 	/**
 	 * Register a class
@@ -403,8 +398,86 @@ class Container
 	}
 	
 	/**
+	 * @see inject
+	 *
+	 * @param string $class
+	 * @param array $parameters
+	 * @param ?callable $initializer
+	 *
+	 * @return object
+	 */
+	public function injectClass(string $class,
+		array $parameters = [],
+		?callable $initializer = null,
+	): object
+	{
+		return (new Injector\TypeClass($class, $parameters, $initializer))
+			->inject($this);
+	}
+	
+	/**
+	 * @see inject
+	 *
+	 * @param string $class
+	 * @param array $parameters
+	 * @param ?callable $initializer
+	 *
+	 * @return object
+	 */
+	public function injectLazy(string $class,
+		array $parameters = [],
+		?callable $initializer = null,
+	): object
+	{
+		// compatibility with pre 8.4
+		if(PHP_VERSION_ID < 84000)
+		{
+			return $this->injectClass(
+				$class,
+				$parameters,
+				$initializer,
+			);
+		}
+		
+		return (new Injector\TypeClass($class, $parameters, $initializer))
+			->inject($this);
+	}
+	
+	/**
+	 * @see inject
+	 *
+	 * @param callable $callable
+	 * @param array $parameters
+	 *
+	 * @return object
+	 */
+	public function injectCallable(callable $callable,
+		array $parameters = [],
+	): object
+	{
+		return (new Injector\TypeCallable($callable, $parameters))
+			->inject($this);
+	}
+	
+	/**
+	 * @see inject
+	 *
+	 * @param object $object
+	 * @param ?callable $initializer
+	 *
+	 * @return object
+	 */
+	public function injectObject(object $object,
+		?callable $initializer = null,
+	): object
+	{
+		return (new Injector\TypeObject($object, $initializer))
+			->inject($this);
+	}
+	
+	/**
 	 * Inject constructor parameters
-	 * 
+	 *
 	 * @param ReflectionClass $reflector
 	 * @param array $values
 	 *
@@ -436,7 +509,7 @@ class Container
 	
 	/**
 	 * Inject a single constructor parameter
-	 * 
+	 *
 	 * @param ReflectionParameter $parameter
 	 * @param array $values
 	 *
@@ -555,7 +628,7 @@ class Container
 	
 	/**
 	 * Resolve a list of types (return the first matching object)
-	 * 
+	 *
 	 * @param array $types
 	 *
 	 * @return ?object
@@ -583,7 +656,7 @@ class Container
 	
 	/**
 	 * Try to automatically register the resolver
-	 * 
+	 *
 	 * @param ReflectionProperty|ReflectionParameter $property
 	 * @param string $key
 	 * @param string $type
@@ -643,7 +716,7 @@ class Container
 	
 	/**
 	 * Loop properties and return only the own types
-	 * 
+	 *
 	 * @param ?ReflectionType $propertyType
 	 *
 	 * @return array
@@ -674,7 +747,7 @@ class Container
 	
 	/**
 	 * Resolve object's properties
-	 * 
+	 *
 	 * @param ReflectionClass $reflector
 	 * @param object $object
 	 * @param bool $lazy
@@ -707,7 +780,7 @@ class Container
 	
 	/**
 	 * Process optional attributes
-	 * 
+	 *
 	 * @param ReflectionProperty|ReflectionParameter $property
 	 * @param mixed $resolved
 	 *
@@ -731,7 +804,7 @@ class Container
 	
 	/**
 	 * Set a value on an object's property
-	 * 
+	 *
 	 * @param ReflectionProperty $property
 	 * @param object $object
 	 * @param mixed $resolved

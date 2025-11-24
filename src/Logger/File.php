@@ -11,7 +11,7 @@ use function file_put_contents;
 /**
  * Trait File
  *
- * @package Wirecard
+ * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait File

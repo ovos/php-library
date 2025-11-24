@@ -35,7 +35,7 @@ class Option
 	/**
 	 * Object associated with the option
 	 * Can be used for further processing of the option
-	 * 
+	 *
 	 * @var ?object
 	 */
 	protected ?object $_object = null;
@@ -56,7 +56,7 @@ class Option
 	
 	/**
 	 * @param Options $options
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setOptions(Options $options): self
@@ -76,7 +76,7 @@ class Option
 	
 	/**
 	 * @param mixed $value
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setValue($value): self
@@ -96,7 +96,7 @@ class Option
 	
 	/**
 	 * @param null|mixed $label
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setLabel($label): self
@@ -144,7 +144,7 @@ class Option
 	
 	/**
 	 * @param ?object $object
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setObject(?object $object): self

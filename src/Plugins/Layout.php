@@ -12,7 +12,7 @@ use function get_class;
 /**
  * Layout
  *
- * @package Plugins
+ * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Layout extends Plugin
@@ -34,7 +34,7 @@ class Layout extends Plugin
 	
 	/**
 	 * Automatically create these placeholders
-	 * 
+	 *
 	 * @var array
 	 */
 	protected array $_placeholders = [];

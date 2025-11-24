@@ -5,14 +5,13 @@ namespace Benchmarks\Store\Redis;
 
 use Ovos\ArrayObject;
 use Ovos\Benchmark;
-use Ovos\Redis\Connection;
-use Ovos\Store\Cache;
-use Ovos\Store\Redis as RedisStore;
+use Ovos\Container\Inject;
+use Ovos\Store\KeyValue;
+use Ovos\Store\Redis as Store;
 use Ovos\Test\Internal;
-use Tests\Store\Redis\Queue as QueueTests;
-use RedisException;
+use Ovos\Test\Parallel;
+use Ovos\Test\Store\TraitRedis;
 
-use function Ovos\config;
 use function sprintf;
 
 /**
@@ -23,6 +22,8 @@ use function sprintf;
  */
 class Queue extends Benchmark
 {
+	use TraitRedis;
+	
 	/**
 	 * @var string
 	 */
@@ -39,60 +40,34 @@ class Queue extends Benchmark
 	public const int CLIENTS = 100;
 	
 	/**
+	 * @var ?Store
+	 */
+	protected ?Store $_store = null;
+	
+	/**
 	 * @var ArrayObject
 	 */
+	#[Inject('config')]
 	protected ArrayObject $_config;
-	
-	/**
-	 * @var ?Connection
-	 */
-	protected ?Connection $_connection = null;
-	
-	/**
-	 * @var ?RedisStore
-	 */
-	protected ?RedisStore $_store = null;
 	
 	public function __construct()
 	{
-		$this->_config = config()->cache;
-		
-		$this->_connection = new Connection($this->_config->persistent);
-		if($this->_connection->connect() === false)
+		if($this->_cacheConfig->getPath(['persistent', 'queue', 'enabled']) !== true)
 		{
-			throw new RedisException
-			(
-				sprintf('Could not connect to redis server "%s" on port "%s".',
-					$this->_store->getConfig()->host,
-					$this->_store->getConfig()->port,
-				)
+			$this->setIsDisabled(true,
+				sprintf('"queue" is not enabled in cache config.')
 			);
+			
+			return;
 		}
-	}
-	
-	protected function _initStore(): void
-	{
-		$this->_store = new RedisStore
-		(
-			$this->_config->prefix,
-			$this->_connection,
-			$this->_config->persistent,
-			Cache::GROUP_BENCHMARKS,
-		);
-	}
-	
-	/**
-	 * Called by the runner before each test method
-	 */
-	#[Internal]
-	public function prepare(): void
-	{
-		$this->_initStore();
+		
+		$this->_group = KeyValue::GROUP_BENCHMARKS;
+		$this->_store = $this->_getStore(Store::class);
 	}
 	
 	public function queue(): bool
 	{
-		$phpBinary = config()->getPath(['cli', 'executable']);
+		$phpBinary = $this->_config->getPath(['cli', 'executable']);
 		$phpBinary = $phpBinary ?? 'php';
 		$command = sprintf('%s %s %s', $phpBinary,
 			dirname(__DIR__, 3) . DIRECTORY_SEPARATOR
@@ -101,18 +76,19 @@ class Queue extends Benchmark
 			. 'Redis' . DIRECTORY_SEPARATOR
 			. 'Queue' . DIRECTORY_SEPARATOR
 			. 'QueueClient.file.php',
-			Cache::GROUP_BENCHMARKS,
+			KeyValue::GROUP_BENCHMARKS,
 		);
 		
 		try
 		{
-			QueueTests::parallel($command, self::CLIENTS);
+			Parallel::run($command, self::CLIENTS);
 			
 			$id = $this->_store->prefix(self::KEY_ITEM_COUNTER,
 				$this->_store->getType()
 			);
 			
 			$count = $this->_store->getClient()->get($id);
+			
 			return (int)$count === 1;
 		}
 		finally
@@ -129,14 +105,5 @@ class Queue extends Benchmark
 	public function finalize(): void
 	{
 		$this->_store->clear();
-	}
-	
-	/**
-	 * Called by the runner after all test methods have been invoked
-	 */
-	#[Internal]
-	public function deconstruct(): void
-	{
-		$this->_connection->disconnect();
 	}
 }

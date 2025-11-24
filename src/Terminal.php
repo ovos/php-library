@@ -38,10 +38,10 @@ class Terminal
 	
 	/**
 	 * Output the message string
-	 * 
+	 *
 	 * @param string $message
 	 * @param bool $markup
-	 * 
+	 *
 	 * @return void
 	 */
 	public static function output(string $message, bool $markup = false): void
@@ -61,10 +61,10 @@ class Terminal
 	
 	/**
 	 * Parses color markers and returns a formatted message
-	 * 
+	 *
 	 * @param string $message
 	 * @param bool $markup
-	 * 
+	 *
 	 * @return string
 	 */
 	public static function getMessage(string $message, bool $markup = false): string

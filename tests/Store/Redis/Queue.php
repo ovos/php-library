@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace Tests\Store\Redis;
 
 use Ovos\ArrayObject;
-use Ovos\Redis\Connection;
+use Ovos\Container\Inject;
 use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Parallel;
-use RedisException;
+use Ovos\Test\Store\TraitRedis;
 
 use function Ovos\config;
 use function sprintf;
@@ -23,6 +23,8 @@ use function sprintf;
  */
 class Queue extends Test
 {
+	use TraitRedis;
+	
 	/**
 	 * @var string
 	 */
@@ -41,12 +43,8 @@ class Queue extends Test
 	/**
 	 * @var ArrayObject
 	 */
+	#[Inject('config')]
 	protected ArrayObject $_config;
-	
-	/**
-	 * @var ?Connection
-	 */
-	protected ?Connection $_connection = null;
 	
 	/**
 	 * @var ?Store
@@ -55,9 +53,7 @@ class Queue extends Test
 	
 	public function __construct()
 	{
-		$this->_config = config()->cache;
-		
-		if($this->_config->getPath(['persistent', 'queue', 'enabled']) !== true)
+		if($this->_cacheConfig->getPath(['persistent', 'queue', 'enabled']) !== true)
 		{
 			$this->setIsDisabled(true,
 				sprintf('"queue" is not enabled in cache config.')
@@ -66,37 +62,7 @@ class Queue extends Test
 			return;
 		}
 		
-		$this->_connection = new Connection($this->_config->persistent);
-		if($this->_connection->connect() === false)
-		{
-			throw new RedisException
-			(
-				sprintf('Could not connect to redis server "%s" on port "%s".',
-					$this->_store->getConfig()->host,
-					$this->_store->getConfig()->port,
-				)
-			);
-		}
-	}
-	
-	protected function _initStore(): void
-	{
-		$this->_store = new Store
-		(
-			$this->_connection,
-			$this->_config->persistent,
-			$this->_config->prefix,
-			KeyValue::GROUP_TESTS,
-		);
-	}
-	
-	/**
-	 * Called by the runner before each test method
-	 */
-	#[Internal]
-	public function prepare(): void
-	{
-		$this->_initStore();
+		$this->_store = $this->_getStore(Store::class);
 	}
 	
 	public function set(): bool
@@ -341,7 +307,7 @@ class Queue extends Test
 	
 	public function queue(): bool
 	{
-		$phpBinary = config()->getPath(['cli', 'executable']);
+		$phpBinary = $this->_config->getPath(['cli', 'executable']);
 		$phpBinary = $phpBinary ?? 'php';
 		$command = sprintf('%s %s %s', $phpBinary,
 			__DIR__
@@ -370,12 +336,11 @@ class Queue extends Test
 	}
 	
 	/**
-	 * Called by the runner after all test methods have been invoked
+	 * Called by the runner after each test method
 	 */
 	#[Internal]
-	public function deconstruct(): void
+	public function finalize(): void
 	{
 		$this->_store->clear();
-		$this->_connection->disconnect();
 	}
 }

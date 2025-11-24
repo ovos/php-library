@@ -3,16 +3,11 @@ declare(strict_types=1);
 
 namespace Benchmarks\Store;
 
-use Ovos\ArrayObject;
 use Ovos\Benchmark;
-use Ovos\Redis\Connection;
-use Ovos\Store\Cache;
-use Ovos\Store\Redis as RedisStore;
+use Ovos\Store\KeyValue;
+use Ovos\Store\Redis as Store;
 use Ovos\Test\Internal;
-use RedisException;
-
-use function Ovos\config;
-use function sprintf;
+use Ovos\Test\Store\TraitRedis;
 
 /**
  * Redis
@@ -22,6 +17,8 @@ use function sprintf;
  */
 class Redis extends Benchmark
 {
+	use TraitRedis;
+	
 	/**
 	 * @var int
 	 */
@@ -33,46 +30,14 @@ class Redis extends Benchmark
 	public const int TAGS_PER_ITEM = 20;
 	
 	/**
-	 * @var ArrayObject
+	 * @var ?Store
 	 */
-	protected ArrayObject $_config;
-	
-	/**
-	 * @var ?Connection
-	 */
-	protected ?Connection $_connection = null;
-	
-	/**
-	 * @var ?RedisStore
-	 */
-	protected ?RedisStore $_store = null;
+	protected ?Store $_store = null;
 	
 	public function __construct()
 	{
-		$this->_config = config()->cache;
-		
-		$this->_connection = new Connection($this->_config->persistent);
-		if($this->_connection->connect() === false)
-		{
-			throw new RedisException
-			(
-				sprintf('Could not connect to redis server "%s" on port "%s".',
-					$this->_store->getConfig()->host,
-					$this->_store->getConfig()->port,
-				)
-			);
-		}
-	}
-	
-	protected function _initStore(): void
-	{
-		$this->_store = new RedisStore
-		(
-			$this->_config->prefix,
-			$this->_connection,
-			$this->_config->persistent,
-			Cache::GROUP_BENCHMARKS,
-		);
+		$this->_group = KeyValue::GROUP_BENCHMARKS;
+		$this->_store = $this->_getStore(Store::class);
 	}
 	
 	protected function _fill(): void
@@ -95,7 +60,6 @@ class Redis extends Benchmark
 	#[Internal]
 	public function prepare(): void
 	{
-		$this->_initStore();
 		$this->_fill();
 	}
 	
@@ -112,14 +76,5 @@ class Redis extends Benchmark
 	public function finalize(): void
 	{
 		$this->_store->clear();
-	}
-	
-	/**
-	 * Called by the runner after all test methods have been invoked
-	 */
-	#[Internal]
-	public function deconstruct(): void
-	{
-		$this->_connection->disconnect();
 	}
 }

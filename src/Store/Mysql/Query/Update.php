@@ -38,7 +38,7 @@ class Update extends Query
 	/**
 	 * Example usage:
 	 * ->set(name: ':name', created_at: 'NOW()')
-	 * 
+	 *
 	 * @param mixed ...$columns
 	 *
 	 * @return self

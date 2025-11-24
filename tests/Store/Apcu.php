@@ -8,7 +8,6 @@ use Ovos\Store\KeyValue;
 use Ovos\Store\Apcu as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
-use Ovos\Test\Parallel;
 
 use function Ovos\config;
 use function sprintf;

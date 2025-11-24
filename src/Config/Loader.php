@@ -55,7 +55,7 @@ class Loader
 		
 		if($cacheId === null)
 		{
-			$fileId = $store->pathToId(basename($file));
+			$fileId = $store::pathToId(basename($file));
 			$cacheId = $store->prefix($rootSection, $fileId);
 		}
 		

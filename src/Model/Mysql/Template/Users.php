@@ -33,7 +33,7 @@ class Users extends Template
 		parent::__construct();
 		
 		$this->_update = array_merge($this->_update, $update);
-	}	
+	}
 	
 	/**
 	 * @param Mysql $model
@@ -51,7 +51,7 @@ class Users extends Template
 			$model->{$this->_update[__FUNCTION__]} = $user->id;
 		}
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */

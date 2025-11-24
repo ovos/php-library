@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Controller\Plugin;
-use Ovos\Container\Injector\TypeClass;
 use Ovos\Exception\RuntimeException;
 use ReflectionMethod;
 
@@ -83,7 +82,7 @@ class Controller
 	{
 		$this->_container = container();
 		$this->_app = $this->_container
-			->getClass(Application::class, Application::class);
+			->getClass(Application::class);
 		
 		$this->_request = $this->_app->getRequest();
 		$this->_request->setControllerInstance($this);
@@ -340,7 +339,7 @@ class Controller
 	/**
 	 * @param ArrayObject $plugins
 	 * @param ArrayObject $groups
-	 * 
+	 *
 	 * @return ArrayObject
 	 */
 	public function getGroupsPlugins(ArrayObject $plugins,
@@ -378,7 +377,7 @@ class Controller
 	 * @param ArrayObject $plugins
 	 * @param ArrayObject $group
 	 * @param string $currentController
-	 * 
+	 *
 	 * @return ArrayObject
 	 */
 	public function getGroupPlugins(ArrayObject $plugins,
@@ -416,7 +415,7 @@ class Controller
 	/**
 	 * @param ArrayObject $plugins
 	 * @param ArrayObject $controllerPlugins
-	 * 
+	 *
 	 * @return ArrayObject
 	 */
 	public function getControllerPlugins(ArrayObject $plugins,
@@ -471,9 +470,9 @@ class Controller
 	
 	/**
 	 * @param ?ArrayObject $plugins
-	 * 
+	 *
 	 * @return self
-	 * 
+	 *
 	 * @throws RuntimeException
 	 */
 	protected function _loadPluginsFromConfig(?ArrayObject $plugins): self
@@ -496,7 +495,7 @@ class Controller
 			
 			/** @var Plugin $instance */
 			$instance = $this->_container
-				->inject(new TypeClass($pluginClass));
+				->injectClass($pluginClass);
 			$this->addPlugin($instance);
 		}
 		

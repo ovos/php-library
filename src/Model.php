@@ -20,7 +20,7 @@ abstract class Model
 	 * @var Container
 	 */
 	protected Container $_container;
-
+	
 	/**
 	 * Application
 	 *

@@ -56,7 +56,7 @@ class QueryBuilder
 	/**
 	 * Example usage:
 	 * ->columns(name: ':name', created_at: 'NOW()')
-	 * 
+	 *
 	 * @param mixed ...$columns
 	 *
 	 * @return Insert
@@ -89,7 +89,7 @@ class QueryBuilder
 	/**
 	 * Example usage:
 	 * ->set(name: ':name', created_at: 'NOW()')
-	 * 
+	 *
 	 * @param mixed ...$columns
 	 *
 	 * @return Update

@@ -36,7 +36,7 @@ class Callback extends Validator
 	
 	/**
 	 * @param Closure $callback
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setCallback(Closure $callback): self

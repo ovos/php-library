@@ -33,7 +33,7 @@ class Timestamps extends Template
 		parent::__construct();
 		
 		$this->_update = array_merge($this->_update, $update);
-	}	
+	}
 	
 	/**
 	 * @param Mysql $model

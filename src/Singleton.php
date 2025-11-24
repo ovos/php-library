@@ -31,7 +31,7 @@ trait Singleton
 	
 	/**
 	 * Clears an old instance and creates a new one
-	 * 
+	 *
 	 * @return self
 	 */
 	public static function newInstance(): self

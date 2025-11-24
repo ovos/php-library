@@ -15,9 +15,9 @@ class Date
 {
 	/**
 	 * Returns seconds duration string in hours:minutes:seconds
-	 * 
+	 *
 	 * @param int $seconds
-	 * 
+	 *
 	 * @return string
 	 */
 	public static function hms(int $seconds): string
@@ -31,7 +31,7 @@ class Date
 	
 	/**
 	 * @param string $month (this, current, previous, next, 0, 1, 2, -1, -2, ...)
-	 * 
+	 *
 	 * @return DateTime
 	 */
 	public static function getMonthStart(string $month): DateTime
@@ -46,7 +46,7 @@ class Date
 	
 	/**
 	 * @param string $month (this, current, previous, next, 0, 1, 2, -1, -2, ...)
-	 * 
+	 *
 	 * @return DateTime
 	 */
 	public static function getMonthEnd(string $month): DateTime
@@ -61,7 +61,7 @@ class Date
 	
 	/**
 	 * @param string $week (this, current, previous, next, 0, 1, 2, -1, -2, ...)
-	 * 
+	 *
 	 * @return DateTime
 	 */
 	public static function getWeekStart(string $week): DateTime
@@ -76,7 +76,7 @@ class Date
 	
 	/**
 	 * @param DateTime $start
-	 * 
+	 *
 	 * @return DateTime
 	 */
 	public static function getWeekEnd(DateTime $start): DateTime
