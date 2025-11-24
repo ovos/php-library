@@ -213,9 +213,9 @@ class Controller
 	/**
 	 * @param string $dispatchedAction
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setDispatchedAction(string $dispatchedAction): self
+	public function setDispatchedAction(string $dispatchedAction): static
 	{
 		$this->_dispatchedAction = $dispatchedAction;
 		
@@ -233,9 +233,9 @@ class Controller
 	/**
 	 * @param array $params
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setParams(array $params): self
+	public function setParams(array $params): static
 	{
 		$this->_params = $params;
 		
@@ -291,9 +291,9 @@ class Controller
 	/**
 	 * @param bool $dispatched
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setDispatched(bool $dispatched): self
+	public function setDispatched(bool $dispatched): static
 	{
 		$this->_dispatched = $dispatched;
 		
@@ -471,11 +471,11 @@ class Controller
 	/**
 	 * @param ?ArrayObject $plugins
 	 *
-	 * @return self
+	 * @return static
 	 *
 	 * @throws RuntimeException
 	 */
-	protected function _loadPluginsFromConfig(?ArrayObject $plugins): self
+	protected function _loadPluginsFromConfig(?ArrayObject $plugins): static
 	{
 		if($plugins === null)
 		{
@@ -512,9 +512,9 @@ class Controller
 	 * @param Plugin $plugin
 	 * @param ?string $symbol
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addPlugin(Plugin $plugin, ?string $symbol = null): self
+	public function addPlugin(Plugin $plugin, ?string $symbol = null): static
 	{
 		if($symbol === null)
 		{
@@ -572,9 +572,9 @@ class Controller
 	/**
 	 * @param string $symbol
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function removePlugin(string $symbol): self
+	public function removePlugin(string $symbol): static
 	{
 		unset($this->_plugins[$symbol]);
 		

@@ -19,7 +19,23 @@ abstract class Test
 	 */
 	#[Inject]
 	protected Container $_container;
-
+	
+	/**
+	 * Application
+	 *
+	 * @var Application
+	 */
+	#[Inject]
+	protected Application $_app;
+	
+	/**
+	 * Config
+	 *
+	 * @var ArrayObject
+	 */
+	#[Inject]
+	protected ArrayObject $_config;
+	
 	/**
 	 * @var bool
 	 */
@@ -34,14 +50,14 @@ abstract class Test
 	 * @param bool $isDisabled
 	 * @param ?string $reason
 	 *
-	 * @return self
+	 * @return static
 	 */
 	#[Internal]
 	public function setIsDisabled
 	(
 		bool $isDisabled,
 		?string $reason = null,
-	): self
+	): static
 	{
 		$this->_isDisabled = $isDisabled;
 		$this->_reason = $reason;

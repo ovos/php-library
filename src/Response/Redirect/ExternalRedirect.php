@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Response\Redirect;
 
 use Ovos\Response\Redirect;
+use Override;
 
 /**
  * ExternalRedirect
@@ -31,6 +32,7 @@ class ExternalRedirect extends Redirect
 	/**
 	 * @return string
 	 */
+	#[Override]
 	public function __toString(): string
 	{
 		return $this->_externalUrl;

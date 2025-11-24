@@ -37,9 +37,9 @@ class Callback extends Validator
 	/**
 	 * @param Closure $callback
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setCallback(Closure $callback): self
+	public function setCallback(Closure $callback): static
 	{
 		$this->_callback = $callback->bindTo($this, $this);
 		

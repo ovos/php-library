@@ -78,7 +78,7 @@ class ArrayObject extends BaseArrayObject
 		$value = parent::offsetGet($key);
 		if(is_array($value))
 		{
-			$value = new self($value);
+			$value = new static($value);
 			$this->offsetSet($key, $value);
 		}
 		
@@ -96,7 +96,7 @@ class ArrayObject extends BaseArrayObject
 		if(is_array($value))
 		{
 			// convert an array to ArrayObject
-			$value = new self($value);
+			$value = new static($value);
 		}
 		
 		parent::offsetSet($key, $value);
@@ -187,9 +187,9 @@ class ArrayObject extends BaseArrayObject
 	/**
 	 * @param array $toMerge
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function merge(array $toMerge): self
+	public function merge(array $toMerge): static
 	{
 		$this->exchangeArray(array_merge($this->getArrayCopy(), $toMerge));
 		
@@ -223,10 +223,10 @@ class ArrayObject extends BaseArrayObject
 	/**
 	 * @param array $array
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public static function factory(array $array = []): self
+	public static function factory(array $array = []): static
 	{
-		return new self($array, self::ARRAY_AS_PROPS);
+		return new static($array, static::ARRAY_AS_PROPS);
 	}
 }

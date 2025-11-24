@@ -64,9 +64,9 @@ class Message
 	/**
 	 * @param ?string $title
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setTitle(?string $title): self
+	public function setTitle(?string $title): static
 	{
 		$this->_title = $title;
 		
@@ -84,9 +84,9 @@ class Message
 	/**
 	 * @param ?string $description
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setDescription(?string $description): self
+	public function setDescription(?string $description): static
 	{
 		$this->_description = $description;
 		
@@ -104,9 +104,9 @@ class Message
 	/**
 	 * @param string $type
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setType(string $type): self
+	public function setType(string $type): static
 	{
 		$this->_type = $type;
 		
@@ -124,9 +124,9 @@ class Message
 	/**
 	 * @param bool $raw
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setIsRaw(bool $raw = true): self
+	public function setIsRaw(bool $raw = true): static
 	{
 		$this->_raw = $raw;
 		

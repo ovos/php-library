@@ -11,7 +11,7 @@ use function strcmp;
 
 /**
  * MoParser
- * 
+ *
  * Modified on MoParser class from motranslator
  * @see https://github.com/phpmyadmin/motranslator
  *
@@ -23,6 +23,7 @@ final class MoParser
 	/**#@+
 	 * Errors
 	 */
+	
 	/**
 	 * File does not exist
 	 */
@@ -42,10 +43,12 @@ final class MoParser
 	/**#@+
 	 * Magic bytes constants
 	 */
+	
 	/**
 	 * Big endian mo file magic bytes
 	 */
 	public const string MAGIC_BE = "\x95\x04\x12\xde";
+	
 	/**
 	 * Little endian mo file magic bytes
 	 */

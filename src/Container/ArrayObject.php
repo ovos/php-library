@@ -5,6 +5,7 @@ namespace Ovos\Container;
 
 use Attribute;
 use Ovos\ArrayObject as BaseArrayObject;
+use Override;
 
 /**
  * ArrayObject
@@ -36,6 +37,12 @@ class ArrayObject implements Injected
 		return $this->_path;
 	}
 	
+	/**
+	 * @param object $object
+	 *
+	 * @return mixed
+	 */
+	#[Override]
 	public function process(object $object): mixed
 	{
 		/** @var $object BaseArrayObject */

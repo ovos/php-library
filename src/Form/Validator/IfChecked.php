@@ -45,9 +45,9 @@ class IfChecked extends Validator
 	/**
 	 * @param string $id
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setId(string $id): self
+	public function setId(string $id): static
 	{
 		$this->_id = $id;
 		

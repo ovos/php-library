@@ -37,9 +37,9 @@ class Insert extends Query
 	 *
 	 * @param string ...$columns
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function columns(mixed ...$columns): self
+	public function columns(mixed ...$columns): static
 	{
 		$this->_columns = $columns;
 		

@@ -77,9 +77,9 @@ class Json extends Template
 	/**
 	 * @param array $properties
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setProperties(array $properties): self
+	public function setProperties(array $properties): static
 	{
 		$this->_properties = $properties;
 		
@@ -97,9 +97,9 @@ class Json extends Template
 	/**
 	 * @param string $type
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setType(string $type): self
+	public function setType(string $type): static
 	{
 		$this->_type = $type;
 		
@@ -117,9 +117,9 @@ class Json extends Template
 	/**
 	 * @param null|string|Closure $class
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setClass(null|string|Closure $class): self
+	public function setClass(null|string|Closure $class): static
 	{
 		$this->_class = $class;
 		
@@ -171,7 +171,7 @@ class Json extends Template
 		$string = json_encode($object, JSON_THROW_ON_ERROR
 			| JSON_UNESCAPED_UNICODE
 			| JSON_UNESCAPED_SLASHES
-		 	| JSON_NUMERIC_CHECK
+			| JSON_NUMERIC_CHECK
 		);
 		
 		// escape backslashes

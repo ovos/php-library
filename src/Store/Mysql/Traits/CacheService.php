@@ -25,12 +25,14 @@ trait CacheService
 	public function initCacheService(): void
 	{
 		/** @var Cache $cacheService */
-		$cacheService = $this->_app->getServices()->get(Cache::SYMBOL);
+		$cacheService = $this->_app->getServices()
+			->get(Cache::SYMBOL);
 		$this->_cacheService = $cacheService;
 	}
 	
 	/**
 	 * @param ?string $cacheKey
+	 * @param bool $persistent
 	 *
 	 * @return bool
 	 */
@@ -39,7 +41,12 @@ trait CacheService
 		bool $persistent = true,
 	): bool
 	{
-		$store = $this->_cacheService->getStore( $persistent);
+		$store = $this->_cacheService->getStore($persistent);
+		if($store === null)
+		{
+			return false;
+		}
+		
 		$cacheId = self::TABLE;
 		if($cacheKey !== null)
 		{

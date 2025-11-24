@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Store\KeyValue;
 
+use Override;
 use Ovos\ArrayObject;
 use Ovos\Connection\Redis as Connection;
 use Closure;
@@ -161,9 +162,9 @@ abstract class Redis extends Tags
 	/**
 	 * @param ?string $prefix
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setPrefix(?string $prefix = null): self
+	public function setPrefix(?string $prefix = null): static
 	{
 		$this->_prefix = $prefix;
 		
@@ -183,9 +184,9 @@ abstract class Redis extends Tags
 	/**
 	 * @param Connection $connection
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setConnection(Connection $connection): self
+	public function setConnection(Connection $connection): static
 	{
 		$this->_connection = $connection;
 		
@@ -203,9 +204,9 @@ abstract class Redis extends Tags
 	/**
 	 * @param ArrayObject $options
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setStoreOptions(ArrayObject $options): self
+	public function setStoreOptions(ArrayObject $options): static
 	{
 		return $this;
 	}
@@ -213,9 +214,9 @@ abstract class Redis extends Tags
 	/**
 	 * @param ArrayObject $config
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setQueue(ArrayObject $config): self
+	public function setQueue(ArrayObject $config): static
 	{
 		if(($enabled = $config->offsetGet('enabled')) !== null) // true or false
 		{
@@ -236,9 +237,9 @@ abstract class Redis extends Tags
 	/**
 	 * @param bool $enabled
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setQueueEnabled(bool $enabled): self
+	public function setQueueEnabled(bool $enabled): static
 	{
 		$this->_queueEnabled = $enabled;
 		
@@ -277,12 +278,12 @@ abstract class Redis extends Tags
 	 * @param ArrayObject $config
 	 * @param ?string $group
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public static function fromConfig(Connection $connection,
 		ArrayObject $config,
 		?string $group = null,
-	): self
+	): static
 	{
 		return new static
 		(
@@ -313,7 +314,7 @@ abstract class Redis extends Tags
 	
 	/**
 	 * Ensures that all the libraries of scripts are loaded into redis
-	 * 
+	 *
 	 * @param bool $replace
 	 *
 	 * @return bool
@@ -335,11 +336,11 @@ abstract class Redis extends Tags
 	 * Ensures that a library of scripts is loaded into redis
 	 * Library name and functions cannot use ":" character in their names (this includes also the prefix):
 	 * "ERR Library names can only contain letters, numbers, or underscores(_) and must be at least one character"
-	 * 
+	 *
 	 * @param string $libraryName
 	 * @param string $libraryFile
 	 * @param bool $replace
-	 * 
+	 *
 	 * @return bool
 	 */
 	public function loadLibrary
@@ -467,7 +468,7 @@ abstract class Redis extends Tags
 	 * @param bool $readOnly
 	 * @param bool $long
 	 * @param int $batchSize
-	 * 
+	 *
 	 * @return void
 	 */
 	protected function _batchFunctionCall(
@@ -510,6 +511,7 @@ abstract class Redis extends Tags
 	 *
 	 * @return null|mixed
 	 */
+	#[Override]
 	public function get(
 		string $key,
 		?Closure $resolver = null,
@@ -606,7 +608,7 @@ abstract class Redis extends Tags
 	 * @param bool $queue override for the config switch
 	 * @param ?int $queueLockTtlMs override for the config value
 	 * @param bool $lockOnly
-	 * 
+	 *
 	 * @return mixed
 	 */
 	protected function _queue(
@@ -774,7 +776,7 @@ abstract class Redis extends Tags
 	 * the get(), for example, when an exception is caught,
 	 * and we know that save() won't be called
 	 * This will enable other processes to acquire the lock faster
-	 * 
+	 *
 	 * @param string $key
 	 * @param ?string $id
 	 *
@@ -811,7 +813,7 @@ abstract class Redis extends Tags
 	/**
 	 * This function should be used for long-running processes
 	 * which hold the lock for longer than default lock TTL
-	 * 
+	 *
 	 * @param string $key
 	 * @param ?int $ttlMs
 	 *
@@ -838,7 +840,7 @@ abstract class Redis extends Tags
 	
 	/**
 	 * Throws exception on purpose, this method is not meant to be used by normal users
-	 * 
+	 *
 	 * @return bool|int
 	 */
 	public function clear(): bool|int
@@ -876,9 +878,9 @@ abstract class Redis extends Tags
 	 *
 	 * @param mixed ...$event
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function log(...$event): self
+	public function log(...$event): static
 	{
 		$this->_connection->log(...$event);
 		

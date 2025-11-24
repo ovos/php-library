@@ -39,13 +39,13 @@ abstract class Model
 	 */
 	public function __construct()
 	{
-		$this->__wakeup();
+		$this->__unserialize();
 	}
 	
 	/**
 	 * @return array
 	 */
-	public function __sleep(): array
+	public function __serialize(): array
 	{
 		$properties = get_object_vars($this);
 		unset($properties['_app']);
@@ -55,8 +55,9 @@ abstract class Model
 	}
 	
 	/**
+	 * @param array $data
 	 */
-	public function __wakeup()
+	public function __unserialize(array $data = []): void
 	{
 		$this->_container = container();
 		$this->_app = $this->_container->get(Application::class);

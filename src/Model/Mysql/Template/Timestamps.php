@@ -6,6 +6,7 @@ namespace Ovos\Model\Mysql\Template;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
 use Ovos\Pdo\Expression;
+use Override;
 
 use function array_merge;
 
@@ -38,6 +39,7 @@ class Timestamps extends Template
 	/**
 	 * @param Mysql $model
 	 */
+	#[Override]
 	public function preInsert(Mysql $model): void
 	{
 		if($this->_update[__FUNCTION__] === null)
@@ -51,6 +53,7 @@ class Timestamps extends Template
 	/**
 	 * @param Mysql $model
 	 */
+	#[Override]
 	public function preUpdate(Mysql $model): void
 	{
 		if($this->_update[__FUNCTION__] === null)

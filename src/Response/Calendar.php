@@ -25,9 +25,12 @@ class Calendar extends Html
 	
 	/**
 	 * @param string $filename
+	 * 
+	 * @return void
 	 */
-	public function setFilename(string $filename)
+	public function setFilename(string $filename): void
 	{
-		$this->setHeader('Content-Disposition',  'attachment; filename=' . $filename);
+		$this->setHeader('Content-Disposition',
+			'attachment; filename=' . $filename);
 	}
 }

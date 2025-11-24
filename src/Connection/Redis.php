@@ -5,6 +5,7 @@ namespace Ovos\Connection;
 
 use Ovos\ArrayObject;
 use Ovos\Connection;
+use Override;
 use Redis as RedisClient;
 use RedisException;
 
@@ -115,6 +116,7 @@ class Redis extends Connection
 	/**
 	 * @return ?RedisClient
 	 */
+	#[Override]
 	public function getClient(): ?RedisClient
 	{
 		return $this->_client;
@@ -123,6 +125,7 @@ class Redis extends Connection
 	/**
 	 * @return ?RedisClient
 	 */
+	#[Override]
 	public function getConnectedClient(): ?RedisClient
 	{
 		return parent::getConnectedClient();

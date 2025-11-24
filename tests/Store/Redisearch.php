@@ -7,6 +7,7 @@ use Ovos\Store\Redisearch as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Store\TraitRedis;
+use Override;
 
 /**
  * Redisearch
@@ -105,9 +106,20 @@ class Redisearch extends Test
 	 * Called by the runner after each test method
 	 */
 	#[Internal]
+	#[Override]
 	public function finalize(): void
 	{
 		$this->_store->clear();
 		$this->_store->indexDrop($this->_store->getType());
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	#[Override]
+	public function deconstruct(): void
+	{
+		$this->_connection->disconnect();
 	}
 }

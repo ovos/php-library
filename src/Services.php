@@ -96,11 +96,11 @@ class Services
 	 * @param string $key
 	 * @param string $serviceClass
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function register(string $key,
 		string $serviceClass,
-	): self
+	): static
 	{
 		/** @var Service $serviceClass */
 		$serviceClass::register($key, $this->_container);

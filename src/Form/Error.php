@@ -44,9 +44,9 @@ class Error
 	/**
 	 * @param ?Element $element
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setElement(?Element $element): self
+	public function setElement(?Element $element): static
 	{
 		$this->_element = $element;
 		
@@ -72,9 +72,9 @@ class Error
 	/**
 	 * @param Validator $validator
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setValidator(Validator $validator): self
+	public function setValidator(Validator $validator): static
 	{
 		$this->_validator = $validator;
 		
@@ -92,9 +92,9 @@ class Error
 	/**
 	 * @param ?string $message
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setMessage(?string $message): self
+	public function setMessage(?string $message): static
 	{
 		$this->_message = $message;
 		
@@ -112,9 +112,9 @@ class Error
 	/**
 	 * @param string $code
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setCode(string $code): self
+	public function setCode(string $code): static
 	{
 		$this->_code = $code;
 		

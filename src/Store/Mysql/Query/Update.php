@@ -41,9 +41,9 @@ class Update extends Query
 	 *
 	 * @param mixed ...$columns
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function set(mixed ...$columns): self
+	public function set(mixed ...$columns): static
 	{
 		foreach($columns as $column => $value)
 		{

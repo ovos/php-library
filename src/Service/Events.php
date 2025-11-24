@@ -93,7 +93,7 @@ class Events extends Service implements Countable, Iterator
 	 * @param string $errorString
 	 * @param string $errorFile
 	 * @param int $errorLine
-	 * 
+	 *
 	 * @return void
 	 */
 	protected function _handleError(int $errorCode, string $errorString, string $errorFile, int $errorLine): void
@@ -122,9 +122,9 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @param mixed ...$event
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function log(...$event): self
+	public function log(...$event): static
 	{
 		services()->logger->log(...$event);
 		
@@ -136,9 +136,9 @@ class Events extends Service implements Countable, Iterator
 	 *
 	 * @param mixed $event
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function add(mixed $event): self
+	public function add(mixed $event): static
 	{
 		// save the event to display it later
 		$this->_events[] = $event;

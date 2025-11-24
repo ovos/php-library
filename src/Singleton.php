@@ -17,9 +17,9 @@ trait Singleton
 	protected static ?self $_instance = null;
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public static function getInstance(): self
+	public static function getInstance(): static
 	{
 		if(static::$_instance === null)
 		{
@@ -32,9 +32,9 @@ trait Singleton
 	/**
 	 * Clears an old instance and creates a new one
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public static function newInstance(): self
+	public static function newInstance(): static
 	{
 		static::$_instance = null;
 		

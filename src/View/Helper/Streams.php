@@ -44,9 +44,9 @@ class Streams extends Helper
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function streams(): self
+	public function streams(): static
 	{
 		return $this;
 	}

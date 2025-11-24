@@ -22,9 +22,9 @@ class Callback extends Filter
 	/**
 	 * @param Closure $callback
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setCallback(Closure $callback): self
+	public function setCallback(Closure $callback): static
 	{
 		$this->_callback = $callback;
 		

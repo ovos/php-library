@@ -56,9 +56,9 @@ class Placeholders extends Helper
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function clear(): self
+	public function clear(): static
 	{
 		$this->_items = [];
 		

@@ -26,7 +26,7 @@ class QueryBuilder
 		$this->setTable($table);
 	}
 	
-	public function setTable(string $table): self
+	public function setTable(string $table): static
 	{
 		$this->_table = $table;
 		

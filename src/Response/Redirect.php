@@ -5,6 +5,7 @@ namespace Ovos\Response;
 
 use Ovos\Response;
 use Ovos\Url;
+use Override;
 
 use function count;
 
@@ -70,9 +71,9 @@ class Redirect extends Response
 	/**
 	 * Send headers
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function sendHeaders(): Response
+	public function sendHeaders(): static
 	{
 		$url = $this->__toString();
 		$this->setHeader('Location', $url);
@@ -85,9 +86,9 @@ class Redirect extends Response
 	/**
 	 * @param bool $withHost
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function withHost(bool $withHost = true): self
+	public function withHost(bool $withHost = true): static
 	{
 		$this->_withHost = $withHost;
 		
@@ -97,9 +98,9 @@ class Redirect extends Response
 	/**
 	 * @param bool $withQueryString
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function withQueryString(bool $withQueryString = true): self
+	public function withQueryString(bool $withQueryString = true): static
 	{
 		$this->_withQueryString = $withQueryString;
 		
@@ -109,6 +110,7 @@ class Redirect extends Response
 	/**
 	 * @return string
 	 */
+	#[Override]
 	public function __toString(): string
 	{
 		$url = $this->_url->__toString();

@@ -7,9 +7,7 @@ use Ovos\Application;
 use Ovos\Container;
 use Ovos\Controller;
 use Ovos\Request;
-use Ovos\Exception\RuntimeException;
 
-use function Ovos\app;
 use function Ovos\container;
 
 /**
@@ -67,9 +65,9 @@ abstract class Plugin
 	/**
 	 * @param Controller $controller
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setController(Controller $controller): self
+	public function setController(Controller $controller): static
 	{
 		$this->_controller = $controller;
 		
@@ -109,9 +107,9 @@ abstract class Plugin
 	/**
 	 * @param bool $enabled
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setEnabled(bool $enabled = true): self
+	public function setEnabled(bool $enabled = true): static
 	{
 		$this->_enabled = $enabled;
 		
@@ -119,9 +117,9 @@ abstract class Plugin
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function disable(): self
+	public function disable(): static
 	{
 		$this->_enabled = false;
 		
@@ -144,8 +142,8 @@ abstract class Plugin
 	 */
 	public function _(string $phrase, ...$params): string
 	{
-		return $this->getController()->_(
-			$phrase, ...$params);
+		return $this->getController()
+			->_($phrase, ...$params);
 	}
 	
 	/**
@@ -156,9 +154,13 @@ abstract class Plugin
 	 *
 	 * @return string
 	 */
-	public function _n(string $phraseSingular, string $phrasePlural, int $n, ...$params): string
+	public function _n(string $phraseSingular,
+		string $phrasePlural,
+		int $n,
+		...$params,
+	): string
 	{
-		return $this->getController()->_n(
-			$phraseSingular, $phrasePlural, $n, ...$params);
+		return $this->getController()
+			->_n($phraseSingular, $phrasePlural, $n, ...$params);
 	}
 }

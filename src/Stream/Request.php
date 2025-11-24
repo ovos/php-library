@@ -31,7 +31,7 @@ class Request
 	
 	/**
 	 * Global context for all requests
-	 * 
+	 *
 	 * @var array
 	 */
 	protected array $_contextOptions = [
@@ -54,7 +54,7 @@ class Request
 	/**
 	 * @see https://www.php.net/manual/en/function.stream-get-meta-data.php
 	 * @see https://www.php.net/manual/en/wrappers.http.php
-	 * 
+	 *
 	 * @var ?array
 	 */
 	protected ?array $_responseMetaData = null;
@@ -79,9 +79,9 @@ class Request
 	/**
 	 * @param ?resource $context
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function invoke(mixed $context = null): self
+	public function invoke(mixed $context = null): static
 	{
 		$this->getMeasurement()->start();
 		
@@ -112,7 +112,7 @@ class Request
 	 * 'wrapper_data' =>
 	 *   [0] =>
 	 *   string(15) "HTTP/1.1 200 OK"
- 	 * 
+ 	 *
 	 * @return ?int
 	 */
 	public function getResponseStatusCode(): ?int
@@ -163,14 +163,14 @@ class Request
 		}
 		
 		return stream_context_create($contextOptions);
-	}	
+	}
 	
 	/**
 	 * @param string $method
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setMethod(string $method): self
+	public function setMethod(string $method): static
 	{
 		$this->_contextOptions['http']['method'] = $method;
 		
@@ -188,9 +188,9 @@ class Request
 	/**
 	 * @param string $url
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setUrl(string $url): self
+	public function setUrl(string $url): static
 	{
 		$this->_url = $url;
 		
@@ -208,9 +208,9 @@ class Request
 	/**
 	 * @param array $contextOptions
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setContextOptions(array $contextOptions): self
+	public function setContextOptions(array $contextOptions): static
 	{
 		$this->_contextOptions = Arrays::deepMerge($this->_contextOptions, $contextOptions);
 		
@@ -228,9 +228,9 @@ class Request
 	/**
 	 * @param ?array $content
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setContent(?array $content): self
+	public function setContent(?array $content): static
 	{
 		$this->_content = $content;
 		

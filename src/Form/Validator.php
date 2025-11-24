@@ -32,9 +32,9 @@ abstract class Validator
 	/**
 	 * @param Element $element
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setElement(Element $element): self
+	public function setElement(Element $element): static
 	{
 		$this->_element = $element;
 		
@@ -60,9 +60,9 @@ abstract class Validator
 	/**
 	 * @param Error $error
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addError(Error $error): self
+	public function addError(Error $error): static
 	{
 		$error->setValidator($this);
 		
@@ -80,9 +80,9 @@ abstract class Validator
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function clearErrors(): self
+	public function clearErrors(): static
 	{
 		$this->_errors = [];
 		
@@ -101,9 +101,9 @@ abstract class Validator
 	 * @param string $errorCode
 	 * @param string $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setMessage(string $errorCode, string $value): self
+	public function setMessage(string $errorCode, string $value): static
 	{
 		$this->_messages[$errorCode] = $value;
 		

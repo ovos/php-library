@@ -18,8 +18,8 @@ use const PHP_INT_MAX;
  * Modified StringReader class from motranslator
  * @see https://github.com/phpmyadmin/motranslator
  * 
- * Simple wrapper around string buffer for
- * random access and values parsing.
+ * Simple wrapper around a string buffer for
+ * random access and value parsing.
  * 
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
@@ -37,7 +37,7 @@ class StringReader
 	protected int $_length;
 	
 	/**
-	 * @param string $filename Name of file to load
+	 * @param string $filename Name of a file to load
 	 */
 	public function __construct(string $filename)
 	{
@@ -46,9 +46,9 @@ class StringReader
 	}
 	
 	/**
-	 * Read number of bytes from given offset.
+	 * Read the number of bytes from a given offset.
 	 *
-	 * @param int $pos   Offset
+	 * @param int $pos Offset
 	 * @param int $bytes Number of bytes to read
 	 * 
 	 * @return string
@@ -67,7 +67,7 @@ class StringReader
 	 * Reads a 32bit integer from the stream.
 	 *
 	 * @param string $unpack Unpack string
-	 * @param int    $pos    Position
+	 * @param int $pos Position
 	 *
 	 * @return int Integer from the stream
 	 */
@@ -82,7 +82,7 @@ class StringReader
 		$result = $data[1];
 		
 		/* We're reading unsigned int, but PHP will happily
-		 * give us negative number on 32-bit platforms.
+		 * give us a negative number on 32-bit platforms.
 		 *
 		 * See also documentation:
 		 * https://secure.php.net/manual/en/function.unpack.php#refsect1-function.unpack-notes
@@ -94,8 +94,8 @@ class StringReader
 	 * Reads an array of integers from the stream.
 	 *
 	 * @param string $unpack Unpack string
-	 * @param int    $pos    Position
-	 * @param int    $count  How many elements should be read
+	 * @param int $pos Position
+	 * @param int $count How many elements should be read?
 	 *
 	 * @return int[] Array of Integers
 	 */

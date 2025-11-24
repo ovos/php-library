@@ -44,9 +44,9 @@ abstract class Connection
 	/**
 	 * @param ArrayObject $config
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setConfig(ArrayObject $config): self
+	public function setConfig(ArrayObject $config): static
 	{
 		$this->_config = $config;
 		
@@ -108,9 +108,9 @@ abstract class Connection
 	 *
 	 * @param mixed ...$event
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function log(...$event): self
+	public function log(...$event): static
 	{
 		$this->_logger->log(...$event);
 		

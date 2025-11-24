@@ -41,9 +41,9 @@ class Translation
 	/**
 	 * @param string $path
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setPath(string $path): self
+	public function setPath(string $path): static
 	{
 		$this->_path = $path;
 		
@@ -61,9 +61,9 @@ class Translation
 	/**
 	 * @param Translator $translator
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setTranslator(Translator $translator): self
+	public function setTranslator(Translator $translator): static
 	{
 		$this->_translator = $translator;
 		
@@ -85,7 +85,8 @@ class Translation
 	 */
 	public function translate(string $phrase): string
 	{
-		return $this->getAdapter()->gettext($phrase);
+		return $this->getAdapter()
+			->gettext($phrase);
 	}
 	
 	/**
@@ -97,7 +98,8 @@ class Translation
 	 */
 	public function translatePlural(string $phraseSingular, string $phrasePlural, int $n): string
 	{
-		return $this->getAdapter()->ngettext($phraseSingular, $phrasePlural, $n);
+		return $this->getAdapter()
+			->ngettext($phraseSingular, $phrasePlural, $n);
 	}
 	
 	/**

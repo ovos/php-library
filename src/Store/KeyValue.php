@@ -74,9 +74,9 @@ abstract class KeyValue extends Store
 	/**
 	 * @param ?string $prefix
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setPrefix(?string $prefix = null): self
+	public function setPrefix(?string $prefix = null): static
 	{
 		$this->_prefix = $prefix;
 		
@@ -105,9 +105,9 @@ abstract class KeyValue extends Store
 	/**
 	 * @param ?string $group
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setGroup(?string $group): self
+	public function setGroup(?string $group): static
 	{
 		$this->_group = $group;
 		
@@ -130,9 +130,9 @@ abstract class KeyValue extends Store
 	/**
 	 * @param ?ArrayObject $config
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setConfig(?ArrayObject $config): self
+	public function setConfig(?ArrayObject $config): static
 	{
 		$this->_config = $config;
 		
@@ -150,9 +150,9 @@ abstract class KeyValue extends Store
 	/**
 	 * @param ArrayObject $config
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setCompression(ArrayObject $config): self
+	public function setCompression(ArrayObject $config): static
 	{
 		if(($enabled = $config->offsetGet('enabled')) !== null) // true or false
 		{

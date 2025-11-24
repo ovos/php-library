@@ -16,7 +16,7 @@ use function array_values;
 /**
  * Trait Cli
  * Additional tools for user-interacting CLI
- * Warning: by default including this trait turns on the colored output
+ * Warning: by default, including this trait turns on the colored output
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>

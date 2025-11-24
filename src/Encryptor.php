@@ -44,9 +44,9 @@ class Encryptor
 	/**
 	 * @param ?string $method
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setMethod(?string $method): self
+	public function setMethod(?string $method): static
 	{
 		$this->_method = $method;
 		
@@ -64,9 +64,9 @@ class Encryptor
 	/**
 	 * @param string $key
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setKey($key): self
+	public function setKey($key): static
 	{
 		$this->_key = $key;
 		

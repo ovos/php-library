@@ -37,9 +37,9 @@ class Shorten extends Filter
 	/**
 	 * @param int $length
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setLength(int $length): self
+	public function setLength(int $length): static
 	{
 		$this->_length = $length;
 	
@@ -57,9 +57,9 @@ class Shorten extends Filter
 	/**
 	 * @param string $ending
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setEnding(string $ending): self
+	public function setEnding(string $ending): static
 	{
 		$this->_ending = $ending;
 		

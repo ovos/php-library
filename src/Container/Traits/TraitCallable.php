@@ -21,9 +21,9 @@ trait TraitCallable
 	/**
 	 * @param callable $callable
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setCallable(callable $callable): self
+	public function setCallable(callable $callable): static
 	{
 		$this->_callable = $callable;
 		

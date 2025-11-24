@@ -27,9 +27,9 @@ class Auth extends Service
 	/**
 	 * @param ?User $user
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setUser(?User $user): self
+	public function setUser(?User $user): static
 	{
 		$this->_user = $user;
 		

@@ -4,6 +4,7 @@ namespace Ovos\Pdo\Profiler;
 
 use Ovos\Pdo\Profiler\Exception\ProfilerException;
 use Ovos\Measurement;
+use Override;
 use PDO;
 use PDOException;
 
@@ -29,6 +30,7 @@ class PdoStatement extends \PDOStatement
 	 * @see https://www.php.net/manual/en/pdostatement.bindparam.php
 	 * @inheritDoc
 	 */
+	#[Override]
 	public function bindParam(string|int $param,
 		mixed &$var,
 		int $type = PDO::PARAM_STR,
@@ -46,6 +48,7 @@ class PdoStatement extends \PDOStatement
 	 * @see https://www.php.net/manual/en/pdostatement.bindvalue.php
 	 * @inheritDoc
 	 */
+	#[Override]
 	public function bindValue(string|int $param,
 		mixed $value,
 		int $type = PDO::PARAM_STR
@@ -61,6 +64,7 @@ class PdoStatement extends \PDOStatement
 	 * @see https://www.php.net/manual/en/pdostatement.execute.php
 	 * @inheritDoc
 	 */
+	#[Override]
 	public function execute(?array $params = null): bool
 	{
 		if(empty($this->queryString))

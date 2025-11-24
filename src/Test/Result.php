@@ -69,9 +69,9 @@ class Result
 	/**
 	 * @param string $result
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setResult(string $result): self
+	public function setResult(string $result): static
 	{
 		$this->result = $result;
 		
@@ -89,9 +89,9 @@ class Result
 	/**
 	 * @param ?string $reason
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setReason(?string $reason): self
+	public function setReason(?string $reason): static
 	{
 		$this->reason = $reason;
 		
@@ -109,9 +109,9 @@ class Result
 	/**
 	 * @param Throwable $throwable
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setThrowable(Throwable $throwable): self
+	public function setThrowable(Throwable $throwable): static
 	{
 		$this->throwable = $throwable;
 		
@@ -119,9 +119,9 @@ class Result
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function startMeasurement(): self
+	public function startMeasurement(): static
 	{
 		$this->measurement = new Measurement;
 		$this->measurement->start();
@@ -130,9 +130,9 @@ class Result
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function stopMeasurement(): self
+	public function stopMeasurement(): static
 	{
 		$this->measurement->stop();
 		

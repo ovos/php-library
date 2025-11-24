@@ -34,9 +34,9 @@ class File extends Element
 	/**
 	 * @param array $types
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setTypes(array $types): self
+	public function setTypes(array $types): static
 	{
 		$this->_types = $types;
 		

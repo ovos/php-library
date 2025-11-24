@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException;
 use PDO;
 use ReflectionClass;
@@ -20,6 +21,30 @@ use function substr;
  */
 abstract class Migration
 {
+	/**
+	 * Container
+	 *
+	 * @var Container
+	 */
+	#[Inject]
+	protected Container $_container;
+	
+	/**
+	 * Application
+	 *
+	 * @var Application
+	 */
+	#[Inject]
+	protected Application $_app;
+	
+	/**
+	 * Config
+	 *
+	 * @var ArrayObject
+	 */
+	#[Inject]
+	protected ArrayObject $_config;
+	
 	/**#@+
 	 * Directions
 	 */
@@ -60,7 +85,10 @@ abstract class Migration
 		if($this->_source === null)
 		{
 			// get database connection
-			$this->_source = services()->database->get($this->_sourceName);
+			$this->_source = $this->_container
+				->getClass(Connections::class)
+				->get($this->_sourceName)
+				->getConnectedClient();
 		}
 		
 		return $this->_source;

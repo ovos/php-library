@@ -31,9 +31,9 @@ class Trim extends Filter
 	/**
 	 * @param string $characterMask
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setCharacterMask(string $characterMask): self
+	public function setCharacterMask(string $characterMask): static
 	{
 		$this->_characterMask = $characterMask;
 		

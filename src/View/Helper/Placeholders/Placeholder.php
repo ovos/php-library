@@ -40,12 +40,12 @@ class Placeholder
 	 * @param null|string|bool|int $value
 	 * @param string $placement
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function set(
 		null|string|bool|int $value,
 		string $placement = self::PLACEMENT_REPLACE,
-	): self
+	): static
 	{
 		switch($placement)
 		{
@@ -66,11 +66,11 @@ class Placeholder
 	/**
 	 * @param null|string|bool|int $value
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function prepend(
 		null|string|bool|int $value
-	): self
+	): static
 	{
 		$this->set($value, self::PLACEMENT_PREPEND);
 		
@@ -80,11 +80,11 @@ class Placeholder
 	/**
 	 * @param null|string|bool|int $value
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function append(
 		null|string|bool|int $value
-	): self
+	): static
 	{
 		$this->set($value, self::PLACEMENT_APPEND);
 		
@@ -114,14 +114,15 @@ class Placeholder
 	 * @param string $template
 	 * @param bool $asset
 	 * 
-	 * @return self
+	 * @return static
 	 */
 	public function includeScript(
 		string $script,
 		string $placement = self::PLACEMENT_APPEND,
-		string $template = '<script type="text/javascript" src="%s"></script>' . PHP_EOL,
+		string $template = '<script type="text/javascript" src="%s"></script>'
+			. PHP_EOL,
 		bool $asset = false,
-	): self
+	): static
 	{
 		if($asset)
 		{

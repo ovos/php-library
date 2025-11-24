@@ -31,9 +31,9 @@ class StripTags extends Filter
 	/**
 	 * @param array $allowedTags
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setAllowedTags(array $allowedTags): self
+	public function setAllowedTags(array $allowedTags): static
 	{
 		$this->_allowedTags = $allowedTags;
 		

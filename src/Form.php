@@ -82,9 +82,9 @@ class Form implements Iterator
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function reset(): self
+	public function reset(): static
 	{
 		$this->_values = [];
 		
@@ -99,9 +99,9 @@ class Form implements Iterator
 	/**
 	 * @param ?string $id
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setId(?string $id): self
+	public function setId(?string $id): static
 	{
 		$this->_id = $id;
 		
@@ -125,9 +125,9 @@ class Form implements Iterator
 	/**
 	 * @param Form $form
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setForm(Form $form): self
+	public function setForm(Form $form): static
 	{
 		$this->_form = $form;
 		
@@ -137,9 +137,9 @@ class Form implements Iterator
 	/**
 	 * @param Url $action
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setAction(Url $action): self
+	public function setAction(Url $action): static
 	{
 		$this->_action = $action;
 		
@@ -160,9 +160,9 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param null|string|bool|int|float|array $value
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setValue(string $id, null|string|bool|int|float|array $value): self
+	public function setValue(string $id, null|string|bool|int|float|array $value): static
 	{
 		$this->_values[$id] = $value;
 		
@@ -174,9 +174,9 @@ class Form implements Iterator
 	 * 
 	 * @param array $values
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setValues(array $values): self
+	public function setValues(array $values): static
 	{
 		if($this->_id !== null && isset($values[$this->_id]))
 		{
@@ -221,9 +221,9 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param null|string|bool|int|float|array $default
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setDefault(string $id, null|string|bool|int|float|array $default): self
+	public function setDefault(string $id, null|string|bool|int|float|array $default): static
 	{
 		$this->_defaults[$id] = $default;
 		
@@ -235,9 +235,9 @@ class Form implements Iterator
 	 * 
 	 * @param array $defaults
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setDefaults(array $defaults): self
+	public function setDefaults(array $defaults): static
 	{
 		if($this->_id !== null && isset($defaults[$this->_id]))
 		{
@@ -402,9 +402,9 @@ class Form implements Iterator
 	 * @param string $id
 	 * @param Element $element
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setElement(string $id, Element $element): self
+	public function setElement(string $id, Element $element): static
 	{
 		$this->__set($id, $element);
 		

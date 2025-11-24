@@ -59,9 +59,9 @@ class Logger extends Service
 	/**
 	 * @param array $remove
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addRemove(array $remove): self
+	public function addRemove(array $remove): static
 	{
 		$this->_remove = array_merge($this->_remove, $remove);
 		
@@ -81,9 +81,9 @@ class Logger extends Service
 	 *
 	 * @param mixed ...$event
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function log(...$event): self
+	public function log(...$event): static
 	{
 		$count = count($event);
 		if($count === 0)

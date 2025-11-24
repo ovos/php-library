@@ -8,6 +8,7 @@ use Ovos\Connection;
 use Ovos\Pdo\Profiler\Collector;
 use Ovos\Pdo\Profiler\Pdo as ProfilerPdo;
 use Ovos\Pdo\Profiler\PdoStatement;
+use Override;
 use PDO;
 use PDOException;
 
@@ -34,6 +35,7 @@ class Mysql extends Connection
 	/**
 	 * @return ?ProfilerPdo
 	 */
+	#[Override]
 	public function getClient(): ?ProfilerPdo
 	{
 		return $this->_client;
@@ -42,6 +44,7 @@ class Mysql extends Connection
 	/**
 	 * @return ?ProfilerPdo
 	 */
+	#[Override]
 	public function getConnectedClient(): ?ProfilerPdo
 	{
 		return parent::getConnectedClient();

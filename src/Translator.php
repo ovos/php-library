@@ -79,9 +79,9 @@ class Translator
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function refreshTranslations(): self
+	public function refreshTranslations(): static
 	{
 		foreach(self::$_translationsPaths as $translationsPath)
 		{
@@ -141,7 +141,11 @@ class Translator
 	 *
 	 * @return string
 	 */
-	public function translatePlural(string $phraseSingular, string $phrasePlural, int $n, ...$params): string
+	public function translatePlural(string $phraseSingular,
+		string $phrasePlural,
+		int $n,
+		...$params,
+	): string
 	{
 		$translation = $this->getPlural($n) === 0 // english
 			? $phraseSingular : $phrasePlural;

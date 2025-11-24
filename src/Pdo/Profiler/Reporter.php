@@ -25,7 +25,7 @@ use function trim;
 class Reporter
 {
 	/**
-	 * Contains data taken from collector
+	 * Contains data taken from a collector
 	 *
 	 * @var SplQueue
 	 */
@@ -87,7 +87,7 @@ class Reporter
 	{
 		if(!empty($parameters))
 		{
-			// Quote the values
+			// quote the values
 			array_walk($parameters, function(&$value)
 			{
 				if(null === $value)
@@ -98,7 +98,7 @@ class Reporter
 				$value = "'" . $value . "'";
 			});
 			
-			// Replace values
+			// replace the values
 			foreach($parameters as $parameter => $value)
 			{
 				$token = is_numeric($parameter) ? '?' : ':' . $parameter;

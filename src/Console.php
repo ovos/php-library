@@ -35,13 +35,13 @@ class Console
 	public static int $limit = 0;
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public static function getInstance(): self
+	public static function getInstance(): static
 	{
 		if(self::$instance === null)
 		{
-			self::$instance = new self;
+			self::$instance = new static;
 		}
 		
 		return self::$instance;
@@ -59,9 +59,9 @@ class Console
 	 *
 	 * @param mixed $message Message
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setMessage(mixed $message): self
+	public function setMessage(mixed $message): static
 	{
 		$this->_messages->push([
 			'message' => $message,
@@ -79,9 +79,9 @@ class Console
 	/**
 	 * @param ...$messages
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setMessages(...$messages): self
+	public function setMessages(...$messages): static
 	{
 		foreach($messages as $message)
 		{

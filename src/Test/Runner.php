@@ -84,9 +84,9 @@ class Runner
 	/**
 	 * @param ?string $filterClass
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function filterClass(?string $filterClass): self
+	public function filterClass(?string $filterClass): static
 	{
 		$this->_filterClass = $filterClass;
 		
@@ -96,9 +96,9 @@ class Runner
 	/**
 	 * @param ?string $filterMethod
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function filterMethod(?string $filterMethod): self
+	public function filterMethod(?string $filterMethod): static
 	{
 		$this->_filterMethod = $filterMethod;
 		

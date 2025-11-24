@@ -77,4 +77,14 @@ class Redis extends Benchmark
 	{
 		$this->_store->clear();
 	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	#[Override]
+	public function deconstruct(): void
+	{
+		$this->_connection->disconnect();
+	}
 }

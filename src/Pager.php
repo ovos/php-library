@@ -160,9 +160,9 @@ class Pager
 	/**
 	 * @param int $pageRange
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setPageRange(int $pageRange): self
+	public function setPageRange(int $pageRange): static
 	{
 		$this->_pageRange = $pageRange;
 		

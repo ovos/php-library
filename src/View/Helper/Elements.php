@@ -32,9 +32,9 @@ class Elements extends Helper
 	protected array $_classes = [];
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function elements(): self
+	public function elements(): static
 	{
 		return $this;
 	}
@@ -42,13 +42,13 @@ class Elements extends Helper
 	/**
 	 * @param string $name
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function __get(string $name): self
+	public function __get(string $name): static
 	{
 		if(!isset($this->_elements[$name]))
 		{
-			$this->_elements[$name] = new self;
+			$this->_elements[$name] = new static;
 		}
 		
 		return $this->_elements[$name];
@@ -59,9 +59,9 @@ class Elements extends Helper
 	 *
 	 * @param string $class
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addClass(string $class): self
+	public function addClass(string $class): static
 	{
 		$this->_classes[$class] = $class;
 		
@@ -73,9 +73,9 @@ class Elements extends Helper
 	 *
 	 * @param mixed $classes
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addClasses(mixed $classes): self
+	public function addClasses(mixed $classes): static
 	{
 		if(is_string($classes))
 		{
@@ -117,9 +117,9 @@ class Elements extends Helper
 	 *
 	 * @param string $class
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function removeClass(string $class): self
+	public function removeClass(string $class): static
 	{
 		if(isset($this->_classes[$class]))
 		{
@@ -134,9 +134,9 @@ class Elements extends Helper
 	 *
 	 * @param mixed $classes
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function removeClasses(mixed $classes): self
+	public function removeClasses(mixed $classes): static
 	{
 		if(is_string($classes))
 		{

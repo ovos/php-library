@@ -7,6 +7,7 @@ use Ovos\Store\Redis as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Store\TraitRedis;
+use Override;
 
 use function count;
 use function array_diff;
@@ -236,6 +237,7 @@ class Redis extends Test
 	 * Called by the runner after each test method
 	 */
 	#[Internal]
+	#[Override]
 	public function finalize(): void
 	{
 		$this->_store->clear();
@@ -245,6 +247,7 @@ class Redis extends Test
 	 * Called by the runner after all test methods have been invoked
 	 */
 	#[Internal]
+	#[Override]
 	public function deconstruct(): void
 	{
 		$this->_connection->disconnect();

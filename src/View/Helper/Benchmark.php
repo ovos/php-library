@@ -43,7 +43,7 @@ class Benchmark extends Helper
 			return null;
 		}
 		
-		return $this->getBenchmark()->getMeasurements()['total'];
+		return $benchmark->getMeasurements()['total'];
 	}
 	
 	/**

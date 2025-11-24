@@ -6,6 +6,7 @@ namespace Ovos\Plugins;
 use Ovos\Controller\Plugin;
 use Ovos\Response;
 use Ovos\View;
+use Override;
 
 use function get_class;
 
@@ -74,6 +75,7 @@ class Layout extends Plugin
 	/**
 	 * @return void
 	 */
+	#[Override] 
 	public function preDispatch(): void
 	{
 	}
@@ -81,6 +83,7 @@ class Layout extends Plugin
 	/**
 	 * @return void
 	 */
+	#[Override] 
 	public function postDispatch(): void
 	{
 		foreach($this->_layout::placeholders()->toArray() as $placeholder => $value)

@@ -19,9 +19,9 @@ trait TraitParameters
 	/**
 	 * @param array $parameters
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setParameters(array $parameters = []): self
+	public function setParameters(array $parameters = []): static
 	{
 		$this->_parameters = $parameters;
 		

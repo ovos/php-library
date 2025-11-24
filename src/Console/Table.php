@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Console;
 
 use Ovos\Terminal\Formatter;
+use Override;
 use Console_Table;
 
 /**
@@ -22,9 +23,9 @@ class Table extends Console_Table
 	/**
 	 * @param bool $hasMarkup
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function hasMarkup(bool $hasMarkup): self
+	public function hasMarkup(bool $hasMarkup): static
 	{
 		$this->_hasMarkup = $hasMarkup;
 		
@@ -38,6 +39,7 @@ class Table extends Console_Table
 	 *
 	 * @return void
 	 */
+	#[Override] 
 	function _calculateCellLengths($row)
 	{
 		if(is_array($row))
@@ -64,6 +66,7 @@ class Table extends Console_Table
 	 *
 	 * @return integer  The string length.
 	 */
+	#[Override]
 	function _strlen($str)
 	{
 		$str = $this->_hasMarkup && is_string($str)

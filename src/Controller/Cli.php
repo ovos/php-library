@@ -7,6 +7,7 @@ use Ovos\Controller;
 use Ovos\Exception;
 use Ovos\Response;
 use Ovos\Terminal;
+use Override;
 
 use function in_array;
 use function array_merge;
@@ -33,7 +34,7 @@ class Cli extends Controller
 	protected bool $_allowHttpAccess = false;
 	
 	/**
-	 * Allows to access specified CLI methods via HTTP
+	 * Allows accessing specified CLI methods via HTTP
 	 *
 	 * @var array
 	 */
@@ -51,6 +52,7 @@ class Cli extends Controller
 	 * 
 	 * @param array $actionParams
 	 */
+	#[Override]
 	public function preDispatch(array $actionParams): void
 	{
 		$this->preDispatchPlugins();
@@ -89,9 +91,9 @@ class Cli extends Controller
 	/**
 	 * @param bool $allowHttpAccess
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setAllowHttpAccess(bool $allowHttpAccess): self
+	public function setAllowHttpAccess(bool $allowHttpAccess): static
 	{
 		$this->_allowHttpAccess = $allowHttpAccess;
 		
@@ -109,9 +111,9 @@ class Cli extends Controller
 	/**
 	 * @param string $action
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addHttpAction(string $action): self
+	public function addHttpAction(string $action): static
 	{
 		$this->_httpActions[] = $action;
 		
@@ -121,9 +123,9 @@ class Cli extends Controller
 	/**
 	 * @param array $actions
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addHttpActions(array $actions): self
+	public function addHttpActions(array $actions): static
 	{
 		$this->_httpActions = array_merge($this->_httpActions, $actions);
 		
@@ -153,23 +155,23 @@ class Cli extends Controller
 	 *
 	 * @param string ...$message,... params for sprintf
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function log(...$message): self
+	public function log(...$message): static
 	{
 		if(count($message))
 		{
 			$message = sprintf(...$message);
 		}
-		
+		var_dump($response->getColoredOutput());
 		Terminal::output('<darkgray>[' . $this->getPid() . '] '
 			. '<purple>' . date('Y-m-d H:i:s') . ': '
-			. '<reset>' . $message . '<reset>' . PHP_EOL, 
+			. '<reset>' . $message . '<reset>' . PHP_EOL,
 			markup: ($response = $this->_app->getResponse())
 				&& $response instanceof Response\Cli
 				&& $response->getColoredOutput()
 		);
-			
+		
 		return $this;
 	}
 }

@@ -62,9 +62,9 @@ abstract class Query
 	/**
 	 * @param string $table
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setTable(string $table): self
+	public function setTable(string $table): static
 	{
 		$this->_table = $table;
 		
@@ -95,11 +95,11 @@ abstract class Query
 	/**
 	 * @param string|callable ...$conditions
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function where(
 		string|callable ...$conditions,
-	): self
+	): static
 	{
 		$count = count($conditions);
 		if($count === 0)
@@ -156,11 +156,11 @@ abstract class Query
 	/**
 	 * @param string|callable ...$conditions
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function andWhere(
 		string|callable ...$conditions,
-	): self
+	): static
 	{
 		return $this->where(...$conditions);
 	}
@@ -168,11 +168,11 @@ abstract class Query
 	/**
 	 * @param string|callable ...$conditions
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function orWhere(
 		string|callable ...$conditions,
-	): self
+	): static
 	{
 		$count = count($conditions);
 		if($count === 0)
@@ -206,9 +206,9 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function whereIn(string $field, array $values): self
+	public function whereIn(string $field, array $values): static
 	{
 		if(count($values) === 0)
 		{
@@ -228,9 +228,9 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function andWhereIn(string $field, array $values): self
+	public function andWhereIn(string $field, array $values): static
 	{
 		return $this->whereIn($field, $values);
 	}
@@ -239,9 +239,9 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function whereNotIn(string $field, array $values): self
+	public function whereNotIn(string $field, array $values): static
 	{
 		if(count($values) === 0)
 		{
@@ -262,9 +262,9 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function andWhereNotIn(string $field, array $values): self
+	public function andWhereNotIn(string $field, array $values): static
 	{
 		return $this->whereNotIn($field, $values);
 	}
@@ -273,9 +273,9 @@ abstract class Query
 	 * @param string $field
 	 * @param array $values
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function orWhereNotIn(string $field, array $values): self
+	public function orWhereNotIn(string $field, array $values): static
 	{
 		if(count($values) === 0)
 		{

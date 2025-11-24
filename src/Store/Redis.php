@@ -5,6 +5,7 @@ namespace Ovos\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Store\KeyValue\Redis as Store;
+use Override;
 use Redis as RedisClient;
 use RedisException;
 
@@ -44,9 +45,9 @@ class Redis extends Store
 	/**
 	 * @param ArrayObject $options
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setStoreOptions(ArrayObject $options): self
+	public function setStoreOptions(ArrayObject $options): static
 	{
 		if(($cleanTags = $options->offsetGet('clean_tags')) !== null) // true or false
 		{
@@ -59,9 +60,9 @@ class Redis extends Store
 	/**
 	 * @param bool $cleanTags
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setCleanTags(bool $cleanTags): self
+	public function setCleanTags(bool $cleanTags): static
 	{
 		$this->_cleanTags = $cleanTags;
 		
@@ -182,6 +183,7 @@ class Redis extends Store
 	 * 
 	 * @return bool
 	 */
+	#[Override]
 	public function set(
 		string $key,
 		mixed $value,

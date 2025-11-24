@@ -6,12 +6,14 @@ namespace Ovos\Model\Mysql\Template;
 use Ovos\ArrayObject;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
+use Override;
 
 use function bin2hex;
 use function openssl_cipher_iv_length;
 use function openssl_decrypt;
 use function openssl_encrypt;
 use function random_bytes;
+use const OPENSSL_RAW_DATA;
 
 /**
  * Encrypted
@@ -39,9 +41,9 @@ class Encrypted extends Template
 	/**
 	 * @param array $properties
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setProperties(array $properties): self
+	public function setProperties(array $properties): static
 	{
 		$this->_properties = $properties;
 		
@@ -59,6 +61,7 @@ class Encrypted extends Template
 	/**
 	 * @param Mysql $model
 	 */
+	#[Override]
 	public function setUp(Mysql $model): void
 	{
 		foreach($this->getProperties() as $property)

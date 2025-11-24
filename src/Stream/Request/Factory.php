@@ -41,7 +41,7 @@ class Factory
 	 *
 	 * @return Request
 	 */
-	public function create(string $url  = '', array $contextOptions = []): Request
+	public function create(string $url = '', array $contextOptions = []): Request
 	{
 		$requestUrl = $this->_baseUrl . $url;
 		$requestContextOptions = Arrays::deepMerge($this->_defaultContextOptions, $contextOptions);
@@ -51,9 +51,9 @@ class Factory
 	/**
 	 * @param string $baseUrl
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setBaseUrl(string $baseUrl): self
+	public function setBaseUrl(string $baseUrl): static
 	{
 		$this->_baseUrl = $baseUrl;
 		
@@ -71,9 +71,9 @@ class Factory
 	/**
 	 * @param array $defaultContextOptions
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setDefaultContextOptions(array $defaultContextOptions): self
+	public function setDefaultContextOptions(array $defaultContextOptions): static
 	{
 		$this->_defaultContextOptions = $defaultContextOptions;
 		

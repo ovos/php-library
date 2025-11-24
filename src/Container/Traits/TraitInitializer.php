@@ -21,9 +21,9 @@ trait TraitInitializer
 	/**
 	 * @param ?callable $initializer
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setInitializer(?callable $initializer): self
+	public function setInitializer(?callable $initializer): static
 	{
 		$this->_initializer = $initializer;
 		

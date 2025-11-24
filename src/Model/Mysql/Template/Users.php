@@ -5,6 +5,7 @@ namespace Ovos\Model\Mysql\Template;
 
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
+use Override;
 
 use function Ovos\services;
 use function array_merge;
@@ -38,6 +39,7 @@ class Users extends Template
 	/**
 	 * @param Mysql $model
 	 */
+	#[Override]
 	public function preInsert(Mysql $model): void
 	{
 		if($this->_update[__FUNCTION__] === null)
@@ -45,7 +47,7 @@ class Users extends Template
 			return;
 		}
 		
-		$auth = services()->auth;
+		$auth = $this->_container->get ()->auth;
 		if($auth !== null && ($user = $auth->getUser()))
 		{
 			$model->{$this->_update[__FUNCTION__]} = $user->id;
@@ -55,6 +57,7 @@ class Users extends Template
 	/**
 	 * @param Mysql $model
 	 */
+	#[Override]
 	public function preUpdate(Mysql $model): void
 	{
 		if($this->_update[__FUNCTION__] === null)

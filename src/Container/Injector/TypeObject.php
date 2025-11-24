@@ -6,9 +6,8 @@ namespace Ovos\Container\Injector;
 use Ovos\Container;
 use Ovos\Container\Injector;
 use Ovos\Container\Traits\TraitInitializer;
-
+use Override;
 use ReflectionObject;
-use Closure;
 
 /**
  * TypeObject
@@ -45,9 +44,9 @@ class TypeObject extends Injector
 	/**
 	 * @param object $object
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setObject(object $object): self
+	public function setObject(object $object): static
 	{
 		$this->_object = $object;
 		
@@ -80,6 +79,7 @@ class TypeObject extends Injector
 	 *
 	 * @return object
 	 */
+	#[Override]
 	public function inject(Container $container): object
 	{
 		$reflector = $this->getReflector();

@@ -77,7 +77,7 @@ class Streams extends Service
 	 *
 	 * @return $this
 	 */
-	public function setDefaultContextOptions(array $defaultContextOptions): self
+	public function setDefaultContextOptions(array $defaultContextOptions): static
 	{
 		$this->_defaultContextOptions = $defaultContextOptions;
 		
@@ -112,7 +112,7 @@ class Streams extends Service
 	}
 	
 	/**
-	 * Pass a request created with factory() method
+	 * Pass a request created with a factory() method
 	 * 
 	 * @param Request $request
 	 *

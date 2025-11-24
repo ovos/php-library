@@ -5,10 +5,8 @@ namespace Ovos\View\Helper;
 
 use Ovos\Service\Cache;
 use Ovos\Service\Memory;
-use Ovos\Store\Apcu;
 use Ovos\View\Helper;
 use Ovos\Dir;
-use Ovos\Services;
 use ErrorException;
 
 use function Ovos\services;
@@ -37,17 +35,18 @@ class Asset extends Helper
 	{
 		parent::__construct();
 		
-		/** @var Memory $cacheService */
-		$cacheService = $this->_app->getServices()->get(Cache::SYMBOL);
+		/** @var Cache $cacheService */
+		$cacheService = $this->_app->getServices()
+			->get(Cache::SYMBOL);
 		$this->_cacheService = $cacheService;
 	}
 	
 	/**
 	 * @param string $asset
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function asset(string $asset): self
+	public function asset(string $asset): static
 	{
 		$this->set($asset);
 		
@@ -57,9 +56,9 @@ class Asset extends Helper
 	/**
 	 * @param string $asset
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function set(string $asset): self
+	public function set(string $asset): static
 	{
 		$this->_asset = $asset;
 		

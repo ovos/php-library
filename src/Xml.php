@@ -31,6 +31,10 @@ class Xml
 		if(($xml instanceof SimpleXMLElement) === false)
 		{
 			$xml = simplexml_load_string($xml);
+			if($xml === false)
+			{
+				return null;
+			}
 		}
 		
 		$dom = new DOMDocument;

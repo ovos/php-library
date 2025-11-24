@@ -59,9 +59,9 @@ class Messages extends Helper implements Countable
 	/**
 	 * @param ?string $namespace
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function messages(?string $namespace = null): self
+	public function messages(?string $namespace = null): static
 	{
 		$this->setNamespace($namespace);
 		
@@ -71,9 +71,9 @@ class Messages extends Helper implements Countable
 	/**
 	 * @param ?string $namespace
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setNamespace(?string $namespace): self
+	public function setNamespace(?string $namespace): static
 	{
 		$this->_namespace = $namespace;
 		

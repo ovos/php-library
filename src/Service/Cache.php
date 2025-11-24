@@ -6,6 +6,7 @@ namespace Ovos\Service;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Container;
+use Ovos\Connections;
 use Ovos\Connection\Redis as Connection;
 use Ovos\Exception\MissingException\MissingConfigException;
 use Ovos\Service;
@@ -64,7 +65,8 @@ class Cache extends Service
 	 * @param Container $container
 	 *
 	 * @return void
-	 * @throws Exception
+	 *
+	 * @throws MissingConfigException
 	 */
 	public static function register(string $key,
 		Container $container,
@@ -102,8 +104,7 @@ class Cache extends Service
 			
 			$this->_persistentConnection = $this->_container
 				->getClass(Connections::class)
-				->getConnection($this->_config->persistent->connection)
-				->getConnectedClient();
+				->getConnection($this->_config->persistent->connection);
 		}
 		
 		return $this->_persistentConnection;
@@ -111,7 +112,7 @@ class Cache extends Service
 	
 	/**
 	 * @param bool $persistent
-	 * 
+	 *
 	 * @return null|Redis|Redisearch|Apcu
 	 */
 	public function getStore(bool $persistent = true): null|Redis|Redisearch|Apcu

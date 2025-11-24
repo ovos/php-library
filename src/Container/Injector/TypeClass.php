@@ -7,7 +7,7 @@ use Ovos\Container;
 use Ovos\Container\Injector;
 use Ovos\Container\Traits\TraitParameters;
 use Ovos\Container\Traits\TraitInitializer;
-
+use Override;
 use ReflectionClass;
 
 /**
@@ -49,9 +49,9 @@ class TypeClass extends Injector
 	/**
 	 * @param string $class
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setClass(string $class): self
+	public function setClass(string $class): static
 	{
 		$this->_class = $class;
 		
@@ -84,6 +84,7 @@ class TypeClass extends Injector
 	 *
 	 * @return object
 	 */
+	#[Override]
 	public function inject(Container $container): object
 	{
 		$reflector = $this->getReflector();

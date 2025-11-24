@@ -167,9 +167,9 @@ class Url
 	 * @param array $components
 	 * @param bool $detectLocale
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setComponents(array $components, bool $detectLocale = false): self
+	public function setComponents(array $components, bool $detectLocale = false): static
 	{
 		// if the first component is a locale symbol, use it
 		if($detectLocale
@@ -189,9 +189,9 @@ class Url
 	 * @param array $components
 	 * @param bool $detectLocale
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function set(array $components, bool $detectLocale = false): self
+	public function set(array $components, bool $detectLocale = false): static
 	{
 		return $this->setComponents($components, $detectLocale);
 	}
@@ -201,9 +201,9 @@ class Url
 	 * 
 	 * @param int|string $component
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addComponent(int|string $component): self
+	public function addComponent(int|string $component): static
 	{
 		$lastComponentKey = $this->_getLastComponentKey();
 		if($this->_components[$lastComponentKey] !== $component)
@@ -217,9 +217,9 @@ class Url
 	/**
 	 * @param string[] $components
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function add(...$components): self
+	public function add(...$components): static
 	{
 		foreach($components as $component)
 		{
@@ -232,9 +232,9 @@ class Url
 	/**
 	 * @param string[] $components
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function remove(...$components): self
+	public function remove(...$components): static
 	{
 		foreach($components as $component)
 		{
@@ -249,9 +249,9 @@ class Url
 	 * 
 	 * @param int|string $component
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function removeComponent(int|string $component): self
+	public function removeComponent(int|string $component): static
 	{
 		if(($key = array_search($component, $this->_components, true)) !== false)
 		{
@@ -264,9 +264,9 @@ class Url
 	/**
 	 * @param int|string|null $component (null to remove it)
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setLastComponent(int|string|null $component): self
+	public function setLastComponent(int|string|null $component): static
 	{
 		if(count($this->_components) === 0)
 		{
@@ -303,9 +303,9 @@ class Url
 	 * 
 	 * @param null|int|string $component (null to remove it)
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setLast(null|int|string $component): self
+	public function setLast(null|int|string $component): static
 	{
 		return $this->setLastComponent($component);
 	}
@@ -321,9 +321,9 @@ class Url
 	/**
 	 * @param null|Locale|string $locale
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setLocale(null|Locale|string $locale): self
+	public function setLocale(null|Locale|string $locale): static
 	{
 		if(is_string($locale))
 		{
@@ -351,9 +351,9 @@ class Url
 	/**
 	 * @param bool $relative
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setRelative(bool $relative): self
+	public function setRelative(bool $relative): static
 	{
 		$this->_relative = $relative;
 		
@@ -409,9 +409,9 @@ class Url
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function getClone(): self
+	public function getClone(): static
 	{
 		return clone $this;
 	}

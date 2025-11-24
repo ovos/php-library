@@ -5,6 +5,7 @@ namespace Ovos\Form\Element;
 
 use Ovos\Form\Element;
 use Ovos\Form\Element\Options\Option;
+use Override;
 
 use function is_array;
 use function array_intersect;
@@ -35,9 +36,9 @@ class Options extends Element
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function clearOptions(): self
+	public function clearOptions(): static
 	{
 		$this->_options = [];
 		
@@ -47,9 +48,9 @@ class Options extends Element
 	/**
 	 * @param array $options
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setOptions(...$options): self
+	public function setOptions(...$options): static
 	{
 		if(is_array($options[0]))
 		{
@@ -69,13 +70,13 @@ class Options extends Element
 	 * @param mixed $value
 	 * @param ?object $object
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function addOption(
 		mixed $key,
 		mixed $value = null,
 		?object $object = null
-	): self
+	): static
 	{
 		if($key instanceof Option)
 		{
@@ -96,9 +97,9 @@ class Options extends Element
 	/**
 	 * @param array $options
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addOptions(array $options): self
+	public function addOptions(array $options): static
 	{
 		$isList = array_is_list($options);
 		
@@ -122,13 +123,13 @@ class Options extends Element
 	 * @param string $valueKey
 	 * @param ?string $labelKey
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function fromObjects(
 		array $options,
 		string $valueKey,
 		?string $labelKey = null,
-	): self
+	): static
 	{
 		foreach($options as $object)
 		{
@@ -171,6 +172,7 @@ class Options extends Element
 	 *
 	 * @return bool
 	 */
+	#[Override] 
 	public function isValid(): bool
 	{
 		$valuesSelected = $this->getValue();

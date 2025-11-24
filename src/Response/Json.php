@@ -5,6 +5,7 @@ namespace Ovos\Response;
 
 use Ovos\Response;
 use Ovos\Exception;
+use Override;
 use stdClass;
 
 use function Ovos\services;
@@ -15,7 +16,7 @@ use function is_string;
 use	function count;
 
 /**
- * Json
+ * JSON
  * Set GET variable "debug" to see formatted JSON on output
  *
  * @package Ovos
@@ -55,9 +56,9 @@ class Json extends Response
 	 *
 	 * @param int $value
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptions(int $value): self
+	public function setOptions(int $value): static
 	{
 		$this->_options = $value;
 		
@@ -119,9 +120,9 @@ class Json extends Response
 	 *
 	 * @param stdClass $response
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function set(stdClass $response): self
+	public function set(stdClass $response): static
 	{
 		$this->_response = $response;
 		
@@ -134,9 +135,9 @@ class Json extends Response
 	 *
 	 * @param ?string $message
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function success(?string $message = null): self
+	public function success(?string $message = null): static
 	{
 		$this->clearErrors();
 		$this->_response->success = true;
@@ -155,12 +156,12 @@ class Json extends Response
 	 * @param null|string|Exception $exception
 	 * @param bool $silent true = do not log this exception
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public function failure(
 		null|string|Exception $exception = null,
 		bool $silent = false
-	): self
+	): static
 	{
 		$this->_response->success = false;
 		if($exception !== null)
@@ -184,14 +185,14 @@ class Json extends Response
 	}
 	
 	/**
-	 * Add error message
+	 * Add an error message
 	 *
 	 * @param mixed $message
 	 * @param null|mixed $key
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function error(mixed $message, mixed $key = null): self
+	public function error(mixed $message, mixed $key = null): static
 	{
 		if(!isset($this->_response->errors))
 		{
@@ -215,9 +216,9 @@ class Json extends Response
 	 *
 	 * @param array $errors
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function errors(array $errors): self
+	public function errors(array $errors): static
 	{
 		foreach($errors as $key => $message)
 		{
@@ -228,20 +229,22 @@ class Json extends Response
 	}
 	
 	/**
-	 * Checks if there are errors in current response
+	 * Checks if there are errors in the current response
 	 */
 	public function hasErrors(): bool
 	{
-		return ((isset($this->_response->errors) && count($this->_response->errors))
-			|| (isset($this->_response->error) && !empty($this->_response->error)));
+		return (
+			(isset($this->_response->errors) && count($this->_response->errors))
+			|| (isset($this->_response->error) && !empty($this->_response->error))
+		);
 	}
 	
 	/**
 	 * Clear response errors
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function clearErrors(): self
+	public function clearErrors(): static
 	{
 		unset($this->_response->errors, $this->_response->error);
 		
@@ -251,6 +254,7 @@ class Json extends Response
 	/**
 	 * @return string
 	 */
+	#[Override]
 	public function __toString(): string
 	{
 		if($this->hasErrors())

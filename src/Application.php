@@ -245,9 +245,9 @@ class Application
 	 *
 	 * @param Response $response
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setResponse(Response $response): self
+	public function setResponse(Response $response): static
 	{
 		$this->_response = $response;
 		
@@ -255,9 +255,9 @@ class Application
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	protected function _init(): self
+	protected function _init(): static
 	{
 		self::$instance = $this->getContainer()
 			->registerValue(__CLASS__, $this, true)
@@ -275,9 +275,9 @@ class Application
 	/**
 	 * Sets the environment
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _initEnvironment(): self
+	protected function _initEnvironment(): static
 	{
 		// get environment from the file
 		$environmentFile = BASE_DIR . Environment::ENV_FILE;
@@ -327,9 +327,9 @@ class Application
 	 *
 	 * @param string $interface
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setInterface(string $interface): self
+	public function setInterface(string $interface): static
 	{
 		$this->_interface = $interface;
 		
@@ -397,9 +397,9 @@ class Application
 	/**
 	 * Sets up shutdown handler
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _initShutdownHandler(): self
+	protected function _initShutdownHandler(): static
 	{
 		register_shutdown_function(array($this, 'handleShutdown'));
 		
@@ -409,9 +409,9 @@ class Application
 	/**
 	 * Initializes the current bootstrap
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _initBootstrap(): self
+	protected function _initBootstrap(): static
 	{
 		$systemConfig = $this->getConfig()->system;
 		$bootstraps = $systemConfig->bootstraps;
@@ -452,9 +452,9 @@ class Application
 	/**
 	 * @param ArrayObject $bootstrap
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setBoostrap(ArrayObject $bootstrap): self
+	public function setBoostrap(ArrayObject $bootstrap): static
 	{
 		$this->_bootstrap = $bootstrap;
 		if($controller = $this->_bootstrap->controller
@@ -479,9 +479,9 @@ class Application
 	/**
 	 * Initializes the current domain
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _initDomain(): self
+	protected function _initDomain(): static
 	{
 		$systemConfig = $this->getConfig()->system;
 		/** @var string $domain */
@@ -544,9 +544,9 @@ class Application
 	/**
 	 * @param string $domain
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setDomain(string $domain): self
+	public function setDomain(string $domain): static
 	{
 		$this->_domain = $domain;
 		
@@ -564,9 +564,9 @@ class Application
 	/**
 	 * Initializes constants
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _initConstants(): self
+	protected function _initConstants(): static
 	{
 		$systemConfig = $this->getConfig()->system;
 		$bootstrap = $this->getBootstrap();
@@ -626,9 +626,9 @@ class Application
 	 * Initializes protocol (http or https)
 	 * Redirects to the correct protocol if needed
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _initProtocol(): self
+	protected function _initProtocol(): static
 	{
 		if($this->isInterfaceHttp() === false)
 		{
@@ -651,9 +651,9 @@ class Application
 	/**
 	 * Initializes modules
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _initModules(): self
+	protected function _initModules(): static
 	{
 		$modules = $this->getConfig()->system->modules;
 		if($modules === null)
@@ -694,9 +694,9 @@ class Application
 	/**
 	 * Initializes services
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _initServices(): self
+	protected function _initServices(): static
 	{
 		/** @var Services $services */
 		$services = $this->_container
@@ -864,9 +864,9 @@ class Application
 	 *
 	 * @param ?Response $response
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _sendResponse(?Response $response): self
+	protected function _sendResponse(?Response $response): static
 	{
 		if($response === null)
 		{
@@ -909,9 +909,9 @@ class Application
 	 *
 	 * @param Response\Json $response
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _sendJsonResponse(Response\Json $response): self
+	protected function _sendJsonResponse(Response\Json $response): static
 	{
 		$profilers = $this->getConfig()->system->profilers;
 		
@@ -952,9 +952,9 @@ class Application
 	 *
 	 * @param Response $response
 	 *
-	 * @return self
+	 * @return static
 	 */
-	protected function _sendProfiledResponse(Response $response): self
+	protected function _sendProfiledResponse(Response $response): static
 	{
 		$response->send();
 		

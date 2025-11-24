@@ -169,9 +169,9 @@ class CachedAdapter
 	/**
 	 * @param array $translations
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setTranslations(array $translations): self
+	public function setTranslations(array $translations): static
 	{
 		$this->_translations = $translations;
 		

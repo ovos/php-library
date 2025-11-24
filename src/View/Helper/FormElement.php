@@ -138,11 +138,11 @@ class FormElement extends Helper
 	/**
 	 * @param Element $element
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function formElement(Element $element): self
+	public function formElement(Element $element): static
 	{
-		return new self($element);
+		return new static($element);
 	}
 	
 	/**
@@ -159,9 +159,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Element $element
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setElement(?Element $element): self
+	public function setElement(?Element $element): static
 	{
 		$this->_element = $element;
 		
@@ -180,9 +180,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?string $type
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setType(?string $type): self
+	public function setType(?string $type): static
 	{
 		$this->_type = $type;
 		
@@ -201,9 +201,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Placeholder $insert
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setLabelInsert(?Placeholder $insert): self
+	public function setLabelInsert(?Placeholder $insert): static
 	{
 		$this->_labelInsert = $insert;
 		
@@ -222,9 +222,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Placeholder $insert
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setFieldInsert(?Placeholder $insert): self
+	public function setFieldInsert(?Placeholder $insert): static
 	{
 		$this->_fieldInsert = $insert;
 		
@@ -243,9 +243,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Placeholder $insert
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setInputInsert(?Placeholder $insert): self
+	public function setInputInsert(?Placeholder $insert): static
 	{
 		$this->_inputInsert = $insert;
 		
@@ -264,9 +264,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?string $description
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setDescription(?string $description): self
+	public function setDescription(?string $description): static
 	{
 		$this->_description = $description;
 		
@@ -285,9 +285,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?string $placeholder
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setPlaceholder(?string $placeholder): self
+	public function setPlaceholder(?string $placeholder): static
 	{
 		$this->_placeholder = $placeholder;
 		
@@ -306,9 +306,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?string $elementClass
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setElementClass(?string $elementClass): self
+	public function setElementClass(?string $elementClass): static
 	{
 		$this->_elementClass = $elementClass;
 		
@@ -327,9 +327,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?string $fieldClass
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setFieldClass(?string $fieldClass): self
+	public function setFieldClass(?string $fieldClass): static
 	{
 		$this->_fieldClass = $fieldClass;
 		
@@ -348,9 +348,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Closure $labelCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setLabelCallback(?Closure $labelCallback): self
+	public function setLabelCallback(?Closure $labelCallback): static
 	{
 		$this->_labelCallback = $labelCallback;
 		
@@ -384,9 +384,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?string $labelClass
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setLabelClass(?string $labelClass): self
+	public function setLabelClass(?string $labelClass): static
 	{
 		$this->_labelClass = $labelClass;
 		
@@ -405,9 +405,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Closure $labelClassCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setLabelClassCallback(?Closure $labelClassCallback): self
+	public function setLabelClassCallback(?Closure $labelClassCallback): static
 	{
 		$this->_labelClassCallback = $labelClassCallback;
 		
@@ -440,9 +440,9 @@ class FormElement extends Helper
 	 * @param string $attribute
 	 * @param int|string $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setAttribute(string $attribute, int|string $value): self
+	public function setAttribute(string $attribute, int|string $value): static
 	{
 		$this->_attributes[$attribute] = $value;
 		
@@ -462,9 +462,9 @@ class FormElement extends Helper
 	/**
 	 * @param array $attributes
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setAttributes(array $attributes): self
+	public function setAttributes(array $attributes): static
 	{
 		$this->_attributes = $attributes;
 		
@@ -483,9 +483,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Closure $attributesCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setAttributesCallback(?Closure $attributesCallback): self
+	public function setAttributesCallback(?Closure $attributesCallback): static
 	{
 		$this->_attributesCallback = $attributesCallback;
 		
@@ -505,9 +505,9 @@ class FormElement extends Helper
 	 * @param string $attribute
 	 * @param int|string $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setInputAttribute(string $attribute, int|string $value): self
+	public function setInputAttribute(string $attribute, int|string $value): static
 	{
 		$this->_inputAttributes[$attribute] = $value;
 		
@@ -527,9 +527,9 @@ class FormElement extends Helper
 	/**
 	 * @param array $attributes
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setInputAttributes(array $attributes): self
+	public function setInputAttributes(array $attributes): static
 	{
 		$this->_inputAttributes = $attributes;
 		
@@ -548,9 +548,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Closure $inputAttributesCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setInputAttributesCallback(?Closure $inputAttributesCallback): self
+	public function setInputAttributesCallback(?Closure $inputAttributesCallback): static
 	{
 		$this->_inputAttributesCallback = $inputAttributesCallback;
 		
@@ -570,9 +570,9 @@ class FormElement extends Helper
 	 * @param string $attribute
 	 * @param int|string $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setOptionAttribute(string $attribute, int|string $value): self
+	public function setOptionAttribute(string $attribute, int|string $value): static
 	{
 		$this->_optionAttributes[$attribute] = $value;
 		
@@ -592,9 +592,9 @@ class FormElement extends Helper
 	/**
 	 * @param array $attributes
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptionAttributes(array $attributes): self
+	public function setOptionAttributes(array $attributes): static
 	{
 		$this->_optionAttributes = $attributes;
 		
@@ -613,9 +613,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Closure $optionAttributesCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptionAttributesCallback(?Closure $optionAttributesCallback): self
+	public function setOptionAttributesCallback(?Closure $optionAttributesCallback): static
 	{
 		$this->_optionAttributesCallback = $optionAttributesCallback;
 		
@@ -635,9 +635,9 @@ class FormElement extends Helper
 	 * @param string $key
 	 * @param mixed $value
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOption(string $key, mixed $value): self
+	public function setOption(string $key, mixed $value): static
 	{
 		$this->_options[$key] = $value;
 		
@@ -660,9 +660,9 @@ class FormElement extends Helper
 	 * 
 	 * @param ?Closure $optionCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptionCallback(?Closure $optionCallback): self
+	public function setOptionCallback(?Closure $optionCallback): static
 	{
 		$this->_optionCallback = $optionCallback;
 		
@@ -680,9 +680,9 @@ class FormElement extends Helper
 	/**
 	 * @param Option $option
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function optionCallback(Option $option): self
+	public function optionCallback(Option $option): static
 	{
 		if($this->_optionCallback !== null)
 		{
@@ -699,9 +699,9 @@ class FormElement extends Helper
 	 * 
 	 * @param ?string $optionWrap
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptionWrap(?string $optionWrap): self
+	public function setOptionWrap(?string $optionWrap): static
 	{
 		return $this->setOptionLabelWrap($optionWrap);
 	}
@@ -709,9 +709,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?string $optionLabelWrap
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptionLabelWrap(?string $optionLabelWrap): self
+	public function setOptionLabelWrap(?string $optionLabelWrap): static
 	{
 		$this->_optionLabelWrap = $optionLabelWrap;
 		
@@ -769,9 +769,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Closure $optionLabelCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptionLabelCallback(?Closure $optionLabelCallback): self
+	public function setOptionLabelCallback(?Closure $optionLabelCallback): static
 	{
 		$this->_optionLabelCallback = $optionLabelCallback;
 		
@@ -805,9 +805,9 @@ class FormElement extends Helper
 	/**
 	 * @param ?Closure $optionClassCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptionClassCallback(?Closure $optionClassCallback): self
+	public function setOptionClassCallback(?Closure $optionClassCallback): static
 	{
 		$this->_optionClassCallback = $optionClassCallback;
 		
@@ -843,9 +843,9 @@ class FormElement extends Helper
 	 * 
 	 * @param ?Closure $labelCallback
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setFieldLabelCallback(?Closure $labelCallback): self
+	public function setFieldLabelCallback(?Closure $labelCallback): static
 	{
 		return $this->setOptionLabelCallback($labelCallback);
 	}

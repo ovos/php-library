@@ -57,9 +57,9 @@ class Option
 	/**
 	 * @param Options $options
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setOptions(Options $options): self
+	public function setOptions(Options $options): static
 	{
 		$this->_options = $options;
 		
@@ -77,9 +77,9 @@ class Option
 	/**
 	 * @param mixed $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setValue($value): self
+	public function setValue(mixed $value): static
 	{
 		$this->_value = $value;
 		
@@ -97,9 +97,9 @@ class Option
 	/**
 	 * @param null|mixed $label
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setLabel($label): self
+	public function setLabel(mixed $label): static
 	{
 		$this->_label = $label;
 		
@@ -145,9 +145,9 @@ class Option
 	/**
 	 * @param ?object $object
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setObject(?object $object): self
+	public function setObject(?object $object): static
 	{
 		$this->_object = $object;
 		

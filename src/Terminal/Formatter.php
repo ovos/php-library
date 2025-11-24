@@ -38,7 +38,7 @@ class Formatter
 	
 	/**
 	 * @var string[]
-	 */	
+	 */
 	public static array $colors =
 	[
 		self::COLOR_RESET => "\33[0m",
@@ -127,6 +127,10 @@ class Formatter
 	 */
 	public static function getHeader(string $header): string
 	{
-		return str_pad(' ' . $header . ' ', 50, '-', STR_PAD_BOTH) . PHP_EOL;
+		return str_pad(' ' . $header . ' ',
+			 50,
+			 '-', STR_PAD_BOTH
+		)
+		. PHP_EOL;
 	}
 }

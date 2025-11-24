@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\Store\KeyValue\Redis as Store;
+use Override;
 use RedisException;
 
 use function in_array;
@@ -45,6 +46,7 @@ class Redisearch extends Store
 	 *
 	 * @return bool
 	 */
+	#[Override]
 	public function set(
 		string $key,
 		mixed $value,

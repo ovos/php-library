@@ -47,9 +47,9 @@ class Command
 	/**
 	 * @param string $name
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setName(string $name): self
+	public function setName(string $name): static
 	{
 		$this->_name = $name;
 		
@@ -59,9 +59,9 @@ class Command
 	/**
 	 * @param array $params
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setParams(array $params): self
+	public function setParams(array $params): static
 	{
 		$this->_params = $params;
 		

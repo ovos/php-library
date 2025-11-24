@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Response;
 
 use Ovos\Response;
+use Override;
 
 /**
  * Html
@@ -35,9 +36,9 @@ class Html extends Response
 	/**
 	 * @param ?string $response
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function set(?string $response): self
+	public function set(?string $response): static
 	{
 		$this->_response = $response;
 		
@@ -47,9 +48,9 @@ class Html extends Response
 	/**
 	 * @param string $response
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function append(string $response): self
+	public function append(string $response): static
 	{
 		$this->_response.= $response;
 		
@@ -67,6 +68,7 @@ class Html extends Response
 	/**
 	 * @return string
 	 */
+	#[Override]
 	public function __toString(): string
 	{
 		return (string)$this->_response;

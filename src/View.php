@@ -302,7 +302,7 @@ class View
 		array $variables = [],
 	): string
 	{
-		$view = new self;
+		$view = new static;
 		
 		return $view->render($viewScriptFile, $variables);
 	}

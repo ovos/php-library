@@ -40,9 +40,9 @@ class Benchmark extends Service
 	/**
 	 * @param string $name
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function start(string $name = self::TOTAL): self
+	public function start(string $name = self::TOTAL): static
 	{
 		$this->_measurements[$name] = new Measurement;
 		$this->_measurements[$name]->start();
@@ -53,9 +53,9 @@ class Benchmark extends Service
 	/**
 	 * @param string $name
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function stop(string $name = self::TOTAL): self
+	public function stop(string $name = self::TOTAL): static
 	{
 		$this->get($name)->stop();
 		

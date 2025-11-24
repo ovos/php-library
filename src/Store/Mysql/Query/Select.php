@@ -112,9 +112,9 @@ class Select extends Query
 	/**
 	 * @param string ...$fields
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function select(string ...$fields): self
+	public function select(string ...$fields): static
 	{
 		foreach($fields as $field)
 		{
@@ -128,9 +128,9 @@ class Select extends Query
 	 * @param string $table
 	 * @param ?string $alias
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function from(string $table, ?string $alias = null): self
+	public function from(string $table, ?string $alias = null): static
 	{
 		$this->_table = $table;
 		if($alias !== null)
@@ -144,9 +144,9 @@ class Select extends Query
 	/**
 	 * @param string $alias
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function alias(string $alias): self
+	public function alias(string $alias): static
 	{
 		$this->_alias = $alias;
 		
@@ -156,9 +156,9 @@ class Select extends Query
 	/**
 	 * @param mixed $limit
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function limit(mixed $limit): self
+	public function limit(mixed $limit): static
 	{
 		$this->_limit = $limit;
 		
@@ -168,9 +168,9 @@ class Select extends Query
 	/**
 	 * @param mixed $offset
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function offset(mixed $offset): self
+	public function offset(mixed $offset): static
 	{
 		$this->_offset = $offset;
 		
@@ -180,9 +180,9 @@ class Select extends Query
 	/**
 	 * @param string ...$arguments
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function groupBy(string ...$arguments): self
+	public function groupBy(string ...$arguments): static
 	{
 		foreach($arguments as $argument)
 		{
@@ -195,9 +195,9 @@ class Select extends Query
 	/**
 	 * @param string ...$conditions
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function having(string ...$conditions): self
+	public function having(string ...$conditions): static
 	{
 		foreach($conditions as $condition)
 		{
@@ -210,9 +210,9 @@ class Select extends Query
 	/**
 	 * @param string ...$arguments
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function orderBy(string ...$arguments): self
+	public function orderBy(string ...$arguments): static
 	{
 		foreach($arguments as $argument)
 		{
@@ -225,9 +225,9 @@ class Select extends Query
 	/**
 	 * @param string ...$joins
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function innerJoin(string ...$joins): self
+	public function innerJoin(string ...$joins): static
 	{
 		$this->_leftJoins = [];
 		
@@ -242,9 +242,9 @@ class Select extends Query
 	/**
 	 * @param string ...$joins
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function leftJoin(string ...$joins): self
+	public function leftJoin(string ...$joins): static
 	{
 		$this->_innerJoins = [];
 		

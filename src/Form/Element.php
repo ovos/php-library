@@ -55,9 +55,9 @@ class Element
 	/**
 	 * @param string $id
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setId(string $id): self
+	public function setId(string $id): static
 	{
 		$this->_id = $id;
 		
@@ -101,9 +101,9 @@ class Element
 	/**
 	 * @param ?Form $form
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setForm(?Form $form): self
+	public function setForm(?Form $form): static
 	{
 		$this->_form = $form;
 		
@@ -126,9 +126,9 @@ class Element
 	/**
 	 * @param null|string|bool|int|float|array $value
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setValue(null|string|bool|int|float|array $value): self
+	public function setValue(null|string|bool|int|float|array $value): static
 	{
 		$this->reset(); // clear cache of getValue()
 		$this->getForm()
@@ -197,9 +197,9 @@ class Element
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function reset(): self
+	public function reset(): static
 	{
 		$this->_value = null;
 		
@@ -209,9 +209,9 @@ class Element
 	/**
 	 * @param ?string $label
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setLabel(?string $label): self
+	public function setLabel(?string $label): static
 	{
 		$this->_label = $label;
 		
@@ -229,9 +229,9 @@ class Element
 	/**
 	 * @param null|string|bool|int|float|array $default
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setDefault(null|string|bool|int|float|array $default): self
+	public function setDefault(null|string|bool|int|float|array $default): static
 	{
 		$this->getForm()
 			->setDefault($this->_id, $default);
@@ -257,9 +257,9 @@ class Element
 	/**
 	 * @param Filter $filter
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addFilter(Filter $filter): self
+	public function addFilter(Filter $filter): static
 	{
 		$this->_filters[] = $filter;
 		
@@ -269,9 +269,9 @@ class Element
 	/**
 	 * @param Validator $validator
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addValidator(Validator $validator): self
+	public function addValidator(Validator $validator): static
 	{
 		$this->_validators[] = $validator;
 		
@@ -304,9 +304,9 @@ class Element
 	/**
 	 * @param Error $error
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addError(Error $error): self
+	public function addError(Error $error): static
 	{
 		$error->setElement($this);
 		$this->_errors[] = $error;
@@ -317,9 +317,9 @@ class Element
 	/**
 	 * @param Error[] $errors
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addErrors(array $errors): self
+	public function addErrors(array $errors): static
 	{
 		foreach($errors as $error)
 		{
@@ -338,9 +338,9 @@ class Element
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function clearErrors(): self
+	public function clearErrors(): static
 	{
 		$this->_errors = [];
 		

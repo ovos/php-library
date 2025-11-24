@@ -46,9 +46,9 @@ class Hash
 	/**
 	 * @param string $algorithm
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setAlgorithm(string $algorithm): self
+	public function setAlgorithm(string $algorithm): static
 	{
 		$this->_algorithm = $algorithm;
 		
@@ -66,9 +66,9 @@ class Hash
 	/**
 	 * @param array $options
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setOptions(array $options): self
+	public function setOptions(array $options): static
 	{
 		$this->_options = $options;
 		

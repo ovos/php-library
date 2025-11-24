@@ -113,14 +113,14 @@ class Apcu extends KeyValue
 	 * @param ArrayObject $config
 	 * @param ?string $group
 	 *
-	 * @return self
+	 * @return static
 	 */
 	public static function fromConfig(
 		ArrayObject $config,
 		?string $group = null,
-	): self
+	): static
 	{
-		return new self
+		return new static
 		(
 			$config->prefix,
 			$group ?? self::GROUP_DEFAULT,
@@ -131,9 +131,9 @@ class Apcu extends KeyValue
 	/**
 	 * @param ArrayObject $config
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setQueue(ArrayObject $config): self
+	public function setQueue(ArrayObject $config): static
 	{
 		if(($enabled = $config->offsetGet('enabled')) !== null) // true or false
 		{
@@ -162,9 +162,9 @@ class Apcu extends KeyValue
 	/**
 	 * @param bool $enabled
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setQueueEnabled(bool $enabled): self
+	public function setQueueEnabled(bool $enabled): static
 	{
 		$this->_queueEnabled = $enabled;
 		

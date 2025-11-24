@@ -62,9 +62,9 @@ class Response
 	/**
 	 * @param int $httpCode
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setHttpCode(int $httpCode): self
+	public function setHttpCode(int $httpCode): static
 	{
 		$this->_httpCode = $httpCode;
 		
@@ -76,9 +76,9 @@ class Response
 	 * @param mixed $value
 	 * @param bool $replace
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setHeader(string $name, mixed $value, bool $replace = false): self
+	public function setHeader(string $name, mixed $value, bool $replace = false): static
 	{
 		$this->_headers[$name] = [
 			'value' => $value,
@@ -91,9 +91,9 @@ class Response
 	/**
 	 * @param string $name
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function clearHeader(string $name): self
+	public function clearHeader(string $name): static
 	{
 		if(isset($this->_headers[$name]))
 		{
@@ -104,9 +104,9 @@ class Response
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function clearAllHeaders(): self
+	public function clearAllHeaders(): static
 	{
 		$this->_headers = [];
 		
@@ -116,9 +116,9 @@ class Response
 	/**
 	 * Send headers
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function sendHeaders(): self
+	public function sendHeaders(): static
 	{
 		if($this->headersSent())
 		{
@@ -165,9 +165,9 @@ class Response
 	/**
 	 * @param bool $sent
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setIsSent(bool $sent): self
+	public function setIsSent(bool $sent): static
 	{
 		$this->_sent = $sent;
 		
@@ -185,9 +185,9 @@ class Response
 	/**
 	 * @param bool $headersSent
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setHeadersSent(bool $headersSent): self
+	public function setHeadersSent(bool $headersSent): static
 	{
 		$this->_headersSent = $headersSent;
 		

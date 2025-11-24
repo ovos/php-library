@@ -8,6 +8,7 @@ use Ovos\Store\KeyValue;
 use Ovos\Store\Apcu as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
+use Override;
 
 use function Ovos\config;
 use function sprintf;
@@ -71,6 +72,7 @@ class Apcu extends Test
 	 * Called by the runner before each test method
 	 */
 	#[Internal]
+	#[Override]
 	public function prepare(): void
 	{
 		$this->_initStore();
@@ -269,6 +271,7 @@ class Apcu extends Test
 	 * Called by the runner after all test methods have been invoked
 	 */
 	#[Internal]
+	#[Override]
 	public function deconstruct(): void
 	{
 		$this->_store->clear();

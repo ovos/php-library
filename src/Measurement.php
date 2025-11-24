@@ -35,9 +35,9 @@ class Measurement
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function start(): self
+	public function start(): static
 	{
 		$this->_time->start = microtime(true);
 		$this->_memory->start = memory_get_usage(false);
@@ -46,9 +46,9 @@ class Measurement
 	}
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public function stop(): self
+	public function stop(): static
 	{
 		$this->_time->end = microtime(true);
 		$this->_memory->end = memory_get_usage(false);

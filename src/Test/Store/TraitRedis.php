@@ -10,6 +10,7 @@ use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Store\KeyValue;
 use Ovos\Test\Internal;
+use Override;
 
 use function sprintf;
 
@@ -84,15 +85,6 @@ trait TraitRedis
 			$this->_cacheConfig->prefix,
 			$this->_group,
 		);
-	}
-	
-	/**
-	 * Called by the runner after all test methods have been invoked
-	 */
-	#[Internal]
-	public function deconstruct(): void
-	{
-		$this->_connection->disconnect();
 	}
 }
 

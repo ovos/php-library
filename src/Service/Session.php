@@ -3,12 +3,12 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
+use Ovos\Exception\MissingException\MissingConfigException;
 use Ovos\Service;
 use Ovos\ArrayObject;
-use Ovos\Container;
 use Ovos\Container\Inject;
 use Ovos\Exception;
-use Ovos\Redis\Connection;
+use Ovos\Connection\Redis as Connection;
 
 use function array_key_exists;
 use function ini_set;
@@ -176,6 +176,11 @@ class Session extends Service
 	 */
 	public function flush(): bool
 	{
+		if($this->_config->session->connection === null)
+		{
+			throw new MissingConfigException('"connection" config section is missing.');
+		}
+		
 		$connection = new Connection($this->_config->session->connection);
 		$connectionStatus = $connection->connect();
 		if($connectionStatus === false)

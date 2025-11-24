@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Store\KeyValue;
 
 use Ovos\Store\KeyValue;
+use Override;
 use Closure;
 
 /**
@@ -22,6 +23,7 @@ abstract class Tags extends KeyValue
 	 *
 	 * @return null|mixed
 	 */
+	#[Override]
 	abstract public function get(
 		string $key,
 		?Closure $resolver = null,
@@ -37,6 +39,7 @@ abstract class Tags extends KeyValue
 	 *
 	 * @return mixed
 	 */
+	#[Override]
 	public function setFromResolver(
 		string $key,
 		?Closure $resolver,
@@ -63,6 +66,7 @@ abstract class Tags extends KeyValue
 	 *
 	 * @return bool
 	 */
+	#[Override]
 	abstract public function set(
 		string $key,
 		mixed $value,

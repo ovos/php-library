@@ -28,9 +28,9 @@ class Replace extends Filter
 	/**
 	 * @param string $pattern
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setPattern(string $pattern): self
+	public function setPattern(string $pattern): static
 	{
 		$this->_pattern = $pattern;
 		
@@ -48,9 +48,9 @@ class Replace extends Filter
 	/**
 	 * @param ?string $replacement
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setReplacement(?string $replacement): self
+	public function setReplacement(?string $replacement): static
 	{
 		$this->_replacement = $replacement;
 		

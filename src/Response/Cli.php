@@ -31,9 +31,9 @@ class Cli extends Html
 	/**
 	 * @param bool $coloredOutput
 	 * 
-	 * @return self
+	 * @return static
 	 */
-	public function setColoredOutput(bool $coloredOutput): self
+	public function setColoredOutput(bool $coloredOutput): static
 	{
 		$this->_coloredOutput = $coloredOutput;
 		

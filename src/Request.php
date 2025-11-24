@@ -100,9 +100,9 @@ class Request
 	/**
 	 * @param Locale $locale
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setLocale(Locale $locale): self
+	public function setLocale(Locale $locale): static
 	{
 		$this->_locale = $locale;
 		
@@ -125,9 +125,9 @@ class Request
 	/**
 	 * @param string $controller
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setController(string $controller): self
+	public function setController(string $controller): static
 	{
 		$this->_controller = $controller;
 		
@@ -145,9 +145,9 @@ class Request
 	/**
 	 * @param string $class
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setControllerClass(string $class): self
+	public function setControllerClass(string $class): static
 	{
 		$this->_controllerClass = $class;
 		
@@ -165,9 +165,9 @@ class Request
 	/**
 	 * @param Controller $instance
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setControllerInstance(Controller $instance): self
+	public function setControllerInstance(Controller $instance): static
 	{
 		$this->_controllerInstance = $instance;
 		
@@ -185,9 +185,9 @@ class Request
 	/**
 	 * @param string $action
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setAction(string $action): self
+	public function setAction(string $action): static
 	{
 		$this->_action = $action;
 		
@@ -205,9 +205,9 @@ class Request
 	/**
 	 * @param string $actionMethod
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setActionMethod(string $actionMethod): self
+	public function setActionMethod(string $actionMethod): static
 	{
 		$this->_actionMethod = $actionMethod;
 		
@@ -225,9 +225,9 @@ class Request
 	/**
 	 * @param mixed $param
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function addParam(mixed $param): self
+	public function addParam(mixed $param): static
 	{
 		$this->_params[] = $param;
 		
@@ -237,9 +237,9 @@ class Request
 	/**
 	 * @param array $params
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setParams(array $params = []): self
+	public function setParams(array $params = []): static
 	{
 		$this->_params = $params;
 		

@@ -86,10 +86,10 @@ class Locale
 	/**
 	 * @param ArrayObject $config
 	 *
-	 * @return self
+	 * @return static
 	 * @throws Exception
 	 */
-	public function fromConfig(ArrayObject $config): self
+	public function fromConfig(ArrayObject $config): static
 	{
 		$this->setConfig($config);
 		
@@ -131,9 +131,9 @@ class Locale
 	/**
 	 * @param ArrayObject $config
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setConfig(ArrayObject $config): self
+	public function setConfig(ArrayObject $config): static
 	{
 		$this->_config = $config;
 		
@@ -151,9 +151,9 @@ class Locale
 	/**
 	 * @param string $urlName
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setUrlName(string $urlName): self
+	public function setUrlName(string $urlName): static
 	{
 		$this->urlName = $urlName;
 		
@@ -171,9 +171,9 @@ class Locale
 	/**
 	 * @param string $symbol
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setSymbol(string $symbol): self
+	public function setSymbol(string $symbol): static
 	{
 		$this->symbol = $symbol;
 		
@@ -191,9 +191,9 @@ class Locale
 	/**
 	 * @param string $language
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setLanguage(string $language): self
+	public function setLanguage(string $language): static
 	{
 		$this->language = $language;
 		
@@ -211,9 +211,9 @@ class Locale
 	/**
 	 * @param string $country
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setCountry(string $country): self
+	public function setCountry(string $country): static
 	{
 		$this->country = $country;
 		
@@ -231,9 +231,9 @@ class Locale
 	/**
 	 * @param string $name
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setName(string $name): self
+	public function setName(string $name): static
 	{
 		$this->name = $name;
 		
@@ -243,9 +243,9 @@ class Locale
 	/**
 	 * @param bool $default
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setDefault(bool $default): self
+	public function setDefault(bool $default): static
 	{
 		$this->default = $default;
 		
@@ -263,9 +263,9 @@ class Locale
 	/**
 	 * @param bool $locked
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setLocked(bool $locked): self
+	public function setLocked(bool $locked): static
 	{
 		$this->locked = $locked;
 		

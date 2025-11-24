@@ -7,6 +7,7 @@ use Ovos\Container;
 use Ovos\Container\Injector;
 use Ovos\Container\Traits\TraitParameters;
 use Ovos\Container\Traits\TraitCallable;
+use Override;
 
 /**
  * TypeCallable
@@ -36,6 +37,7 @@ class TypeCallable extends Injector
 	 *
 	 * @return object
 	 */
+	#[Override]
 	public function inject(Container $container): object
 	{
 		// no resolution whatsoever except for access to the container

@@ -25,9 +25,9 @@ class StripPrefix extends Filter
 	/**
 	 * @param ?string $prefix
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setPrefix(?string $prefix): self
+	public function setPrefix(?string $prefix): static
 	{
 		$this->_prefix = $prefix;
 		

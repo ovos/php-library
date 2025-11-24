@@ -34,13 +34,13 @@ class Collector
 	public static int $limit = 0;
 	
 	/**
-	 * @return self
+	 * @return static
 	 */
-	public static function getInstance(): self
+	public static function getInstance(): static
 	{
 		if(self::$instance === null)
 		{
-			self::$instance = new self;
+			self::$instance = new static;
 		}
 		
 		return self::$instance;
@@ -60,9 +60,9 @@ class Collector
 	 * @param array $parameters Statement values
 	 * @param Measurement $measurement time and memory usage
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setQuery(string $sql, array $parameters, Measurement $measurement): self
+	public function setQuery(string $sql, array $parameters, Measurement $measurement): static
 	{
 		$this->_queries->push([
 			'sql' => $sql,

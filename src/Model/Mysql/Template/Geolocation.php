@@ -6,6 +6,7 @@ namespace Ovos\Model\Mysql\Template;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
 use Ovos\Pdo\Expression;
+use Override;
 
 /**
  * Geolocation
@@ -50,6 +51,7 @@ class Geolocation extends Template
 	/**
 	 * @param Mysql $model
 	 */
+	#[Override]
 	public function setUp(Mysql $model): void
 	{
 		$model->setJsonSerializeFilter([
@@ -60,6 +62,7 @@ class Geolocation extends Template
 	/**
 	 * @param Mysql $model
 	 */
+	#[Override]
 	public function preSave(Mysql $model): void
 	{
 		// sometimes it's always true, because MySQL keeps it in a different format (precision)

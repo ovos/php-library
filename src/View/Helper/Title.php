@@ -40,9 +40,9 @@ class Title extends Helper
 	/**
 	 * @param ?string $defaultTitle
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function title(?string $defaultTitle = null): self
+	public function title(?string $defaultTitle = null): static
 	{
 		if($defaultTitle !== null)
 		{
@@ -55,9 +55,9 @@ class Title extends Helper
 	/**
 	 * @param string $title
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function set(string $title): self
+	public function set(string $title): static
 	{
 		$this->_title = $title;
 		
@@ -75,9 +75,9 @@ class Title extends Helper
 	/**
 	 * @param string $defaultTitle
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setDefault(string $defaultTitle): self
+	public function setDefault(string $defaultTitle): static
 	{
 		$this->_defaultTitle = $defaultTitle;
 		
@@ -95,9 +95,9 @@ class Title extends Helper
 	/**
 	 * @param string $separator
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function setSeparator(string $separator): self
+	public function setSeparator(string $separator): static
 	{
 		$this->_separator = $separator;
 		
@@ -107,9 +107,9 @@ class Title extends Helper
 	/**
 	 * @param string $item
 	 *
-	 * @return self
+	 * @return static
 	 */
-	public function add(string $item): self
+	public function add(string $item): static
 	{
 		$this->_items[] = $item;
 		
@@ -122,7 +122,8 @@ class Title extends Helper
 	public function __toString(): string
 	{
 		$items = $this->_items;
-		array_unshift($items, $this->_title ?: $this->_defaultTitle);
+		array_unshift($items,
+			$this->_title ?: $this->_defaultTitle);
 		
 		return implode($this->_separator, array_reverse($items));
 	}

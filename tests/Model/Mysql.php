@@ -3,14 +3,12 @@ declare(strict_types=1);
 
 namespace Tests\Model;
 
-use Ovos\Exception;
-use Ovos\Pdo\Expression;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Model\Mysql as Model;
 use Ovos\Store\Mysql as Store;
 use Ovos\Model\Mysql\Template;
-use PDO;
+use Override;
 
 /**
  * Mysql
@@ -193,6 +191,7 @@ class Mysql extends Test
 	 * Called by the runner after each test method
 	 */
 	#[Internal]
+	#[Override]
 	public function finalize(): void
 	{
 		$this->_store->source()->exec('TRUNCATE TABLE tests');
@@ -202,6 +201,7 @@ class Mysql extends Test
 	 * Called by the runner after all test methods have been invoked
 	 */
 	#[Internal]
+	#[Override]
 	public function deconstruct(): void
 	{
 		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
