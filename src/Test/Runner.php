@@ -5,7 +5,6 @@ namespace Ovos\Test;
 
 use Ovos\Container;
 use Ovos\Container\Inject;
-use Ovos\Container\Injector\TypeClass;
 use Ovos\Test;
 use Ovos\Test\Exception\SkipException;
 use Ovos\Exception\InvalidException\InvalidClassException;
@@ -247,9 +246,8 @@ class Runner
 		if($this->_test === null)
 		{
 			/** @var Test $test */
-			$test = $this->_container->inject(
-				new TypeClass($this->class->name),
-			);
+			$test = $this->_container
+				->injectClass($this->class->name);
 			
 			if(is_subclass_of($test, 'Ovos\Test') === false)
 			{

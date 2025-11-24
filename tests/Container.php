@@ -35,6 +35,18 @@ class Container extends Test
 			&& $instance->value === 'test';
 	}
 	
+	public function injectClass(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Dependency1::class, Dependency1::class);
+		$instance = $container->injectClass(Service1::class,
+			Service1::$parameters,
+		);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
 	public function getClass(): bool
 	{
 		$container = new BaseContainer;
@@ -61,6 +73,24 @@ class Container extends Test
 		, Service1::$parameters);
 		
 		$instance = $container->get(Service1::class);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
+	public function injectCallable(): bool
+	{
+		$container = new BaseContainer;
+		$instance = $container->injectCallable(
+			function(BaseContainer $container, array $parameters)
+			{
+				return new Service1
+				(
+					$container->getClass(Dependency1::class),
+					$parameters['value'],
+				);
+			}
+		, Service1::$parameters);
 		
 		return $instance->dependency1 instanceof Dependency1
 			&& $instance->value === 'test';
@@ -123,6 +153,18 @@ class Container extends Test
 			&& $instance->value === 'test';
 	}
 	
+	public function injectObject(): bool
+	{
+		$container = new BaseContainer;
+		$instance = $container->injectObject(new Service1(
+			$container->getClass(Dependency1::class, Dependency1::class),
+			Service1::$parameters['value'],
+		));
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
 	public function registerLazy(): bool
 	{
 		$container = new BaseContainer;
@@ -133,6 +175,19 @@ class Container extends Test
 		);
 		
 		$instance = $container->get(Service1::class);
+		
+		return $instance->dependency1 instanceof Dependency1
+			&& $instance->value === 'test';
+	}
+	
+	public function injectLazy(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerLazy(Dependency1::class);
+		$instance = $container->injectLazy(
+			Service1::class,
+			Service1::$parameters,
+		);
 		
 		return $instance->dependency1 instanceof Dependency1
 			&& $instance->value === 'test';

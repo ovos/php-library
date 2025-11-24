@@ -9,11 +9,9 @@ use Ovos\Exception\NotFoundException;
 use Ovos\Service\Cache;
 use SplFileInfo;
 
-use function is_string;
 use function in_array;
 use function array_slice;
 use function is_numeric;
-use function strcmp;
 use function array_key_exists;
 use function count;
 use function krsort;
@@ -144,7 +142,7 @@ class Router
 		
 		if(preg_match(
 			$this->_extensionMatchPattern,
-			$params[$count - 1], 
+			$params[$count - 1],
 			$matches
 		) === 0)
 		{

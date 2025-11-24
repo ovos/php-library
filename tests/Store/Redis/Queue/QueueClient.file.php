@@ -5,7 +5,6 @@ namespace Tests\Store\Redis\Queue;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Container\Inject;
-use Ovos\Container\Injector\TypeClass;
 use Ovos\Controller;
 use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
@@ -110,5 +109,5 @@ class QueueClient extends Controller\Cli
 $application = container()
 	->getClass(Application::class); // register config before injecting
 $client = $application->getContainer()
-	->inject(new TypeClass(QueueClient::class));
+	->injectClass(QueueClient::class);
 $client->run();

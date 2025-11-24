@@ -109,7 +109,7 @@ class Dir
 	}
 	
 	/**
-	 * Remove the directory with all it's contents
+	 * Remove the directory with all its contents
 	 *
 	 * @param string $path
 	 * @param bool $remove
@@ -172,7 +172,7 @@ class Dir
 	}
 	
 	/**
-	 * Empty the directory or remove recursively files and directories matching regular expression
+	 * Empty the directory or recursively remove files and directories matching regular expression
 	 *
 	 * @param string $path
 	 * @param ?string $match (regular expression)
@@ -447,7 +447,7 @@ class Dir
 				$filter
 			);
 		}
-			
+		
 		// the order depends on filesystem
 		// sort names of files
 		sort($files, SORT_NATURAL);

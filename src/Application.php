@@ -173,7 +173,7 @@ class Application
 	{
 		try
 		{
-			$dispatcher = $this->_container->getClass(Dispatcher::class, Dispatcher::class);
+			$dispatcher = $this->_container->getClass(Dispatcher::class);
 			if($response = $dispatcher->dispatch($request))
 			{
 				$this->setResponse($response);
@@ -219,7 +219,7 @@ class Application
 	
 	/**
 	 * Returns response
-	 * 
+	 *
 	 * @param ?string $response
 	 *
 	 * @return Response
@@ -265,8 +265,8 @@ class Application
 		
 		$this->_container
 			// Request is required by Memory
-			->registerClass(Request::class, Request::class)
-			->registerClass(Router::class, Router::class)
+			->registerClass(Request::class)
+			->registerClass(Router::class)
 			->registerClass(Memory::SYMBOL, Memory::class);
 		
 		return $this;
@@ -282,8 +282,7 @@ class Application
 		// get environment from the file
 		$environmentFile = BASE_DIR . Environment::ENV_FILE;
 		$loader = $this->_container
-			->registerClass(EnvLoader::class, EnvLoader::class)
-			->get(EnvLoader::class);
+			->getClass(EnvLoader::class);
 		
 		$environment = $loader->load($environmentFile);
 		$this->_environment = $environment ?: new Environment;
@@ -452,7 +451,7 @@ class Application
 	
 	/**
 	 * @param ArrayObject $bootstrap
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setBoostrap(ArrayObject $bootstrap): self
@@ -755,7 +754,7 @@ class Application
 	public function getServices(): Services
 	{
 		return $this->_container
-			->getClass(Services::class, Services::class);
+			->getClass(Services::class);
 	}
 	
 	/**

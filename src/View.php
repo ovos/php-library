@@ -90,7 +90,7 @@ class View
 		
 		$this->_container = container();
 		$this->_app = $this->_container
-			->getClass(Application::class, Application::class);
+			->getClass(Application::class);
 		$this->_request = $this->_app->getRequest();
 		$this->_eventsService = $this->_container->get(Events::SYMBOL);
 		
