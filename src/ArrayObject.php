@@ -32,7 +32,7 @@ class ArrayObject extends BaseArrayObject
 	
 	/**
 	 * @param mixed $key
-	 * 
+	 *
 	 * @return mixed
 	 */
 	public function get(mixed $key): mixed
@@ -42,7 +42,7 @@ class ArrayObject extends BaseArrayObject
 		
 	/**
 	 * @param mixed $key
-	 * 
+	 *
 	 * @return array
 	 */
 	public function getArray(mixed $key = null): array
@@ -63,7 +63,7 @@ class ArrayObject extends BaseArrayObject
 	
 	/**
 	 * @param mixed $key
-	 * 
+	 *
 	 * @return mixed
 	 */
 	public function offsetGet(mixed $key): mixed
@@ -137,10 +137,10 @@ class ArrayObject extends BaseArrayObject
 	
 	/**
 	 * Returns a nested value specified by a dot-separated path
-	 * 
+	 *
 	 * @param string|array $path
 	 * @param ?self $arrayObject
-	 * 
+	 *
 	 * @return mixed (self|mixed|null)
 	 */
 	public function getPath(string|array $path, ?self $arrayObject = null): mixed
@@ -156,7 +156,7 @@ class ArrayObject extends BaseArrayObject
 	/**
 	 * @param array $pathElements
 	 * @param ArrayObject $arrayObject
-	 * 
+	 *
 	 * @return mixed
 	 */
 	protected function _getFromPath(array $pathElements,
@@ -186,7 +186,7 @@ class ArrayObject extends BaseArrayObject
 	
 	/**
 	 * @param array $toMerge
-	 * 
+	 *
 	 * @return self
 	 */
 	public function merge(array $toMerge): self
@@ -198,10 +198,10 @@ class ArrayObject extends BaseArrayObject
 	
 	/**
 	 * Returns value as an array
-	 * 
+	 *
 	 * @param string $key
 	 * @param string $separator
-	 * 
+	 *
 	 * @return ?array
 	 */
 	public function asArray(string $key, string $separator = ', '): ?array
@@ -222,7 +222,7 @@ class ArrayObject extends BaseArrayObject
 	
 	/**
 	 * @param array $array
-	 * 
+	 *
 	 * @return self
 	 */
 	public static function factory(array $array = []): self

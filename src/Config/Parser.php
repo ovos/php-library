@@ -18,7 +18,7 @@ class Parser
 	/**
 	 * @param string $file
 	 * @param ?Environment $environment
-	 * 
+	 *
 	 * @return ?array
 	 */
 	public static function parse(string $file,

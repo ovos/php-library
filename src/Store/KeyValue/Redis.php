@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Store\KeyValue;
 
 use Ovos\ArrayObject;
-use Ovos\Redis\Connection;
+use Ovos\Connection\Redis as Connection;
 use Closure;
 use Throwable;
 use Redis as RedisClient;

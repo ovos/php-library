@@ -3,17 +3,15 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException\FileNotFoundException;
 use Ovos\Exception\NotFoundException;
-use ReflectionClass;
-use ReflectionException;
+use Ovos\Service\Cache;
 use SplFileInfo;
 
-use function is_string;
 use function in_array;
 use function array_slice;
 use function is_numeric;
-use function strcmp;
 use function array_key_exists;
 use function count;
 use function krsort;
@@ -38,6 +36,12 @@ class Router
 	protected ArrayObject $_config;
 	
 	/**
+	 * @var Cache 
+	 */
+	#[Inject(Cache::SYMBOL)]
+	protected Cache $_cacheService;
+	
+	/**
 	 * @var string
 	 */
 	public const string CACHE_ID_CONTROLLERS = 'controllers';
@@ -59,7 +63,7 @@ class Router
 	
 	/**
 	 * Don't treat these extensions as any other static file
-	 * 
+	 *
 	 * @var array
 	 */
 	protected array $_nonStaticExtensions = [
@@ -138,7 +142,7 @@ class Router
 		
 		if(preg_match(
 			$this->_extensionMatchPattern,
-			$params[$count - 1], 
+			$params[$count - 1],
 			$matches
 		) === 0)
 		{
@@ -151,6 +155,7 @@ class Router
 		}
 		
 		$this->_url->setComponents([]);
+		
 		throw new FileNotFoundException('File not found.');
 	}
 	
@@ -202,38 +207,28 @@ class Router
 		}
 		
 		$controllers = $this->_getControllers($modules);
-		/*
-		echo PHP_EOL, 'END RESULT', PHP_EOL;
-		var_dump($controllers);
-		*/
-		// after checking for locale, check for controller (with optional namespace path), and action
+		
+		// after checking for locale, check for controller (with an optional namespace path), and action
 		foreach($params as $key => $param)
 		{
 			// determine the correct controller
-			// controller namespace loop
-			// while param is a valid namespace of controller, or a controller,
-			// continue to the last matching one
-			foreach($controllers as $name => $children)
+			// check if we should go deeper (current param is not the last level controller, but a namespace)
+			if(isset($controllers[$param]) 
+				&& is_array($controllers[$param]) // namespace exists on this level
+				&& isset($params[$key + 1])) // next param exists
 			{
-				// check if we should go deeper (current param is not the last level controller, but a namespace)
-				if(is_string($name) // namespace exists on this level
-					&& isset($params[$key + 1]) // next param exists
-					&& strcmp($name, $param) === 0 // namespace and current param are the same, check inside it
-					&& (in_array($params[$key + 1], $children, true) // controlller exists in the namespace
-						|| array_key_exists($params[$key + 1], $children))) // deeper namespace exists inside the namespace
+				$children = $controllers[$param];
+				$nextParam = $params[$key + 1];
+				
+				// check if the next param is valid in this namespace
+				if(in_array($nextParam, $children, true) // controller exists in the namespace
+					|| array_key_exists($nextParam, $children)) // a deeper namespace exists inside the namespace
 				{
 					$controllers = $children; // loop children
 					$controllerClass.= Strings::studlyCase($param) . '\\';
 					$controller.= $param . '/';
 					
-					continue 2; // go to the next param
-				}
-				
-				// check if we are already on the last level
-				if(is_string($children) // $children are not an array but a controller name
-					&& strcmp($children, $param) === 0)
-				{
-					break;
+					continue; // go to the next param
 				}
 			}
 			
@@ -263,20 +258,15 @@ class Router
 			
 			// check if the controller has such a method
 			$method = Strings::camelCase($params[0]);
-			$controllerClass = $controllerClass !== null
-				? $controllerClass
-				: $request->getControllerClass(); // get default
+			$controllerClass = $controllerClass ?? $request->getControllerClass(); // get default
 			$controllerClassNs = 'Controllers\\' . $controllerClass;
-			try
+			
+			if(class_exists($controllerClassNs) === false)
 			{
-				$reflectionClass = new ReflectionClass($controllerClassNs);
-			}
-			catch(ReflectionException $exception)
-			{
-				throw new NotFoundException($exception->getMessage());
+				throw new NotFoundException('Class %s does not exist', $controllerClassNs);
 			}
 			
-			if($reflectionClass->hasMethod($method) === false)
+			if(method_exists($controllerClassNs, $method) === false)
 			{
 				return $params;
 			}
@@ -289,7 +279,7 @@ class Router
 		// return the remaining parameters
 		return $params;
 	}
-
+	
 	/**
 	 * @param ArrayObject $modules
 	 *
@@ -299,7 +289,7 @@ class Router
 	{
 		$cacheId = self::CACHE_ID_CONTROLLERS;
 		
-		$store = services()->cache->getPerishableStore();
+		$store = $this->_cacheService->getPerishableStore();
 		if($item = $store->get($cacheId))
 		{
 			return $item;
@@ -314,34 +304,33 @@ class Router
 			{
 				$dir = $moduleDir . DIRECTORY_SEPARATOR . 'controllers';
 				
-				$moduleControllers = Dir::getTree($dir, skipCallback: function($file)
-				{
-					/**
-					* @var SplFileInfo $file
-					*/
-					return $file->isFile() && $file->getExtension() !== 'php';
-				}, filenameCallback: function($file)
-				{
-					/**
-					* @var SplFileInfo $file
-					*/
-					$basename = $file->getBasename('.php');
-					return Strings::snakeCase($basename);
-				});
-				/*
-				echo PHP_EOL, '$controllers', PHP_EOL;
-				var_export($controllers);
-				echo PHP_EOL, '$moduleControllers', PHP_EOL;
-				var_export($moduleControllers);
-				*/
-				//$controllers = Arrays::deepMerge($controllers, $moduleControllers);
+				$moduleControllers = Dir::getTree(
+					$dir,
+					skipCallback: static function($file)
+					{
+						/**
+						* @var SplFileInfo $file
+						*/
+						return $file->isFile() && $file->getExtension() !== 'php';
+					},
+					filenameCallback: static function($file)
+					{
+						/**
+						* @var SplFileInfo $file
+						*/
+						$basename = $file->getBasename('.php');
+						return Strings::snakeCase($basename);
+					}
+				);
+				
 				// merge all values without overwriting keys like in Arrays::deepMerge
 				$controllers = array_merge_recursive($controllers, $moduleControllers);
-				// directories (keys of array) first, ksort puts the directories last
-				// order is z-a
-				krsort($controllers, SORT_NATURAL);
 			}
 		}
+		
+		// directories (keys of an array) first, ksort puts the directories last
+		// order is z-a
+		krsort($controllers, SORT_NATURAL);
 		
 		$store->set($cacheId, $controllers);
 		

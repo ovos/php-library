@@ -75,15 +75,12 @@ class Environment
 	}
 	
 	/**
-	 * @return array
-	 */
-	/**
 	 * Parsing callback for YAML tag.
-	 * 
+	 *
 	 * @param mixed $value Data from the YAML file
 	 * @param string $tag Tag that triggered callback
 	 * @param int $flags Scalar entity style (see YAML_*_SCALAR_STYLE)
-	 * 
+	 *
 	 * @return mixed Value that YAML parser should emit for the given value
 	 */
 	public function getYamlTag(mixed $value, string $tag, int $flags): mixed

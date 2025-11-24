@@ -6,8 +6,8 @@ namespace Ovos\Service;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Container;
-use Ovos\Exception;
-use Ovos\Redis\Connection;
+use Ovos\Connection\Redis as Connection;
+use Ovos\Exception\MissingException\MissingConfigException;
 use Ovos\Service;
 use Ovos\Store\Apcu;
 use Ovos\Store\KeyValue\Redis as RedisStore;
@@ -75,7 +75,7 @@ class Cache extends Service
 		$config = $container->get(Application::CONTAINER_KEY_CONFIG);
 		if($config->cache === null)
 		{
-			throw new Exception('"cache" config section is missing.');
+			throw new MissingConfigException('"cache" config section is missing.');
 		}
 		
 		if($config->cache->enabled === false)
@@ -95,12 +95,15 @@ class Cache extends Service
 	{
 		if($this->_persistentConnection === null)
 		{
-			$this->_persistentConnection = $this->_container
-				->getValue(Connection::class, new Connection($this->_config->persistent));
-			if($this->_persistentConnection->connect() === false)
+			if($this->_config->persistent->connection === null)
 			{
-				return null;
+				throw new MissingConfigException('"connection" config section is missing.');
 			}
+			
+			$this->_persistentConnection = $this->_container
+				->getClass(Connections::class)
+				->getConnection($this->_config->persistent->connection)
+				->getConnectedClient();
 		}
 		
 		return $this->_persistentConnection;

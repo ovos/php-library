@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Container\Inject;
 use Ovos\Test\Internal;
 
 /**
@@ -13,6 +14,12 @@ use Ovos\Test\Internal;
  */
 abstract class Test
 {
+	/**
+	 * @var Container
+	 */
+	#[Inject]
+	protected Container $_container;
+
 	/**
 	 * @var bool
 	 */

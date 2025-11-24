@@ -124,10 +124,9 @@ class Arrays
 	}
 	
 	/**
-	 * Group values in pairs
-	 * 
+	 * Group values in pairs:
 	 * name => value
-	 * 
+	 *
 	 * @param array $values
 	 *
 	 * @return array
@@ -152,7 +151,7 @@ class Arrays
 	/**
 	 * Returns a flattened array
 	 *
-	 * example:
+	 * An example:
 	 * 		[('Data' => ['first_name' => 'Hannes']]
 	 * will be transformed to
 	 * 		['Data[first_name]' => 'Hannes']

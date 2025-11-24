@@ -81,7 +81,7 @@ class IfChecked extends Validator
 		$elementChecked = $this->getElement()->getValue() === 1;
 		
 		$valid = $elementChecked === false
-			|| ($elementChecked === true && $elementComparedChecked === true);
+			|| ($elementComparedChecked === true);
 		if($valid === false)
 		{
 			$error = new Error(self::ERROR_NOT_CHECKED, sprintf(

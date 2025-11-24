@@ -241,7 +241,7 @@ class Element
 	
 	/**
 	 * @param mixed $value
-	 * 
+	 *
 	 * @return mixed
 	 */
 	public function filterValue(mixed $value): mixed

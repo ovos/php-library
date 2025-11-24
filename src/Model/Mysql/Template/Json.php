@@ -44,11 +44,11 @@ class Json extends Template
 	
 	/**
 	 * Type of stored object
-	 * 
+	 *
 	 * @var string
 	 */
 	protected string $_type;
-		
+	
 	/**
 	 * Class of stored object
 	 * 
@@ -76,7 +76,7 @@ class Json extends Template
 
 	/**
 	 * @param array $properties
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setProperties(array $properties): self
@@ -116,7 +116,7 @@ class Json extends Template
 	
 	/**
 	 * @param null|string|Closure $class
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setClass(null|string|Closure $class): self
@@ -133,7 +133,7 @@ class Json extends Template
 	{
 		return $this->_class;
 	}
-
+	
 	/**
 	 * @param Mysql $model
 	 */
@@ -153,7 +153,7 @@ class Json extends Template
 	 * @param mixed $object
 	 * @param string $property
 	 * @param Mysql $model
-	 * 
+	 *
 	 * @return ?string
 	 */
 	public function encode(mixed $object, string $property, Mysql $model): ?string
@@ -167,7 +167,7 @@ class Json extends Template
 		{
 			throw new Exception('Cannot encode a string.');
 		}
-	
+		
 		$string = json_encode($object, JSON_THROW_ON_ERROR
 			| JSON_UNESCAPED_UNICODE
 			| JSON_UNESCAPED_SLASHES
@@ -185,7 +185,7 @@ class Json extends Template
 		$query = $model->source()->query('SELECT CAST(\'' . $string . '\' as JSON)', PDO::FETCH_COLUMN, 0);
 		$string = $query->fetch();
 		
-		return $string ?: null;	
+		return $string ?: null;
 	}
 	
 	/**
@@ -197,11 +197,6 @@ class Json extends Template
 	 */
 	public function decode(string $string, string $property, Mysql $model): mixed
 	{
-		if($string === null)
-		{
-			return null;
-		}
-		
 		$object = json_decode($string,
 			associative: $this->_type === self::TYPE_ARRAY,
 			flags: JSON_THROW_ON_ERROR

@@ -4,20 +4,19 @@ namespace Tests\Store\Redis\Queue;
 
 use Ovos\Application;
 use Ovos\ArrayObject;
+use Ovos\Container\Inject;
 use Ovos\Controller;
-use Ovos\Redis\Connection;
 use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
-use RedisException;
+use Ovos\Test\Store\TraitRedis;
 
-use function Ovos\config;
 use function dirname;
 use function define;
 use function is_dir;
 use function getmypid;
 use function microtime;
 use function sleep;
-use function sprintf;
+use function Ovos\container;
 
 /**
  * Tool for testing cache queue
@@ -41,6 +40,8 @@ if(is_dir(Application::CONFIGS_DIR) === false)
 
 class QueueClient extends Controller\Cli
 {
+	use TraitRedis;
+	
 	/**
 	 * @var string
 	 */
@@ -54,12 +55,8 @@ class QueueClient extends Controller\Cli
 	/**
 	 * @var ArrayObject
 	 */
+	#[Inject('config')]
 	protected ArrayObject $_config;
-	
-	/**
-	 * @var Connection
-	 */
-	protected Connection $_connection;
 	
 	/**
 	 * @var Store
@@ -70,32 +67,10 @@ class QueueClient extends Controller\Cli
 	{
 		parent::__construct();
 		
-		$config = config();
-		$config->system->profilers->enabled = false;
+		$this->_config->system->profilers->enabled = false;
 		
-		$this->_config = $config->cache;
-		
-		$this->_connection = new Connection($this->_config->persistent);
-		if($this->_connection->connect() === false)
-		{
-			throw new RedisException
-			(
-				sprintf('Could not connect to redis server "%s" on port "%s".',
-					$this->_store->getConfig()->host,
-					$this->_store->getConfig()->port,
-				)
-			);
-		}
-		
-		$group = $_SERVER['argv'][1] ?? KeyValue::GROUP_TESTS;
-		
-		$this->_store = new Store
-		(
-			$this->_connection,
-			$this->_config->persistent,
-			$this->_config->prefix,
-			$group,
-		);
+		$this->_group = $_SERVER['argv'][1] ?? KeyValue::GROUP_TESTS;
+		$this->_store = $this->_getStore(Store::class);
 	}
 	
 	/**
@@ -131,5 +106,8 @@ class QueueClient extends Controller\Cli
 	}
 }
 
-$client = new QueueClient;
+$application = container()
+	->getClass(Application::class); // register config before injecting
+$client = $application->getContainer()
+	->injectClass(QueueClient::class);
 $client->run();

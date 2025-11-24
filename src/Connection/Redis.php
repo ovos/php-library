@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Redis;
+namespace Ovos\Connection;
 
 use Ovos\ArrayObject;
+use Ovos\Connection;
 use Redis as RedisClient;
 use RedisException;
 
-use function Ovos\services;
 use function count;
 use function date;
 use function file_put_contents;
@@ -15,18 +15,13 @@ use function microtime;
 use function sprintf;
 
 /**
- * Connection
+ * Redis
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
-class Connection
+class Redis extends Connection
 {
-	/**
-	 * @var ArrayObject
-	 */
-	protected ArrayObject $_config;
-	
 	/**
 	 * Redis object
 	 *
@@ -92,7 +87,7 @@ class Connection
 	 */
 	public function __construct(ArrayObject $config)
 	{
-		$this->setConfig($config);
+		parent::__construct($config);
 		
 		// initialize timeout values taking in consideration default values set in this class
 		$this->_connectTimeout = (float)
@@ -118,23 +113,83 @@ class Connection
 	}
 	
 	/**
-	 * @param ArrayObject $config
-	 * 
-	 * @return self
+	 * @return ?RedisClient
 	 */
-	public function setConfig(ArrayObject $config): self
+	public function getClient(): ?RedisClient
 	{
-		$this->_config = $config;
-		
-		return $this;
+		return $this->_client;
 	}
 	
 	/**
-	 * @return ArrayObject
+	 * @return ?RedisClient
 	 */
-	public function getConfig(): ArrayObject
+	public function getConnectedClient(): ?RedisClient
 	{
-		return $this->_config;
+		return parent::getConnectedClient();
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function connect(): bool
+	{
+		$port = (int)($this->_config->port ?? 6379);
+		
+		$connectionOptions = [
+			'host' => $this->_config->host,
+			'port' => $port,
+			'connectTimeout' => $this->_connectTimeout,
+		];
+		$this->_client = new RedisClient($connectionOptions);
+		
+		$options = [
+			RedisClient::OPT_READ_TIMEOUT => $this->_readTimeout,
+			RedisClient::OPT_SERIALIZER => RedisClient::SERIALIZER_NONE,
+			RedisClient::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
+			RedisClient::OPT_MAX_RETRIES => 0, // do not limit the max retries, let the timeout handle it
+			RedisClient::OPT_BACKOFF_ALGORITHM => RedisClient::BACKOFF_ALGORITHM_DECORRELATED_JITTER, // https://github.com/phpredis/phpredis/pull/1993/files
+			RedisClient::OPT_BACKOFF_BASE => 500, // the minimum delay between retries when backing off
+			RedisClient::OPT_BACKOFF_CAP => 750, // the maximum delay between replies when backing off
+		];
+		
+		// set options
+		foreach($options as $optionName => $optionValue)
+		{
+			$this->_client->setOption($optionName, $optionValue);
+		}
+		
+		try
+		{
+			$this->_client->select($this->_config->database);
+		}
+		catch(RedisException $exception)
+		{
+			$this->_client = null;
+			$this->_logger->log
+			(
+				new RedisException
+				(
+					sprintf('Could not connect to redis server "%s" on port "%s".',
+						$this->_config->host,
+						$this->_config->port
+					), 
+					0,
+					$exception, // previous
+				)
+			);
+			
+			return false;
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * @return bool
+	 */
+	public function disconnect(): bool
+	{
+		return $this->_client->close();
 	}
 	
 	/**
@@ -195,7 +250,7 @@ class Connection
 					$function,
 					$diff
 				);
-				services()->events->log($message);
+				$this->_logger->log($message);
 				
 				$filename = sprintf('%s_%s.txt',
 					$this->_slowLogFilename,
@@ -266,91 +321,5 @@ class Connection
 		}
 		
 		return true;
-	}
-	
-	/**
-	 * @return bool
-	 */
-	public function connect(): bool
-	{
-		$port = (int)($this->_config->port ?? 6379);
-		
-		$connectionOptions = [
-			'host' => $this->_config->host,
-			'port' => $port,
-			'connectTimeout' => $this->_connectTimeout,
-		];
-		$this->_client = new RedisClient($connectionOptions);
-		
-		$options = [
-			RedisClient::OPT_READ_TIMEOUT => $this->_readTimeout,
-			RedisClient::OPT_SERIALIZER => RedisClient::SERIALIZER_NONE,
-			RedisClient::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
-			RedisClient::OPT_MAX_RETRIES => 0, // do not limit the max retries, let the timeout handle it
-			RedisClient::OPT_BACKOFF_ALGORITHM => RedisClient::BACKOFF_ALGORITHM_DECORRELATED_JITTER, // https://github.com/phpredis/phpredis/pull/1993/files
-			RedisClient::OPT_BACKOFF_BASE => 500, // the minimum delay between retries when backing off
-			RedisClient::OPT_BACKOFF_CAP => 750, // the maximum delay between replies when backing off
-		];
-		
-		// set options
-		foreach($options as $optionName => $optionValue)
-		{
-			$this->_client->setOption($optionName, $optionValue);
-		}
-		
-		try
-		{
-			$this->_client->select($this->_config->database);
-		}
-		catch(RedisException $exception)
-		{
-			$this->_client = null;
-			services()->events->log
-			(
-				new RedisException
-				(
-					sprintf('Could not connect to redis server "%s" on port "%s".',
-						$this->_config->host,
-						$this->_config->port
-					), 
-					0,
-					$exception, // previous
-				)
-			);
-			
-			return false;
-		}
-		
-		return true;
-	}
-	
-	/**
-	 * @return bool
-	 */
-	public function disconnect(): bool
-	{
-		return $this->_client->close();
-	}
-	
-	/**
-	 * @return ?RedisClient
-	 */
-	public function getClient(): ?RedisClient
-	{
-		return $this->_client;
-	}
-	
-	/**
-	 * Logs events (messages/errors/exceptions)
-	 *
-	 * @param mixed ...$event
-	 *
-	 * @return self
-	 */
-	public function log(...$event): self
-	{
-		services()->logger->log(...$event);
-		
-		return $this;
 	}
 }

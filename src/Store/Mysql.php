@@ -4,22 +4,26 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\Exception;
+use Ovos\Connections;
 use Ovos\Model\Mysql as Model;
 use Ovos\Store;
 use Ovos\Store\Mysql\Query;
 use Ovos\Store\Mysql\QueryBuilder;
-use Ovos\Service\Database;
 use Ovos\Pdo\Expression;
 use PDO;
 use PDOStatement;
 use Closure;
 
-use function Ovos\services;
 use function sprintf;
 use function is_bool;
 use function is_integer;
 use function array_keys;
 use function array_map;
+use function array_unique;
+use function array_column;
+use function implode;
+use function preg_replace;
+use function reset;
 
 /**
  * Mysql
@@ -46,7 +50,7 @@ abstract class Mysql extends Store
 	/**
 	 * @var string
 	 */
-	protected string $_sourceName = 'database';
+	protected string $_sourceName = 'mysql';
 	
 	/**
 	 * A connection between PHP and a database server
@@ -64,8 +68,9 @@ abstract class Mysql extends Store
 		{
 			// get database connection
 			$this->_source = $this->_container
-				->get(Database::SYMBOL)
-				->get($this->_sourceName);
+				->getClass(Connections::class)
+				->get($this->_sourceName)
+				->getConnectedClient();
 		}
 		
 		return $this->_source;
@@ -93,7 +98,7 @@ abstract class Mysql extends Store
 		
 		return static::TABLE;
 	}
-		
+	
 	/**
 	 * @return string
 	 */
@@ -110,7 +115,7 @@ abstract class Mysql extends Store
 	/**
 	 * Only used for getSql() calls, never used to query the database
 	 * or fetch results
-	 * 
+	 *
 	 * @return QueryBuilder
 	 */
 	public function query(): QueryBuilder
@@ -375,7 +380,7 @@ abstract class Mysql extends Store
 		
 		$query = $this->query()
 			->select($select);
-			
+		
 		if($alias !== null)
 		{
 			$query->alias($alias);
@@ -475,7 +480,8 @@ abstract class Mysql extends Store
 	 */
 	public function fetchGrouped(PDOStatement $statement, string $class): array
 	{
-		$result = $statement->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP, $class); // group by first column
+		$result = $statement
+			->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP, $class); // group by the first column
 		return array_map(static fn($row) => reset($row), $result);
 	}
 	

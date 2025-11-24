@@ -30,7 +30,7 @@ class Strings
 {
 	/**
 	 * @deprecated 
-	 * 
+	 *
 	 * @param string $haystack
 	 * @param string $needle
 	 *
@@ -43,7 +43,7 @@ class Strings
 	
 	/**
 	 * @deprecated @see https://wiki.php.net/rfc/str_contains
-	 * 
+	 *
 	 * @param string $haystack
 	 * @param string $needle
 	 *

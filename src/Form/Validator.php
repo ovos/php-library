@@ -59,7 +59,7 @@ abstract class Validator
 	
 	/**
 	 * @param Error $error
-	 * 
+	 *
 	 * @return self
 	 */
 	public function addError(Error $error): self
@@ -100,7 +100,7 @@ abstract class Validator
 	/**
 	 * @param string $errorCode
 	 * @param string $value
-	 * 
+	 *
 	 * @return self
 	 */
 	public function setMessage(string $errorCode, string $value): self
@@ -112,7 +112,7 @@ abstract class Validator
 	
 	/**
 	 * @param string $errorCode
-	 * 
+	 *
 	 * @return ?string
 	 */
 	public function getMessage(string $errorCode): ?string

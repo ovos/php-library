@@ -21,9 +21,10 @@ class Functions
 	 *
 	 * @return void
 	 */
-	public static function println(string $line = '',
+	public static function println(
+		string $line = '',
 		bool $bold = false,
-		bool $indent = false
+		bool $indent = false,
 	): void
 	{
 		$isCli = PHP_SAPI === 'cli';
