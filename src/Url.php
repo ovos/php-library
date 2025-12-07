@@ -3,20 +3,20 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use function array_merge;
+use function array_shift;
+use function array_unshift;
 use function count;
 use function end;
-use function key;
-use function reset;
-use function strpos;
-use function is_string;
-use function array_unshift;
-use function array_merge;
 use function implode;
-use function preg_split;
-use function array_shift;
-use function strlen;
-use function substr;
+use function is_string;
+use function key;
 use function parse_url;
+use function preg_split;
+use function reset;
+use function strlen;
+use function strpos;
+use function substr;
 
 /**
  * Url
@@ -26,27 +26,18 @@ use function parse_url;
  */
 class Url
 {
-	/**
-	 * @var ?Locale
-	 */
-	protected ?Locale $_locale = null;
+	protected ?Locale $locale = null;
+	
+	protected array $components = [];
+	
+	protected bool $relative = false;
 	
 	/**
-	 * @var array
-	 */
-	protected array $_components = [];
-	
-	/**
-	 * @var bool
-	 */
-	protected bool $_relative = false;
-	
-	/**
-	 * Construct
-	 *
 	 * @param string|int[] $components
 	 */
-	public function __construct(...$components)
+	public function __construct(
+		...$components,
+	)
 	{
 		$componentsCount = count($components);
 		if($componentsCount)
@@ -67,13 +58,10 @@ class Url
 		
 		$this->setComponents(self::getRequestComponents(), true);
 	}
-
-	/**
-	 * @param bool|int|float|string $url
-	 *
-	 * @return array
-	 */
-	public static function getUrlComponents(bool|int|float|string $url): array
+	
+	public static function getUrlComponents(
+		bool|int|float|string $url,
+	): array
 	{
 		if(is_string($url) === false)
 		{
@@ -93,13 +81,10 @@ class Url
 		return preg_split('~/+~', trim($url, '/'));
 	}
 	
-	/**
-	 * @param array $components
-	 * @param bool $relative
-	 *
-	 * @return ?string
-	 */
-	public static function getUrlFromComponents(array $components, bool $relative = false): ?string
+	public static function getUrlFromComponents(
+		array $components,
+		bool $relative = false,
+	): ?string
 	{
 		$url = $relative ? '' : ROUTE_PATH;
 		
@@ -125,8 +110,6 @@ class Url
 	
 	/**
 	 * Returns request components
-	 *
-	 * @return array
 	 */
 	public static function getRequestComponents(): array
 	{
@@ -148,7 +131,7 @@ class Url
 				}
 				
 				$source = substr($source, strlen(ROUTE_PATH));
-				if($source !== '' && $source !== false) // empty or ROUTE_PATH longer than source
+				if($source !== '') // empty or ROUTE_PATH longer than source
 				{
 					$components = self::getUrlComponents($source);
 				}
@@ -163,13 +146,10 @@ class Url
 		return $components;
 	}
 	
-	/**
-	 * @param array $components
-	 * @param bool $detectLocale
-	 *
-	 * @return static
-	 */
-	public function setComponents(array $components, bool $detectLocale = false): static
+	public function setComponents(
+		array $components,
+		bool $detectLocale = false,
+	): static
 	{
 		// if the first component is a locale symbol, use it
 		if($detectLocale
@@ -180,35 +160,30 @@ class Url
 			$this->setLocale(Locales::get($localeUrlName));
 		}
 		
-		$this->_components = $components;
+		$this->components = $components;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param array $components
-	 * @param bool $detectLocale
-	 *
-	 * @return static
-	 */
-	public function set(array $components, bool $detectLocale = false): static
+	public function set(
+		array $components,
+		bool $detectLocale = false,
+	): static
 	{
 		return $this->setComponents($components, $detectLocale);
 	}
 	
 	/**
 	 * Add *new* component
-	 * 
-	 * @param int|string $component
-	 *
-	 * @return static
 	 */
-	public function addComponent(int|string $component): static
+	public function addComponent(
+		int|string $component,
+	): static
 	{
-		$lastComponentKey = $this->_getLastComponentKey();
-		if($this->_components[$lastComponentKey] !== $component)
+		$lastComponentKey = $this->getLastComponentKey();
+		if($this->components[$lastComponentKey] !== $component)
 		{
-			$this->_components[] = $component;
+			$this->components[] = $component;
 		}
 		
 		return $this;
@@ -216,10 +191,10 @@ class Url
 	
 	/**
 	 * @param string[] $components
-	 *
-	 * @return static
 	 */
-	public function add(...$components): static
+	public function add(
+		...$components,
+	): static
 	{
 		foreach($components as $component)
 		{
@@ -231,10 +206,10 @@ class Url
 		
 	/**
 	 * @param string[] $components
-	 *
-	 * @return static
 	 */
-	public function remove(...$components): static
+	public function remove(
+		...$components,
+	): static
 	{
 		foreach($components as $component)
 		{
@@ -246,16 +221,14 @@ class Url
 	
 	/**
 	 * Removes a component
-	 * 
-	 * @param int|string $component
-	 *
-	 * @return static
 	 */
-	public function removeComponent(int|string $component): static
+	public function removeComponent(
+		int|string $component,
+	): static
 	{
-		if(($key = array_search($component, $this->_components, true)) !== false)
+		if(($key = array_search($component, $this->components, true)) !== false)
 		{
-			unset($this->_components[$key]);
+			unset($this->components[$key]);
 		}
 		
 		return $this;
@@ -266,21 +239,23 @@ class Url
 	 *
 	 * @return static
 	 */
-	public function setLastComponent(int|string|null $component): static
+	public function setLastComponent(
+		int|string|null $component,
+	): static
 	{
-		if(count($this->_components) === 0)
+		if(count($this->components) === 0)
 		{
 			return $this;
 		}
 		
-		$lastComponentKey = $this->_getLastComponentKey();
+		$lastComponentKey = $this->getLastComponentKey();
 		if($component === null)
 		{
-			unset($this->_components[$lastComponentKey]);
+			unset($this->components[$lastComponentKey]);
 		}
 		else
 		{
-			$this->_components[$lastComponentKey] = $component;
+			$this->components[$lastComponentKey] = $component;
 		}
 		
 		return $this;
@@ -289,95 +264,74 @@ class Url
 	/**
 	 * @return null|int|string
 	 */
-	protected function _getLastComponentKey(): null|int|string
+	protected function getLastComponentKey(
+	): null|int|string
 	{
-		end($this->_components);
-		$lastComponentKey = key($this->_components);
-		reset($this->_components);
+		end($this->components);
+		$lastComponentKey = key($this->components);
+		reset($this->components);
 		
 		return $lastComponentKey;
 	}
 	
 	/**
 	 * @see setLastComponent
-	 * 
-	 * @param null|int|string $component (null to remove it)
-	 *
-	 * @return static
 	 */
-	public function setLast(null|int|string $component): static
+	public function setLast(
+		null|int|string $component, // null to remove it
+	): static
 	{
 		return $this->setLastComponent($component);
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getComponents(): array
 	{
-		return $this->_components;
+		return $this->components;
 	}
 	
-	/**
-	 * @param null|Locale|string $locale
-	 *
-	 * @return static
-	 */
-	public function setLocale(null|Locale|string $locale): static
+	public function setLocale(
+		null|Locale|string $locale,
+	): static
 	{
 		if(is_string($locale))
 		{
 			$locale = Locales::get($locale);
 		}
 		
-		$this->_locale = $locale;
+		$this->locale = $locale;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?Locale
-	 */
 	public function getLocale(): ?Locale
 	{
-		if($this->_locale === null)
+		if($this->locale === null)
 		{
-			$this->_locale = Locales::getDefault();
+			$this->locale = Locales::getDefault();
 		}
 		
-		return $this->_locale;
+		return $this->locale;
 	}
 	
-	/**
-	 * @param bool $relative
-	 *
-	 * @return static
-	 */
 	public function setRelative(bool $relative): static
 	{
-		$this->_relative = $relative;
+		$this->relative = $relative;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function getRelative(): bool
 	{
-		return $this->_relative;
+		return $this->relative;
 	}
 	
-	/**
-	 * @param bool $relative
-	 *
-	 * @return string
-	 */
-	public function getUrl(bool $relative = false): string
+	public function getUrl(
+		bool $relative = false,
+	): string
 	{
 		$components = $this->getComponents();
 		
-		$locale = $this->_locale;
+		$locale = $this->locale;
 		if($locale === null)
 		{
 			$locale = app()->getRequest()->getLocale();
@@ -389,28 +343,19 @@ class Url
 		}
 		
 		return self::getUrlFromComponents($components,
-			$relative || $this->_relative);
+			$relative || $this->relative);
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getWithHost(): string
 	{
 		return SYSTEM_HOST . $this->getUrl(false);
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
 		return $this->getUrl();
 	}
 	
-	/**
-	 * @return static
-	 */
 	public function getClone(): static
 	{
 		return clone $this;

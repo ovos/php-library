@@ -14,85 +14,65 @@ use MessageFormatter;
  */
 class Translator
 {
-	/**#@+
-	 * Translations
-	 */
+	// Translations
 	public const string TRANSLATION_EXT = '.mo';
-	/**#@-*/
 	
 	/**
 	 * Locale of this instance
-	 *
-	 * @var Locale
 	 */
-	protected Locale $_locale;
+	protected Locale $locale;
 	
 	/**
 	 * Current locale instance to use for this response
 	 * It's possible to use all locales and translate in many languages during the single request
-	 *
-	 * @var ?Locale
 	 */
-	protected static ?Locale $_currentLocale = null;
+	protected static ?Locale $currentLocale = null;
 	
 	/**
 	 * @var Translation[]
 	 */
-	protected array $_translations = [];
+	protected array $translations = [];
 	
-	/**
-	 * @var array
-	 */
-	protected static array $_translationsPaths = [];
+	protected static array $translationsPaths = [];
 	
-	/**
-	 * @param Locale $locale
-	 */
-	public function __construct(Locale $locale)
+	public function __construct(
+		Locale $locale,
+	)
 	{
-		$this->_locale = $locale; // translator for this specific locale
+		$this->locale = $locale; // translator for this specific locale
 		
 		$this->refreshTranslations();
 	}
 	
-	/**
-	 * @param Locale $locale
-	 *
-	 * @return void
-	 */
-	public static function setCurrentLocale(Locale $locale): void
+	public static function setCurrentLocale(
+		Locale $locale,
+	): void
 	{
-		self::$_currentLocale = $locale;
+		self::$currentLocale = $locale;
 	}
 	
-	/**
-	 * @return Locale
-	 */
 	public static function getCurrentLocale(): Locale
 	{
-		if(self::$_currentLocale === null)
+		if(self::$currentLocale === null)
 		{
-			self::$_currentLocale = Locales::getDefault();
+			self::$currentLocale = Locales::getDefault();
 		}
 		
-		return self::$_currentLocale;
+		return self::$currentLocale;
 	}
 	
-	/**
-	 * @return static
-	 */
 	public function refreshTranslations(): static
 	{
-		foreach(self::$_translationsPaths as $translationsPath)
+		foreach(self::$translationsPaths as $translationsPath)
 		{
 			$translationPath = $translationsPath
-				. $this->_locale->getLanguage()
+				. $this->locale->getLanguage()
 				. self::TRANSLATION_EXT;
 			
 			if(array_key_exists($translationPath,
-				$this->_translations) === false)
+				$this->translations) === false)
 			{
-				$this->_translations[$translationPath]
+				$this->translations[$translationPath]
 					= new Translation($this, $translationPath);
 			}
 		}
@@ -105,20 +85,17 @@ class Translator
 	 */
 	public function getTranslations(): array
 	{
-		return $this->_translations;
+		return $this->translations;
 	}
 	
-	/**
-	 * @param string $phrase
-	 * @param mixed ...$params
-	 *
-	 * @return string
-	 */
-	public function translate(string $phrase, ...$params): string
+	public function translate(
+		string $phrase,
+		...$params,
+	): string
 	{
 		$translation = $phrase;
 		
-		foreach($this->_translations as $translationAdapter)
+		foreach($this->translations as $translationAdapter)
 		{
 			$result = $translationAdapter->translate($phrase);
 			if($result !== ''
@@ -128,29 +105,24 @@ class Translator
 			}
 		}
 		
-		return $this->_getTranslation($translation, ...$params);
+		return $this->getTranslation($translation, ...$params);
 	}
 	
 	/**
 	 * https://stackoverflow.com/questions/12184978/poedit-doesnt-recognize-n-plurals
-	 *
-	 * @param string $phraseSingular
-	 * @param string $phrasePlural
-	 * @param int $n
-	 * @param string ...$params
-	 *
-	 * @return string
 	 */
-	public function translatePlural(string $phraseSingular,
+	public function translatePlural(
+		string $phraseSingular,
 		string $phrasePlural,
 		int $n,
 		...$params,
 	): string
 	{
 		$translation = $this->getPlural($n) === 0 // english
-			? $phraseSingular : $phrasePlural;
+			? $phraseSingular
+			: $phrasePlural;
 		
-		foreach($this->_translations as $translationAdapter)
+		foreach($this->translations as $translationAdapter)
 		{
 			$result = $translationAdapter->translatePlural($phraseSingular, $phrasePlural, $n);
 			
@@ -164,42 +136,33 @@ class Translator
 			}
 		}
 		
-		return $this->_getTranslation($translation, ...$params);
+		return $this->getTranslation($translation, ...$params);
 	}
 	
-	/**
-	 * @param string $translation
-	 * @param mixed $params
-	 *
-	 * @return string
-	 */
-	protected function _getTranslation(string $translation, ...$params): string
+	protected function getTranslation(
+		string $translation,
+		...$params,
+	): string
 	{
 		if(empty($params))
 		{
 			return $translation;
 		}
 		
-		$formatter = new MessageFormatter($this->_locale->getLanguage(), $translation);
+		$formatter = new MessageFormatter($this->locale->getLanguage(), $translation);
 		return $formatter->format($params);
 	}
 	
-	/**
-	 * @param string $path
-	 *
-	 * @return void
-	 */
-	public static function addTranslationsPath(string $path): void
+	public static function addTranslationsPath(
+		string $path,
+	): void
 	{
-		self::$_translationsPaths[$path] = $path;
+		self::$translationsPaths[$path] = $path;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public static function getTranslationsPaths(): array
 	{
-		return self::$_translationsPaths;
+		return self::$translationsPaths;
 	}
 	
 	/**
@@ -207,16 +170,14 @@ class Translator
 	 * An alternative is to parse and eval "Plural-Forms:" header in .mo file
 	 *
 	 * Returns the plural definition to use
-	 *
-	 * @param int $number
-	 *
-	 * @return int
 	 */
-	public function getPlural(int $number): int
+	public function getPlural(
+		int $number,
+	): int
 	{
-		$language = $this->_locale->language;
+		$language = $this->locale->language;
 		
-		if($this->_locale->symbol === 'pt_BR') // exception for Brasil
+		if($this->locale->symbol === 'pt_BR') // exception for Brasil
 		{
 			$language = 'xbr';
 		}

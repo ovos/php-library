@@ -13,41 +13,20 @@ use Ovos\View;
  */
 class Message
 {
-	/**#@+
-	 * Types
-	 */
+	// Types
 	public const string TYPE_INFO = 'info';
 	public const string TYPE_SUCCESS = 'success';
 	public const string TYPE_WARNING = 'warning';
 	public const string TYPE_ERROR = 'error';
-	/**#@-*/
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_title;
+	protected ?string $title;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_description;
+	protected ?string $description;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_type;
+	protected string $type;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_raw;
+	protected bool $raw;
 	
-	/**
-	 * @param string $type
-	 * @param ?string $description
-	 * @param ?string $title
-	 * @param bool $raw
-	 */
 	public function __construct(
 		string $type = self::TYPE_SUCCESS,
 		?string $description = null,
@@ -61,123 +40,85 @@ class Message
 		$this->setIsRaw($raw);
 	}
 	
-	/**
-	 * @param ?string $title
-	 *
-	 * @return static
-	 */
-	public function setTitle(?string $title): static
+	public function setTitle(
+		?string $title,
+	): static
 	{
-		$this->_title = $title;
+		$this->title = $title;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getTitle(): ?string
 	{
-		return $this->_title;
+		return $this->title;
 	}
 	
-	/**
-	 * @param ?string $description
-	 *
-	 * @return static
-	 */
-	public function setDescription(?string $description): static
+	public function setDescription(
+		?string $description,
+	): static
 	{
-		$this->_description = $description;
+		$this->description = $description;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getDescription(): ?string
 	{
-		return $this->_description;
+		return $this->description;
 	}
 	
-	/**
-	 * @param string $type
-	 *
-	 * @return static
-	 */
-	public function setType(string $type): static
+	public function setType(
+		string $type,
+	): static
 	{
-		$this->_type = $type;
+		$this->type = $type;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getType(): string
 	{
-		return $this->_type;
+		return $this->type;
 	}
 	
-	/**
-	 * @param bool $raw
-	 *
-	 * @return static
-	 */
-	public function setIsRaw(bool $raw = true): static
+	public function setIsRaw(
+		bool $raw = true,
+	): static
 	{
-		$this->_raw = $raw;
+		$this->raw = $raw;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isRaw(): bool
 	{
-		return $this->_raw;
+		return $this->raw;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isInfo(): bool
 	{
 		return $this->getType() === self::TYPE_INFO;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isSuccess(): bool
 	{
 		return $this->getType() === self::TYPE_SUCCESS;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isWarning(): bool
 	{
 		return $this->getType() === self::TYPE_WARNING;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isError(): bool
 	{
 		return $this->getType() === self::TYPE_ERROR;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
-		return View::messages()->__toString();
+		return View::messages()
+			->__toString();
 	}
 }

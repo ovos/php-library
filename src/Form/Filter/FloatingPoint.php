@@ -13,12 +13,9 @@ use Ovos\Form\Filter;
  */
 class FloatingPoint extends Filter
 {
-	/**
-	 * @param mixed $value
-	 *
-	 * @return float
-	 */
-	public function filter(mixed $value): float
+	public function filter(
+		mixed $value,
+	): float
 	{
 		return (float)$value;
 	}

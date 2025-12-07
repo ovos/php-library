@@ -19,61 +19,32 @@ use function str_starts_with;
  */
 class Locale
 {
-	/**
-	 * @var ?ArrayObject
-	 */
-	protected ?ArrayObject $_config = null;
+	protected ?ArrayObject $config = null;
 	
-	/**#@+
-	 * Default values of the default system locale
-	 */
+	// Default values of the default system locale
 	public const string DEFAULT_URL_NAME = 'en';
 	public const string DEFAULT_SYMBOL = 'en_US';
-	/**#@-*/
 	
-	/**
-	 * @var string
-	 */
 	public string $urlName;
 	
-	/**
-	 * @var string
-	 */
 	public string $symbol;
 	
-	/**
-	 * @var string
-	 */
 	public string $language;
 	
-	/**
-	 * @var string
-	 */
 	public string $country;
 	
-	/**
-	 * @var string
-	 */
 	public string $name;
 	
-	/**
-	 * @var bool
-	 */
 	public bool $default = false;
 	
-	/**
-	 * @var bool
-	 */
 	public bool $locked = false;
 	
-	/**
-	 * @var ?Translator
-	 */
-	protected ?Translator $_translator = null;
+	protected ?Translator $translator = null;
 	
-	/**
-	 */
-	public function __construct(string $urlName, ?ArrayObject $config = null)
+	public function __construct(
+		string $urlName,
+		?ArrayObject $config = null,
+	)
 	{
 		$this->setUrlName($urlName);
 		
@@ -83,13 +54,9 @@ class Locale
 		}
 	}
 	
-	/**
-	 * @param ArrayObject $config
-	 *
-	 * @return static
-	 * @throws Exception
-	 */
-	public function fromConfig(ArrayObject $config): static
+	public function fromConfig(
+		ArrayObject $config,
+	): static
 	{
 		$this->setConfig($config);
 		
@@ -120,179 +87,132 @@ class Locale
 		return $this;
 	}
 	
-	/**
-	 * @return ArrayObject
-	 */
 	public function getConfig(): ArrayObject
 	{
-		return $this->_config;
+		return $this->config;
 	}
 	
-	/**
-	 * @param ArrayObject $config
-	 *
-	 * @return static
-	 */
-	public function setConfig(ArrayObject $config): static
+	public function setConfig(
+		ArrayObject $config,
+	): static
 	{
-		$this->_config = $config;
+		$this->config = $config;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getUrlName(): string
 	{
 		return $this->urlName;
 	}
 	
-	/**
-	 * @param string $urlName
-	 *
-	 * @return static
-	 */
-	public function setUrlName(string $urlName): static
+	public function setUrlName(
+		string $urlName,
+	): static
 	{
 		$this->urlName = $urlName;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getSymbol(): string
 	{
 		return $this->symbol;
 	}
 	
-	/**
-	 * @param string $symbol
-	 *
-	 * @return static
-	 */
-	public function setSymbol(string $symbol): static
+	public function setSymbol(
+		string $symbol,
+	): static
 	{
 		$this->symbol = $symbol;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getLanguage(): string
 	{
 		return $this->language;
 	}
 	
-	/**
-	 * @param string $language
-	 *
-	 * @return static
-	 */
-	public function setLanguage(string $language): static
+	public function setLanguage(
+		string $language,
+	): static
 	{
 		$this->language = $language;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getCountry(): string
 	{
 		return $this->country;
 	}
 	
-	/**
-	 * @param string $country
-	 *
-	 * @return static
-	 */
-	public function setCountry(string $country): static
+	public function setCountry(
+		string $country,
+	): static
 	{
 		$this->country = $country;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getName(): string
 	{
 		return $this->name;
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return static
-	 */
-	public function setName(string $name): static
+	public function setName(
+		string $name,
+	): static
 	{
 		$this->name = $name;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param bool $default
-	 *
-	 * @return static
-	 */
-	public function setDefault(bool $default): static
+	public function setDefault(
+		bool $default,
+	): static
 	{
 		$this->default = $default;
 		
 		return $this;
 	}
-
-	/**
-	 * @return bool
-	 */
+	
 	public function isDefault(): bool
 	{
 		return $this->default;
 	}
 	
-	/**
-	 * @param bool $locked
-	 *
-	 * @return static
-	 */
-	public function setLocked(bool $locked): static
+	public function setLocked(
+		bool $locked,
+	): static
 	{
 		$this->locked = $locked;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isLocked(): bool
 	{
 		return $this->locked;
 	}
 	
 	/**
-	 * @param Request $request
-	 * 
-	 * @return bool
+	 * Support for selective translations
+	 * (only for some controllers - configured in yml)
 	 */
-	public function isLockedForRequest(Request $request): bool
+	public function isLockedForRequest(
+		Request $request,
+	): bool
 	{
-		if($this->_config === null)
+		if($this->config === null)
 		{
 			return $this->locked;
 		}
 		
-		$controllers = $this->_config->offsetGet('controllers');
+		$controllers = $this->config->offsetGet('controllers');
 		if($controllers === null)
 		{
 			return $this->locked;
@@ -315,25 +235,19 @@ class Locale
 		return $locked;
 	}
 	
-	/**
-	 * @return Translator
-	 */
 	public function getTranslator(): Translator
 	{
-		if($this->_translator === null)
+		if($this->translator === null)
 		{
-			$this->_translator = new Translator($this);
+			$this->translator = new Translator($this);
 		}
 		
-		return $this->_translator;
+		return $this->translator;
 	}
 	
-	/**
-	 * @param array $top
-	 *
-	 * @return array
-	 */
-	public function getCountries(array $top = []): array
+	public function getCountries(
+		array $top = [],
+	): array
 	{
 		$countries = [];
 		
@@ -371,9 +285,6 @@ class Locale
 		return $countries;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function __debugInfo(): array
 	{
 		return [

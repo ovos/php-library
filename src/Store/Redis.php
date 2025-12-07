@@ -9,15 +9,15 @@ use Override;
 use Redis as RedisClient;
 use RedisException;
 
+use function array_diff;
+use function array_merge;
 use function array_push;
 use function array_unique;
-use function array_merge;
-use function array_diff;
 use function count;
 use function explode;
 use function implode;
-use function is_int;
 use function is_array;
+use function is_int;
 
 /**
  * Redis
@@ -27,27 +27,19 @@ use function is_array;
  */
 class Redis extends Store
 {
-	/**#@+
-	 * Types
-	 */
+	// Types
 	public const string TYPE_TAGS = 'tags';
-	/**#@-*/
 	
 	/**
 	 * Maintain clean tags = remove ids of invalidated items while invalidating them.
 	 * Results in slower invalidation, at the same benefitting with consistent and compact data.
 	 * If this option is off, make sure to enable garbage collector (can run as CLI once at night).
-	 * 
-	 * @var bool
 	 */
-	protected bool $_cleanTags = false;
+	protected bool $cleanTags = false;
 	
-	/**
-	 * @param ArrayObject $options
-	 *
-	 * @return static
-	 */
-	public function setStoreOptions(ArrayObject $options): static
+	public function setStoreOptions(
+		ArrayObject $options,
+	): static
 	{
 		if(($cleanTags = $options->offsetGet('clean_tags')) !== null) // true or false
 		{
@@ -57,33 +49,24 @@ class Redis extends Store
 		return $this;
 	}
 	
-	/**
-	 * @param bool $cleanTags
-	 *
-	 * @return static
-	 */
-	public function setCleanTags(bool $cleanTags): static
+	public function setCleanTags(
+		bool $cleanTags,
+	): static
 	{
-		$this->_cleanTags = $cleanTags;
+		$this->cleanTags = $cleanTags;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function getCleanTags(): bool
 	{
-		return $this->_cleanTags;
+		return $this->cleanTags;
 	}
 	
-	/**
-	 * @param RedisClient $client
-	 * @param string $id
-	 *
-	 * @return array
-	 */
-	protected function _getCurrentTags(RedisClient $client, string $id): array
+	protected function getCurrentTags(
+		RedisClient $client,
+		string $id,
+	): array
 	{
 		try
 		{
@@ -101,14 +84,11 @@ class Redis extends Store
 		}
 		
 		return [];
-	} 
+	}
 	
-	/**
-	 * @param string $key
-	 *
-	 * @return ?array
-	 */
-	public function getTags(string $key): ?array
+	public function getTags(
+		string $key,
+	): ?array
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -119,7 +99,7 @@ class Redis extends Store
 		{
 			$id = $this->prefix($key, $this->getType());
 			
-			return $this->_getCurrentTags($client, $id);
+			return $this->getCurrentTags($client, $id);
 		}
 		catch(RedisException $exception)
 		{
@@ -129,12 +109,9 @@ class Redis extends Store
 		return null;
 	}
 	
-	/**
-	 * @param string $key
-	 *
-	 * @return bool
-	 */
-	public function delete(string $key): bool
+	public function delete(
+		string $key,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -144,10 +121,10 @@ class Redis extends Store
 		try
 		{
 			$id = $this->prefix($key, $this->getType());
-			$tags = $this->_getCurrentTags($client, $id);
+			$tags = $this->getCurrentTags($client, $id);
 			
 			$client->clearLastError();
-			$client->multi($this->_multiMode);
+			$client->multi($this->multiMode);
 			$client->unlink($id);
 			
 			foreach($tags as $tag)
@@ -175,14 +152,6 @@ class Redis extends Store
 		return false;
 	}
 	
-	/**
-	 * @param string $key
-	 * @param mixed $value
-	 * @param int $ttl
-	 * @param array $tags
-	 * 
-	 * @return bool
-	 */
 	#[Override]
 	public function set(
 		string $key,
@@ -202,7 +171,7 @@ class Redis extends Store
 		{
 			$value = $this->compress($this->serialize($value));
 			
-			$currentTags = $this->_getCurrentTags($client, $id);
+			$currentTags = $this->getCurrentTags($client, $id);
 			
 			// if an item has some tags on it and a supplied array is empty,
 			// then we should remove the "tags" field on the item
@@ -212,7 +181,7 @@ class Redis extends Store
 			}
 			
 			$client->clearLastError();
-			$client->multi($this->_multiMode);
+			$client->multi($this->multiMode);
 			
 			$args = [$id, self::KEY_DATA, $value];
 			if(count($tags))
@@ -294,12 +263,9 @@ class Redis extends Store
 		return false;
 	}
 	
-	/**
-	 * @param array $tags
-	 *
-	 * @return bool
-	 */
-	public function invalidateTags(array $tags): bool
+	public function invalidateTags(
+		array $tags,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -320,7 +286,7 @@ class Redis extends Store
 			// this is an option functionality, which is not required
 			// at the cost of speed on invalidation; it keeps a database smaller (clean)
 			// by removing ids from tags
-			if($this->_cleanTags === true)
+			if($this->cleanTags === true)
 			{
 				$ids = $this->getIdsMatchingAnyTags($tags);
 				$countIds = count($ids);
@@ -329,7 +295,7 @@ class Redis extends Store
 				{
 					$client->clearLastError();
 					
-					$this->_batchFunctionCall('store_unlink_clean_tags', $ids, [
+					$this->batchFunctionCall('store_unlink_clean_tags', $ids, [
 						$group,
 						$typeItems,
 						$typeTags,
@@ -347,7 +313,7 @@ class Redis extends Store
 			
 			foreach($tags as $tag)
 			{
-				$this->_functionCall('store_unlink_by_tag', [], [
+				$this->functionCall('store_unlink_by_tag', [], [
 					$group,
 					$tag,
 					$typeItems,
@@ -370,12 +336,9 @@ class Redis extends Store
 		return false;
 	}
 	
-	/**
-	 * @param array $tags
-	 *
-	 * @return array
-	 */
-	public function getIdsMatchingAnyTags(array $tags): array
+	public function getIdsMatchingAnyTags(
+		array $tags,
+	): array
 	{
 		// return a unique list of ids matching any of the tags
 		$ids = $this->getIdsMatchingAllTags($tags);
@@ -393,12 +356,9 @@ class Redis extends Store
 		return [];
 	}
 	
-	/**
-	 * @param array $tags
-	 *
-	 * @return array
-	 */
-	public function getIdsMatchingAllTags(array $tags): array
+	public function getIdsMatchingAllTags(
+		array $tags,
+	): array
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -415,7 +375,7 @@ class Redis extends Store
 			
 			foreach($tags as $tag)
 			{
-				$results = $this->_functionCall('store_get_ids_by_tag', [], [
+				$results = $this->functionCall('store_get_ids_by_tag', [], [
 					$group,
 					$tag,
 					$typeTags,
@@ -442,8 +402,6 @@ class Redis extends Store
 	
 	/**
 	 * Returns a list of all tags
-	 * 
-	 * @return array
 	 */
 	public function getAllTags(): array
 	{
@@ -460,7 +418,7 @@ class Redis extends Store
 		{
 			$client->clearLastError();
 			
-			$results = $this->_functionCall('store_get_tags', [], [
+			$results = $this->functionCall('store_get_tags', [], [
 				$group,
 				$typeTags,
 			], true);
@@ -485,8 +443,6 @@ class Redis extends Store
 	
 	/**
 	 * Throws exception on purpose, this method is not meant to be used by normal users
-	 * 
-	 * @return bool|int
 	 */
 	public function collectGarbage(): bool|int
 	{
@@ -507,7 +463,7 @@ class Redis extends Store
 			
 			foreach($tags as $tag)
 			{
-				$result = $this->_functionCall('store_clean_tag', [], [
+				$result = $this->functionCall('store_clean_tag', [], [
 					$group,
 					$tag,
 					$typeItems,

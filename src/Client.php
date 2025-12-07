@@ -16,28 +16,21 @@ use function ip2long;
  */
 class Client
 {
-	/**#@+
-	 * Protocol constant
-	 */
+	// Protocol constant
 	public const string PROTOCOL_HTTP = 'http';
 	public const string PROTOCOL_HTTPS = 'https';
-	/**#@-*/
 	
 	/**
 	 * Returns current protocol (http or https)
-	 *
-	 * @var ?string
 	 */
-	protected static ?string $_protocol = null;
+	protected static ?string $protocol = null;
 	
 	/**
 	 * Is HTTPS on?
-	 *
-	 * @return string
 	 */
 	public static function getProtocol(): string
 	{
-		if(self::$_protocol === null)
+		if(self::$protocol === null)
 		{
 			/**
 			 * REQUEST_SCHEME have been available since Apache 2.4.16, but only on servers with direct TLS connections
@@ -50,29 +43,25 @@ class Client
 			$isHttps = $_SERVER['REQUEST_SCHEME'] === self::PROTOCOL_HTTPS
 				|| (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === self::PROTOCOL_HTTPS);
 			
-			self::$_protocol = $isHttps ? self::PROTOCOL_HTTPS : self::PROTOCOL_HTTP;
+			self::$protocol = $isHttps ? self::PROTOCOL_HTTPS : self::PROTOCOL_HTTP;
 		}
 		
-		return self::$_protocol;
+		return self::$protocol;
 	}
 
 	/**
 	 * IP address
-	 *
-	 * @var ?string
 	 */
-	protected static ?string $_ip = null;
+	protected static ?string $ip = null;
 	
 	/**
 	 * Returns visitor's IP address
 	 * Supports proxies
 	 * Supports cloudflare
-	 *
-	 * @return string
 	 */
 	public static function getIp(): string
 	{
-		if(self::$_ip === null)
+		if(self::$ip === null)
 		{
 			// build up an array of available IPs
 			$ips = [];
@@ -98,19 +87,19 @@ class Client
 					&& ip2long($possibleIp) !== false)
 				{
 					// valid IP
-					self::$_ip = $possibleIp;
+					self::$ip = $possibleIp;
 					break;
 				}
 			}
 			
 			// no valid IP sent by proxies, use default or return an empty string
-			if(self::$_ip === null)
+			if(self::$ip === null)
 			{
-				self::$_ip = $_SERVER['REMOTE_ADDR'] ?? '';
+				self::$ip = $_SERVER['REMOTE_ADDR'] ?? '';
 			}
 		}
 		
-		return self::$_ip;
+		return self::$ip;
 	}
 	
 	/**

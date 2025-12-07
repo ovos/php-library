@@ -14,18 +14,15 @@ use Ovos\Dir as BaseDir;
  */
 class Dir extends Test
 {
-	/**
-	 * @var string
-	 */
-	protected string $_dir = __DIR__
+	protected string $dir = __DIR__
 		. DIRECTORY_SEPARATOR . 'Dir'
 		. DIRECTORY_SEPARATOR . 'files'
 		. DIRECTORY_SEPARATOR;
 	
 	public function copyFiles(): bool
 	{
-		$copy = $this->_dir . 'copy';
-		$copy2 = $this->_dir . 'copy2';
+		$copy = $this->dir . 'copy';
+		$copy2 = $this->dir . 'copy2';
 		BaseDir::create($copy2);
 		BaseDir::copyFiles($copy, $copy2);
 		
@@ -38,9 +35,9 @@ class Dir extends Test
 	
 	public function moveFiles(): bool
 	{
-		$copy = $this->_dir . 'copy';
-		$copy2 = $this->_dir . 'copy2';
-		$move = $this->_dir . 'move';
+		$copy = $this->dir . 'copy';
+		$copy2 = $this->dir . 'copy2';
+		$move = $this->dir . 'move';
 		BaseDir::create($copy2);
 		BaseDir::copyFiles($copy, $copy2);
 		BaseDir::create($move);
@@ -56,7 +53,7 @@ class Dir extends Test
 	
 	public function getTree(): bool
 	{
-		$copy = $this->_dir . 'copy';
+		$copy = $this->dir . 'copy';
 		$tree = [
 			'dir1' => [
 				'dir1' => [
@@ -86,14 +83,14 @@ class Dir extends Test
 	
 	public function getFiles(): bool
 	{
-		$copy = $this->_dir . 'copy';
+		$copy = $this->dir . 'copy';
 		
 		return count(BaseDir::getFiles($copy)) === 9;
 	}
 	
 	public function getFilesFilterFiles(): bool
 	{
-		$copy = $this->_dir . 'copy';
+		$copy = $this->dir . 'copy';
 		
 		return count(BaseDir::getFiles($copy, filter: BaseDir::FILTER_FILES)) === 6;
 	}

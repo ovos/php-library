@@ -17,38 +17,30 @@ use function count;
  */
 class Redirect extends Response
 {
-	/**
-	 * @var Url
-	 */
-	protected Url $_url;
+	protected Url $url;
 	
 	/**
 	 * HTTP code
-	 *
-	 * @var int
 	 */
-	protected int $_httpCode = 302;
+	protected int $httpCode = 302;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_withHost = false;
+	protected bool $withHost = false;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_withQueryString = false;
+	protected bool $withQueryString = false;
 	
 	/**
 	 * @param Url|string[] $urlComponents
 	 */
-	public function __construct(...$urlComponents)
+	public function __construct(
+		...$urlComponents,
+	)
 	{
 		parent::__construct();
 		
-		if(isset($urlComponents[0]) && ($urlComponents[0] instanceof Url))
+		if(isset($urlComponents[0])
+			&& ($urlComponents[0] instanceof Url))
 		{
-			$this->_url = $urlComponents[0];
+			$this->url = $urlComponents[0];
 			return;
 		}
 		
@@ -57,21 +49,16 @@ class Redirect extends Response
 			$urlComponents[] = '/';
 		}
 		
-		$this->_url = new Url(...$urlComponents);
+		$this->url = new Url(...$urlComponents);
 	}
 	
-	/**
-	 * @return Url
-	 */
 	public function getUrl(): Url
 	{
-		return $this->_url;
+		return $this->url;
 	}
 	
 	/**
 	 * Send headers
-	 *
-	 * @return static
 	 */
 	public function sendHeaders(): static
 	{
@@ -83,44 +70,35 @@ class Redirect extends Response
 		return $this;
 	}
 	
-	/**
-	 * @param bool $withHost
-	 *
-	 * @return static
-	 */
-	public function withHost(bool $withHost = true): static
+	public function withHost(
+		bool $withHost = true,
+	): static
 	{
-		$this->_withHost = $withHost;
+		$this->withHost = $withHost;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param bool $withQueryString
-	 *
-	 * @return static
-	 */
-	public function withQueryString(bool $withQueryString = true): static
+	public function withQueryString(
+		bool $withQueryString = true,
+	): static
 	{
-		$this->_withQueryString = $withQueryString;
+		$this->withQueryString = $withQueryString;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	#[Override]
 	public function __toString(): string
 	{
-		$url = $this->_url->__toString();
+		$url = $this->url->__toString();
 		
-		if($this->_withHost)
+		if($this->withHost)
 		{
 			$url = SYSTEM_HOST . $url;
 		}
 		
-		if($this->_withQueryString && $_SERVER['QUERY_STRING'] !== '')
+		if($this->withQueryString && $_SERVER['QUERY_STRING'] !== '')
 		{
 			$url.= '?' . $_SERVER['QUERY_STRING']; 
 		}

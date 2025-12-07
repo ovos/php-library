@@ -19,125 +19,94 @@ use ErrorException;
  */
 class Streams extends Service
 {
-	/**
-	 * @var string
-	 */
 	public const string SYMBOL = 'streams';
 	
-	/**
-	 * @var int
-	 */
 	public const int DEFAULT_TIMEOUT = 15;
 	
-	/**
-	 * @var ?ArrayObject 
-	 */
-	protected ?ArrayObject $_config = null;
+	protected ?ArrayObject $config = null;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_defaultContextOptions = [];
+	protected array $defaultContextOptions = [];
 	
-	/**
-	 * @var Request[]
-	 */
-	protected array $_requests = [];
+	protected array $requests = [];
 	
-	/**
-	 * @param ArrayObject $config
-	 */
 	public function __construct(
 		#[Inject('config')]
 		#[InjectArrayObject('streams')]
 		ArrayObject $config,
 	)
 	{
-		$this->_config = $config;
+		$this->config = $config;
 		
-		$this->_defaultContextOptions = [
+		$this->defaultContextOptions = [
 			'http' => [
-				'timeout' => $this->_config->timeout ?: self::DEFAULT_TIMEOUT,
+				'timeout' => $this->config->timeout ?: self::DEFAULT_TIMEOUT,
 			],
 		];
 		
-		if($this->_config->username && $this->_config->password)
+		if($this->config->username && $this->config->password)
 		{
 			$auth = base64_encode(sprintf('%s:%s',
-				$this->_config->username,
-				$this->_config->password,
+				$this->config->username,
+				$this->config->password,
 			));
 			
-			$this->_defaultContextOptions['http']['header'] = 'Authorization: Basic ' . $auth;
+			$this->defaultContextOptions['http']['header']
+				= 'Authorization: Basic ' . $auth;
 		}
 	}
 	
-	/**
-	 * @param array $defaultContextOptions
-	 *
-	 * @return $this
-	 */
-	public function setDefaultContextOptions(array $defaultContextOptions): static
+	public function setDefaultContextOptions(
+		array $defaultContextOptions,
+	): static
 	{
-		$this->_defaultContextOptions = $defaultContextOptions;
+		$this->defaultContextOptions = $defaultContextOptions;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getDefaultContextOptions(): array
 	{
-		return $this->_defaultContextOptions;
+		return $this->defaultContextOptions;
 	}
 	
 	/**
-	 * @param string $url
-	 * @param array $contextOptions
-	 *
-	 * @return mixed
-	 * 
-	 * @throws ErrorException (from fopen)
+	 * @throws ErrorException (from fopen in invoke())
 	 */
-	public function request(string $url, array $contextOptions = []): mixed
+	public function request(
+		string $url,
+		array $contextOptions = [],
+	): mixed
 	{
-		$requestUrl = ($this->_config->base_url ?? $this->_config->url) . $url; // -> url for BC
-		$request = (new Request($requestUrl, $this->_defaultContextOptions))
+		$requestUrl = ($this->config->base_url ?? $this->config->url) . $url; // -> url for BC
+		$request = (new Request($requestUrl, $this->defaultContextOptions))
 			->setContextOptions($contextOptions);
 		$object = $request->invoke()->getJsonResponse();
-		$this->_requests[] = $request;
+		$this->requests[] = $request;
 		
 		return $object;
 	}
 	
 	/**
 	 * Pass a request created with a factory() method
-	 * 
-	 * @param Request $request
 	 *
-	 * @return mixed
-	 * 
-	 * @throws ErrorException (from fopen)
+	 * @throws ErrorException (from fopen in invoke())
 	 */
-	public function invoke(Request $request): mixed
+	public function invoke(
+		Request $request,
+	): mixed
 	{
 		$object = $request->invoke()->getJsonResponse();
-		$this->_requests[] = $request;
+		$this->requests[] = $request;
 		
 		return $object;
 	}
 	
-	/**
-	 * @param string $baseUrl
-	 * @param array $defaultContextOptions
-	 *
-	 * @return Factory
-	 */
-	public function factory(string $baseUrl,
-		array $defaultContextOptions = []): Factory
+	public function factory(
+		string $baseUrl,
+		array $defaultContextOptions = [],
+	): Factory
 	{
-		return (new Factory($baseUrl, $this->_defaultContextOptions))
+		return (new Factory($baseUrl, $this->defaultContextOptions))
 			->setDefaultContextOptions($defaultContextOptions);
 	}
 	
@@ -146,6 +115,6 @@ class Streams extends Service
 	 */
 	public function getRequests(): array
 	{
-		return $this->_requests;
+		return $this->requests;
 	}
 }

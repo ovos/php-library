@@ -4,24 +4,23 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\Client;
-use Ovos\Error;
 use Ovos\Exception;
-use Ovos\Logger as LoggerTrait;
+use Ovos\Logger\Traits\TraitFile;
 use Ovos\Service;
 use Throwable;
 
+use function count;
+use function date;
+use function get_class;
+use function implode;
 use function is_array;
 use function is_numeric;
 use function is_string;
-use function count;
-use function sprintf;
-use function date;
-use function implode;
 use function json_encode;
-use function preg_match;
-use function get_class;
-use function method_exists;
 use function mb_strlen;
+use function method_exists;
+use function preg_match;
+use function sprintf;
 
 /**
  * Logger
@@ -31,59 +30,39 @@ use function mb_strlen;
  */
 class Logger extends Service
 {
-	use LoggerTrait\File;
+	use TraitFile;
 	
-	/**
-	 * @var string
-	 */
 	public const string SYMBOL = 'logger';
 	
-	/**
-	 * @var string
-	 */
-	protected string $_dir = 'events';
+	protected string $dir = 'events';
 	
-	/**
-	 * @var string
-	 */
-	protected string $_file = 'events';
+	protected string $file = 'events';
 	
-	/**
-	 * @var array
-	 */
-	protected array $_remove = [
+	protected array $remove = [
 		'~^password.*~',
 		'~Authorization~',
 	];
 	
-	/**
-	 * @param array $remove
-	 *
-	 * @return static
-	 */
-	public function addRemove(array $remove): static
+	public function addRemove(
+		array $remove,
+	): static
 	{
-		$this->_remove = array_merge($this->_remove, $remove);
+		$this->remove = array_merge($this->remove, $remove);
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getRemove(): array
 	{
-		return $this->_remove;
+		return $this->remove;
 	}
 	
 	/**
 	 * Logs events (messages/errors/exceptions)
-	 *
-	 * @param mixed ...$event
-	 *
-	 * @return static
 	 */
-	public function log(...$event): static
+	public function log(
+		...$event,
+	): static
 	{
 		$count = count($event);
 		if($count === 0)
@@ -126,14 +105,11 @@ class Logger extends Service
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getPrepend(): string
 	{
 		// prepend
 		$prepend = date('c ');
-		if($this->_app->isInterfaceHttp())
+		if($this->app->isInterfaceHttp())
 		{
 			$prepend.= sprintf
 			(
@@ -144,7 +120,7 @@ class Logger extends Service
 				$_SERVER['HTTP_USER_AGENT'] ?? ''
 			);
 		}
-		else if($this->_app->isInterfaceCli())
+		else if($this->app->isInterfaceCli())
 		{
 			$prepend.= 'CLI: ' . (isset($_SERVER['argv']) ?
 				implode(' ', $_SERVER['argv']) : 'no arguments');
@@ -153,9 +129,6 @@ class Logger extends Service
 		return $prepend . PHP_EOL;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getAppend(): string
 	{
 		// append
@@ -163,28 +136,31 @@ class Logger extends Service
 		if(!empty($_GET))
 		{
 			$append.= 'GET: ' . PHP_EOL
-				. json_encode($_GET, JSON_PRETTY_PRINT) . PHP_EOL;
+				. json_encode($_GET, 
+					JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT,
+				) . PHP_EOL;
 		}
 		if(!empty($_POST))
 		{
 			$append.= 'POST: ' . PHP_EOL
-				. json_encode($this->remove($_POST), JSON_PRETTY_PRINT) . PHP_EOL;
+				. json_encode($this->remove($_POST), 
+					JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT,
+				) . PHP_EOL;
 		}
 		if(!empty($_FILES))
 		{
 			$append.= 'FILES: ' . PHP_EOL
-				. json_encode($_FILES, JSON_PRETTY_PRINT) . PHP_EOL;
+				. json_encode($_FILES, 
+					JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT,
+				) . PHP_EOL;
 		}
 		
 		return $append . PHP_EOL;
 	}
 	
-	/**
-	 * @param array $data
-	 *
-	 * @return array
-	 */
-	public function remove(array $data): array
+	public function remove(
+		array $data,
+	): array
 	{
 		foreach($data as $key => $value)
 		{
@@ -200,7 +176,7 @@ class Logger extends Service
 				continue;
 			}
 			
-			foreach($this->_remove as $pattern)
+			foreach($this->remove as $pattern)
 			{
 				if(preg_match($pattern, $key, $matches))
 				{
@@ -214,15 +190,14 @@ class Logger extends Service
 		return $data;
 	}
 	
-	/**
-	 * @param object $event
-	 *
-	 * @return string
-	 */
-	public function getEvent(object $event): string
+	public function getEvent(
+		object $event,
+	): string
 	{
 		$output = '';
-		if($event instanceof Throwable && method_exists($event, 'getPrevious'))
+		
+		if($event instanceof Throwable
+			&& method_exists($event, 'getPrevious'))
 		{
 			$previous = false;
 			do
@@ -240,16 +215,6 @@ class Logger extends Service
 			}
 			while($event = $event->getPrevious());
 		}
-		else
-		{
-			$name = $event instanceof Error
-				? $event->getName()
-				: get_class($event);
-			$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
-			$output.= $name . ': ' . $event->getMessage()
-				. PHP_EOL . $event->getTraceAsString();
-		}
-		$output.= PHP_EOL;
 		
 		return $output;
 	}

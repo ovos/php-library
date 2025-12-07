@@ -14,53 +14,30 @@ use Ovos\Container\Inject;
  */
 abstract class Service
 {
-	/**
-	 * @var Container
-	 */
 	#[Inject]
-	protected Container $_container;
+	protected Container $container;
 	
-	/**
-	 * @var Application
-	 */
 	#[Inject] 
-	protected Application $_app;
+	protected Application $app;
 	
-	/**
-	 * @var Request
-	 */
 	#[Inject] 
-	protected Request $_request;
+	protected Request $request;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_enabled = true;
+	protected bool $enabled = true;
 	
-	/**
-	 * @param string $key
- 	 * @param Container $container
-	 *
-	 * @return void
-	 */
-	public static function register(string $key,
+	public static function register(
+		string $key,
 		Container $container,
 	): void
 	{
 		$container->registerClass($key, static::class);
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isEnabled(): bool
 	{
-		return $this->_enabled;
+		return $this->enabled;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getSymbol(): string
 	{
 		return static::SYMBOL;

@@ -7,6 +7,10 @@ use Ovos\Terminal\Formatter;
 use Override;
 use Console_Table;
 
+use function count;
+use function is_array;
+use function is_string;
+
 /**
  * Table
  *
@@ -15,62 +19,57 @@ use Console_Table;
  */
 class Table extends Console_Table
 {
-	/**
-	 * @var bool
-	 */
-	protected bool $_hasMarkup = false;
+	protected bool $hasMarkup = false;
 	
-	/**
-	 * @param bool $hasMarkup
-	 * 
-	 * @return static
-	 */
-	public function hasMarkup(bool $hasMarkup): static
+	public function hasMarkup(
+		bool $hasMarkup,
+	): static
 	{
-		$this->_hasMarkup = $hasMarkup;
+		$this->hasMarkup = $hasMarkup;
 		
 		return $this;
 	}
 	
 	/**
 	 * Calculates the maximum length for each column of a row.
-	 *
-	 * @param array $row The row data.
-	 *
-	 * @return void
 	 */
 	#[Override] 
-	function _calculateCellLengths($row)
+	function _calculateCellLengths(
+		$row, // the row data
+	)
 	{
-		if(is_array($row))
+		if(is_array($row) === false)
 		{
-			for($i = 0; $i < count($row); $i++)
+			return;
+		}
+		
+		for($i = 0,
+			$iMax = count($row); $i < $iMax; $i++)
+		{
+			if(!isset($this->_cell_lengths[$i]))
 			{
-				if(!isset($this->_cell_lengths[$i]))
-				{
-					$this->_cell_lengths[$i] = 0;
-				}
-				$rowValue = $this->_hasMarkup && is_string($row[$i])
-					? Formatter::stripTerminalMarkup($row[$i]) : $row[$i];
-				
-				$this->_cell_lengths[$i] = max($this->_cell_lengths[$i],
-					$this->_strlen($rowValue));
+				$this->_cell_lengths[$i] = 0;
 			}
+			$rowValue = $this->hasMarkup && is_string($row[$i])
+				? Formatter::stripTerminalMarkup($row[$i])
+				: $row[$i];
+			
+			$this->_cell_lengths[$i] = max($this->_cell_lengths[$i],
+				$this->_strlen($rowValue));
 		}
 	}
 	
 	/**
 	 * Returns the character length of a string.
-	 *
-	 * @param string $str A multibyte or singlebyte string.
-	 *
-	 * @return integer  The string length.
 	 */
 	#[Override]
-	function _strlen($str)
+	function _strlen(
+		$str, // a multibyte or singlebyte string.
+	)
 	{
-		$str = $this->_hasMarkup && is_string($str)
-			? Formatter::stripTerminalMarkup($str) : $str;
+		$str = $this->hasMarkup && is_string($str)
+			? Formatter::stripTerminalMarkup($str)
+			: $str;
 		
 		return parent::_strlen($str);
 	}

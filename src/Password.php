@@ -5,15 +5,15 @@ namespace Ovos;
 
 use Ovos\Password\Hash;
 
-use function strlen;
-use function count;
 use function array_rand;
-use function str_shuffle;
+use function count;
 use function floor;
-use function sqrt;
-use function substr;
 use function password_verify;
+use function str_shuffle;
 use function str_split;
+use function strlen;
+use function substr;
+use function sqrt;
 
 /**
  * Password
@@ -23,54 +23,35 @@ use function str_split;
  */
 class Password
 {
-	/**#@+
-	 * Generator sets
-	 */
+	// Generator sets
 	public const int SET_LOWERCASE = 1;
 	public const int SET_UPPERCASE = 2;
 	public const int SET_DIGITS = 4;
 	public const int SET_SPECIAL = 8;
 	public const int SET_SPECIAL_FTP = 16;
-	/**#@-*/
 	
-	/**
-	 * @var ?Hash 
-	 */
 	public static ?Hash $hashInstance = null;
 	
-	/**
-	 * @param string $password
-	 * @param ?int $algorithm
-	 * @param ?array $options
-	 *
-	 * @return bool|string
-	 */
-	public static function hash(string $password,
+	public static function hash(
+		string $password,
 		?int $algorithm = null,
-		?array $options = null
+		?array $options = null,
 	): bool|string
 	{
-		return self::getHashInstance()->hash($password, $algorithm, $options);
+		return self::getHashInstance()
+			->hash($password, $algorithm, $options);
 	}
 	
-	/**
-	 * @param string $password
-	 * @param ?int $algorithm
-	 * @param ?array $options
-	 *
-	 * @return bool|string
-	 */
-	public static function needsRehash(string $password,
+	public static function needsRehash(
+		string $password,
 		?int $algorithm = null,
-		?array $options = null
+		?array $options = null,
 	): bool|string
 	{
-		return self::getHashInstance()->needsRehash($password, $algorithm, $options);
+		return self::getHashInstance()
+			->needsRehash($password, $algorithm, $options);
 	}
 	
-	/**
-	 * @return Hash
-	 */
 	public static function getHashInstance(): Hash
 	{
 		if(self::$hashInstance === null)
@@ -81,13 +62,10 @@ class Password
 		return self::$hashInstance;
 	}
 	
-	/**
-	 * @param string $password
-	 * @param string $hash
-	 *
-	 * @return bool
-	 */
-	public static function verify(string $password, string $hash): bool
+	public static function verify(
+		string $password,
+		string $hash,
+	): bool
 	{
 		return password_verify($password, $hash);
 	}
@@ -105,16 +83,14 @@ class Password
 	 *
 	 * Based on
 	 * @see https://gist.github.com/tylerhall/521810
-	 *
-	 * @param int $length
-	 * @param bool $dashes
-	 * @param int $availableSets
-	 *
-	 * @return string
 	 */
-	public static function generate(int $length = 9,
+	public static function generate(
+		int $length = 9,
 		bool $dashes = true,
-		int $availableSets = self::SET_LOWERCASE + self::SET_UPPERCASE + self::SET_DIGITS + self::SET_SPECIAL
+		int $availableSets = self::SET_LOWERCASE
+			+ self::SET_UPPERCASE
+			+ self::SET_DIGITS
+			+ self::SET_SPECIAL,
 	): string
 	{
 		$sets = [];

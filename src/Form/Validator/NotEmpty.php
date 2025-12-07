@@ -14,31 +14,26 @@ use Ovos\Form\Validator;
  */
 class NotEmpty extends Validator
 {
-	/**#@+
-	 * Errors
-	 */
+	// Errors
 	public const string ERROR_EMPTY = 'empty';
-	/**#@-*/
 	
 	/**
 	 * @var string[]
 	 */
-	protected array $_messages =
+	protected array $messages =
 	[
 		self::ERROR_EMPTY => '"%s" cannot be empty.',
 	];
 	
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	public function isValid(mixed $value): bool
+	public function isValid(
+		mixed $value,
+	): bool
 	{
 		$valid = empty($value) === false;
 		if($valid === false)
 		{
-			$error = new Error(self::ERROR_EMPTY, sprintf($this->getMessage(self::ERROR_EMPTY),
+			$error = new Error(self::ERROR_EMPTY,
+				sprintf($this->getMessage(self::ERROR_EMPTY),
 				$this->getElement()->getName()
 			));
 			$this->addError($error);

@@ -8,12 +8,12 @@ use Ovos\View\Helper;
 use Ovos\Service\Events;
 use Throwable;
 
-use function call_user_func_array;
-use function method_exists;
-use function ob_start;
-use function ob_get_clean;
 use function array_key_exists;
+use function call_user_func_array;
 use function class_exists;
+use function method_exists;
+use function ob_get_clean;
+use function ob_start;
 
 /**
  * View
@@ -37,149 +37,107 @@ class View
 {
 	use Translatable;
 	
-	/**
-	 * @var string
-	 */
 	public const string SUFFIX = '.phtml';
 	
-	/**
-	 * @var Container
-	 */
-	protected Container $_container;
+	protected Container $container;
 	
-	/**
-	 * @var Application
-	 */
-	protected Application $_app;
+	protected Application $app;
 	
-	/**
-	 * @var Request
-	 */
-	protected Request $_request;
+	protected Request $request;
 	
-	/**
-	 * @var Events
-	 */
-	protected Events $_eventsService;
+	protected Events $eventsService;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_viewScriptFile;
+	protected ?string $viewScriptFile;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_vars = [];
+	protected array $vars = [];
 	
-	/**
-	 * @var array
-	 */
-	protected static array $_helpers = [];
+	protected static array $helpers = [];
 	
-	/**
-	 * @param ?string $viewScriptFile
-	 * @param array $vars
-	 */
 	public function __construct(
 		?string $viewScriptFile = null,
 		array $vars = [],
 	)
 	{
-		$this->_viewScriptFile = $viewScriptFile;
+		$this->viewScriptFile = $viewScriptFile;
 		
-		$this->_container = container();
-		$this->_app = $this->_container
+		$this->container = container();
+		$this->app = $this->container
 			->getClass(Application::class);
-		$this->_request = $this->_app->getRequest();
-		$this->_eventsService = $this->_container->get(Events::SYMBOL);
+		$this->request = $this->app->getRequest();
+		$this->eventsService = $this->container->get(Events::SYMBOL);
 		
-		$this->app = $this->_app;
-		$this->interface = $this->_app->getInterface();
-		$this->config = $this->_app->getConfig();
-		$this->request = $this->_app->getRequest();
+		$this->app = $this->app;
+		$this->interface = $this->app->getInterface();
+		$this->config = $this->app->getConfig();
+		$this->request = $this->app->getRequest();
 		
-		$this->url = $this->_request->getUrl();
-		$this->controller = $this->_request->getController();
-		$this->controllerInstance = $this->_request->getControllerInstance();
-		$this->action = $this->_request->getAction();
-		$this->locale = $this->_request->getLocale();
+		$this->url = $this->request->getUrl();
+		$this->controller = $this->request->getController();
+		$this->controllerInstance = $this->request->getControllerInstance();
+		$this->action = $this->request->getAction();
+		$this->locale = $this->request->getLocale();
 		$this->client = Client::class;
 		
 		// assign additional variables
 		$this->setMultiple($vars);
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return mixed
-	 */
-	public function __get(string $name): mixed
+	public function __get(
+		string $name,
+	): mixed
 	{
 		if($this->__isset($name) === false)
 		{
 			return null;
 		}
 		
-		return $this->_vars[$name];
+		return $this->vars[$name];
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return bool
-	 */
-	public function __isset(string $name): bool
+	public function __isset(
+		string $name,
+	): bool
 	{
-		return array_key_exists($name, $this->_vars);
+		return array_key_exists($name, $this->vars);
 	}
 	
-	/**
-	 * @param string $name
-	 * @param mixed $value
-	 */
-	public function __set(string $name, mixed $value): void
+	public function __set(
+		string $name,
+		mixed $value,
+	): void
 	{
-		$this->_vars[$name] = $value;
+		$this->vars[$name] = $value;
 	}
 	
-	/**
-	 * @param string $name
-	 */
-	public function __unset(string $name): void
+	public function __unset(
+		string $name,
+	): void
 	{
-		unset($this->_vars[$name]);
+		unset($this->vars[$name]);
 	}
 	
-	/**
-	 * @param string $name
-	 * @param array $arguments
-	 *
-	 * @return mixed
-	 */
-	public function __call(string $name, array $arguments): mixed
+	public function __call(
+		string $name,
+		array $arguments,
+	): mixed
 	{
 		return self::__callStatic($name, $arguments);
 	}
 	
-	/**
-	 * @param string $name
-	 * @param array $arguments
-	 *
-	 * @return mixed
-	 */
-	public static function __callStatic(string $name, array $arguments): mixed
+	public static function __callStatic(
+		string $name,
+		array $arguments,
+	): mixed
 	{
-		if(isset(self::$_helpers[$name]) === false)
+		if(isset(self::$helpers[$name]) === false)
 		{
 			$helper = self::getHelperClass($name);
 			$instance = container()->getClass($helper, $helper);
 			
-			self::$_helpers[$name] = $instance;
+			self::$helpers[$name] = $instance;
 		}
 		
-		$instance = self::$_helpers[$name];
+		$instance = self::$helpers[$name];
 		
 		if(method_exists($instance, $name))
 		{
@@ -189,12 +147,9 @@ class View
 		return $instance;
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return string
-	 */
-	public static function getHelperClass(string $name): string
+	public static function getHelperClass(
+		string $name,
+	): string
 	{
 		$systemConfig = container()
 			->get(Application::CONTAINER_KEY_CONFIG)
@@ -219,19 +174,17 @@ class View
 	
 	/**
 	 * Escapes a value for output in a view script.
-	 *
-	 * @param mixed $value The output to escape.
-	 *
-	 * @return mixed The escaped value.
 	 */
-	public function escape(mixed $value): mixed
+	public function escape(
+		mixed $value,
+	): mixed
 	{
 		if($value === null)
 		{
 			return null;
 		}
 		
-		if(!is_string($value))
+		if(is_string($value) === false)
 		{
 			return $value;
 		}
@@ -244,14 +197,6 @@ class View
 		return Strings::escapeForHtml($value);
 	}
 	
-	/**
-	 * @param ?string $viewScriptFile (optional)
-	 * @param array $variables (optional)
-	 *
-	 * @return string
-	 *
-	 * @throws Exception
-	 */
 	public function render(
 		?string $viewScriptFile = null,
 		array $variables = [],
@@ -259,7 +204,7 @@ class View
 	{
 		if($viewScriptFile === null)
 		{
-			$viewScriptFile = $this->_viewScriptFile;
+			$viewScriptFile = $this->viewScriptFile;
 		}
 		
 		if($viewScriptFile === null)
@@ -280,7 +225,7 @@ class View
 		}
 		catch(Throwable $throwable)
 		{
-			$this->_eventsService->add($throwable);
+			$this->eventsService->add($throwable);
 			
 			// do not render buggy HTML
 			// and prevent previous output buffers to be outputted
@@ -288,15 +233,7 @@ class View
 			return '';
 		}
 	}
-		
-	/**
-	 * @param ?string $viewScriptFile (optional)
-	 * @param array $variables (optional)
-	 *
-	 * @return string
-	 *
-	 * @throws Exception
-	 */
+	
 	public function partial(
 		?string $viewScriptFile = null,
 		array $variables = [],
@@ -307,10 +244,9 @@ class View
 		return $view->render($viewScriptFile, $variables);
 	}
 	
-	/**
-	 * @param array $variables
-	 */
-	public function setMultiple(array $variables): void
+	public function setMultiple(
+		array $variables,
+	): void
 	{
 		foreach($variables as $name => $value)
 		{
@@ -318,19 +254,11 @@ class View
 		}
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getVars(): array
 	{
-		return $this->_vars;
+		return $this->vars;
 	}
 	
-	/**
-	 * @return string
-	 *
-	 * @throws Exception
-	 */
 	public function __toString(): string
 	{
 		return $this->render();

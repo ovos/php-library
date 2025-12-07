@@ -17,13 +17,10 @@ use function usleep;
  */
 class Parallel
 {
-	/**
-	 * @param string $command
-	 * @param int $amount
-	 *
-	 * @return void
-	 */
-	public static function run(string $command, int $amount): void
+	public static function run(
+		string $command,
+		int $amount,
+	): void
 	{
 		$processes = [];
 		for($i = 0; $i < $amount; $i++)

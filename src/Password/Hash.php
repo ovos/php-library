@@ -11,24 +11,16 @@ namespace Ovos\Password;
  */
 class Hash
 {
-	/**
-	 * @var string
-	 */
-	protected string $_algorithm;
+	protected string $algorithm;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_options;
+	protected array $options;
 	
-	/**
-	 */
 	public function __construct()
 	{
 		if(defined('PASSWORD_ARGON2ID'))
 		{
-			$this->_algorithm = PASSWORD_ARGON2ID;
-			$this->_options = [
+			$this->algorithm = PASSWORD_ARGON2ID;
+			$this->options = [
 				'memory_cost' => PASSWORD_ARGON2_DEFAULT_MEMORY_COST * 2,
 				'time_cost' => PASSWORD_ARGON2_DEFAULT_TIME_COST * 10,
 				'threads' => PASSWORD_ARGON2_DEFAULT_THREADS * 1,
@@ -36,61 +28,43 @@ class Hash
 		}
 		else
 		{
-			$this->_algorithm = PASSWORD_BCRYPT;
-			$this->_options = [
+			$this->algorithm = PASSWORD_BCRYPT;
+			$this->options = [
 				'cost' => 10,
 			];
 		}
 	}
 	
-	/**
-	 * @param string $algorithm
-	 * 
-	 * @return static
-	 */
-	public function setAlgorithm(string $algorithm): static
+	public function setAlgorithm(
+		string $algorithm,
+	): static
 	{
-		$this->_algorithm = $algorithm;
+		$this->algorithm = $algorithm;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getAlgorithm(): string
 	{
-		return $this->_algorithm;
+		return $this->algorithm;
 	}
 	
-	/**
-	 * @param array $options
-	 * 
-	 * @return static
-	 */
-	public function setOptions(array $options): static
+	public function setOptions(
+		array $options,
+	): static
 	{
-		$this->_options = $options;
+		$this->options = $options;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getOptions(): array
 	{
-		return $this->_options;
+		return $this->options;
 	}
 	
-	/**
-	 * @param string $password
-	 * @param ?string $algorithm
-	 * @param ?array $options
-	 *
-	 * @return null|bool|string
-	 */
-	public function hash(string $password,
+	public function hash(
+		string $password,
 		?string $algorithm = null,
 		?array $options = null,
 	): null|bool|string
@@ -107,13 +81,6 @@ class Hash
 		return password_hash($password, $this->getAlgorithm(), $this->getOptions());
 	}
 	
-	/**
-	 * @param string $password
-	 * @param ?string $algorithm
-	 * @param ?array $options
-	 *
-	 * @return bool
-	 */
 	public function needsRehash(
 		string $password,
 		?string $algorithm = null,

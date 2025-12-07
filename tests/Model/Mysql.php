@@ -18,23 +18,17 @@ use Override;
  */
 class Mysql extends Test
 {
-	/**
-	 * @var object
-	 */
-	protected object $_store;
+	protected object $store;
 	
-	/**
-	 * @var object
-	 */
-	protected object $_model; 
+	protected object $model; 
 	
 	public function __construct()
 	{
-		$this->_store = (new class() extends Store
+		$this->store = (new class() extends Store
 		{
 			public const ?string TABLE = 'tests';
 		});
-		$this->_model = new class() extends Model
+		$this->model = new class() extends Model
 		{
 			public static object $store;
 			
@@ -48,9 +42,9 @@ class Mysql extends Test
 				$this->addTemplate(new Template\Json(['object'], Template\Json::TYPE_ARRAY));
 			}
 		};
-		$this->_model::$store = $this->_store;
+		$this->model::$store = $this->store;
 		
-		$this->_store->source()->exec('
+		$this->store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				name VARCHAR(128) NULL,
@@ -67,15 +61,15 @@ class Mysql extends Test
 	
 	public function modified(): bool
 	{
-		$this->_store->source()->exec('
+		$this->store->source()->exec('
 			INSERT INTO tests
 			VALUES
 				(1, "Test 1", null, null, 1);
 		');
 		
-		$query = $this->_store->executeFind(where: ['id' => 1]);
+		$query = $this->store->executeFind(where: ['id' => 1]);
 		/** @var Model $model */
-		$model = $query->fetchObject($this->_model::class);
+		$model = $query->fetchObject($this->model::class);
 		$model->name = 'Test modified';
 		$model->object = ['test' => 1, 'test2' => 2];
 		$modified = $model->getModified();
@@ -90,15 +84,15 @@ class Mysql extends Test
 	
 	public function export(): bool
 	{
-		$this->_store->source()->exec('
+		$this->store->source()->exec('
 			INSERT INTO tests
 			VALUES
 				(1, "Test 1", "{\\"test\\": 1}", null, 1);
 		');
 		
-		$query = $this->_store->executeFind(where: ['id' => 1]);
+		$query = $this->store->executeFind(where: ['id' => 1]);
 		/** @var Model $model */
-		$model = $query->fetchObject($this->_model::class);
+		$model = $query->fetchObject($this->model::class);
 		$export = $model->export(type: Model::EXPORT_TYPE_ARRAY);
 		
 		$export['object'] = serialize($export['object']);
@@ -115,15 +109,15 @@ class Mysql extends Test
 	
 	public function filterIn(): bool
 	{
-		$this->_store->source()->exec('
+		$this->store->source()->exec('
 			INSERT INTO tests
 			VALUES
 				(1, "Test 1", null, null, 1);
 		');
 		
-		$query = $this->_store->executeFind(where: ['id' => 1]);
+		$query = $this->store->executeFind(where: ['id' => 1]);
 		/** @var Model $model */
-		$model = $query->fetchObject($this->_model::class);
+		$model = $query->fetchObject($this->model::class);
 		$export = $model->export(
 			type: Model::EXPORT_TYPE_ARRAY,
 			filter: ['name'],
@@ -139,15 +133,15 @@ class Mysql extends Test
 	
 	public function filterOut(): bool
 	{
-		$this->_store->source()->exec('
+		$this->store->source()->exec('
 			INSERT INTO tests
 			VALUES
 				(1, "Test 1", null, null, 1);
 		');
 		
-		$query = $this->_store->executeFind(where: ['id' => 1]);
+		$query = $this->store->executeFind(where: ['id' => 1]);
 		/** @var Model $model */
-		$model = $query->fetchObject($this->_model::class);
+		$model = $query->fetchObject($this->model::class);
 		$export = $model->export(
 			type: Model::EXPORT_TYPE_ARRAY,
 			filter: ['name'],
@@ -167,7 +161,7 @@ class Mysql extends Test
 	public function import(): bool
 	{
 		/** @var Model $model */
-		$model = $this->_model::import([
+		$model = $this->model::import([
 			'name' => 'Test 1',
 			'object' => [],
 			'modified_at' => '2000-01-01 01:01:01',
@@ -181,7 +175,7 @@ class Mysql extends Test
 	public function save(): bool
 	{
 		/** @var Model $model */
-		$model = new $this->_model;
+		$model = new $this->model;
 		$model->save();
 		
 		return $model->id === 1;
@@ -194,7 +188,7 @@ class Mysql extends Test
 	#[Override]
 	public function finalize(): void
 	{
-		$this->_store->source()->exec('TRUNCATE TABLE tests');
+		$this->store->source()->exec('TRUNCATE TABLE tests');
 	}
 	
 	/**
@@ -204,6 +198,6 @@ class Mysql extends Test
 	#[Override]
 	public function deconstruct(): void
 	{
-		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
+		$this->store->source()->exec('DROP TABLE IF EXISTS tests');
 	}
 }

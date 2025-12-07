@@ -16,29 +16,20 @@ use Models\User as Model;
  */
 class User extends Helper
 {
-	/**
-	 * @var Auth
-	 */
-	protected Auth $_authService;
+	protected Auth $authService;
 	
-	/**
-	 * @param Auth $authService
-	 */
 	public function __construct(
 		#[Inject(Auth::SYMBOL)] Auth $authService,
 	)
 	{
 		parent::__construct();
 		
-		$this->_authService = $authService;
+		$this->authService = $authService;
 	}
 	
-	/**
-	 * @return ?Model
-	 */
 	public function user(): ?Model
 	{
-		return $this->_authService
+		return $this->authService
 			?->getUser();
 	}
 }

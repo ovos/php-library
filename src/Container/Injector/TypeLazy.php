@@ -14,13 +14,10 @@ use Override;
  */
 class TypeLazy extends TypeClass
 {
-	/**
-	 * @param Container $container
-	 *
-	 * @return object
-	 */
 	#[Override]
-	public function inject(Container $container): object
+	public function inject(
+		Container $container,
+	): object
 	{
 		$reflector = $this->getReflector();
 		$parameters = $this->getParameters();

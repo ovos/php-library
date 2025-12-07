@@ -19,25 +19,19 @@ use stdClass;
  */
 class Json extends Test
 {
-	/**
-	 * @var object
-	 */
-	protected object $_store;
+	protected object $store;
 	
-	/**
-	 * @var object
-	 */
-	protected object $_model;
+	protected object $model;
 	
 	public function __construct()
 	{
-		$this->_store = (new class() extends Store
+		$this->store = (new class() extends Store
 		{
 			public const ?string TABLE = 'tests';
 		});
-		$this->_model = new class() extends Model
+		$this->model = new class() extends Model
 		{
-			public static $store;
+			public static object $store;
 			
 			public static function getStoreClass(): string
 			{
@@ -46,12 +40,14 @@ class Json extends Test
 			
 			public function setUp(): void
 			{
-				$this->addTemplate(new Template\Json(['object'], Template\Json::TYPE_OBJECT));
+				$this->addTemplate(new Template\Json(['object'], 
+					Template\Json::TYPE_OBJECT),
+				);
 			}
 		};
-		$this->_model::$store = $this->_store;
+		$this->model::$store = $this->store;
 		
-		$this->_store->source()->exec('
+		$this->store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				object JSON NOT NULL,
@@ -79,7 +75,7 @@ class Json extends Test
 		$object->array = [1, 2, 3];
 		$object->subObject = $subObject;
 		
-		$modelInstance = new $this->_model;
+		$modelInstance = new $this->model;
 		$modelInstance->object = $object;
 		$modelInstance->save();
 		$modelInstance->refresh();
@@ -95,7 +91,7 @@ class Json extends Test
 	#[Override]
 	public function finalize(): void
 	{
-		$this->_store->source()->exec('TRUNCATE TABLE tests');
+		$this->store->source()->exec('TRUNCATE TABLE tests');
 	}
 	
 	/**
@@ -105,6 +101,6 @@ class Json extends Test
 	#[Override]
 	public function deconstruct(): void
 	{
-		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
+		$this->store->source()->exec('DROP TABLE IF EXISTS tests');
 	}
 }

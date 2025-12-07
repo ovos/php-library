@@ -22,27 +22,21 @@ class Redis extends Test
 {
 	use TraitRedis;
 	
-	/**
-	 * @var string
-	 */
 	public const string KEY_ITEM = 'item';
 	
-	/**
-	 * @var ?Store
-	 */
-	protected ?Store $_store = null;
+	protected ?Store $store = null;
 	
 	public function __construct()
 	{
-		$this->_store = $this->_getStore(Store::class);
+		$this->store = $this->getStore(Store::class);
 	}
 	
 	public function delete(): bool
 	{
-		$this->_store->set(self::KEY_ITEM, 'test');
-		$this->_store->delete(self::KEY_ITEM);
+		$this->store->set(self::KEY_ITEM, 'test');
+		$this->store->delete(self::KEY_ITEM);
 		
-		$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+		$exists = $this->store->get(self::KEY_ITEM, queue: false);
 		
 		return $exists === null;
 	}
@@ -53,8 +47,8 @@ class Redis extends Test
 			'stored' => true,
 		];
 		
-		$this->_store->set(self::KEY_ITEM, $array);
-		$array = $this->_store->get(self::KEY_ITEM, queue: false);
+		$this->store->set(self::KEY_ITEM, $array);
+		$array = $this->store->get(self::KEY_ITEM, queue: false);
 		
 		try
 		{
@@ -62,7 +56,7 @@ class Redis extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -71,11 +65,11 @@ class Redis extends Test
 		$tags1 = ['tag1', 'tag2'];
 		$tags2 = ['tag3'];
 		
-		$this->_store->set('item1', 'test', tags: $tags1);
-		$this->_store->set('item2', 'test', tags: $tags2);
-		$this->_store->set('item3', 'test', tags: $tags1);
+		$this->store->set('item1', 'test', tags: $tags1);
+		$this->store->set('item2', 'test', tags: $tags2);
+		$this->store->set('item3', 'test', tags: $tags1);
 		
-		$tags = $this->_store->getAllTags();
+		$tags = $this->store->getAllTags();
 		sort($tags);
 		
 		try
@@ -84,9 +78,9 @@ class Redis extends Test
 		}
 		finally
 		{
-			$this->_store->delete('item1');
-			$this->_store->delete('item2');
-			$this->_store->delete('item3');
+			$this->store->delete('item1');
+			$this->store->delete('item2');
+			$this->store->delete('item3');
 		}
 	}
 	
@@ -95,12 +89,12 @@ class Redis extends Test
 		$tags1 = ['tag1', 'tag2'];
 		$tags2 = ['tag3'];
 		
-		$this->_store->set('item1', 'test', tags: $tags1);
-		$this->_store->set('item2', 'test', tags: $tags2);
-		$this->_store->set('item3', 'test', tags: $tags1);
+		$this->store->set('item1', 'test', tags: $tags1);
+		$this->store->set('item2', 'test', tags: $tags2);
+		$this->store->set('item3', 'test', tags: $tags1);
 		
 		// may return more ids (the list was not garbage collected
-		$ids = $this->_store->getIdsMatchingAnyTags(['tag1']);
+		$ids = $this->store->getIdsMatchingAnyTags(['tag1']);
 		
 		try
 		{
@@ -108,9 +102,9 @@ class Redis extends Test
 		}
 		finally
 		{
-			$this->_store->delete('item1');
-			$this->_store->delete('item2');
-			$this->_store->delete('item3');
+			$this->store->delete('item1');
+			$this->store->delete('item2');
+			$this->store->delete('item3');
 		}
 	}
 	
@@ -119,10 +113,10 @@ class Redis extends Test
 		$tags = ['tag1', 'tag2'];
 		$newTags = ['tag1', 'tag2', 'tag3'];
 		
-		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
-		$this->_store->set(self::KEY_ITEM, 'test', tags: $newTags);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $newTags);
 		
-		$result = $this->_store->getTags(self::KEY_ITEM);
+		$result = $this->store->getTags(self::KEY_ITEM);
 		
 		try
 		{
@@ -130,7 +124,7 @@ class Redis extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -139,10 +133,10 @@ class Redis extends Test
 		$tags = ['tag1', 'tag2', 'tag3'];
 		$newTags = ['tag1', 'tag2'];
 		
-		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
-		$this->_store->set(self::KEY_ITEM, 'test', tags: $newTags);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $newTags);
 		
-		$result = $this->_store->getTags(self::KEY_ITEM);
+		$result = $this->store->getTags(self::KEY_ITEM);
 		
 		try
 		{
@@ -150,17 +144,17 @@ class Redis extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function invalidateTags(): bool
 	{
 		$tags = ['tag1', 'tag2'];
-		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
-		$this->_store->invalidateTags([$tags[0]]);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->invalidateTags([$tags[0]]);
 		
-		$result = $this->_store->get(self::KEY_ITEM, queue: false);
+		$result = $this->store->get(self::KEY_ITEM, queue: false);
 		
 		try
 		{
@@ -168,21 +162,21 @@ class Redis extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function cleanTags(): bool
 	{
-		$this->_store->setCleanTags(true);
+		$this->store->setCleanTags(true);
 		
 		$tags = ['tag1', 'tag2'];
-		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
-		$this->_store->invalidateTags([$tags[0]]);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->invalidateTags([$tags[0]]);
 		
 		// check if the ID still exists within the tag field
-		$tagId = $this->_store->prefix($tags[1], $this->_store->getType($this->_store::TYPE_TAGS));
-		$exists = $this->_store->getClient()->hGet($tagId, self::KEY_ITEM);
+		$tagId = $this->store->prefix($tags[1], $this->store->getType($this->store::TYPE_TAGS));
+		$exists = $this->store->getClient()->hGet($tagId, self::KEY_ITEM);
 		
 		try
 		{
@@ -190,7 +184,7 @@ class Redis extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -198,17 +192,17 @@ class Redis extends Test
 	{
 		$tags = ['tag1'];
 		
-		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
 		
 		// unlink the ID, leaving only the tag field with the key of the item in it
-		$id = $this->_store->prefix(self::KEY_ITEM, $this->_store->getType());
-		$this->_store->getClient()->unlink($id);
+		$id = $this->store->prefix(self::KEY_ITEM, $this->store->getType());
+		$this->store->getClient()->unlink($id);
 		
-		$this->_store->collectGarbage();
+		$this->store->collectGarbage();
 		
 		// check if the ID still exists within the tag field
-		$tagId = $this->_store->prefix($tags[0], $this->_store->getType($this->_store::TYPE_TAGS));
-		$exists = $this->_store->getClient()->hGet($tagId, self::KEY_ITEM);
+		$tagId = $this->store->prefix($tags[0], $this->store->getType($this->store::TYPE_TAGS));
+		$exists = $this->store->getClient()->hGet($tagId, self::KEY_ITEM);
 		
 		try
 		{
@@ -216,7 +210,7 @@ class Redis extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -226,9 +220,9 @@ class Redis extends Test
 			'stored' => true,
 		];
 		
-		$this->_store->set(self::KEY_ITEM, $array);
-		$this->_store->clear();
-		$result = $this->_store->get(self::KEY_ITEM, queue: false);
+		$this->store->set(self::KEY_ITEM, $array);
+		$this->store->clear();
+		$result = $this->store->get(self::KEY_ITEM, queue: false);
 		
 		return $result === null;
 	}
@@ -240,7 +234,7 @@ class Redis extends Test
 	#[Override]
 	public function finalize(): void
 	{
-		$this->_store->clear();
+		$this->store->clear();
 	}
 	
 	/**
@@ -250,6 +244,6 @@ class Redis extends Test
 	#[Override]
 	public function deconstruct(): void
 	{
-		$this->_connection->disconnect();
+		$this->connection->disconnect();
 	}
 }

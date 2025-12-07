@@ -20,25 +20,23 @@ class PdoStatement extends \PDOStatement
 {
 	/**
 	 * Contains all bound parameters
-	 *
-	 * @var array
 	 */
-	protected array $_parameters = [];
+	protected array $parameters = [];
 	
 	/**
 	 * Catches parameter value, passes arguments to PDO
 	 * @see https://www.php.net/manual/en/pdostatement.bindparam.php
-	 * @inheritDoc
 	 */
 	#[Override]
-	public function bindParam(string|int $param,
+	public function bindParam(
+		string|int $param,
 		mixed &$var,
 		int $type = PDO::PARAM_STR,
 		int $maxLength = 0,
-		mixed $driverOptions = null
+		mixed $driverOptions = null,
 	): bool
 	{
-		$this->_storeParameter($param, $var);
+		$this->storeParameter($param, $var);
 		
 		return parent::bindParam($param, $var, $type, $maxLength, $driverOptions);
 	}
@@ -46,15 +44,15 @@ class PdoStatement extends \PDOStatement
 	/**
 	 * Catches value, passes arguments to PDO
 	 * @see https://www.php.net/manual/en/pdostatement.bindvalue.php
-	 * @inheritDoc
 	 */
 	#[Override]
-	public function bindValue(string|int $param,
+	public function bindValue(
+		string|int $param,
 		mixed $value,
-		int $type = PDO::PARAM_STR
+		int $type = PDO::PARAM_STR,
 	): bool
 	{
-		$this->_storeParameter($param, $value);
+		$this->storeParameter($param, $value);
 		
 		return parent::bindValue($param, $value, $type);
 	}
@@ -62,21 +60,23 @@ class PdoStatement extends \PDOStatement
 	/**
 	 * Measures time while executing statement, returns result
 	 * @see https://www.php.net/manual/en/pdostatement.execute.php
-	 * @inheritDoc
 	 */
 	#[Override]
-	public function execute(?array $params = null): bool
+	public function execute(
+		?array $params = null,
+	): bool
 	{
 		if(empty($this->queryString))
 		{
-			throw new ProfilerException('Whoops, looks like an empty query got executed');
+			throw new ProfilerException(
+				'Whoops, looks like an empty query got executed');
 		}
 		
 		if($params !== null)
 		{
 			foreach($params as $parameter => $value)
 			{
-				$this->_storeParameter($parameter, $value);
+				$this->storeParameter($parameter, $value);
 			}
 		}
 
@@ -94,7 +94,10 @@ class PdoStatement extends \PDOStatement
 			$measurement->stop();
 			// pass query and parameters to collector
 			Collector::getInstance()
-				->setQuery($this->queryString, $this->_parameters, $measurement);
+				->setQuery($this->queryString,
+					$this->parameters,
+					$measurement,
+				);
 			
 			throw $exception;
 		}
@@ -103,22 +106,24 @@ class PdoStatement extends \PDOStatement
 		
 		// Pass query and parameters to collector
 		Collector::getInstance()
-			->setQuery($this->queryString, $this->_parameters, $measurement);
+			->setQuery($this->queryString,
+				$this->parameters,
+				$measurement,
+			);
 		
 		// Reset values
-		$this->_parameters = [];
+		$this->parameters = [];
 		
 		return $data;
 	}
-
-	/**
-	 * @param string $name
-	 * @param mixed $value
-	 */
-	protected function _storeParameter(string $name, mixed $value): void
+	
+	protected function storeParameter(
+		string $name,
+		mixed $value,
+	): void
 	{
 		$name = ltrim($name, ':');
 		
-		$this->_parameters[$name] = $value;
+		$this->parameters[$name] = $value;
 	}
 }

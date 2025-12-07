@@ -15,14 +15,6 @@ use Closure;
  */
 abstract class Tags extends KeyValue
 {
-	/**
-	 * @param string $key
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param array $tags
-	 *
-	 * @return null|mixed
-	 */
 	#[Override]
 	abstract public function get(
 		string $key,
@@ -31,14 +23,6 @@ abstract class Tags extends KeyValue
 		array $tags = [],
 	): mixed;
 	
-	/**
-	 * @param string $key
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param array $tags
-	 *
-	 * @return mixed
-	 */
 	#[Override]
 	public function setFromResolver(
 		string $key,
@@ -58,14 +42,6 @@ abstract class Tags extends KeyValue
 		return $value;
 	}
 	
-	/**
-	 * @param string $key
-	 * @param mixed $value
-	 * @param int $ttl
-	 * @param array $tags
-	 *
-	 * @return bool
-	 */
 	#[Override]
 	abstract public function set(
 		string $key,

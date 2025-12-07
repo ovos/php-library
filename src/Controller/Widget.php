@@ -8,7 +8,6 @@ use Ovos\Container;
 use Ovos\Request;
 use Ovos\Translatable;
 
-
 use function Ovos\container;
 
 /**
@@ -21,65 +20,39 @@ abstract class Widget
 {
 	use Translatable;
 	
-	/**
-	 * @var Container
-	 */
-	protected Container $_container;
+	protected Container $container;
 	
-	/**
-	 * Application
-	 *
-	 * @var Application
-	 */
-	protected Application $_app;
+	protected Application $app;
 	
-	/**
-	 * @var Request
-	 */
-	protected Request $_request;
+	protected Request $request;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_script;
+	protected string $script;
 	
 	/**
 	 */
 	public function __construct()
 	{
-		$this->_container = container();
-		$this->_app = $this->_container->get(Application::class);
+		$this->container = container();
+		$this->app = $this->container->get(Application::class);
 		
-		$this->_request = $this->_app->getRequest();
+		$this->request = $this->app->getRequest();
 	}
 	
-	/**
-	 * @param string $script
-	 *
-	 * @return static
-	 */
-	public function setScript(string $script): static
+	public function setScript(
+		string $script,
+	): static
 	{
-		$this->_script = $script;
+		$this->script = $script;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getScript(): string
 	{
-		return $this->_script;
+		return $this->script;
 	}
 	
-	/**
-	 * @return string
-	 */
 	abstract public function render(): string;
 	
-	/**
-	 * @return string
-	 */
 	abstract public function __toString(): string;
 }

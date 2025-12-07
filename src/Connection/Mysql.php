@@ -22,28 +22,16 @@ use function sprintf;
  */
 class Mysql extends Connection
 {
-	/**
-	 * @var ArrayObject
-	 */
-	protected ArrayObject $_config;
+	protected ArrayObject $config;
 	
-	/**
-	 * @var ?ProfilerPdo
-	 */
-	protected ?ProfilerPdo $_client = null;
+	protected ?ProfilerPdo $client = null;
 	
-	/**
-	 * @return ?ProfilerPdo
-	 */
 	#[Override]
 	public function getClient(): ?ProfilerPdo
 	{
-		return $this->_client;
+		return $this->client;
 	}
 	
-	/**
-	 * @return ?ProfilerPdo
-	 */
 	#[Override]
 	public function getConnectedClient(): ?ProfilerPdo
 	{
@@ -52,19 +40,20 @@ class Mysql extends Connection
 	
 	/**
 	 * Returns database client
-	 *
-	 * @return bool
 	 */
 	public function connect(): bool
 	{
-		$dsn = sprintf('mysql:dbname=%s;host=%s;charset=utf8',
-			$this->_config->database, $this->_config->host);
+		$dsn = sprintf(
+			'mysql:dbname=%s;host=%s;charset=utf8',
+			$this->config->database,
+			$this->config->host,
+		);
 		
 		try
 		{
-			$this->_client = new ProfilerPdo($dsn,
-				$this->_config->username,
-				$this->_config->password,
+			$this->client = new ProfilerPdo($dsn,
+				$this->config->username,
+				$this->config->password,
 				[
 					PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_OBJ,
 					PDO::ATTR_EMULATE_PREPARES => false,
@@ -74,8 +63,8 @@ class Mysql extends Connection
 		}
 		catch(PDOException $exception)
 		{
-			$this->_client = null;
-			$this->_logger->log
+			$this->client = null;
+			$this->logger->log
 			(
 				$exception
 			);
@@ -83,26 +72,23 @@ class Mysql extends Connection
 			return false;
 		}
 		
-		if($this->_profilers->enabled)
+		if($this->profilers->enabled)
 		{
-			$this->_client->setAttribute(PDO::ATTR_STATEMENT_CLASS, [
+			$this->client->setAttribute(PDO::ATTR_STATEMENT_CLASS, [
 				PdoStatement::class,
 			]);
-			if($this->_profilers->offsetExists('queries'))
+			if($this->profilers->offsetExists('queries'))
 			{
-				Collector::$limit = $this->_profilers->queries->limit;
+				Collector::$limit = $this->profilers->queries->limit;
 			}
 		}
 		
 		return true;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function disconnect(): bool
 	{
-		$this->_client = null;
+		$this->client = null;
 		
 		return true;
 	}

@@ -13,14 +13,14 @@ use Ovos\View;
  */
 class Layout extends View
 {
-	/**
-	 * @param ?string $viewScriptFile
-	 */
-	public function __construct(?string $viewScriptFile = null)
+	public function __construct(
+		?string $viewScriptFile = null,
+	)
 	{
 		if($viewScriptFile !== null)
 		{
-			$viewScriptFile = 'layouts' . DIRECTORY_SEPARATOR . $viewScriptFile;
+			$viewScriptFile = 'layouts'
+				. DIRECTORY_SEPARATOR . $viewScriptFile;
 		}
 		
 		parent::__construct($viewScriptFile);

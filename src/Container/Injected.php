@@ -11,10 +11,7 @@ namespace Ovos\Container;
  */
 interface Injected
 {
-	/**
-	 * @param object $object
-	 *
-	 * @return mixed
-	 */
-	public function process(object $object): mixed;
+	public function process(
+		object $object,
+	): mixed;
 }

@@ -5,10 +5,10 @@ namespace Ovos\View\Helper\Placeholders;
 
 use Ovos\View;
 
+use function array_search;
 use function ob_start;
 use function ob_get_clean;
 use function sprintf;
-use function array_search;
 
 /**
  * Placeholder
@@ -18,30 +18,15 @@ use function array_search;
  */
 class Placeholder
 {
-	/**#@+
-	 * Placements
-	 */
+	// Placements
 	public const string PLACEMENT_REPLACE = 'replace';
 	public const string PLACEMENT_PREPEND = 'prepend';
 	public const string PLACEMENT_APPEND = 'append';
-	/**#@-*/
 	
-	/**
-	 * @var null|string|bool|int
-	 */
-	protected null|string|bool|int $_value = null;
+	protected null|string|bool|int $value = null;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_scripts = [];
+	protected array $scripts = [];
 	
-	/**
-	 * @param null|string|bool|int $value
-	 * @param string $placement
-	 *
-	 * @return static
-	 */
 	public function set(
 		null|string|bool|int $value,
 		string $placement = self::PLACEMENT_REPLACE,
@@ -50,26 +35,21 @@ class Placeholder
 		switch($placement)
 		{
 			case self::PLACEMENT_REPLACE:
-				$this->_value = $value;
+				$this->value = $value;
 				break;
 			case self::PLACEMENT_PREPEND:
-				$this->_value = $value . $this->_value;
+				$this->value = $value . $this->value;
 				break;
 			case self::PLACEMENT_APPEND:
-				$this->_value.= $value;
+				$this->value.= $value;
 				break;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param null|string|bool|int $value
-	 *
-	 * @return static
-	 */
 	public function prepend(
-		null|string|bool|int $value
+		null|string|bool|int $value,
 	): static
 	{
 		$this->set($value, self::PLACEMENT_PREPEND);
@@ -77,13 +57,8 @@ class Placeholder
 		return $this;
 	}
 	
-	/**
-	 * @param null|string|bool|int $value
-	 *
-	 * @return static
-	 */
 	public function append(
-		null|string|bool|int $value
+		null|string|bool|int $value,
 	): static
 	{
 		$this->set($value, self::PLACEMENT_APPEND);
@@ -91,31 +66,18 @@ class Placeholder
 		return $this;
 	}
 	
-	/**
-	 */
 	public function captureStart(): void
 	{
 		ob_start();
 	}
 	
-	/**
-	 * @param string $placement
-	 */
 	public function captureEnd(
-		string $placement = self::PLACEMENT_APPEND
+		string $placement = self::PLACEMENT_APPEND,
 	): void
 	{
 		$this->set(ob_get_clean(), $placement);
 	}
 	
-	/**
-	 * @param string $script
-	 * @param string $placement
-	 * @param string $template
-	 * @param bool $asset
-	 * 
-	 * @return static
-	 */
 	public function includeScript(
 		string $script,
 		string $placement = self::PLACEMENT_APPEND,
@@ -129,23 +91,21 @@ class Placeholder
 			$script = View::asset($script);
 		}
 		
-		if(in_array($script, $this->_scripts, true))
+		if(in_array($script, $this->scripts, true))
 		{
 			return $this;
 		}
 		
 		$this->set(sprintf($template, $script), $placement);
-		$this->_scripts[] = $script;
+		$this->scripts[] = $script;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return null|string|bool|int
-	 */
-	public function getValue(): null|string|bool|int
+	public function getValue(
+	): null|string|bool|int
 	{
-		return $this->_value;
+		return $this->value;
 	}
 	
 	/**

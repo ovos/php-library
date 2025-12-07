@@ -17,86 +17,61 @@ use function implode;
  */
 abstract class Query
 {
-	/**#@+
-	 * Conditions
-	 */
+	// Conditions
 	public const string CONDITION_TYPE_DEFAULT = 'default';
 	public const string CONDITION_TYPE_NESTED = 'nested';
 	public const string CONDITION_OPERATOR_AND = 'AND';
 	public const string CONDITION_OPERATOR_OR = 'OR';
-	/**#@-*/
 	
-	/**
-	 * @var string
-	 */
-	public const string INDENT = "\t";
+	protected ?string $alias = null;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_table;
+	protected string $table;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_columns = [];
+	protected array $columns = [];
 	
-	 /**
-	  * @var array
-	  */
-	 protected array $_conditions = [];
+	protected array $leftJoins = [];
 	
-	 /**
-	  * @var string
-	  */
-	 protected string $_conditionOperator = Condition::OPERATOR_AND;
+	protected array $innerJoins = [];
 	
-	 /**
-	  * @param string $table
-	  */
-	 public function __construct(string $table)
-	 {
+	protected array $conditions = [];
+	
+	protected string $conditionOperator = Condition::OPERATOR_AND;
+	
+	public function __construct(
+		string $table,
+	)
+	{
 		$this->setTable($table);
 	}
 	
-	/**
-	 * @param string $table
-	 *
-	 * @return static
-	 */
-	public function setTable(string $table): static
+	protected function getFrom(): string
 	{
-		$this->_table = $table;
+		return $this->alias !== null
+			? $this->table . ' ' . $this->alias
+			: $this->table;
+	}
+	
+	public function setTable(
+		string $table,
+	): static
+	{
+		$this->table = $table;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getTable(): string
 	{
-		return $this->_table;
+		return $this->table;
 	}
 	
-	/**
-	 * @return string
-	 */
 	abstract public function getSql(): string;
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
 		return $this->getSql();
 	}
 	
-	/**
-	 * @param string|callable ...$conditions
-	 *
-	 * @return static
-	 */
 	public function where(
 		string|callable ...$conditions,
 	): static
@@ -108,39 +83,33 @@ abstract class Query
 		}
 		
 		if(is_callable($conditions[0])
-			&& $nestedCondition = $this->_getNestedCondition($conditions[0]))
+			&& $nestedCondition = $this->getNestedCondition($conditions[0]))
 		{
-			$this->_conditions[] = $nestedCondition;
+			$this->conditions[] = $nestedCondition;
 			
 			return $this;
 		}
 		
 		foreach($conditions as $condition)
 		{
-			$this->_conditions[] = $condition;
+			$this->conditions[] = $condition;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param callable $condition
-	 * @param string $operator
-	 *
-	 * @return ?Condition
-	 */
-	protected function _getNestedCondition(
+	protected function getNestedCondition(
 		callable $condition,
 		string $operator = Condition::OPERATOR_AND,
 	): ?Condition
 	{
 		$nestedQuery = clone $this;
-		$nestedQuery->_conditions = [];
-		$nestedQuery->_conditionOperator = Condition::OPERATOR_AND;
+		$nestedQuery->conditions = [];
+		$nestedQuery->conditionOperator = Condition::OPERATOR_AND;
 		
 		$condition($nestedQuery);
 		
-		if(count($nestedQuery->_conditions) === 0)
+		if(count($nestedQuery->conditions) === 0)
 		{
 			return null;
 		}
@@ -149,15 +118,10 @@ abstract class Query
 		(
 			Condition::TYPE_NESTED,
 			$operator,
-			nested: $nestedQuery->_conditions
+			nested: $nestedQuery->conditions
 		);
 	}
 	
-	/**
-	 * @param string|callable ...$conditions
-	 *
-	 * @return static
-	 */
 	public function andWhere(
 		string|callable ...$conditions,
 	): static
@@ -165,11 +129,6 @@ abstract class Query
 		return $this->where(...$conditions);
 	}
 	
-	/**
-	 * @param string|callable ...$conditions
-	 *
-	 * @return static
-	 */
 	public function orWhere(
 		string|callable ...$conditions,
 	): static
@@ -181,17 +140,17 @@ abstract class Query
 		}
 		
 		if(is_callable($conditions[0])
-			&& $nestedCondition= $this->_getNestedCondition($conditions[0],
+			&& $nestedCondition= $this->getNestedCondition($conditions[0],
 			Condition::OPERATOR_OR))
 		{
-			$this->_conditions[] = $nestedCondition;
+			$this->conditions[] = $nestedCondition;
 			
 			return $this;
 		}
 		
 		foreach($conditions as $condition)
 		{
-			$this->_conditions[] = new Condition
+			$this->conditions[] = new Condition
 			(
 				Condition::TYPE_DEFAULT,
 				Condition::OPERATOR_OR,
@@ -202,13 +161,10 @@ abstract class Query
 		return $this;
 	}
 	
-	/**
-	 * @param string $field
-	 * @param array $values
-	 *
-	 * @return static
-	 */
-	public function whereIn(string $field, array $values): static
+	public function whereIn(
+		string $field,
+		array $values,
+	): static
 	{
 		if(count($values) === 0)
 		{
@@ -219,63 +175,23 @@ abstract class Query
 			. ' IN ('
 			. implode(', ', $values)
 			. ')';
-		$this->_conditions[] = $condition;
+		$this->conditions[] = $condition;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string $field
-	 * @param array $values
-	 *
-	 * @return static
-	 */
-	public function andWhereIn(string $field, array $values): static
+	public function andWhereIn(
+		string $field,
+		array $values,
+	): static
 	{
 		return $this->whereIn($field, $values);
 	}
 	
-	/**
-	 * @param string $field
-	 * @param array $values
-	 *
-	 * @return static
-	 */
-	public function whereNotIn(string $field, array $values): static
-	{
-		if(count($values) === 0)
-		{
-			return $this;
-		}
-		
-		$condition = $field
-			. ' NOT IN ('
-			. implode(', ', $values) 
-			. ')';
-		
-		$this->_conditions[] = $condition;
-		
-		return $this;
-	}
-	
-	/**
-	 * @param string $field
-	 * @param array $values
-	 *
-	 * @return static
-	 */
-	public function andWhereNotIn(string $field, array $values): static
-	{
-		return $this->whereNotIn($field, $values);
-	}
-	
-	/**
-	 * @param string $field
-	 * @param array $values
-	 *
-	 * @return static
-	 */
-	public function orWhereNotIn(string $field, array $values): static
+	public function whereNotIn(
+		string $field,
+		array $values,
+	): static
 	{
 		if(count($values) === 0)
 		{
@@ -286,7 +202,35 @@ abstract class Query
 			. ' NOT IN ('
 			. implode(', ', $values)
 			. ')';
-		$this->_conditions[] = new Condition
+		
+		$this->conditions[] = $condition;
+		
+		return $this;
+	}
+	
+	public function andWhereNotIn(
+		string $field,
+		array $values,
+	): static
+	{
+		return $this->whereNotIn($field, $values);
+	}
+	
+	public function orWhereNotIn(
+		string $field,
+		array $values,
+	): static
+	{
+		if(count($values) === 0)
+		{
+			return $this;
+		}
+		
+		$condition = $field
+			. ' NOT IN ('
+			. implode(', ', $values)
+			. ')';
+		$this->conditions[] = new Condition
 		(
 			Condition::TYPE_DEFAULT,
 			Condition::OPERATOR_OR,
@@ -298,13 +242,9 @@ abstract class Query
 	
 	/**
 	 * Helper method to build SQL for conditions
-	 *
-	 * @param array $conditions
-	 * @param string $glue
-	 * 
-	 * @return string
 	 */
-	protected function _getConditionsSql(array $conditions,
+	protected function getConditionsSql(
+		array $conditions,
 		string $glue = PHP_EOL,
 	): string
 	{
@@ -319,7 +259,7 @@ abstract class Query
 					&& count($condition->nested)
 				)
 				{
-					$subConditionSql = $this->_getConditionsSql($condition->nested, ' ');
+					$subConditionSql = $this->getConditionsSql($condition->nested, ' ');
 					
 					$nestedSql = '(' . $subConditionSql . ')';
 					

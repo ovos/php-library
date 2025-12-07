@@ -16,12 +16,9 @@ use function simplexml_load_string;
  */
 class Xml
 {
-	/**
-	 * @param null|string|SimpleXMLElement $xml
-	 *
-	 * @return ?string
-	 */
-	public static function format(null|string|SimpleXMLElement $xml): ?string
+	public static function format(
+		null|string|SimpleXMLElement $xml,
+	): ?string
 	{
 		if($xml === null)
 		{

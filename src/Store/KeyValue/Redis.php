@@ -11,8 +11,8 @@ use Throwable;
 use Redis as RedisClient;
 use RedisException;
 
-use function array_slice;
 use function array_key_exists;
+use function array_slice;
 use function bin2hex;
 use function ceil;
 use function count;
@@ -22,62 +22,43 @@ use function random_bytes;
 use function str_replace;
 
 /**
- * KeyValue
+ * Redis
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Redis extends Tags
 {
-	/**#@+
-	 * Separators
-	 */
+	// Separators
 	public const string SEPARATOR_FUNCTION = '_';
-	/**#@-*/
 	
-	/**
-	 * @var ?string 
-	 */
-	protected ?string $_functionPrefix = null;
+	protected ?string $functionPrefix = null;
 	
-	/**#@+
-	 * Keys
-	 */
+	// Keys
 	public const string KEY_DATA = 'data';
 	public const string KEY_TAGS = 'tags';
-	/**#@-*/
 	
-	/**#@+
+	/**
 	 * Statuses
+	 *
 	 * Used for rawCommand, which returns strings instead of boolean values when OPT_REPLY_LITERAL is enabled
 	 * @see https://github.com/phpredis/phpredis/issues/1550
 	 */
 	public const string STATUS_OK = 'OK';
-	/**#@-*/
 	
-	/**#@+
-	 * Types
-	 */
+	// Types
 	public const string TYPE_ITEMS = 'items';
 	public const string TYPE_LOCK = 'lock';
 	public const string TYPE_CHANNEL = 'channel';
-	/**#@-*/
 	
 	/**
 	 * Redis connection
-	 *
-	 * @var Connection
 	 */
-	protected Connection $_connection;
+	protected Connection $connection;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_multiMode = RedisClient::PIPELINE;
+	protected int $multiMode = RedisClient::PIPELINE;
 	
-	/**#@+
-	 * Libraries
-	 */
+	// Libraries
 	/**
 	 * The array of function libraries used by this lass
 	 */
@@ -86,48 +67,22 @@ abstract class Redis extends Tags
 			'Lua'
 			. DIRECTORY_SEPARATOR . 'Redis.lua',
 	];
-	/**#@-*/
 	
-	/**
-	 * @var array
-	 */
-	protected array $_librariesLoaded = [];
+	protected array $librariesLoaded = [];
 	
-	/**#@+
-	 * Queue (MemoLock) configuration
-	 */
+	// Queue (MemoLock) configuration
+	protected bool $queueEnabled = false;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_queueEnabled = false;
+	protected int $queueLockTtlMs = 2000;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_queueLockTtlMs = 2000;
-	
-	/**
-	 * @var int
-	 */
-	protected int $_queueWaitAttempts = 3;
-	
-	/**#@-*/
+	protected int $queueWaitAttempts = 3;
 	
 	/**
 	 * An array of unique values for any active locks,
 	 * indexed by the prefixed cache id
-	 * 
-	 * @var array
 	 */
-	protected array $_queueLocks = [];
+	protected array $queueLocks = [];
 	
-	/**
-	 * @param Connection $connection
-	 * @param ArrayObject $config
-	 * @param ?string $prefix
-	 * @param ?string $group
-	 */
 	public function __construct
 	(
 		Connection $connection,
@@ -143,34 +98,31 @@ abstract class Redis extends Tags
 		$this->setPrefix($prefix);
 		$this->setGroup($group);
 		
-		if($storeOptions = $this->_config->offsetGet('store_options'))
+		if($storeOptions = $this->config->offsetGet('store_options'))
 		{
 			$this->setStoreOptions($storeOptions);
 		}
 		
-		if($compression = $this->_config->offsetGet('compression'))
+		if($compression = $this->config->offsetGet('compression'))
 		{
 			$this->setCompression($compression);
 		}
 		
-		if($queue = $this->_config->offsetGet('queue'))
+		if($queue = $this->config->offsetGet('queue'))
 		{
 			$this->setQueue($queue);
 		}
 	}
 	
-	/**
-	 * @param ?string $prefix
-	 *
-	 * @return static
-	 */
-	public function setPrefix(?string $prefix = null): static
+	public function setPrefix(
+		?string $prefix = null,
+	): static
 	{
-		$this->_prefix = $prefix;
+		$this->prefix = $prefix;
 		
 		if($prefix !== null)
 		{
-			$this->_functionPrefix = str_replace
+			$this->functionPrefix = str_replace
 			(
 				[self::SEPARATOR_PREFIX, '-'],
 				[self::SEPARATOR_FUNCTION, self::SEPARATOR_FUNCTION],
@@ -181,106 +133,76 @@ abstract class Redis extends Tags
 		return $this;
 	}
 	
-	/**
-	 * @param Connection $connection
-	 *
-	 * @return static
-	 */
-	public function setConnection(Connection $connection): static
+	public function setConnection(
+		Connection $connection,
+	): static
 	{
-		$this->_connection = $connection;
+		$this->connection = $connection;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return Connection
-	 */
 	public function getConnection(): Connection
 	{
-		return $this->_connection;
+		return $this->connection;
 	}
 	
-	/**
-	 * @param ArrayObject $options
-	 *
-	 * @return static
-	 */
-	public function setStoreOptions(ArrayObject $options): static
+	public function setStoreOptions(
+		ArrayObject $options,
+	): static
 	{
 		return $this;
 	}
 	
-	/**
-	 * @param ArrayObject $config
-	 *
-	 * @return static
-	 */
-	public function setQueue(ArrayObject $config): static
+	public function setQueue(
+		ArrayObject $config,
+	): static
 	{
 		if(($enabled = $config->offsetGet('enabled')) !== null) // true or false
 		{
-			$this->_queueEnabled = $enabled;
+			$this->queueEnabled = $enabled;
 		}
 		if(($lockTtlMs = $config->offsetGet('lock_ttl_ms')) !== null)
 		{
-			$this->_queueLockTtlMs = $lockTtlMs;
+			$this->queueLockTtlMs = $lockTtlMs;
 		}
 		if(($waitAttempts = $config->offsetGet('wait_attempts')) !== null)
 		{
-			$this->_queueWaitAttempts = $waitAttempts;
+			$this->queueWaitAttempts = $waitAttempts;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param bool $enabled
-	 *
-	 * @return static
-	 */
-	public function setQueueEnabled(bool $enabled): static
+	public function setQueueEnabled(
+		bool $enabled,
+	): static
 	{
-		$this->_queueEnabled = $enabled;
+		$this->queueEnabled = $enabled;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isQueueEnabled(): bool
 	{
-		return $this->_queueEnabled;
+		return $this->queueEnabled;
 	}
 	
-	/**
-	 * @param string $key
-	 * @param ?string $prefix
-	 * @param string $separator
-	 *
-	 * @return string
-	 */
-	public function functionPrefix(string $key,
+	public function functionPrefix(
+		string $key,
 		?string $prefix = null,
-		string $separator = self::SEPARATOR_FUNCTION
+		string $separator = self::SEPARATOR_FUNCTION,
 	): string
 	{
-		$prefix = $prefix ?? $this->_functionPrefix;
+		$prefix = $prefix ?? $this->functionPrefix;
 		
 		return $prefix !== null
 			? $prefix . $separator . $key
 			: $key;
 	}
 	
-	/**
-	 * @param Connection $connection
-	 * @param ArrayObject $config
-	 * @param ?string $group
-	 *
-	 * @return static
-	 */
-	public static function fromConfig(Connection $connection,
+	public static function fromConfig(
+		Connection $connection,
 		ArrayObject $config,
 		?string $group = null,
 	): static
@@ -294,32 +216,24 @@ abstract class Redis extends Tags
 		);
 	}
 	
-	/**
-	 * @return ?RedisClient
-	 */
 	public function getClient(): ?RedisClient
 	{
-		return $this->_connection->getClient();
+		return $this->connection->getClient();
 	}
 	
-	/**
-	 * @param string $type
-	 *
-	 * @return string
-	 */
-	public function getType(string $type = self::TYPE_ITEMS): string
+	public function getType(
+		string $type = self::TYPE_ITEMS,
+	): string
 	{
 		return $this->prefix($type, $this->getGroup());
 	}
 	
 	/**
 	 * Ensures that all the libraries of scripts are loaded into redis
-	 *
-	 * @param bool $replace
-	 *
-	 * @return bool
 	 */
-	public function loadLibraries(bool $replace = false): bool
+	public function loadLibraries(
+		bool $replace = false,
+	): bool
 	{
 		foreach(static::LIBRARIES as $libraryName => $libraryFile)
 		{
@@ -336,24 +250,17 @@ abstract class Redis extends Tags
 	 * Ensures that a library of scripts is loaded into redis
 	 * Library name and functions cannot use ":" character in their names (this includes also the prefix):
 	 * "ERR Library names can only contain letters, numbers, or underscores(_) and must be at least one character"
-	 *
-	 * @param string $libraryName
-	 * @param string $libraryFile
-	 * @param bool $replace
-	 *
-	 * @return bool
 	 */
-	public function loadLibrary
-	(
+	public function loadLibrary(
 		string $libraryName,
 		string $libraryFile,
-		bool $replace = false
+		bool $replace = false,
 	): bool
 	{
 		$libraryName = $this->functionPrefix($libraryName);
 		
-		if(isset($this->_librariesLoaded[$libraryName])
-			&& $this->_librariesLoaded[$libraryName] === true
+		if(isset($this->librariesLoaded[$libraryName])
+			&& $this->librariesLoaded[$libraryName] === true
 			&& $replace === false)
 		{
 			return true;
@@ -374,7 +281,7 @@ abstract class Redis extends Tags
 				&& $list[0]['library_name'] === $libraryName
 			)
 			{
-				$this->_librariesLoaded[$libraryName] = true;
+				$this->librariesLoaded[$libraryName] = true;
 				
 				return true;
 			}
@@ -388,8 +295,8 @@ abstract class Redis extends Tags
 		);
 		
 		$functions = str_replace('[prefix]',
-			$this->_functionPrefix
-				? $this->_functionPrefix . self::SEPARATOR_FUNCTION
+			$this->functionPrefix
+				? $this->functionPrefix . self::SEPARATOR_FUNCTION
 				: '',
 			$functions,
 		);
@@ -408,7 +315,7 @@ abstract class Redis extends Tags
 		
 		if($libraryLoaded === $libraryName)
 		{
-			$this->_librariesLoaded[$libraryName] = true;
+			$this->librariesLoaded[$libraryName] = true;
 			
 			return true;
 		}
@@ -416,16 +323,7 @@ abstract class Redis extends Tags
 		return false;
 	}
 	
-	/**
-	 * @param string $function
-	 * @param array $keys
-	 * @param array $args
-	 * @param bool $readOnly
-	 * @param bool $long
-	 *
-	 * @return mixed
-	 */
-	protected function _functionCall(
+	protected function functionCall(
 		string $function,
 		array $keys = [],
 		array $args = [],
@@ -442,7 +340,7 @@ abstract class Redis extends Tags
 		
 		if($long)
 		{
-			$this->_connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
+			$this->connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
 		}
 		
 		$call = $readOnly
@@ -451,27 +349,17 @@ abstract class Redis extends Tags
 		;
 		$functionName = $this->functionPrefix($function);
 		
-		$result = $this->_connection->slowLog([$client, $call], $functionName, $keys, $args);
+		$result = $this->connection->slowLog([$client, $call], $functionName, $keys, $args);
 		
 		if($long)
 		{
-			$this->_connection->toggleReadTimeout();
+			$this->connection->toggleReadTimeout();
 		}
 		
 		return $result;
 	}
 	
-	/**
-	 * @param string $function
-	 * @param array $keys
-	 * @param array $args
-	 * @param bool $readOnly
-	 * @param bool $long
-	 * @param int $batchSize
-	 *
-	 * @return void
-	 */
-	protected function _batchFunctionCall(
+	protected function batchFunctionCall(
 		string $function,
 		array $keys = [],
 		array $args = [],
@@ -483,7 +371,7 @@ abstract class Redis extends Tags
 		if($long)
 		{
 			// an extended timeout will be valid through all calls of the batch
-			$this->_connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
+			$this->connection->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
 		}
 		
 		$countKeys = count($keys);
@@ -492,33 +380,23 @@ abstract class Redis extends Tags
 		for($batch = 0; $batch < $totalBatches; $batch++)
 		{
 			$keysBatch = array_slice($keys, $batch * $batchSize, $batchSize);
-			$this->_functionCall($function, $keysBatch, $args, $readOnly);
+			$this->functionCall($function, $keysBatch, $args, $readOnly);
 		}
 		
 		if($long)
 		{
-			$this->_connection->toggleReadTimeout();
+			$this->connection->toggleReadTimeout();
 		}
 	}
 	
-	/**
-	 * @param string $key
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param array $tags
-	 * @param bool $queue override for the config switch
-	 * @param ?int $queueLockTtlMs override for the config value
-	 *
-	 * @return null|mixed
-	 */
 	#[Override]
 	public function get(
 		string $key,
 		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
-		?bool $queue = null,
-		?int $queueLockTtlMs = null,
+		?bool $queue = null, // override for the config switch
+		?int $queueLockTtlMs = null, // override for the config value
 	): mixed
 	{
 		if(($client = $this->getClient()) === null)
@@ -547,7 +425,7 @@ abstract class Redis extends Tags
 		}
 		
 		// cache miss, queue logic begins
-		return $this->_queue(
+		return $this->queue(
 			$client,
 			$key,
 			$id,
@@ -559,22 +437,12 @@ abstract class Redis extends Tags
 		);
 	}
 	
-	/**
-	 * @param string $key
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param array $tags
-	 * @param ?int $queueLockTtlMs override for the config value
-	 * @param bool $lockOnly
-	 *
-	 * @return mixed
-	 */
-	public function queue(
+	public function lockAndQueue(
 		string $key,
 		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
-		?int $queueLockTtlMs = null,
+		?int $queueLockTtlMs = null, // override for the config value
 		bool $lockOnly = false,
 	): mixed
 	{
@@ -585,7 +453,7 @@ abstract class Redis extends Tags
 		
 		$id = $this->prefix($key, $this->getType());
 		
-		return $this->_queue(
+		return $this->queue(
 			$client,
 			$key,
 			$id,
@@ -598,33 +466,20 @@ abstract class Redis extends Tags
 		);
 	}
 	
-	/**
-	 * @param RedisClient $client
-	 * @param string $key
-	 * @param string $id
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param array $tags
-	 * @param bool $queue override for the config switch
-	 * @param ?int $queueLockTtlMs override for the config value
-	 * @param bool $lockOnly
-	 *
-	 * @return mixed
-	 */
-	protected function _queue(
+	protected function queue(
 		RedisClient $client,
 		string $key,
 		string $id,
 		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
-		?bool $queue = null,
-		?int $queueLockTtlMs = null,
+		?bool $queue = null, // override for the config switch
+		?int $queueLockTtlMs = null, // override for the config value
 		bool $lockOnly = false,
 	): mixed
 	{
-		if(($this->_queueEnabled === false && $queue !== true)
-			|| ($this->_queueEnabled === true && $queue === false)
+		if(($this->queueEnabled === false && $queue !== true)
+			|| ($this->queueEnabled === true && $queue === false)
 		)
 		{
 			return $this->setFromResolver($key, $resolver, $ttl, $tags);
@@ -633,7 +488,7 @@ abstract class Redis extends Tags
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
 		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		$lockValue = bin2hex(random_bytes(16));
-		$queueLockTtlMs = $queueLockTtlMs ?? $this->_queueLockTtlMs;
+		$queueLockTtlMs = $queueLockTtlMs ?? $this->queueLockTtlMs;
 		
 		// try to acquire a distributed lock
 		$lockAcquired = $client->set($lockKey, $lockValue, [
@@ -644,7 +499,7 @@ abstract class Redis extends Tags
 		if($lockAcquired)
 		{
 			// lock acquired, store it internally for releaseActiveLock()
-			return $this->_lockAcquired($key,
+			return $this->lockAcquired($key,
 				$id,
 				$lockValue,
 				$resolver,
@@ -655,10 +510,10 @@ abstract class Redis extends Tags
 		
 		// lock not acquired
 		$waitTimeMs = $waitTimeJitterMs = $queueLockTtlMs;
-		for($attempt = 0; $attempt < $this->_queueWaitAttempts; $attempt++)
+		for($attempt = 0; $attempt < $this->queueWaitAttempts; $attempt++)
 		{
 			// set read timeout to the requested queue lock TTL
-			$this->_connection->toggleReadTimeout(
+			$this->connection->toggleReadTimeout(
 				Connection::TIMEOUT_READ_CUSTOM, 
 				$waitTimeJitterMs / 1000, // milliseconds to seconds
 				false,
@@ -686,7 +541,7 @@ abstract class Redis extends Tags
 			finally
 			{
 				// restore the default read timeout
-				$this->_connection->toggleReadTimeout();
+				$this->connection->toggleReadTimeout();
 			}
 			
 			// either we got the message or we timed-out
@@ -706,7 +561,7 @@ abstract class Redis extends Tags
 				}
 				
 				// check if the lock still exists
-				if($client->exists($lockKey) === false)
+				if($client->exists($lockKey) === 0)
 				{
 					// try to acquire a distributed lock
 					$lockAcquired = $client->set($lockKey, $lockValue, [
@@ -717,7 +572,7 @@ abstract class Redis extends Tags
 					if($lockAcquired)
 					{
 						// lock acquired, store it internally for releaseActiveLock()
-						return $this->_lockAcquired($key,
+						return $this->lockAcquired($key,
 							$id,
 							$lockValue,
 							$resolver,
@@ -738,17 +593,7 @@ abstract class Redis extends Tags
 		return $this->callResolver($resolver);
 	}
 	
-	/**
-	 * @param string $key
-	 * @param string $id
-	 * @param string $lockValue
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param array $tags
-	 *
-	 * @return mixed
-	 */
-	protected function _lockAcquired(
+	protected function lockAcquired(
 		string $key,
 		string $id,
 		string $lockValue,
@@ -757,7 +602,7 @@ abstract class Redis extends Tags
 		array $tags = [],
 	): mixed
 	{
-		$this->_queueLocks[$id] = $lockValue;
+		$this->queueLocks[$id] = $lockValue;
 		
 		try
 		{
@@ -776,11 +621,6 @@ abstract class Redis extends Tags
 	 * the get(), for example, when an exception is caught,
 	 * and we know that save() won't be called
 	 * This will enable other processes to acquire the lock faster
-	 *
-	 * @param string $key
-	 * @param ?string $id
-	 *
-	 * @return bool
 	 */
 	public function releaseActiveLock(
 		string $key,
@@ -792,19 +632,19 @@ abstract class Redis extends Tags
 			$id = $this->prefix($key, $this->getType());
 		}
 		
-		if(array_key_exists($id, $this->_queueLocks) === false)
+		if(array_key_exists($id, $this->queueLocks) === false)
 		{
 			return false;
 		}
 		
-		$lockValue = $this->_queueLocks[$id];
-		unset($this->_queueLocks[$id]);
+		$lockValue = $this->queueLocks[$id];
+		unset($this->queueLocks[$id]);
 		
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
 		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		
 		// atomically release the lock and notify any waiters using the Lua script
-		return (bool)$this->_functionCall('store_release_lock_and_publish',
+		return (bool)$this->functionCall('store_release_lock_and_publish',
 			[$lockKey, $channelName],
 			[$lockValue],
 		);
@@ -813,26 +653,24 @@ abstract class Redis extends Tags
 	/**
 	 * This function should be used for long-running processes
 	 * which hold the lock for longer than default lock TTL
-	 *
-	 * @param string $key
-	 * @param ?int $ttlMs
-	 *
-	 * @return bool
 	 */
-	public function renewLock(string $key, ?int $ttlMs = null): bool
+	public function renewLock(
+		string $key,
+		?int $ttlMs = null,
+	): bool
 	{
 		$id = $this->prefix($key, $this->getType());
 		
-		if(array_key_exists($id, $this->_queueLocks) === false)
+		if(array_key_exists($id, $this->queueLocks) === false)
 		{
 			return false;
 		}
 		
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
-		$lockValue = $this->_queueLocks[$id];
-		$ttlMs = $ttlMs ?? $this->_queueLockTtlMs;
+		$lockValue = $this->queueLocks[$id];
+		$ttlMs = $ttlMs ?? $this->queueLockTtlMs;
 		
-		return (bool)$this->_functionCall('store_renew_lock',
+		return (bool)$this->functionCall('store_renew_lock',
 			[$lockKey],
 			[$lockValue, $ttlMs],
 		);
@@ -840,8 +678,6 @@ abstract class Redis extends Tags
 	
 	/**
 	 * Throws exception on purpose, this method is not meant to be used by normal users
-	 *
-	 * @return bool|int
 	 */
 	public function clear(): bool|int
 	{
@@ -856,7 +692,7 @@ abstract class Redis extends Tags
 		
 		$client->clearLastError();
 		
-		$result = $this->_functionCall('store_clear', [], [
+		$result = $this->functionCall('store_clear', [], [
 			$prefix,
 		], long: true);
 		
@@ -875,14 +711,12 @@ abstract class Redis extends Tags
 	
 	/**
 	 * Logs events (messages/errors/exceptions)
-	 *
-	 * @param mixed ...$event
-	 *
-	 * @return static
 	 */
-	public function log(...$event): static
+	public function log(
+		...$event,
+	): static
 	{
-		$this->_connection->log(...$event);
+		$this->connection->log(...$event);
 		
 		return $this;
 	}

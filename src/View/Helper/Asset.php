@@ -4,12 +4,10 @@ declare(strict_types=1);
 namespace Ovos\View\Helper;
 
 use Ovos\Service\Cache;
-use Ovos\Service\Memory;
+use Ovos\Service\Events;
 use Ovos\View\Helper;
 use Ovos\Dir;
 use ErrorException;
-
-use function Ovos\services;
 
 /**
  * Asset
@@ -19,67 +17,51 @@ use function Ovos\services;
  */
 class Asset extends Helper
 {
-	/**
-	 * @var Cache
-	 */
-	protected Cache $_cacheService;
+	protected Cache $cacheService;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_asset;
+	protected string $asset;
 	
-	/**
-	 */
 	public function __construct()
 	{
 		parent::__construct();
 		
 		/** @var Cache $cacheService */
-		$cacheService = $this->_app->getServices()
+		$cacheService = $this->container
 			->get(Cache::SYMBOL);
-		$this->_cacheService = $cacheService;
+		$this->cacheService = $cacheService;
 	}
 	
-	/**
-	 * @param string $asset
-	 *
-	 * @return static
-	 */
-	public function asset(string $asset): static
+	public function asset(
+		string $asset,
+	): static
 	{
 		$this->set($asset);
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string $asset
-	 *
-	 * @return static
-	 */
-	public function set(string $asset): static
+	public function set(
+		string $asset,
+	): static
 	{
-		$this->_asset = $asset;
+		$this->asset = $asset;
 		
 		return $this;
 	}
 	
 	/**
-	 * Add timestamp with last modification date, cache filemtime call in apcu
-	 * 
-	 * @return string
+	 * Add timestamp with the last modification date, cache filemtime call in apcu
 	 */
 	public function __toString(): string
 	{
 		$filename = $this->getFilename();
 		
 		// fetch mtime from memory
-		$store = $this->_cacheService->getPerishableStore();
-		$cacheId = $store->pathToId($this->_asset); // a static method accessed from the instance
+		$store = $this->cacheService->getPerishableStore();
+		$cacheId = $store::pathToId($this->asset); // a static method accessed from the instance
 		if($mDate = $store->get($cacheId))
 		{
-			return $this->_asset . '?' . $mDate;
+			return $this->asset . '?' . $mDate;
 		}
 		
 		try
@@ -91,18 +73,17 @@ class Asset extends Helper
 		}
 		catch(ErrorException $exception)
 		{
-			services()->events->add($exception);
+			$this->container
+				->get(Events::SYMBOL)
+				->add($exception);
 		}
 		
-		return $this->_asset;
+		return $this->asset;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getFilename(): string
 	{
-		return BASE_DIR . 'public' . DIRECTORY_SEPARATOR
-			. Dir::preProcess($this->_asset, true);
+		return BASE_DIR . 'public'
+			. DIRECTORY_SEPARATOR . Dir::preProcess($this->asset, true);
 	}
 }

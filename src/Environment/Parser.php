@@ -13,13 +13,12 @@ use function parse_ini_file;
  */
 class Parser
 {
-	/**
-	 * @param string $file
-	 * @return ?array
-	 */
-	public static function parse(string $file): ?array
+	public static function parse(
+		string $file,
+	): ?array
 	{
-		$result = parse_ini_file($file, true, INI_SCANNER_TYPED);
+		$result = parse_ini_file($file, true,
+			INI_SCANNER_TYPED);
 		if($result === false)
 		{
 			return null;
@@ -33,12 +32,9 @@ class Parser
 	 * It can be used to parse values coming from other sources than an INI file
 	 * We use it to parse a default value specified next to !ENV YAML tags,
 	 * which identify specific entries in .env file
-	 * 
-	 * @param string $value
-	 *
-	 * @return mixed
 	 */
-	public static function parseValue(string $value,
+	public static function parseValue(
+		string $value,
 	): mixed
 	{
 		// convert to lowercase for case-insensitive keyword matching later

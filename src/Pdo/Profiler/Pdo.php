@@ -20,10 +20,13 @@ class Pdo extends \PDO
 	/**
 	 * Measures time while executing a query, returns a result
 	 * @see https://www.php.net/manual/en/pdo.query
-	 * @inheritDoc
 	 */
 	#[Override]
-	public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): false|PDOStatement
+	public function query(
+		string $query,
+		?int $fetchMode = null,
+		mixed ...$fetchModeArgs,
+	): false|PDOStatement
 	{
 		$args = func_get_args();
 		
@@ -58,10 +61,11 @@ class Pdo extends \PDO
 	/**
 	 * Measures time while executing a query, returns the number of affected rows
 	 * @see https://www.php.net/manual/en/pdo.exec.php
-	 * @inheritDoc
 	 */
 	#[Override]
-	public function exec(string $statement): int|false
+	public function exec(
+		string $statement,
+	): int|false
 	{
 		// execute the query and measure time & memory usage
 		$measurement = new Measurement;

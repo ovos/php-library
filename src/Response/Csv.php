@@ -11,24 +11,19 @@ namespace Ovos\Response;
  */
 class Csv extends Html
 {
-	/**
-	 * Construct
-	 *
-	 * @param ?string $response
-	 */
-	public function __construct(?string $response = null)
+	public function __construct(
+		?string $response = null,
+	)
 	{
 		parent::__construct($response);
 		
-		$this->setHeader('Content-Type', 'text/csv; charset=utf-8');
+		$this->setHeader('Content-Type',
+			'text/csv; charset=utf-8');
 	}
 	
-	/**
-	 * @param string $filename
-	 *
-	 * @return void
-	 */
-	public function setFilename(string $filename): void
+	public function setFilename(
+		string $filename,
+	): void
 	{
 		$this->setHeader('Content-Disposition',
 			'attachment; filename=' . $filename);

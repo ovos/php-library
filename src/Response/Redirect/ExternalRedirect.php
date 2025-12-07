@@ -14,27 +14,20 @@ use Override;
  */
 class ExternalRedirect extends Redirect
 {
-	/**
-	 * @var string
-	 */
-	protected string $_externalUrl;
+	protected string $externalUrl;
 	
-	/**
-	 * @param string $externalUrl
-	 */
-	public function __construct(string $externalUrl)
+	public function __construct(
+		string $externalUrl,
+	)
 	{
 		parent::__construct();
 		
-		$this->_externalUrl = $externalUrl;
+		$this->externalUrl = $externalUrl;
 	}
 	
-	/**
-	 * @return string
-	 */
 	#[Override]
 	public function __toString(): string
 	{
-		return $this->_externalUrl;
+		return $this->externalUrl;
 	}
 }

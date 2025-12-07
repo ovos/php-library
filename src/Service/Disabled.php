@@ -13,57 +13,44 @@ use Ovos\Service;
  */
 class Disabled extends Service
 {
-	/**
-	 * @var string
-	 */
 	public const string SYMBOL = 'disabled';
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_enabled = false;
+	protected bool $enabled = false;
 	
-	/**
-	 * @param string $name
-	 * @param array $arguments
-	 */
-	public function __call(string $name, array $arguments): void
+	public function __call(
+		string $name,
+		array $arguments,
+	): void
 	{
 		// do nothing
 	}
 	
-	/**
-	 * @param string $name
-	 * @param array $arguments
-	 */
-	public static function __callStatic(string $name, array $arguments): void
+	public static function __callStatic(
+		string $name,
+		array $arguments,
+	): void
 	{
 		// do nothing
 	}
 	
-	/**
-	 * @param string $name
-	 */
-	public function __get(string $name): void
+	public function __get(
+		string $name,
+	): void
 	{
 		// do nothing
 	}
 	
-	/**
-	 * @param string $name
-	 * @param mixed $value
-	 */
-	public function __set(string $name, mixed $value): void
+	public function __set(
+		string $name,
+		mixed $value,
+	): void
 	{
 		// do nothing
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return bool
-	 */
-	public function __isset(string $name): bool
+	public function __isset(
+		string $name,
+	): bool
 	{
 		// do nothing
 		return false;

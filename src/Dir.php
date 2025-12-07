@@ -9,23 +9,23 @@ use RecursiveIteratorIterator;
 use SplFileInfo;
 
 use function count;
-use function substr;
 use function file_exists;
-use function umask;
-use function mkdir;
-use function str_replace;
-use function str_contains;
-use function unlink;
-use function rtrim;
+use function func_get_args;
+use function is_dir;
+use function is_readable;
+use function ksort;
 use function ltrim;
+use function mkdir;
 use function preg_match;
 use function rmdir;
-use function is_readable;
+use function rtrim;
 use function scandir;
-use function is_dir;
-use function func_get_args;
 use function sort;
-use function ksort;
+use function str_contains;
+use function str_replace;
+use function substr;
+use function umask;
+use function unlink;
 
 /**
  * Dir
@@ -36,26 +36,17 @@ use function ksort;
  */
 class Dir
 {
-	/**#@+
-	 * Filters
-	 */
+	// Filters
 	public const int FILTER_NONE = 0;
 	public const int FILTER_DIRECTORIES = 1;
 	public const int FILTER_FILES = 2;
-	/**#@-*/
 	
 	/**
 	 * Creates a directory structure
-	 *
-	 * @param string $path
-	 * @param int $mode (octal)
-	 * @param bool $preProcess
-	 *
-	 * @return bool
 	 */
 	public static function create(
 		string $path,
-		int $mode = 0777,
+		int $mode = 0777, // (octal)
 		bool $preProcess = true,
 	): bool
 	{
@@ -90,13 +81,11 @@ class Dir
 	 * Pre-processes a path or relative path (second param)
 	 * Removes directory separator from the end and replaces all separators with consistent ones
 	 * Set $relative to true to remove directory separator also from the start of the string
-	 *
-	 * @param string $path
-	 * @param bool $relative
-	 *
-	 * @return string
 	 */
-	public static function preProcess(string $path, bool $relative = false): string
+	public static function preProcess(
+		string $path,
+		bool $relative = false,
+	): string
 	{
 		$path = str_replace(['/', '\\'], [DIRECTORY_SEPARATOR, DIRECTORY_SEPARATOR], $path);
 		$path = rtrim($path, DIRECTORY_SEPARATOR);
@@ -110,17 +99,11 @@ class Dir
 	
 	/**
 	 * Remove the directory with all its contents
-	 *
-	 * @param string $path
-	 * @param bool $remove
-	 * @param ?string $match (regular expression)
-	 *
-	 * @return void
 	 */
 	public static function remove(
 		string $path,
 		bool $remove = true,
-		?string $match = null,
+		?string $match = null, // a regular expression
 	): void
 	{
 		if(is_dir($path) === false)
@@ -145,7 +128,10 @@ class Dir
 			/**
 			 * @var SplFileInfo $file
 			 */
-			if($match !== null && !preg_match($match, $file->getFilename()))
+			if($match !== null && preg_match(
+				$match,
+				$file->getFilename(),
+			) === 0)
 			{
 				continue;
 			}
@@ -173,26 +159,22 @@ class Dir
 	
 	/**
 	 * Empty the directory or recursively remove files and directories matching regular expression
-	 *
-	 * @param string $path
-	 * @param ?string $match (regular expression)
-	 *
-	 * @return void
 	 */
-	public static function clear(string $path, ?string $match = null): void
+	public static function clear(
+		string $path,
+		?string $match = null, // regular expression
+	): void
 	{
 		self::remove($path, false, $match);
 	}
 	
 	/**
 	 * Remove the path of directories if they are empty
-	 *
-	 * @param string $pathToKeep absolute path
-	 * @param string $path relative path
-	 *
-	 * @return void
 	 */
-	public static function removeEmpty(string $pathToKeep, string $path): void
+	public static function removeEmpty(
+		string $pathToKeep, // absolute path
+		string $path, // relative path
+	): void
 	{
 		$pathToKeep = self::preProcess($pathToKeep);
 		$path = self::preProcess($path, true);
@@ -215,21 +197,23 @@ class Dir
 			
 			if(str_contains($path, DIRECTORY_SEPARATOR))
 			{
-				$pathUp = substr($path, 0, strrpos($path, DIRECTORY_SEPARATOR));
+				$pathUp = substr($path,
+					0,
+					strrpos($path, DIRECTORY_SEPARATOR),
+				);
 				self::removeEmpty($pathToKeep, $pathUp);
 			}
 		}
 	}
 	
 	/**
-	 * Moves contents of one directory to another recursively without removing the target directory's contents
-	 *
-	 * @param string $pathFrom
-	 * @param string $pathTo
-	 *
-	 * @return void
+	 * Moves contents of one directory to another recursively
+	 * without removing the target directory's contents
 	 */
-	public static function moveFiles(string $pathFrom, string $pathTo): void
+	public static function moveFiles(
+		string $pathFrom,
+		string $pathTo,
+	): void
 	{
 		$pathFrom = self::preProcess($pathFrom);
 		$pathTo = self::preProcess($pathTo);
@@ -269,15 +253,8 @@ class Dir
 	}
 	
 	/**
-	 * Copy contents of one directory to another recursively without removing target directory's contents
-	 *
-	 * @param string $pathFrom
-	 * @param string $pathTo
-	 * @param bool $overwrite
-	 * @param ?callable $filenameCallback
-	 * @param ?callable $callback
-	 *
-	 * @return void
+	 * Copy contents of one directory to another recursively
+	 * without removing the target directory's contents
 	 */
 	public static function copyFiles(
 		string $pathFrom,
@@ -347,12 +324,10 @@ class Dir
 	
 	/**
 	 * Check if the directory is empty
-	 *
-	 * @param string $path
-	 *
-	 * @return ?bool
 	 */
-	public static function isEmpty(string $path): ?bool
+	public static function isEmpty(
+		string $path,
+	): ?bool
 	{
 		if(is_readable($path) === false)
 		{
@@ -361,40 +336,22 @@ class Dir
 		return (count(scandir($path, SCANDIR_SORT_NONE)) === 2); // if only array('..', '.');
 	}
 	
-	/**
-	 * @param string $path
-	 * @param bool $skipHidden
-	 * @param ?callable $skipCallback
-	 * @param ?callable $filenameCallback Callback function for filename processing
-	 * @param int $filter
-	 *
-	 * @return array
-	 */
 	public static function getDirectoriesTree(
 		string $path,
 		bool $skipHidden = true,
 		?callable $skipCallback = null,
-		?callable $filenameCallback = null,
+		?callable $filenameCallback = null, // callback function for filename processing
 		int $filter = self::FILTER_DIRECTORIES,
 	): array
 	{
 		return self::getTree(...func_get_args());
 	}
 	
-	/**
-	 * @param string $path
-	 * @param bool $skipHidden
-	 * @param ?callable $skipCallback
-	 * @param ?callable $filenameCallback Callback function for filename processing
-	 * @param int $filter
-	 *
-	 * @return array
-	 */
 	public static function getTree(
 		string $path,
 		bool $skipHidden = true,
 		?callable $skipCallback = null,
-		?callable $filenameCallback = null,
+		?callable $filenameCallback = null, // callback function for filename processing
 		int $filter = self::FILTER_NONE,
 	): array
 	{
@@ -457,14 +414,6 @@ class Dir
 		return $dirs + $files;
 	}
 	
-	/**
-	 * @param string $path
-	 * @param bool $skipHidden
-	 * @param ?callable $skipCallback
-	 * @param int $filter
-	 *
-	 * @return array
-	 */
 	public static function getFiles(
 		string $path,
 		bool $skipHidden = true,

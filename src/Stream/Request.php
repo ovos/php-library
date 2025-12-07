@@ -14,74 +14,55 @@ use Ovos\Measurement;
  */
 class Request
 {
-	/**#@+
-	 * Methods
-	 */
+	// Methods
 	public const string METHOD_GET = 'GET';
 	public const string METHOD_POST = 'POST';
 	public const string METHOD_PUT = 'PUT';
-	/**#@-*/
 	
 	/**
-	 * Global URL, for cases when the project uses only a single API, thus Ovos\Stream\Request\Factory is not needed
-	 * 
-	 * @var string
+	 * Global URL, for cases when the project uses only a single API,
+	 * thus Ovos\Stream\Request\Factory is not needed
 	 */
-	protected string $_url;
+	protected string $url;
 	
 	/**
 	 * Global context for all requests
-	 *
-	 * @var array
 	 */
-	protected array $_contextOptions = [
+	protected array $contextOptions = [
 		'http' => [
 			'method' => self::METHOD_GET,
 			'header' => [], // required by createContext()
 		]
 	];
 	
-	/**
-	 * @var ?array
-	 */
-	protected ?array $_content = null;
+	protected ?array $content = null;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_response = null;
+	protected ?string $response = null;
 	
 	/**
 	 * @see https://www.php.net/manual/en/function.stream-get-meta-data.php
 	 * @see https://www.php.net/manual/en/wrappers.http.php
-	 *
-	 * @var ?array
 	 */
-	protected ?array $_responseMetaData = null;
+	protected ?array $responseMetaData = null;
 	
-	/**
-	 * @var Measurement
-	 */
-	protected Measurement $_measurement;
+	protected Measurement $measurement;
 	
 	/**
 	 */
-	public function __construct(string $url,
+	public function __construct(
+		string $url,
 		array $contextOptions = [],
 	)
 	{
-		$this->_url = $url;
+		$this->url = $url;
 		$this->setContextOptions($contextOptions);
 		
-		$this->_measurement = new Measurement;
+		$this->measurement = new Measurement;
 	}
 	
-	/**
-	 * @param ?resource $context
-	 *
-	 * @return static
-	 */
-	public function invoke(mixed $context = null): static
+	public function invoke(
+		mixed $context = null,
+	): static
 	{
 		$this->getMeasurement()->start();
 		
@@ -90,15 +71,15 @@ class Request
 			$context = $this->createContext();
 		}
 		
-		$url = $this->_url;
+		$url = $this->url;
 		if($this->getMethod() === self::METHOD_GET
 			&& $content = $this->getContent())
 		{
 			$url.= '?' . http_build_query($content);
 		}
 		$stream = fopen($url, 'r', false, $context);
-		$this->_responseMetaData = stream_get_meta_data($stream);
-		$this->_response = stream_get_contents($stream);
+		$this->responseMetaData = stream_get_meta_data($stream);
+		$this->response = stream_get_contents($stream);
 		fclose($stream);
 		
 		$this->getMeasurement()->stop();
@@ -112,22 +93,20 @@ class Request
 	 * 'wrapper_data' =>
 	 *   [0] =>
 	 *   string(15) "HTTP/1.1 200 OK"
- 	 *
-	 * @return ?int
 	 */
 	public function getResponseStatusCode(): ?int
 	{
-		if($this->_responseMetaData === null)
+		if($this->responseMetaData === null)
 		{
 			return null;
 		}
 		
-		if(!isset($this->_responseMetaData['wrapper_data']))
+		if(isset($this->responseMetaData['wrapper_data']) === false)
 		{
 			return null;
 		}
 		
-		foreach($this->_responseMetaData['wrapper_data'] as $header)
+		foreach($this->responseMetaData['wrapper_data'] as $header)
 		{
 			if(str_starts_with($header, 'HTTP/') === false)
 			{
@@ -147,136 +126,107 @@ class Request
 	public function createContext(
 	): mixed
 	{
-		$contextOptions = $this->_contextOptions;
+		$contextOptions = $this->contextOptions;
 		
-		if($this->_contextOptions['http']['method'] === self::METHOD_POST)
+		if($this->contextOptions['http']['method'] === self::METHOD_POST)
 		{
-			if($this->_content !== null && !isset($contextOptions['http']['content']))
+			if($this->content !== null
+				&& isset($contextOptions['http']['content']) === false)
 			{
-				$contextOptions['http']['content'] = http_build_query($this->_content);
+				$contextOptions['http']['content']
+					= http_build_query($this->content);
 			}
 			
 			if(isset($contextOptions['http']['content']))
 			{
-				$contextOptions['http']['header'][] = 'Content-Type: application/x-www-form-urlencoded';
+				$contextOptions['http']['header'][]
+					= 'Content-Type: application/x-www-form-urlencoded';
 			}
 		}
 		
 		return stream_context_create($contextOptions);
 	}
 	
-	/**
-	 * @param string $method
-	 *
-	 * @return static
-	 */
-	public function setMethod(string $method): static
+	public function setMethod(
+		string $method,
+	): static
 	{
-		$this->_contextOptions['http']['method'] = $method;
+		$this->contextOptions['http']['method'] = $method;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getMethod(): ?string
 	{
-		return $this->_contextOptions['http']['method'];
+		return $this->contextOptions['http']['method'];
 	}
 	
-	/**
-	 * @param string $url
-	 *
-	 * @return static
-	 */
-	public function setUrl(string $url): static
+	public function setUrl(
+		string $url,
+	): static
 	{
-		$this->_url = $url;
+		$this->url = $url;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getUrl(): string
 	{
-		return $this->_url;
+		return $this->url;
 	}
 	
-	/**
-	 * @param array $contextOptions
-	 *
-	 * @return static
-	 */
-	public function setContextOptions(array $contextOptions): static
+	public function setContextOptions(
+		array $contextOptions,
+	): static
 	{
-		$this->_contextOptions = Arrays::deepMerge($this->_contextOptions, $contextOptions);
+		$this->contextOptions = Arrays::deepMerge(
+			$this->contextOptions,
+			$contextOptions,
+		);
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getContextOptions(): array
 	{
-		return $this->_contextOptions;
+		return $this->contextOptions;
 	}
 	
-	/**
-	 * @param ?array $content
-	 *
-	 * @return static
-	 */
-	public function setContent(?array $content): static
+	public function setContent(
+		?array $content,
+	): static
 	{
-		$this->_content = $content;
+		$this->content = $content;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?array
-	 */
 	public function getContent(): ?array
 	{
-		return $this->_content;
+		return $this->content;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getResponse(): ?string
 	{
-		return $this->_response;
+		return $this->response;
 	}
 	
-	/**
-	 * @return mixed
-	 */
 	public function getJsonResponse(): mixed
 	{
-		return json_decode($this->_response, flags: JSON_THROW_ON_ERROR);
+		return json_decode($this->response, flags: JSON_THROW_ON_ERROR);
 	}
 	
 	/**
 	 * @see https://www.php.net/manual/en/function.stream-get-meta-data.php
 	 * @see https://www.php.net/manual/en/wrappers.http.php
-	 * 
-	 * @return ?array
 	 */
 	public function getResponseMetaData(): ?array
 	{
-		return $this->_responseMetaData;
+		return $this->responseMetaData;
 	}
 	
-	/**
-	 * @return Measurement
-	 */
 	public function getMeasurement(): Measurement
 	{
-		return $this->_measurement;
+		return $this->measurement;
 	}
 }

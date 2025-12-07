@@ -15,11 +15,9 @@ use Ovos\View\Helper;
  */
 class Queries extends Helper
 {
-	/**
-	 * @return Reporter
-	 */
 	public function getReporter(): Reporter
 	{
+		// TODO: rework with container?
 		static $reporter;
 		if($reporter === null)
 		{
@@ -29,20 +27,14 @@ class Queries extends Helper
 		return $reporter;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getCount(): int
 	{
 		return $this->getReporter()->getCount();
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
-		if($this->_app->getConfig()->system->profilers->enabled === false)
+		if($this->app->getConfig()->system->profilers->enabled === false)
 		{
 			return '';
 		}

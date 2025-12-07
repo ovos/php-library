@@ -23,52 +23,28 @@ use Ovos\Store\Redisearch;
  */
 class Cache extends Service
 {
-	/**
-	 * @var string
-	 */
 	public const string SYMBOL = 'cache';
 	
-	/**
-	 * @var ArrayObject
-	 */
-	protected ArrayObject $_config;
+	protected ArrayObject $config;
 	
 	/**
 	 * Connection to a persistent database
-	 *
-	 * @var ?Connection
 	 */
-	protected ?Connection $_persistentConnection = null;
+	protected ?Connection $persistentConnection = null;
 	
-	/**
-	 * @var ?RedisStore
-	 */
-	protected ?RedisStore $_persistentStore = null;
+	protected ?RedisStore $persistentStore = null;
 	
-	/**
-	 * @var ?Apcu
-	 */
-	protected ?Apcu $_perishableStore = null;
+	protected ?Apcu $perishableStore = null;
 	
-	/**
-	 * @param ArrayObject $config
-	 */
 	public function __construct(
 		ArrayObject $config,
 	)
 	{
-		$this->_config = $config;
+		$this->config = $config;
 	}
 	
-	/**
-	 * @param string $key
-	 * @param Container $container
-	 *
-	 * @return void
-	 *
-	 * @throws MissingConfigException
-	 */
-	public static function register(string $key,
+	public static function register(
+		string $key,
 		Container $container,
 	): void
 	{
@@ -90,70 +66,59 @@ class Cache extends Service
 		]);
 	}
 	
-	/**
-	 * @return ?Connection
-	 */
 	public function getPersistentConnection(): ?Connection
 	{
-		if($this->_persistentConnection === null)
+		if($this->persistentConnection === null)
 		{
-			if($this->_config->persistent->connection === null)
+			if($this->config->persistent->connection === null)
 			{
 				throw new MissingConfigException('"connection" config section is missing.');
 			}
 			
-			$this->_persistentConnection = $this->_container
+			$this->persistentConnection = $this->container
 				->getClass(Connections::class)
-				->getConnection($this->_config->persistent->connection);
+				->get($this->config->persistent->connection);
 		}
 		
-		return $this->_persistentConnection;
+		return $this->persistentConnection;
 	}
 	
-	/**
-	 * @param bool $persistent
-	 *
-	 * @return null|Redis|Redisearch|Apcu
-	 */
-	public function getStore(bool $persistent = true): null|Redis|Redisearch|Apcu
+	public function getStore(
+		bool $persistent = true,
+	): null|Redis|Redisearch|Apcu
 	{
 		return $persistent ?
 			$this->getPersistentStore()
 			: $this->getPerishableStore();
 	}
 	
-	/**
-	 * @return null|Redis|Redisearch
-	 */
-	public function getPersistentStore(): null|Redis|Redisearch
+	public function getPersistentStore(
+	): null|Redis|Redisearch
 	{
-		if($this->_persistentStore === null)
+		if($this->persistentStore === null)
 		{
 			/** @var Redis $storeClass */
 			$storeClass = 'Ovos\Store\\'
-				. ($this->_config->persistent->store ?? 'Redis');
+				. ($this->config->persistent->store ?? 'Redis');
 			$store = $storeClass::fromConfig
 			(
 				$this->getPersistentConnection(),
-				$this->_config,
+				$this->config,
 			);
 			
-			$this->_persistentStore = $store;
+			$this->persistentStore = $store;
 		}
 		
-		return $this->_persistentStore;
+		return $this->persistentStore;
 	}
 	
-	/**
-	 * @return Apcu
-	 */
 	public function getPerishableStore(): Apcu
 	{
-		if($this->_perishableStore === null)
+		if($this->perishableStore === null)
 		{
-			$this->_perishableStore = Apcu::fromConfig($this->_config);
+			$this->perishableStore = Apcu::fromConfig($this->config);
 		}
 		
-		return $this->_perishableStore;
+		return $this->perishableStore;
 	}
 }

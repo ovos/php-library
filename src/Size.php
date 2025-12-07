@@ -20,13 +20,11 @@ class Size
 {
 	/**
 	 * Get size expressed in B, KB, MB, GB...
-	 *
-	 * @param int $bytes
-	 * @param int $precision
-	 *
-	 * @return string
 	 */
-	public static function format(int $bytes, int $precision = 2): string
+	public static function format(
+		int $bytes,
+		int $precision = 2,
+	): string
 	{
 		$units = ['B', 'KB', 'MB', 'GB', 'TB']; 
 		

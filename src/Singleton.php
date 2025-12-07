@@ -11,32 +11,24 @@ namespace Ovos;
  */
 trait Singleton
 {
-	/**
-	 * @var ?self
-	 */
-	protected static ?self $_instance = null;
+	protected static ?self $instance = null;
 	
-	/**
-	 * @return static
-	 */
 	public static function getInstance(): static
 	{
-		if(static::$_instance === null)
+		if(static::$instance === null)
 		{
-			static::$_instance = new static;
+			static::$instance = new static;
 		}
 		
-		return static::$_instance;
+		return static::$instance;
 	}
 	
 	/**
 	 * Clears an old instance and creates a new one
-	 *
-	 * @return static
 	 */
 	public static function newInstance(): static
 	{
-		static::$_instance = null;
+		static::$instance = null;
 		
 		return self::getInstance();
 	}

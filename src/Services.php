@@ -29,41 +29,29 @@ use Ovos\Service\Database;
  */
 class Services
 {
-	/**
-	 * @var Container 
-	 */
-	protected Container $_container;
+	protected Container $container;
 	
-	/**
-	 * @param Container $container
-	 */
-	public function __construct(Container $container)
+	public function __construct(
+		Container $container,
+	)
 	{
-		$this->_container = $container;
+		$this->container = $container;
 	}
 	
 	/**
 	 * @deprecated
-	 * 
-	 * @return ?self
 	 */
 	public static function getInstance(): ?self
 	{
 		return container()->get(static::class);
 	}
 	
-	/**
-	 * @param string $key
-	 * @param ?string $registerClass
-	 *
-	 * @return ?Service
-	 */
 	public function get(
 		string $key,
 		?string $registerClass = null,
 	): ?Service
 	{
-		$service = $this->_container->resolve($key);
+		$service = $this->container->resolve($key);
 		
 		if($service === null)
 		{
@@ -76,44 +64,34 @@ class Services
 				$this->register($key, Disabled::class);
 			}
 			
-			$service = $this->_container->get($key);
+			$service = $this->container->get($key);
 		}
 		
 		return $service;
 	}
 	
-	/**
-	 * @param string $key
-	 *
-	 * @return ?Service
-	 */
-	public function __get(string $key): ?Service
+	public function __get(
+		string $key,
+	): ?Service
 	{
 		return $this->get($key);
 	}
 	
-	/**
-	 * @param string $key
-	 * @param string $serviceClass
-	 *
-	 * @return static
-	 */
-	public function register(string $key,
+	public function register(
+		string $key,
 		string $serviceClass,
 	): static
 	{
 		/** @var Service $serviceClass */
-		$serviceClass::register($key, $this->_container);
+		$serviceClass::register($key, $this->container);
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ArrayObject
-	 */
 	public function getConfig(): ArrayObject
 	{
-		return $this->_container->get(Application::CONTAINER_KEY_CONFIG)
+		return $this->container
+			->get(Application::CONTAINER_KEY_CONFIG)
 			->system->services;
 	}
 }

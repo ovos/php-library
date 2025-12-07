@@ -11,127 +11,84 @@ namespace Ovos\Form;
  */
 class Error
 {
-	/**
-	 * @var ?Element
-	 */
-	protected ?Element $_element = null;
+	protected ?Element $element = null;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_code;
+	protected string $code;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_message;
+	protected string $message;
 	
-	/**
-	 * @var Validator
-	 */
-	protected Validator $_validator;
+	protected Validator $validator;
 	
-	/**
-	 * @param string $code
-	 * @param ?string $message
-	 */
-	public function __construct(string $code, ?string $message = null)
+	public function __construct(
+		string $code,
+		?string $message = null,
+	)
 	{
 		$this->setCode($code);
 		$this->setMessage($message);
 	}
 	
-	/**
-	 * @param ?Element $element
-	 *
-	 * @return static
-	 */
-	public function setElement(?Element $element): static
+	public function setElement(
+		?Element $element,
+	): static
 	{
-		$this->_element = $element;
+		$this->element = $element;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function hasElement(): bool
 	{
-		return $this->_element !== null;
+		return $this->element !== null;
 	}
 	
-	/**
-	 * @return ?Element
-	 */
 	public function getElement(): ?Element
 	{
-		return $this->_element;
+		return $this->element;
 	}
 	
-	/**
-	 * @param Validator $validator
-	 * 
-	 * @return static
-	 */
-	public function setValidator(Validator $validator): static
+	public function setValidator(
+		Validator $validator,
+	): static
 	{
-		$this->_validator = $validator;
+		$this->validator = $validator;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return Validator
-	 */
 	public function getValidator(): Validator
 	{
-		return $this->_validator;
-	}	
+		return $this->validator;
+	}
 	
-	/**
-	 * @param ?string $message
-	 * 
-	 * @return static
-	 */
-	public function setMessage(?string $message): static
+	public function setMessage(
+		?string $message,
+	): static
 	{
-		$this->_message = $message;
+		$this->message = $message;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getMessage(): ?string
 	{
-		return $this->_message;
+		return $this->message;
 	}
 	
-	/**
-	 * @param string $code
-	 * 
-	 * @return static
-	 */
-	public function setCode(string $code): static
+	public function setCode(
+		string $code,
+	): static
 	{
-		$this->_code = $code;
+		$this->code = $code;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getCode(): string
 	{
-		return $this->_code;
+		return $this->code;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function __debugInfo(): array
 	{
 		return [

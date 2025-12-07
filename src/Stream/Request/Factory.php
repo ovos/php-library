@@ -15,76 +15,58 @@ use Ovos\Stream\Request;
  */
 class Factory
 {
-	/**
-	 * @var string
-	 */
-	protected string $_baseUrl;
+	protected string $baseUrl;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_defaultContextOptions = [];
+	protected array $defaultContextOptions = [];
 	
 	/**
 	 */
-	public function __construct(string $baseUrl,
+	public function __construct(
+		string $baseUrl,
 		array $defaultContextOptions = [],
 	)
 	{
-		$this->_baseUrl = $baseUrl;
-		$this->_defaultContextOptions = $defaultContextOptions;
+		$this->baseUrl = $baseUrl;
+		$this->defaultContextOptions = $defaultContextOptions;
 	}
 	
-	/**
-	 * @param string $url
-	 * @param array $contextOptions
-	 *
-	 * @return Request
-	 */
-	public function create(string $url = '', array $contextOptions = []): Request
+	public function create(
+		string $url = '',
+		array $contextOptions = [],
+	): Request
 	{
-		$requestUrl = $this->_baseUrl . $url;
-		$requestContextOptions = Arrays::deepMerge($this->_defaultContextOptions, $contextOptions);
+		$requestUrl = $this->baseUrl . $url;
+		$requestContextOptions = Arrays::deepMerge($this->defaultContextOptions,
+			$contextOptions,
+		);
 		return new Request($requestUrl, $requestContextOptions);
 	}
 	
-	/**
-	 * @param string $baseUrl
-	 *
-	 * @return static
-	 */
-	public function setBaseUrl(string $baseUrl): static
+	public function setBaseUrl(
+		string $baseUrl,
+	): static
 	{
-		$this->_baseUrl = $baseUrl;
+		$this->baseUrl = $baseUrl;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getBaseUrl(): string
 	{
-		return $this->_baseUrl;
+		return $this->baseUrl;
 	}
 	
-	/**
-	 * @param array $defaultContextOptions
-	 *
-	 * @return static
-	 */
-	public function setDefaultContextOptions(array $defaultContextOptions): static
+	public function setDefaultContextOptions(
+		array $defaultContextOptions,
+	): static
 	{
-		$this->_defaultContextOptions = $defaultContextOptions;
+		$this->defaultContextOptions = $defaultContextOptions;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getDefaultContextOptions(): array
 	{
-		return $this->_defaultContextOptions;
+		return $this->defaultContextOptions;
 	}
 }

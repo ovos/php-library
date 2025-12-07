@@ -5,6 +5,7 @@ namespace Ovos\Model\Mysql\Template;
 
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
+use Ovos\Service\Auth;
 use Override;
 
 use function Ovos\services;
@@ -21,7 +22,7 @@ class Users extends Template
 	/**
 	 * @var string[]
 	 */
-	protected array $_update = [
+	protected array $update = [
 		'preInsert' => 'created_by',
 		'preUpdate' => 'modified_by'
 	];
@@ -29,46 +30,48 @@ class Users extends Template
 	/**
 	 * @param array $update
 	 */
-	public function __construct(array $update = [])
+	public function __construct(
+		array $update = [],
+	)
 	{
 		parent::__construct();
 		
-		$this->_update = array_merge($this->_update, $update);
+		$this->update = array_merge($this->update, $update);
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
 	#[Override]
-	public function preInsert(Mysql $model): void
+	public function preInsert(
+		Mysql $model,
+	): void
 	{
-		if($this->_update[__FUNCTION__] === null)
+		if($this->update[__FUNCTION__] === null)
 		{
 			return;
 		}
 		
-		$auth = $this->_container->get ()->auth;
-		if($auth !== null && ($user = $auth->getUser()))
+		$authService = $this->container->get(Auth::SYMBOL);
+		if($authService !== null
+			&& ($user = $authService->getUser()))
 		{
-			$model->{$this->_update[__FUNCTION__]} = $user->id;
+			$model->{$this->update[__FUNCTION__]} = $user->id;
 		}
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
 	#[Override]
-	public function preUpdate(Mysql $model): void
+	public function preUpdate(
+		Mysql $model,
+	): void
 	{
-		if($this->_update[__FUNCTION__] === null)
+		if($this->update[__FUNCTION__] === null)
 		{
 			return;
 		}
 		
-		$auth = services()->auth;
-		if($auth !== null && ($user = $auth->getUser()))
+		$authService = $this->container->get(Auth::SYMBOL);
+		if($authService !== null
+			&& ($user = $authService->getUser()))
 		{
-			$model->{$this->_update[__FUNCTION__]} = $user->id;
+			$model->{$this->update[__FUNCTION__]} = $user->id;
 		}
 	}
 }

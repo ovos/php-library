@@ -16,64 +16,50 @@ use Override;
  */
 class Geolocation extends Template
 {
-	/**
-	 * @var string
-	 */
-	protected string $_target;
+	protected string $target;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_latitude;
+	protected string $latitude;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_longitude;
+	protected string $longitude;
 	
-	/**
-	 * @param string $target
-	 * @param string $latitude
-	 * @param string $longitude
-	 */
-	public function __construct(string $target,
+	public function __construct(
+		string $target,
 		string $latitude = 'latitude',
 		string $longitude = 'longitude',
 	)
 	{
 		parent::__construct();
 		
-		$this->_target = $target;
-		$this->_latitude = $latitude;
-		$this->_longitude = $longitude;
+		$this->target = $target;
+		$this->latitude = $latitude;
+		$this->longitude = $longitude;
 	}	
 	
-	/**
-	 * @param Mysql $model
-	 */
 	#[Override]
-	public function setUp(Mysql $model): void
+	public function setUp(
+		Mysql $model,
+	): void
 	{
 		$model->setJsonSerializeFilter([
-			$this->_target, // binary POINT, breaks json_encode
+			$this->target, // binary POINT, breaks json_encode
 		]);
-	}	
+	}
 	
-	/**
-	 * @param Mysql $model
-	 */
 	#[Override]
-	public function preSave(Mysql $model): void
+	public function preSave(
+		Mysql $model,
+	): void
 	{
 		// sometimes it's always true, because MySQL keeps it in a different format (precision)
-		if($model->isModified($this->_latitude, $this->_longitude) === false)
+		if($model->isModified($this->latitude, $this->longitude) === false)
 		{
 			return;
-		}	
+		}
 		
-		$expression = "ST_GeomFromText(CONCAT('POINT(', $this->_latitude, ' ', $this->_longitude, ')'), 4326)";
+		$expression
+			= "ST_GeomFromText(CONCAT('POINT(', $this->latitude, ' ', $this->longitude, ')'), 4326)";
 		// set value via modifyProperty to record it as modified
 		// it may have been prevented from being loaded due to its binary value
-		$model->modifyProperty($this->_target, new Expression($expression));
+		$model->modifyProperty($this->target, new Expression($expression));
 	}
 }

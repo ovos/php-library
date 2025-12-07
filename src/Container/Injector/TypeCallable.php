@@ -20,11 +20,8 @@ class TypeCallable extends Injector
 	use TraitParameters;
 	use TraitCallable;
 	
-	/**
-	 * @param callable $callable
-	 * @param array $parameters
-	 */
-	public function __construct(callable $callable,
+	public function __construct(
+		callable $callable,
 		array $parameters = [],
 	)
 	{
@@ -32,16 +29,13 @@ class TypeCallable extends Injector
 		$this->setCallable($callable);
 	}
 	
-	/**
-	 * @param Container $container
-	 *
-	 * @return object
-	 */
 	#[Override]
-	public function inject(Container $container): object
+	public function inject(
+		Container $container,
+	): object
 	{
 		// no resolution whatsoever except for access to the container
 		// inside the anonymous function
-		return ($this->_callable)($container, $this->getParameters());
+		return ($this->callable)($container, $this->getParameters());
 	}
 }

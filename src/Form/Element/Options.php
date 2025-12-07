@@ -7,12 +7,12 @@ use Ovos\Form\Element;
 use Ovos\Form\Element\Options\Option;
 use Override;
 
-use function is_array;
 use function array_intersect;
 use function array_is_list;
-use function count;
 use function array_keys;
+use function count;
 use function in_array;
+use function is_array;
 
 /**
  * Options
@@ -25,32 +25,25 @@ class Options extends Element
 	/**
 	 * @var Option[]
 	 */
-	protected array $_options = [];
+	protected array $options = [];
 	
-	/**
-	 * @param array $options
-	 */
-	public function __construct(array $options = [])
+	public function __construct(
+		array $options = [],
+	)
 	{
 		$this->setOptions($options);
 	}
 	
-	/**
-	 * @return static
-	 */
 	public function clearOptions(): static
 	{
-		$this->_options = [];
+		$this->options = [];
 		
 		return $this;
 	}
 	
-	/**
-	 * @param array $options
-	 *
-	 * @return static
-	 */
-	public function setOptions(...$options): static
+	public function setOptions(
+		...$options,
+	): static
 	{
 		if(is_array($options[0]))
 		{
@@ -65,15 +58,8 @@ class Options extends Element
 		return $this;
 	}
 	
-	/**
-	 * @param mixed|Option $key
-	 * @param mixed $value
-	 * @param ?object $object
-	 *
-	 * @return static
-	 */
 	public function addOption(
-		mixed $key,
+		mixed $key, // mixed|Option
 		mixed $value = null,
 		?object $object = null
 	): static
@@ -89,17 +75,14 @@ class Options extends Element
 		}
 		
 		$option->setOptions($this);
-		$this->_options[] = $option;
+		$this->options[] = $option;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param array $options
-	 *
-	 * @return static
-	 */
-	public function addOptions(array $options): static
+	public function addOptions(
+		array $options,
+	): static
 	{
 		$isList = array_is_list($options);
 		
@@ -118,13 +101,6 @@ class Options extends Element
 		return $this;
 	}
 	
-	/**
-	 * @param array $options
-	 * @param string $valueKey
-	 * @param ?string $labelKey
-	 *
-	 * @return static
-	 */
 	public function fromObjects(
 		array $options,
 		string $valueKey,
@@ -149,7 +125,7 @@ class Options extends Element
 	 */
 	public function getOptions(): array
 	{
-		return $this->_options;
+		return $this->options;
 	}
 	
 	/**
@@ -159,7 +135,7 @@ class Options extends Element
 	{
 		$values = [];
 		
-		foreach($this->_options as $options)
+		foreach($this->options as $options)
 		{
 			$values[] = (string)$options->getValue();
 		}
@@ -169,10 +145,8 @@ class Options extends Element
 	
 	/**
 	 * Validate value (or values) against options
-	 *
-	 * @return bool
 	 */
-	#[Override] 
+	#[Override]
 	public function isValid(): bool
 	{
 		$valuesSelected = $this->getValue();

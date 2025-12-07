@@ -14,24 +14,17 @@ use Attribute;
 #[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_PARAMETER)]
 class Inject
 {
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_key = null;
+	protected ?string $key = null;
 	
-	/**
-	* @param ?string $key
-	*/
-	public function __construct(?string $key = null)
+	public function __construct(
+		?string $key = null,
+	)
 	{
-		$this->_key = $key;
+		$this->key = $key;
 	}
 	
-	/**
-	* @return ?string
-	*/
 	public function getKey(): ?string
 	{
-		return $this->_key;
+		return $this->key;
 	}
 }

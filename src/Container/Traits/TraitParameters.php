@@ -11,28 +11,19 @@ namespace Ovos\Container\Traits;
  */
 trait TraitParameters
 {
-	/**
-	 * @var array
-	 */
-	protected array $_parameters = [];
+	protected array $parameters = [];
 	
-	/**
-	 * @param array $parameters
-	 *
-	 * @return static
-	 */
-	public function setParameters(array $parameters = []): static
+	public function setParameters(
+		array $parameters = [],
+	): static
 	{
-		$this->_parameters = $parameters;
+		$this->parameters = $parameters;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getParameters(): array
 	{
-		return $this->_parameters;
+		return $this->parameters;
 	}
 }

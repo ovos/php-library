@@ -9,11 +9,11 @@ use Ovos\Exception\NotFoundException;
 use Ovos\Service\Cache;
 use SplFileInfo;
 
-use function in_array;
-use function array_slice;
-use function is_numeric;
 use function array_key_exists;
+use function array_slice;
 use function count;
+use function in_array;
+use function is_numeric;
 use function krsort;
 use function preg_match;
 
@@ -25,83 +25,52 @@ use function preg_match;
  */
 class Router
 {
-	/**
-	 * @var Application
-	 */
-	protected Application $_app;
+	protected Application $app;
 	
-	/**
-	 * @var ArrayObject
-	 */
-	protected ArrayObject $_config;
+	protected ArrayObject $config;
 	
-	/**
-	 * @var Cache 
-	 */
 	#[Inject(Cache::SYMBOL)]
-	protected Cache $_cacheService;
+	protected Cache $cacheService;
 	
-	/**
-	 * @var string
-	 */
 	public const string CACHE_ID_CONTROLLERS = 'controllers';
 	
-	/**
-	 * @var Request
-	 */
-	protected Request $_request;
+	protected Request $request;
 	
-	/**
-	 * @var Url
-	 */
-	protected Url $_url;
+	protected Url $url;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_extensionMatchPattern = '~^.+(\.\w+)$~i';
+	protected string $extensionMatchPattern = '~^.+(\.\w+)$~i';
 	
 	/**
 	 * Don't treat these extensions as any other static file
-	 *
-	 * @var array
 	 */
-	protected array $_nonStaticExtensions = [
+	protected array $nonStaticExtensions = [
 		'.xml',
 		'.html',
 	];
 	
-	/**
-	 * @param Application $application
-	 * @param Request $request
-	 */
-	public function __construct(Application $application,
+	public function __construct(
+		Application $application,
 		Request $request,
 	)
 	{
-		$this->_app = $application;
-		$this->_config = $this->_app->getConfig();
+		$this->app = $application;
+		$this->config = $this->app->getConfig();
 		
-		$this->_request = $request;
-		$this->_url = $request->getUrl();
+		$this->request = $request;
+		$this->url = $request->getUrl();
 	}
 	
-	/**
-	 * @return Request
-	 */
 	public function getRequest(): Request
 	{
-		return $this->_request;
+		return $this->request;
 	}
 	
 	/**
 	 * Accepts any number of url components and returns string
-	 *
-	 * @param string[] $components url components
-	 *
-	 * @return string
 	 */
-	public function assemble(...$components): string
+	public function assemble(
+		...$components, // url components
+	): string
 	{
 		$url = new Url(...$components);
 		return $url->__toString();
@@ -111,26 +80,24 @@ class Router
 	 * Supports HTTP & CLI
 	 * HTTP: /:controller/:action/[:paramValue/]+
 	 * CLI: :controller :action [:paramValue]+
-	 *
-	 * @param Request $request
 	 */
-	public function route(Request $request): void
+	public function route(
+		Request $request,
+	): void
 	{
-		$params = $this->_url->getComponents();
-		$this->_routeFiles($params);
-		$this->_setRequest($request, $params);
+		$params = $this->url->getComponents();
+		$this->routeFiles($params);
+		$this->setRequest($request, $params);
 	}
 	
 	/**
 	 * Handle routing of files
-	 * 
-	 * @param array $params
-	 *
-	 * @throws FileNotFoundException
 	 */
-	protected function _routeFiles(array $params): void
+	protected function routeFiles(
+		array $params,
+	): void
 	{
-		if($this->_request->isCli())
+		if($this->request->isCli())
 		{
 			return;
 		}
@@ -141,31 +108,30 @@ class Router
 		}
 		
 		if(preg_match(
-			$this->_extensionMatchPattern,
+			$this->extensionMatchPattern,
 			$params[$count - 1],
-			$matches
+			$matches,
 		) === 0)
 		{
 			return;
 		}
 		
-		if(in_array($matches[1], $this->_nonStaticExtensions, true))
+		if(in_array($matches[1], $this->nonStaticExtensions, true))
 		{
 			return;
 		}
 		
-		$this->_url->setComponents([]);
+		$this->url->setComponents([]);
 		
 		throw new FileNotFoundException('File not found.');
 	}
 	
-	/**
-	 * @param Request $request
-	 * @param array $params
-	 */
-	protected function _setRequest(Request $request, array $params): void
+	protected function setRequest(
+		Request $request,
+		array $params,
+	): void
 	{
-		$params = $this->_getParams($request, $params);
+		$params = $this->getParams($request, $params);
 		
 		// set params on $request object
 		foreach($params as $param)
@@ -189,24 +155,21 @@ class Router
 		}
 	}
 	
-	/**
-	 * @param Request $request
-	 * @param array $params
-	 *
-	 * @return array
-	 */
-	protected function _getParams(Request $request, array $params): array
+	protected function getParams(
+		Request $request,
+		array $params,
+	): array
 	{
 		// set controller
 		$controllerClass = $controller = null;
 		
-		$modules = $this->_config->system->modules;
+		$modules = $this->config->system->modules;
 		if($modules === null)
 		{
 			return $params;
 		}
 		
-		$controllers = $this->_getControllers($modules);
+		$controllers = $this->getControllers($modules);
 		
 		// after checking for locale, check for controller (with an optional namespace path), and action
 		foreach($params as $key => $param)
@@ -263,7 +226,8 @@ class Router
 			
 			if(class_exists($controllerClassNs) === false)
 			{
-				throw new NotFoundException('Class %s does not exist', $controllerClassNs);
+				throw new NotFoundException(
+				'Class %s does not exist', $controllerClassNs);
 			}
 			
 			if(method_exists($controllerClassNs, $method) === false)
@@ -280,16 +244,13 @@ class Router
 		return $params;
 	}
 	
-	/**
-	 * @param ArrayObject $modules
-	 *
-	 * @return array
-	 */
-	protected function _getControllers(ArrayObject $modules): array
+	protected function getControllers(
+		ArrayObject $modules,
+	): array
 	{
 		$cacheId = self::CACHE_ID_CONTROLLERS;
 		
-		$store = $this->_cacheService->getPerishableStore();
+		$store = $this->cacheService->getPerishableStore();
 		if($item = $store->get($cacheId))
 		{
 			return $item;
@@ -311,7 +272,8 @@ class Router
 						/**
 						* @var SplFileInfo $file
 						*/
-						return $file->isFile() && $file->getExtension() !== 'php';
+						return $file->isFile()
+							&& $file->getExtension() !== 'php';
 					},
 					filenameCallback: static function($file)
 					{
@@ -324,7 +286,10 @@ class Router
 				);
 				
 				// merge all values without overwriting keys like in Arrays::deepMerge
-				$controllers = array_merge_recursive($controllers, $moduleControllers);
+				$controllers = array_merge_recursive(
+					$controllers,
+					$moduleControllers,
+				);
 			}
 		}
 		

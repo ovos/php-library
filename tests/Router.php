@@ -79,7 +79,8 @@ class RouterTestController extends Controller
 	
 	public function test(
 		bool $firstParam = false,
-		bool $secondParam = true): void
+		bool $secondParam = true,
+	): void
 	{
 		$this->firstParam = $firstParam;
 		$this->secondParam = $secondParam;

@@ -13,28 +13,19 @@ use Closure;
  */
 trait TraitInitializer
 {
-	/**
-	 * @var ?Closure
-	 */
-	protected ?Closure $_initializer = null;
+	protected ?Closure $initializer = null;
 	
-	/**
-	 * @param ?callable $initializer
-	 *
-	 * @return static
-	 */
-	public function setInitializer(?callable $initializer): static
+	public function setInitializer(
+		?callable $initializer,
+	): static
 	{
-		$this->_initializer = $initializer;
+		$this->initializer = $initializer;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?Closure
-	 */
 	public function getInitializer(): ?Closure
 	{
-		return $this->_initializer;
+		return $this->initializer;
 	}
 }

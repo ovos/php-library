@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Store\Mysql\Traits;
 
 use Ovos\Service\Memory;
-use Ovos\Services;
 
 /**
  * MemoryService
@@ -14,29 +13,21 @@ use Ovos\Services;
  */
 trait MemoryService
 {
-	/**
-	 * @var Memory
-	 */
-	protected Memory $_memoryService;
+	protected Memory $memoryService;
 	
-	/**
-	 * @return void
-	 */
 	public function initMemoryService(): void
 	{
 		/** @var Memory $memoryService */
-		$memoryService = $this->_app->getServices()->get(Memory::SYMBOL);
-		$this->_memoryService = $memoryService;
+		$memoryService = $this->container->get(Memory::SYMBOL);
+		$this->memoryService = $memoryService;
 	}
 	
-	/**
-	 * @param ?string $cacheKey
-	 *
-	 * @return bool
-	 */
-	public function invalidateMemory(?string $cacheKey = null): bool
+	public function invalidateMemory(
+		?string $cacheKey = null,
+	): bool
 	{
-		$store = $this->_memoryService->getStore();
+		$store = $this->memoryService
+			->getStore();
 		$cacheId = self::TABLE;
 		if($cacheKey !== null)
 		{

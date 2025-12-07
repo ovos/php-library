@@ -15,67 +15,50 @@ use Ovos\Form\Validator;
  */
 class IfChecked extends Validator
 {
-	/**#@+
-	 * Errors
-	 */
+	// Errors
 	public const string ERROR_NOT_CHECKED = 'not_checked';
-	/**#@-*/
 	
 	/**
 	 * @var string[]
 	 */
-	protected array $_messages =
+	protected array $messages =
 	[
 		self::ERROR_NOT_CHECKED => '"{0}" has to be completed first.',
 	];
 	
-	/**
-	 * @var string
-	 */
-	protected string $_id;
+	protected string $id;
 	
-	/**
-	 * @param string $id
-	 */
-	public function __construct(string $id)
+	public function __construct(
+		string $id,
+	)
 	{
 		$this->setId($id);
 	}
 	
-	/**
-	 * @param string $id
-	 * 
-	 * @return static
-	 */
-	public function setId(string $id): static
+	public function setId(
+		string $id,
+	): static
 	{
-		$this->_id = $id;
+		$this->id = $id;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getId(): string
 	{
-		return $this->_id;
+		return $this->id;
 	}
 	
-	/**
-	 * @return Element
-	 */
 	public function getComparedElement(): Element
 	{
-		return $this->getElement()->getForm()->getElement($this->_id);
+		return $this->getElement()
+			->getForm()
+			->getElement($this->id);
 	}
 	
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	public function isValid(mixed $value): bool
+	public function isValid(
+		mixed $value,
+	): bool
 	{
 		$elementComparedChecked = $this->getComparedElement()->getValue() === 1;
 		$elementChecked = $this->getElement()->getValue() === 1;
@@ -85,7 +68,7 @@ class IfChecked extends Validator
 		if($valid === false)
 		{
 			$error = new Error(self::ERROR_NOT_CHECKED, sprintf(
-				$this->getMessage(self::ERROR_NOT_CHECKED), 
+				$this->getMessage(self::ERROR_NOT_CHECKED),
 				$this->getComparedElement()->getLabel(),
 				$this->getElement()->getLabel()
 			));

@@ -22,9 +22,7 @@ use function count;
  */
 class Redisearch extends Store
 {
-	/**#@+
-	 * Libraries
-	 */
+	// Libraries
 	/**
 	 * The array of function libraries used by this lass
 	 */
@@ -36,16 +34,7 @@ class Redisearch extends Store
 			'Lua'
 			. DIRECTORY_SEPARATOR . 'Redisearch.lua',
 	];
-	/**#@-*/
 	
-	/**
-	 * @param string $key
-	 * @param mixed $value
-	 * @param int $ttl
-	 * @param array $tags
-	 *
-	 * @return bool
-	 */
 	#[Override]
 	public function set(
 		string $key,
@@ -66,7 +55,7 @@ class Redisearch extends Store
 			$value = $this->compress($this->serialize($value));
 			
 			$client->clearLastError();
-			$client->multi($this->_multiMode);
+			$client->multi($this->multiMode);
 			// hSet can set multiple pairs of key => value, do not believe the PhpStorm Stub
 			// @see https://redis.io/docs/latest/commands/hset/
 			$client->hSet(
@@ -100,12 +89,9 @@ class Redisearch extends Store
 		return false;
 	}
 	
-	/**
-	 * @param string $key
-	 *
-	 * @return bool
-	 */
-	public function delete(string $key): bool
+	public function delete(
+		string $key,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -127,12 +113,9 @@ class Redisearch extends Store
 		return false;
 	}
 	
-	/**
-	 * @param array $tags
-	 *
-	 * @return bool
-	 */
-	public function invalidateTags(array $tags): bool
+	public function invalidateTags(
+		array $tags,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -164,7 +147,7 @@ class Redisearch extends Store
 			 * We could also reference all matching tags using the following syntax:
 			 * @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}"
 			 */
-			$this->_functionCall('store_search_unlink_by_tags', [], [
+			$this->functionCall('store_search_unlink_by_tags', [], [
 				$type,
 				'@tags:{' . implode('|', $tags) . '}', // matches any of the tags
 			]);
@@ -179,9 +162,6 @@ class Redisearch extends Store
 		return false;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function clear(): bool
 	{
 		$keysUnlinked = parent::clear();
@@ -193,9 +173,6 @@ class Redisearch extends Store
 		return $this->indexRebuild();
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function indexRebuild(): bool
 	{
 		$type = $this->getType();
@@ -220,12 +197,9 @@ class Redisearch extends Store
 		return false;
 	}
 	
-	/**
-	 * @param string $type
-	 *
-	 * @return bool
-	 */
-	public function indexExists(string $type): bool
+	public function indexExists(
+		string $type,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -246,12 +220,9 @@ class Redisearch extends Store
 		return false;
 	}
 	
-	/**
-	 * @param string $type
-	 *
-	 * @return bool
-	 */
-	public function indexDrop(string $type): bool
+	public function indexDrop(
+		string $type,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{
@@ -261,8 +232,10 @@ class Redisearch extends Store
 		try
 		{
 			// throws exception if index does not exist
-			return $client->rawCommand('FT.DROPINDEX', $type, 'DD')
-				=== self::STATUS_OK;
+			return $client->rawCommand('FT.DROPINDEX',
+				$type,
+				'DD',
+			) === self::STATUS_OK;
 		}
 		catch(RedisException $exception)
 		{
@@ -272,12 +245,9 @@ class Redisearch extends Store
 		return false;
 	}
 	
-	/**
-	 * @param string $type
-	 *
-	 * @return bool
-	 */
-	public function indexCreate(string $type): bool
+	public function indexCreate(
+		string $type,
+	): bool
 	{
 		if(($client = $this->getClient()) === null)
 		{

@@ -23,46 +23,35 @@ use const OPENSSL_RAW_DATA;
  */
 class Encrypted extends Template
 {
-	/**
-	 * @var array
-	 */
-	protected array $_properties = [];
+	protected array $properties = [];
 	
-	/**
-	 * @param array $properties
-	 */
-	public function __construct(array $properties = [])
+	public function __construct(
+		array $properties = [],
+	)
 	{
 		parent::__construct();
 		
 		$this->setProperties($properties);
 	}
 	
-	/**
-	 * @param array $properties
-	 * 
-	 * @return static
-	 */
-	public function setProperties(array $properties): static
+	public function setProperties(
+		array $properties,
+	): static
 	{
-		$this->_properties = $properties;
+		$this->properties = $properties;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getProperties(): array
 	{
-		return $this->_properties;
+		return $this->properties;
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
 	#[Override]
-	public function setUp(Mysql $model): void
+	public function setUp(
+		Mysql $model,
+	): void
 	{
 		foreach($this->getProperties() as $property)
 		{
@@ -74,22 +63,16 @@ class Encrypted extends Template
 		}
 	}
 	
-	/**
-	 * @return ?ArrayObject
-	 */
 	public function getEncryptionConfig(): ?ArrayObject
 	{
-		return $this->_config->database->encryption;
+		return $this->config->database->encryption;
 	}
 	
-	/**
-	 * @param ?string $string
-	 * @param string $property
-	 * @param Mysql $model
-	 *
-	 * @return ?string
-	 */
-	public function encrypt(?string $string, string $property, Mysql $model): ?string
+	public function encrypt(
+		?string $string,
+		string $property,
+		Mysql $model,
+	): ?string
 	{
 		if($string === null)
 		{
@@ -121,14 +104,11 @@ class Encrypted extends Template
 		return $string ?: null;	
 	}
 	
-	/**
-	 * @param ?string $string
-	 * @param string $property
-	 * @param Mysql $model
-	 *
-	 * @return ?string
-	 */
-	public function decrypt(?string $string, string $property, Mysql $model): ?string
+	public function decrypt(
+		?string $string,
+		string $property,
+		Mysql $model,
+	): ?string
 	{
 		if($string === null)
 		{

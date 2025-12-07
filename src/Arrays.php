@@ -25,16 +25,11 @@ use function str_replace;
  */
 class Arrays
 {
-	/**
-	 * @param array $array
-	 * @param string $className
-	 * @param int $flags
-	 *
-	 * @return mixed
-	 */
-	public static function deepToArrayObject(array $array,
+	public static function deepToArrayObject(
+		array $array,
 		string $className = ArrayObject::class,
-		int $flags = BaseArrayObject::ARRAY_AS_PROPS): mixed
+		int $flags = BaseArrayObject::ARRAY_AS_PROPS,
+	): mixed
 	{
 		foreach($array as $key => $value)
 		{
@@ -88,14 +83,23 @@ class Arrays
 					return $arrays[1];
 				}
 				
-				foreach(array_unique(array_merge(array_keys($arrays[0]), array_keys($arrays[1]))) as $key)
+				foreach(array_unique(array_merge(
+					array_keys($arrays[0]),
+					array_keys($arrays[1]),
+				)) as $key)
 				{
 					$isKey0 = array_key_exists($key, $arrays[0]);
 					$isKey1 = array_key_exists($key, $arrays[1]);
 					
-					if($isKey0 && $isKey1 && is_array($arrays[0][$key]) && is_array($arrays[1][$key]))
+					if($isKey0 && $isKey1
+						&& is_array($arrays[0][$key])
+						&& is_array($arrays[1][$key])
+					)
 					{
-						$arrays[2][$key] = (__METHOD__)($arrays[0][$key], $arrays[1][$key]);
+						$arrays[2][$key]= (__METHOD__)(
+							$arrays[0][$key],
+							$arrays[1][$key],
+						);
 					}
 					else if($isKey0 && $isKey1)
 					{
@@ -126,10 +130,6 @@ class Arrays
 	/**
 	 * Group values in pairs:
 	 * name => value
-	 *
-	 * @param array $values
-	 *
-	 * @return array
 	 */
 	public static function getPairs(array $values): array
 	{
@@ -155,9 +155,6 @@ class Arrays
 	 * 		[('Data' => ['first_name' => 'Hannes']]
 	 * will be transformed to
 	 * 		['Data[first_name]' => 'Hannes']
-	 *
-	 * @param array $array
-	 * @return array
 	 */
 	public static function flatten(array $array): array
 	{
@@ -192,23 +189,11 @@ class Arrays
 		return $flat;
 	}
 	
-	/**
-	 * @param string $prefix
-	 * @param array $values
-	 *
-	 * @return array
-	 */
 	public static function prefixValues(string $prefix, array $values): array
 	{
 		return array_map(static fn($value) => $prefix . $value, $values);
 	}
 	
-	/**
-	 * @param string $prefix
-	 * @param array $values
-	 *
-	 * @return array
-	 */
 	public static function prefixKeys(string $prefix, array $values): array
 	{
 		return array_combine

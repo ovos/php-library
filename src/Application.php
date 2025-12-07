@@ -32,28 +32,17 @@ use function register_shutdown_function;
  */
 class Application
 {
-	/**
-	 * @var ?Application
-	 */
 	public static ?Application $instance = null;
 	
-	/**#@+
-	 * Interfaces
-	 */
+	// Interfaces
 	public const string INT_HTTP = 'http';
 	public const string INT_CLI = 'cli';
-	/**#@-*/
 	
-	/**#@+
-	 * Container keys
-	 */
+	// Container keys
 	public const string CONTAINER_KEY_CONFIG = 'config';
-	/**#@-*/
 	
 	/**
 	 * The configs fir
-	 *
-	 * @var string
 	 */
 	public const string CONFIGS_DIR = BASE_DIR
 		. 'application' . DIRECTORY_SEPARATOR
@@ -61,99 +50,62 @@ class Application
 	
 	/**
 	 * The environment state of the current application
-	 *
-	 * @var Environment
 	 */
-	protected Environment $_environment;
+	protected Environment $environment;
 	
 	/**
 	 * The container for object instances of the current application
-	 *
-	 * @var ?Container
 	 */
-	protected ?Container $_container = null;
+	protected ?Container $container = null;
 	
 	/**
 	 * The interface of the current application
-	 *
-	 * @var string
 	 */
-	protected string $_interface = self::INT_HTTP;
+	protected string $interface = self::INT_HTTP;
 	
-	/**
-	 * @var ?ArrayObject
-	 */
-	protected ?ArrayObject $_config = null;
+	protected ?ArrayObject $config = null;
 	
 	/**
 	 * @var ArrayObject[]
 	 */
-	protected array $_configs = [];
+	protected array $configs = [];
 	
-	/**
-	 * @var ?ArrayObject
-	 */
-	protected ?ArrayObject $_bootstrap = null;
+	protected ?ArrayObject $bootstrap = null;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_domain = null;
+	protected ?string $domain = null;
 	
-	/**
-	 * Request
-	 *
-	 * @var ?Request
-	 */
-	protected ?Request $_request = null;
+	protected ?Request $request = null;
 	
-	/**
-	 * Response
-	 *
-	 * @var ?Response
-	 */
-	protected ?Response $_response = null;
+	protected ?Response $response = null;
 	
-	/**
-	 * Router
-	 *
-	 * @var ?Router
-	 */
-	protected ?Router $_router = null;
+	protected ?Router $router = null;
 	
-	/**
-	 * Construct
-	 *
-	 * @param ?string $interface (optional)
-	 * @see self::INT_*
-	 */
-	public function __construct(?string $interface = null)
+	public function __construct(
+		?string $interface = null, // @see self::INT_*
+	)
 	{
-		$this->_init();
+		$this->init();
 		
 		if($interface !== null)
 		{
-			$this->_interface = $interface;
+			$this->interface = $interface;
 		}
 		else if($this->getRequest()->isCli())
 		{
-			$this->_interface = self::INT_CLI;
+			$this->interface = self::INT_CLI;
 		}
 		
 		$this
-			->_initEnvironment()
-			->_initShutdownHandler()
-			->_initBootstrap()
-			->_initDomain()
-			->_initConstants()
-			->_initProtocol()
-			->_initModules()
-			->_initServices();
+			->initEnvironment()
+			->initShutdownHandler()
+			->initBootstrap()
+			->initDomain()
+			->initConstants()
+			->initProtocol()
+			->initModules()
+			->initServices();
 	}
 	
-	/**
-	 * Run
-	 */
 	public function run(): void
 	{
 		$request = $this->getRequest();
@@ -164,16 +116,13 @@ class Application
 		$this->dispatch($request);
 	}
 	
-	/**
-	 * Dispatch
-	 *
-	 * @param Request $request
-	 */
-	public function dispatch(Request $request): void
+	public function dispatch(
+		Request $request,
+	): void
 	{
 		try
 		{
-			$dispatcher = $this->_container->getClass(Dispatcher::class);
+			$dispatcher = $this->container->getClass(Dispatcher::class);
 			if($response = $dispatcher->dispatch($request))
 			{
 				$this->setResponse($response);
@@ -185,85 +134,62 @@ class Application
 		}
 	}
 	
-	/**
-	 * Returns router
-	 *
-	 * @return Router
-	 */
 	public function getRouter(): Router
 	{
-		if($this->_router === null)
+		if($this->router === null)
 		{
-			$this->_router = $this->_container
+			$this->router = $this->container
 				->get(Router::class);
 		}
 		
-		return $this->_router;
+		return $this->router;
 	}
 	
-	/**
-	 * Returns request
-	 *
-	 * @return Request
-	 */
 	public function getRequest(): Request
 	{
-		if($this->_request === null)
+		if($this->request === null)
 		{
-			$this->_request = $this->_container
+			$this->request = $this->container
 				->get(Request::class);
 		}
 		
-		return $this->_request;
+		return $this->request;
 	}
 	
-	/**
-	 * Returns response
-	 *
-	 * @param ?string $response
-	 *
-	 * @return Response
-	 */
-	public function getResponse(?string $response = null): Response
+	public function getResponse(
+		?string $response = null,
+	): Response
 	{
-		if($this->_response === null)
+		if($this->response === null)
 		{
-			$this->_response = $this->_request->isCli()
+			$this->response = $this->request->isCli()
 				? new Response\Cli($response)
 				: new Response\Html($response);
 		}
 		else if($response !== null)
 		{
-			$this->_response->set($response);
+			$this->response->set($response);
 		}
 		
-		return $this->_response;
+		return $this->response;
 	}
 	
-	/**
-	 * Returns response
-	 *
-	 * @param Response $response
-	 *
-	 * @return static
-	 */
-	public function setResponse(Response $response): static
+	public function setResponse(
+		Response $response,
+	): static
 	{
-		$this->_response = $response;
+		$this->response = $response;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return static
-	 */
-	protected function _init(): static
+	protected function init(): static
 	{
 		self::$instance = $this->getContainer()
 			->registerValue(__CLASS__, $this, true)
 			->get(__CLASS__);
 		
-		$this->_container
+		$this->container
 			// Request is required by Memory
 			->registerClass(Request::class)
 			->registerClass(Router::class)
@@ -272,103 +198,67 @@ class Application
 		return $this;
 	}
 	
-	/**
-	 * Sets the environment
-	 *
-	 * @return static
-	 */
-	protected function _initEnvironment(): static
+	protected function initEnvironment(): static
 	{
 		// get environment from the file
-		$environmentFile = BASE_DIR . Environment::ENV_FILE;
-		$loader = $this->_container
+		$environmentFile = BASE_DIR . Environment::FILE;
+		$loader = $this->container
 			->getClass(EnvLoader::class);
 		
 		$environment = $loader->load($environmentFile);
-		$this->_environment = $environment ?: new Environment;
+		$this->environment = $environment ?: new Environment;
 		
 		$configsDir = defined('CONFIGS_DIR')
 			? constant('CONFIGS_DIR')
 			: self::CONFIGS_DIR;
 		
-		$this->_config = $this->getConfig(
+		$this->config = $this->getConfig(
 			$configsDir . 'environments.yml',
 			$environment
 		);
-		$this->_container
-			->registerObject(Environment::class, $this->_environment)
-			->registerObject(self::CONTAINER_KEY_CONFIG, $this->_config);
+		$this->container
+			->registerObject(Environment::class, $this->environment)
+			->registerObject(self::CONTAINER_KEY_CONFIG, $this->config);
 		
 		return $this;
 	}
 	
-	/**
-	 * Returns current environment
-	 *
-	 * @return Environment
-	 */
 	public function getEnvironment(): Environment
 	{
-		return $this->_environment;
+		return $this->environment;
 	}
 	
-	/**
-	 * Returns current environment as string
-	 *
-	 * @return string
-	 */
 	public function getEnv(): string
 	{
-		return $this->_environment->getEnv();
+		return $this->environment->getEnv();
 	}
 	
-	/**
-	 * Sets the application's interface
-	 *
-	 * @param string $interface
-	 *
-	 * @return static
-	 */
-	public function setInterface(string $interface): static
+	public function setInterface(
+		string $interface,
+	): static
 	{
-		$this->_interface = $interface;
+		$this->interface = $interface;
 		
 		return $this;
 	}
 	
-	/**
-	 * Returns the application's interface
-	 *
-	 * @return string
-	 */
 	public function getInterface(): string
 	{
-		return $this->_interface;
+		return $this->interface;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isInterfaceHttp(): bool
 	{
-		return $this->_interface === self::INT_HTTP;
+		return $this->interface === self::INT_HTTP;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isInterfaceCli(): bool
 	{
-		return $this->_interface === self::INT_CLI;
+		return $this->interface === self::INT_CLI;
 	}
 	
 	/**
 	 * Returns the config object (with optional array access)
-	 *
-	 * @param ?string $configFile
-	 * @param ?Environment $environment
-	 *
-	 * @return ArrayObject
 	 */
 	public function getConfig(
 		?string $configFile = null,
@@ -377,29 +267,27 @@ class Application
 	{
 		if($environment === null && $configFile === null)
 		{
-			return $this->_config;
+			return $this->config;
 		}
 		
-		if(!isset($this->_configs[$configFile]))
+		if(isset($this->configs[$configFile]) === false)
 		{
 			/** @var ConfigLoader $loader */
-			$loader = $this->_container->getClass(ConfigLoader::class, 
+			$loader = $this->container->getClass(ConfigLoader::class, 
 			ConfigLoader::class,
 			);
 			
 			$config = $loader->load($configFile, $environment);
-			$this->_configs[$configFile] = $config;
+			$this->configs[$configFile] = $config;
 		}
 		
-		return $this->_configs[$configFile];
+		return $this->configs[$configFile];
 	}
 	
 	/**
 	 * Sets up shutdown handler
-	 *
-	 * @return static
 	 */
-	protected function _initShutdownHandler(): static
+	protected function initShutdownHandler(): static
 	{
 		register_shutdown_function(array($this, 'handleShutdown'));
 		
@@ -408,10 +296,8 @@ class Application
 	
 	/**
 	 * Initializes the current bootstrap
-	 *
-	 * @return static
 	 */
-	protected function _initBootstrap(): static
+	protected function initBootstrap(): static
 	{
 		$systemConfig = $this->getConfig()->system;
 		$bootstraps = $systemConfig->bootstraps;
@@ -449,15 +335,12 @@ class Application
 		return $this;
 	}
 	
-	/**
-	 * @param ArrayObject $bootstrap
-	 *
-	 * @return static
-	 */
-	public function setBoostrap(ArrayObject $bootstrap): static
+	public function setBoostrap(
+		ArrayObject $bootstrap,
+	): static
 	{
-		$this->_bootstrap = $bootstrap;
-		if($controller = $this->_bootstrap->controller
+		$this->bootstrap = $bootstrap;
+		if($controller = $this->bootstrap->controller
 			->get($this->getInterface()))
 		{
 			$this->getRequest()
@@ -468,20 +351,15 @@ class Application
 		return $this;
 	}
 	
-	/**
-	 * @return ?ArrayObject
-	 */
 	public function getBootstrap(): ?ArrayObject
 	{
-		return $this->_bootstrap;
+		return $this->bootstrap;
 	}
 	
 	/**
 	 * Initializes the current domain
-	 *
-	 * @return static
 	 */
-	protected function _initDomain(): static
+	protected function initDomain(): static
 	{
 		$systemConfig = $this->getConfig()->system;
 		/** @var string $domain */
@@ -489,7 +367,7 @@ class Application
 		/** @var ArrayObject $domains */
 		$domains = $systemConfig->domains; // if there are many
 		
-		// CLI applications don't have domains'
+		// CLI applications don't have domains
 		if($domain === null
 			&& $domains === null)
 		{
@@ -521,7 +399,7 @@ class Application
 			return $this;
 		}
 		
-		if(!isset($_SERVER['SERVER_NAME']))
+		if(isset($_SERVER['SERVER_NAME']) === false)
 		{
 			return $this;
 		}
@@ -541,32 +419,24 @@ class Application
 		return $this;
 	}
 	
-	/**
-	 * @param string $domain
-	 * 
-	 * @return static
-	 */
-	public function setDomain(string $domain): static
+	public function setDomain(
+		string $domain,
+	): static
 	{
-		$this->_domain = $domain;
+		$this->domain = $domain;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getDomain(): ?string
 	{
-		return $this->_domain;
+		return $this->domain;
 	}
 	
 	/**
 	 * Initializes constants
-	 *
-	 * @return static
 	 */
-	protected function _initConstants(): static
+	protected function initConstants(): static
 	{
 		$systemConfig = $this->getConfig()->system;
 		$bootstrap = $this->getBootstrap();
@@ -625,10 +495,8 @@ class Application
 	/**
 	 * Initializes protocol (http or https)
 	 * Redirects to the correct protocol if needed
-	 *
-	 * @return static
 	 */
-	protected function _initProtocol(): static
+	protected function initProtocol(): static
 	{
 		if($this->isInterfaceHttp() === false)
 		{
@@ -650,10 +518,8 @@ class Application
 	
 	/**
 	 * Initializes modules
-	 *
-	 * @return static
 	 */
-	protected function _initModules(): static
+	protected function initModules(): static
 	{
 		$modules = $this->getConfig()->system->modules;
 		if($modules === null)
@@ -668,8 +534,10 @@ class Application
 			if($module->translations)
 			{
 				Translator::addTranslationsPath(BASE_DIR
-					. $module->path . DIRECTORY_SEPARATOR 
-					. 'translations' . DIRECTORY_SEPARATOR);
+					. $module->path
+					. DIRECTORY_SEPARATOR . 'translations'
+					. DIRECTORY_SEPARATOR
+				);
 			}
 			
 			if($module->views)
@@ -680,7 +548,8 @@ class Application
 					(
 						PATH_SEPARATOR,
 						[
-							BASE_DIR . $module->path . DIRECTORY_SEPARATOR . 'views',
+							BASE_DIR . $module->path
+							. DIRECTORY_SEPARATOR . 'views',
 							get_include_path()
 						]
 					)
@@ -693,13 +562,11 @@ class Application
 	
 	/**
 	 * Initializes services
-	 *
-	 * @return static
 	 */
-	protected function _initServices(): static
+	protected function initServices(): static
 	{
 		/** @var Services $services */
-		$services = $this->_container
+		$services = $this->container
 			->registerCallable(Services::class,
 			function(Container $container)
 			{
@@ -736,8 +603,9 @@ class Application
 			
 			if(class_exists($serviceClass) === false)
 			{
-				throw new RuntimeException('Service class does not exist "%s".',
-					$serviceClass
+				throw new RuntimeException(
+					'Service class does not exist "%s".',
+					$serviceClass,
 				);
 			}
 			
@@ -748,20 +616,12 @@ class Application
 		return $this;
 	}
 	
-	/**
-	 * @return Services
-	 */
 	public function getServices(): Services
 	{
-		return $this->_container
+		return $this->container
 			->getClass(Services::class);
 	}
 	
-	/**
-	 * Handles shutdown
-	 *
-	 * @return void
-	 */
 	public function handleShutdown(): void
 	{
 		if($error = error_get_last())
@@ -793,7 +653,7 @@ class Application
 					$errors = [];
 					foreach($this->getServices()->events as $event)
 					{
-						/** @var $event Exception|Error */
+						/** @var $event Exception */
 						$errors[] = $event->__toString();
 					}
 					/** @var Response\Json $response */
@@ -833,7 +693,7 @@ class Application
 		// send the response
 		try
 		{
-			$this->_sendResponse($response);
+			$this->sendResponse($response);
 		}
 		catch(Throwable $throwable)
 		{
@@ -846,27 +706,22 @@ class Application
 		}
 	}
 	
-	/**
-	 * @return Container
-	 */
 	public function getContainer(): Container
 	{
-		if($this->_container === null)
+		if($this->container === null)
 		{
-			$this->_container = container();
+			$this->container = container();
 		}
 		
-		return $this->_container;
+		return $this->container;
 	}
 	
 	/**
-	 * Send response
-	 *
-	 * @param ?Response $response
-	 *
-	 * @return static
+	 * Sends a response
 	 */
-	protected function _sendResponse(?Response $response): static
+	protected function sendResponse(
+		?Response $response,
+	): static
 	{
 		if($response === null)
 		{
@@ -883,17 +738,17 @@ class Application
 			/**
 			 * @var Response\Json $response
 			 */
-			$this->_sendJsonResponse($response);
+			$this->sendJsonResponse($response);
 		}
 		else if($response instanceof Response\Html)
 		{
 			/*** @var Response\Html $response */
-			$this->_sendProfiledResponse($response);
+			$this->sendProfiledResponse($response);
 		}
 		else if($response instanceof Response\Cli)
 		{
 			/*** @var Response\Cli $response */
-			$this->_sendProfiledResponse($response);
+			$this->sendProfiledResponse($response);
 		}
 		else
 		{
@@ -905,13 +760,11 @@ class Application
 	}
 	
 	/**
-	 * Sends JSON response
-	 *
-	 * @param Response\Json $response
-	 *
-	 * @return static
+	 * Sends a JSON response
 	 */
-	protected function _sendJsonResponse(Response\Json $response): static
+	protected function sendJsonResponse(
+		Response\Json $response,
+	): static
 	{
 		$profilers = $this->getConfig()->system->profilers;
 		
@@ -948,13 +801,11 @@ class Application
 	}
 	
 	/**
-	 * Sends profiled response
-	 *
-	 * @param Response $response
-	 *
-	 * @return static
+	 * Sends a profiled response
 	 */
-	protected function _sendProfiledResponse(Response $response): static
+	protected function sendProfiledResponse(
+		Response $response,
+	): static
 	{
 		$response->send();
 		
@@ -977,8 +828,6 @@ class Application
 
 /**
  * Helper function for accessing the app
- *
- * @return Application
  */
 function app(): Application
 {
@@ -987,43 +836,31 @@ function app(): Application
 
 /**
  * Returns the config array
- *
- * @return ArrayObject
  */
 function config(): ArrayObject
 {
 	return app()->getConfig();
 }
 
-/**
- * @return Request
- */
 function request(): Request
 {
 	return app()->getRequest();
 }
 
-/**
- * @return Locale
- */
 function locale(): Locale
 {
 	return app()->getRequest()->getLocale();
 }
 
-/**
- * @param ...$messages
- *
- * @return Console
- */
-function console(...$messages): Console
+function console(
+	...$messages,
+): Console
 {
-	return Console::getInstance()->setMessages(...$messages);
+	return container()
+		->getClass(Console::class)
+		->setMessages(...$messages);
 }
 
-/**
- * @return Services
- */
 function services(): Services
 {
 	return app()->getServices();

@@ -5,8 +5,8 @@ namespace Ovos;
 
 use function ceil;
 use function floor;
-use function min;
 use function max;
+use function min;
 use function range;
 
 /**
@@ -17,42 +17,18 @@ use function range;
  */
 class Pager
 {
-	/**
-	 * @var int
-	 */
-	protected int $_count;
+	protected int $count;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_firstPage = 1;
+	protected int $firstPage = 1;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_page;
+	protected int $page;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_perPage;
+	protected int $perPage;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_pages;
+	protected int $pages;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_pageRange;
+	protected int $pageRange;
 	
-	/**
-	 * @param int $page
-	 * @param int $count
-	 * @param int $perPage
-	 * @param int $pageRange
-	 */
 	public function __construct(
 		int $page,
 		int $count,
@@ -60,188 +36,137 @@ class Pager
 		int $pageRange = 10,
 	)
 	{
-		$this->_count = $count;
-		$this->_perPage = $perPage;
-		$this->_pages = max(1, (int)ceil($count / $perPage));
-		$this->_page = ($page <= 0 || $page > $this->_pages)
-			? $this->_firstPage
+		$this->count = $count;
+		$this->perPage = $perPage;
+		$this->pages = max(1, (int)ceil($count / $perPage));
+		$this->page = ($page <= 0 || $page > $this->pages)
+			? $this->firstPage
 			: $page;
-		$this->_pageRange = $pageRange;
+		$this->pageRange = $pageRange;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getCount(): int
 	{
-		return $this->_count;
+		return $this->count;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getPerPage(): int
 	{
-		return $this->_perPage;
+		return $this->perPage;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getPages(): int
 	{
-		return $this->_pages;
+		return $this->pages;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getPagesInRange(): array
 	{
-		$halfRange = (int)floor($this->_pageRange / 2);
-		$start = max(1, $this->_page - $halfRange);
-		$end = min($this->_pages, $this->_page + $halfRange);
+		$halfRange = (int)floor($this->pageRange / 2);
+		$start = max(1, $this->page - $halfRange);
+		$end = min($this->pages, $this->page + $halfRange);
 		
 		// adjust if there are fewer pages to the left
-		if($this->_page - $start < $halfRange)
+		if($this->page - $start < $halfRange)
 		{
-			$end = min($this->_pages, $end + ($halfRange - ($this->_page - $start)));
+			$end = min(
+				$this->pages,
+			$end + ($halfRange - ($this->page - $start)),
+			);
 		}
 		
 		// adjust if there are fewer pages to the right
-		if($end - $this->_page < $halfRange)
+		if($end - $this->page < $halfRange)
 		{
-			$start = max(1, $start - ($halfRange - ($end - $this->_page)));
+			$start = max(
+				1,
+				$start - ($halfRange - ($end - $this->page))
+			);
 		}
 		
 		return range($start, $end);
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getPage(): int
 	{
-		return $this->_page;
+		return $this->page;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function hasNextPage(): bool
 	{
-		return $this->_page < $this->_pages;
+		return $this->page < $this->pages;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getNextPage(): int
 	{
-		return $this->_page + 1;
+		return $this->page + 1;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function hasPreviousPage(): bool
 	{
-		return $this->_page > 1;
+		return $this->page > 1;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getPreviousPage(): int
 	{
-		return $this->_page - 1;
+		return $this->page - 1;
 	}
 	
-	/**
-	 * @param int $pageRange
-	 *
-	 * @return static
-	 */
-	public function setPageRange(int $pageRange): static
+	public function setPageRange(
+		int $pageRange,
+	): static
 	{
-		$this->_pageRange = $pageRange;
+		$this->pageRange = $pageRange;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getPageRange(): int
 	{
-		return $this->_pageRange;
+		return $this->pageRange;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getFirstPage(): int
 	{
-		return $this->_firstPage;
+		return $this->firstPage;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getLastPage(): int
 	{
 		return $this->getPages();
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isFirstPage(): bool
 	{
-		return $this->_page === $this->_firstPage;
+		return $this->page === $this->firstPage;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isLastPage(): bool
 	{
-		return $this->_page === $this->_pages;
+		return $this->page === $this->pages;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getOffset(): int
 	{
-		return $this->_perPage * $this->_page - $this->_perPage;
+		return $this->perPage * $this->page - $this->perPage;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getLimit(): int
 	{
 		return $this->getPerPage();
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getFirst(): int
 	{
 		return $this->getOffset() + 1;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getLast(): int
 	{
-		$last = $this->_perPage * $this->_page;
-		if($last > $this->_count)
+		$last = $this->perPage * $this->page;
+		if($last > $this->count)
 		{
-			return $this->_count;
+			return $this->count;
 		}
 		
 		return $last;

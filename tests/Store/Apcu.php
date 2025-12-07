@@ -21,49 +21,34 @@ use function sprintf;
  */
 class Apcu extends Test
 {
-	/**
-	 * @var string
-	 */
 	public const string KEY_ITEM = 'item';
 	
-	/**
-	 * @var string
-	 */
 	public const string KEY_ITEM_COUNTER = 'item:counter';
 	
-	/**
-	 * @var int
-	 */
 	public const int CLIENTS = 3;
 	
-	/**
-	 * @var ArrayObject
-	 */
-	protected ArrayObject $_config;
+	protected ArrayObject $config;
 	
-	/**
-	 * @var ?Store
-	 */
-	protected ?Store $_store = null;
+	protected ?Store $store = null;
 	
 	public function __construct()
 	{
-		$this->_config = config()->cache;
+		$this->config = config()->cache;
 		
-		if($this->_config->getPath(['perishable', 'queue', 'enabled']) !== true)
+		if($this->config->getPath(['perishable', 'queue', 'enabled']) !== true)
 		{
-			$this->setIsDisabled(true,
-				sprintf('"queue" is not enabled in cache config.')
+			$this->setDisabled(true,
+			'"queue" is not enabled in cache config.'
 			);
 			
 			return;
 		}
 	}
 	
-	protected function _initStore(): void
+	protected function initStore(): void
 	{
-		$this->_store = Store::fromConfig(
-			$this->_config,
+		$this->store = Store::fromConfig(
+			$this->config,
 			KeyValue::GROUP_TESTS,
 		);
 	}
@@ -75,72 +60,72 @@ class Apcu extends Test
 	#[Override]
 	public function prepare(): void
 	{
-		$this->_initStore();
+		$this->initStore();
 	}
 	
 	public function set(): bool
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM) === null)
+			if($this->store->get(self::KEY_ITEM) === null)
 			{
-				$this->_store->set(self::KEY_ITEM, 'test');
+				$this->store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function setManualOverride(): bool
 	{
-		$queueEnabled = $this->_store->isQueueEnabled();
+		$queueEnabled = $this->store->isQueueEnabled();
 		
 		try
 		{
-			$this->_store->setQueueEnabled(false);
-			if($this->_store->get(self::KEY_ITEM, queue: true) === null)
+			$this->store->setQueueEnabled(false);
+			if($this->store->get(self::KEY_ITEM, queue: true) === null)
 			{
-				$this->_store->set(self::KEY_ITEM, 'test');
+				$this->store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null;
 		}
 		finally
 		{
-			$this->_store->setQueueEnabled($queueEnabled);
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->setQueueEnabled($queueEnabled);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function setManual(): bool
 	{
-		$queueEnabled = $this->_store->isQueueEnabled();
+		$queueEnabled = $this->store->isQueueEnabled();
 		
 		try
 		{
-			$this->_store->setQueueEnabled(false);
-			if($this->_store->get(self::KEY_ITEM) === null)
+			$this->store->setQueueEnabled(false);
+			if($this->store->get(self::KEY_ITEM) === null)
 			{
-				$this->_store->queue(self::KEY_ITEM); // manual queue call
-				$this->_store->set(self::KEY_ITEM, 'test');
+				$this->store->lockAndQueue(self::KEY_ITEM); // manual queue call
+				$this->store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null;
 		}
 		finally
 		{
-			$this->_store->setQueueEnabled($queueEnabled);
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->setQueueEnabled($queueEnabled);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -150,7 +135,7 @@ class Apcu extends Test
 		
 		try
 		{
-			$result = $this->_store->get(self::KEY_ITEM,
+			$result = $this->store->get(self::KEY_ITEM,
 				resolver: fn() => $value,
 			);
 			
@@ -158,7 +143,7 @@ class Apcu extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -166,21 +151,21 @@ class Apcu extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM) === null)
+			if($this->store->get(self::KEY_ITEM) === null)
 			{
-				$this->_store->releaseActiveLock(self::KEY_ITEM);
+				$this->store->releaseActiveLock(self::KEY_ITEM);
 			}
 			
-			$id = $this->_store
-				->prefix(self::KEY_ITEM, $this->_store->getGroup());
-			$lockKey = $this->_store
+			$id = $this->store
+				->prefix(self::KEY_ITEM, $this->store->getGroup());
+			$lockKey = $this->store
 				->prefix(Store::TYPE_LOCK, $id);
 			
 			return apcu_exists($lockKey) === false;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -188,17 +173,17 @@ class Apcu extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM) === null)
+			if($this->store->get(self::KEY_ITEM) === null)
 			{
-				$this->_store->renewLock(self::KEY_ITEM);
-				$this->_store->set(self::KEY_ITEM, 'value'); // to release the lock
+				$this->store->renewLock(self::KEY_ITEM);
+				$this->store->set(self::KEY_ITEM, 'value'); // to release the lock
 			}
 			
 			return true;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -208,19 +193,19 @@ class Apcu extends Test
 		
 		try
 		{
-			$result = $this->_store->get(self::KEY_ITEM,
+			$result = $this->store->get(self::KEY_ITEM,
 				resolver: fn() => $value,
 				queue: false,
 			);
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null
 				&& $result === $value;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -228,11 +213,11 @@ class Apcu extends Test
 	{
 		try
 		{
-			$result = $this->_store->get(self::KEY_ITEM,
+			$result = $this->store->get(self::KEY_ITEM,
 				queue: false,
 			);
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists === null
 				&& $result === null;
@@ -244,19 +229,19 @@ class Apcu extends Test
 	
 	public function lockOnly(): bool
 	{
-		$id = $this->_store
-			->prefix(self::KEY_ITEM, $this->_store->getGroup());
+		$id = $this->store
+			->prefix(self::KEY_ITEM, $this->store->getGroup());
 		
-		$lockKey = $this->_store
+		$lockKey = $this->store
 			->prefix(Store::TYPE_LOCK, $id);
 		
 		try
 		{
-			$this->_store->queue(self::KEY_ITEM, lockOnly: true);
+			$this->store->lockAndQueue(self::KEY_ITEM, lockOnly: true);
 			
 			$exists = apcu_exists($lockKey) === true;
 			
-			$this->_store->releaseActiveLock(self::KEY_ITEM);
+			$this->store->releaseActiveLock(self::KEY_ITEM);
 			
 			$existsNot = apcu_exists($lockKey) === false;
 			
@@ -274,6 +259,6 @@ class Apcu extends Test
 	#[Override]
 	public function deconstruct(): void
 	{
-		$this->_store->clear();
+		$this->store->clear();
 	}
 }

@@ -20,88 +20,61 @@ use function get_object_vars;
  */
 abstract class Template
 {
-	/**
-	 * Container
-	 *
-	 * @var Container
-	 */
-	protected Container $_container;
+	protected Container $container;
 	
-	/**
-	 * Application
-	 *
-	 * @var Application
-	 */
-	protected Application $_app;
+	protected Application $app;
 	
-	/**
-	 * Config
-	 *
-	 * @var ArrayObject
-	 */
-	protected ArrayObject $_config;
-
-	/**
-	 */
+	protected ArrayObject $config;
+	
 	public function __construct()
 	{
 		$this->__unserialize();
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function __serialize(): array
 	{
 		$properties = get_object_vars($this);
-		unset($properties['_app']);
-		unset($properties['_config']);
+		unset($properties['_app'], $properties['_config']);
 		
 		return array_keys($properties);
 	}
 	
-	/**
-	 * @param array $data
-	 */
-	public function __unserialize(array $data = []): void
+	public function __unserialize(
+		array $data = [],
+	): void
 	{
-		$this->_container = container();
-		$this->_app = $this->_container->get(Application::class);
-		$this->_config = $this->_app->getConfig();
+		$this->container = container();
+		$this->app = $this->container->get(Application::class);
+		$this->config = $this->app->getConfig();
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function setUp(Mysql $model): void
+	public function setUp(
+		Mysql $model,
+	): void
 	{
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function preInsert(Mysql $model): void
+	public function preInsert(
+		Mysql $model,
+	): void
 	{
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function preUpdate(Mysql $model): void
+	public function preUpdate(
+		Mysql $model,
+	): void
 	{
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function preSave(Mysql $model): void
+	public function preSave(
+		Mysql $model,
+	): void
 	{
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function preDelete(Mysql $model): void
+	public function preDelete(
+		Mysql $model,
+	): void
 	{
 	}
 }

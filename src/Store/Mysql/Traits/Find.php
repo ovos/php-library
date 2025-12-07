@@ -15,11 +15,11 @@ use PDO;
 trait Find
 {
 	/**
-	 * @param ...$arguments
-	 *
 	 * @return false|Model|Model[]
 	 */
-	public function find(...$arguments): false|Model|array
+	public function find(
+		...$arguments,
+	): false|Model|array
 	{
 		$many = $arguments['many'] ?? false;
 		unset($arguments['many']);

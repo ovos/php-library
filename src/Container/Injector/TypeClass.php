@@ -21,22 +21,12 @@ class TypeClass extends Injector
 	use TraitParameters;
 	use TraitInitializer;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_class;
+	protected string $class;
 	
-	/**
-	 * @var ?ReflectionClass 
-	 */
-	protected ?ReflectionClass $_reflector = null;
+	protected ?ReflectionClass $reflector = null;
 	
-	/**
-	 * @param string $class
-	 * @param array $parameters
-	 * @param ?callable $initializer
-	 */
-	public function __construct(string $class,
+	public function __construct(
+		string $class,
 		array $parameters = [],
 		?callable $initializer = null,
 	)
@@ -46,46 +36,34 @@ class TypeClass extends Injector
 		$this->setInitializer($initializer);
 	}
 	
-	/**
-	 * @param string $class
-	 *
-	 * @return static
-	 */
-	public function setClass(string $class): static
+	public function setClass(
+		string $class,
+	): static
 	{
-		$this->_class = $class;
+		$this->class = $class;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getClass(): string
 	{
-		return $this->_class;
+		return $this->class;
 	}
 	
-	/**
-	 * @return ReflectionClass
-	 */
 	public function getReflector(): ReflectionClass
 	{
-		if($this->_reflector === null)
+		if($this->reflector === null)
 		{
-			$this->_reflector = new ReflectionClass($this->_class);
+			$this->reflector = new ReflectionClass($this->class);
 		}
 		
-		return $this->_reflector;
+		return $this->reflector;
 	}
 	
-	/**
-	 * @param Container $container
-	 *
-	 * @return object
-	 */
 	#[Override]
-	public function inject(Container $container): object
+	public function inject(
+		Container $container,
+	): object
 	{
 		$reflector = $this->getReflector();
 		$parameters = $this->getParameters();
@@ -100,7 +78,7 @@ class TypeClass extends Injector
 				$instance = $reflector->newInstanceWithoutConstructor();
 				$container->resolveProperties($reflector, $instance);
 				
-				if($constructor = $reflector->getConstructor()) 
+				if($constructor = $reflector->getConstructor())
 				{
 					$constructor->invokeArgs($instance, $instanceArgs);
 				}

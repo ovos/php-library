@@ -23,12 +23,9 @@ use function array_values;
  */
 trait Cli
 {
-	/**
-	 * @param mixed $default
-	 * 
-	 * @return ?string
-	 */
-	public function readLine(mixed $default = null): ?string
+	public function readLine(
+		mixed $default = null,
+	): ?string
 	{
 		$line = Terminal::readLine();
 		if($line === null)
@@ -39,13 +36,10 @@ trait Cli
 		return $line;
 	}
 	
-	/**
-	 * @param string $dir
-	 * @param bool $selectDirectory
-	 *
-	 * @return array
-	 */
-	public function listFiles(string $dir, bool $selectDirectory = false): array
+	public function listFiles(
+		string $dir,
+		bool $selectDirectory = false,
+	): array
 	{
 		$files = [];
 		
@@ -60,7 +54,8 @@ trait Cli
 				continue;
 			}
 			
-			if(str_starts_with($file->getBasename(), '.')) // skip hidden files
+			// skip hidden files
+			if(str_starts_with($file->getBasename(), '.'))
 			{
 				continue;
 			}
@@ -72,13 +67,10 @@ trait Cli
 		return array_values($files);
 	}
 	
-	/**
-	 * @param string $dir
-	 * @param bool $selectDirectory
-	 *
-	 * @return ?SplFileInfo
-	 */
-	public function selectFile(string $dir, bool $selectDirectory = false): ?SplFileInfo
+	public function selectFile(
+		string $dir,
+		bool $selectDirectory = false,
+	): ?SplFileInfo
 	{
 		$files = $this->listFiles($dir, $selectDirectory);
 		if(count($files) === 0)
@@ -86,12 +78,15 @@ trait Cli
 			return null;
 		}
 		
-		$this->log('Please pick a %s (type the number and hit <blue>ENTER<reset>):', 
-			$selectDirectory ? 'directory' : 'file');
-			
+		$this->log(
+			'Please pick a %s (type the number and hit <blue>ENTER<reset>):', 
+			$selectDirectory ? 'directory' : 'file'
+		);
+		
 		foreach($files as $key => $file)
 		{
-			printf("\t%d. %s" . PHP_EOL, $key + 1, $file->getBasename());
+			printf("\t%d. %s" . PHP_EOL,
+			$key + 1, $file->getBasename());
 		}
 		
 		$selection = (int)$this->readLine() - 1;
@@ -103,12 +98,9 @@ trait Cli
 		return null;
 	}
 	
-	/**
-	 * @param string $dir
-	 *
-	 * @return ?SplFileInfo
-	 */
-	public function selectDirectory(string $dir): ?SplFileInfo
+	public function selectDirectory(
+		string $dir,
+	): ?SplFileInfo
 	{
 		return $this->selectFile($dir, true);
 	}

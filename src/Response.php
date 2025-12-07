@@ -15,72 +15,53 @@ use function ob_get_length;
  */
 class Response
 {
-	/**
-	 * Application
-	 *
-	 * @var Application
-	 */
-	protected Application $_app;
+	protected Container $container;
+	
+	protected Application $app;
 	
 	/**
 	 * HTTP code
-	 *
-	 * @var int
 	 */
-	protected int $_httpCode = 200;
+	protected int $httpCode = 200;
 	
 	/**
 	 * Sent
-	 *
-	 * @var bool
 	 */
-	protected bool $_sent = false;
+	protected bool $sent = false;
 	
 	/**
 	 * Headers
-	 *
-	 * @var array
 	 */
-	protected array $_headers = [];
+	protected array $headers = [];
 	
 	/**
 	 * Headers sent
-	 *
-	 * @var bool
 	 */
-	protected bool $_headersSent = false;
+	protected bool $headersSent = false;
 	
-	/**
-	 * Construct
-	 */
 	public function __construct()
 	{
-		$this->_app = app();
-		$this->_app->setResponse($this);
+		$this->container = container();
+		$this->app = $this->container->get(Application::class);
+		$this->app->setResponse($this);
 	}
 	
-	/**
-	 * @param int $httpCode
-	 *
-	 * @return static
-	 */
-	public function setHttpCode(int $httpCode): static
+	public function setHttpCode(
+		int $httpCode,
+	): static
 	{
-		$this->_httpCode = $httpCode;
+		$this->httpCode = $httpCode;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string $name
-	 * @param mixed $value
-	 * @param bool $replace
-	 *
-	 * @return static
-	 */
-	public function setHeader(string $name, mixed $value, bool $replace = false): static
+	public function setHeader(
+		string $name,
+		mixed $value,
+		bool $replace = false,
+	): static
 	{
-		$this->_headers[$name] = [
+		$this->headers[$name] = [
 			'value' => $value,
 			'replace' => $replace
 		];
@@ -88,35 +69,27 @@ class Response
 		return $this;
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return static
-	 */
-	public function clearHeader(string $name): static
+	public function clearHeader(
+		string $name,
+	): static
 	{
-		if(isset($this->_headers[$name]))
+		if(isset($this->headers[$name]))
 		{
-			unset($this->_headers[$name]);
+			unset($this->headers[$name]);
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @return static
-	 */
 	public function clearAllHeaders(): static
 	{
-		$this->_headers = [];
+		$this->headers = [];
 		
 		return $this;
 	}
 	
 	/**
 	 * Send headers
-	 *
-	 * @return static
 	 */
 	public function sendHeaders(): static
 	{
@@ -125,14 +98,17 @@ class Response
 			return $this;
 		}
 		
-		if($this->_app->getRequest()->isCli() === false)
+		if($this->app->getRequest()->isCli() === false)
 		{
-			foreach($this->_headers as $name => $header)
+			foreach($this->headers as $name => $header)
 			{
-				header($name . ': ' . $header['value'], $header['replace']);
+				header(
+					$name . ': ' . $header['value'],
+					$header['replace'],
+				);
 			}
 			
-			http_response_code($this->_httpCode);
+			http_response_code($this->httpCode);
 		}
 		
 		$this->setHeadersSent(true);
@@ -140,9 +116,6 @@ class Response
 		return $this;
 	}
 	
-	/**
-	 * @return ?self
-	 */
 	public function send(): ?self
 	{
 		if($this->isSent())
@@ -162,49 +135,34 @@ class Response
 		return $this;
 	}
 	
-	/**
-	 * @param bool $sent
-	 *
-	 * @return static
-	 */
-	public function setIsSent(bool $sent): static
+	public function setIsSent(
+		bool $sent,
+	): static
 	{
-		$this->_sent = $sent;
+		$this->sent = $sent;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isSent(): bool
 	{
-		return $this->_sent;
+		return $this->sent;
 	}
 	
-	/**
-	 * @param bool $headersSent
-	 *
-	 * @return static
-	 */
-	public function setHeadersSent(bool $headersSent): static
+	public function setHeadersSent(
+		bool $headersSent,
+	): static
 	{
-		$this->_headersSent = $headersSent;
+		$this->headersSent = $headersSent;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function headersSent(): bool
 	{
-		return $this->_headersSent;
+		return $this->headersSent;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
 		return '';

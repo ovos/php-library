@@ -16,36 +16,26 @@ use Override;
 #[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_PARAMETER)]
 class ArrayObject implements Injected
 {
-	/**
-	 * @var array 
-	 */
-	protected array $_path;
+	protected array $path;
 	
-	/**
-	* @param array $path
-	*/
-	public function __construct(...$path)
+	public function __construct(
+		...$path,
+	)
 	{
-		$this->_path = $path;
+		$this->path = $path;
 	}
 	
-	/**
-	* @return array
-	*/
 	public function getPath(): array
 	{
-		return $this->_path;
+		return $this->path;
 	}
 	
-	/**
-	 * @param object $object
-	 *
-	 * @return mixed
-	 */
 	#[Override]
-	public function process(object $object): mixed
+	public function process(
+		object $object,
+	): mixed
 	{
 		/** @var $object BaseArrayObject */
-		return $object->getPath($this->_path);
+		return $object->getPath($this->path);
 	}
 }

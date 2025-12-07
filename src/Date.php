@@ -15,12 +15,10 @@ class Date
 {
 	/**
 	 * Returns seconds duration string in hours:minutes:seconds
-	 *
-	 * @param int $seconds
-	 *
-	 * @return string
 	 */
-	public static function hms(int $seconds): string
+	public static function hms(
+		int $seconds,
+	): string
 	{
 		$zero = new DateTime('@0');
 		$offset = new DateTime('@' . (string)$seconds);
@@ -29,12 +27,9 @@ class Date
 		return sprintf('%02d:%02d:%02d', $diff->days * 24 + $diff->h, $diff->i, $diff->s);
 	}
 	
-	/**
-	 * @param string $month (this, current, previous, next, 0, 1, 2, -1, -2, ...)
-	 *
-	 * @return DateTime
-	 */
-	public static function getMonthStart(string $month): DateTime
+	public static function getMonthStart(
+		string $month, // (this, current, previous, next, 0, 1, 2, -1, -2, ...)
+	): DateTime
 	{
 		$date = new DateTime;
 		$date
@@ -44,12 +39,9 @@ class Date
 		return $date;
 	}
 	
-	/**
-	 * @param string $month (this, current, previous, next, 0, 1, 2, -1, -2, ...)
-	 *
-	 * @return DateTime
-	 */
-	public static function getMonthEnd(string $month): DateTime
+	public static function getMonthEnd(
+		string $month, // (this, current, previous, next, 0, 1, 2, -1, -2, ...)
+	): DateTime
 	{
 		$date = new DateTime;
 		$date
@@ -59,12 +51,9 @@ class Date
 		return $date;
 	}
 	
-	/**
-	 * @param string $week (this, current, previous, next, 0, 1, 2, -1, -2, ...)
-	 *
-	 * @return DateTime
-	 */
-	public static function getWeekStart(string $week): DateTime
+	public static function getWeekStart(
+		string $week, // (this, current, previous, next, 0, 1, 2, -1, -2, ...)
+	): DateTime
 	{
 		$start = new DateTime;
 		$start
@@ -74,12 +63,9 @@ class Date
 		return $start;
 	}
 	
-	/**
-	 * @param DateTime $start
-	 *
-	 * @return DateTime
-	 */
-	public static function getWeekEnd(DateTime $start): DateTime
+	public static function getWeekEnd(
+		DateTime $start,
+	): DateTime
 	{
 		$end = clone $start;
 		$end->modify('sunday this week')

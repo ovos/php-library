@@ -19,42 +19,36 @@ class Redisearch extends Test
 {
 	use TraitRedis;
 	
-	/**
-	 * @var string
-	 */
 	public const string KEY_ITEM = 'item';
 	
-	/**
-	 * @var ?Store
-	 */
-	protected ?Store $_store = null;
+	protected ?Store $store = null;
 	
 	public function __construct()
 	{
-		$this->_getConnection()->getConfig()->database = 0;
-		$this->_store = $this->_getStore(Store::class);
+		$this->getConnection()->getConfig()->database = 0;
+		$this->store = $this->getStore(Store::class);
 	}
 	
 	public function delete(): bool
 	{
-		$this->_store->set(self::KEY_ITEM, 'test');
-		$this->_store->delete(self::KEY_ITEM);
+		$this->store->set(self::KEY_ITEM, 'test');
+		$this->store->delete(self::KEY_ITEM);
 		
-		$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+		$exists = $this->store->get(self::KEY_ITEM, queue: false);
 		
 		return $exists === null;
 	}
 	
 	public function storeArray(): bool
 	{
-		$this->_store->indexRebuild();
+		$this->store->indexRebuild();
 		
 		$array = [
 			'stored' => true
 		];
 		
-		$this->_store->set(self::KEY_ITEM, $array);
-		$array = $this->_store->get(self::KEY_ITEM, queue: false);
+		$this->store->set(self::KEY_ITEM, $array);
+		$array = $this->store->get(self::KEY_ITEM, queue: false);
 		
 		try
 		{
@@ -62,20 +56,20 @@ class Redisearch extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function invalidateTags(): bool
 	{
-		$this->_store->indexRebuild();
+		$this->store->indexRebuild();
 		
 		$tags = ['tag1', 'tag2'];
 		
-		$this->_store->set(self::KEY_ITEM, 'test', tags: $tags);
-		$this->_store->invalidateTags([$tags[0]]);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->invalidateTags([$tags[0]]);
 		
-		$result = $this->_store->get(self::KEY_ITEM, queue: false);
+		$result = $this->store->get(self::KEY_ITEM, queue: false);
 		
 		try
 		{
@@ -83,21 +77,21 @@ class Redisearch extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function clear(): bool
 	{
-		$this->_store->indexRebuild();
+		$this->store->indexRebuild();
 		
 		$array = [
 			'stored' => true
 		];
 		
-		$this->_store->set(self::KEY_ITEM, $array);
-		$this->_store->clear();
-		$result = $this->_store->get(self::KEY_ITEM, queue: false);
+		$this->store->set(self::KEY_ITEM, $array);
+		$this->store->clear();
+		$result = $this->store->get(self::KEY_ITEM, queue: false);
 		
 		return $result === null;
 	}
@@ -109,8 +103,8 @@ class Redisearch extends Test
 	#[Override]
 	public function finalize(): void
 	{
-		$this->_store->clear();
-		$this->_store->indexDrop($this->_store->getType());
+		$this->store->clear();
+		$this->store->indexDrop($this->store->getType());
 	}
 	
 	/**
@@ -120,6 +114,6 @@ class Redisearch extends Test
 	#[Override]
 	public function deconstruct(): void
 	{
-		$this->_connection->disconnect();
+		$this->connection->disconnect();
 	}
 }

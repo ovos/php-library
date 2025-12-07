@@ -8,8 +8,6 @@ use Ovos\View;
 use Ovos\View\Helper;
 use Ovos\Service;
 
-use function Ovos\services;
-
 /**
  * Benchmark
  *
@@ -18,24 +16,18 @@ use function Ovos\services;
  */
 class Benchmark extends Helper
 {
-	/**
-	 * @return ?Service\Benchmark
-	 */
 	public function getBenchmark(): ?Service\Benchmark
 	{
 		static $benchmark;
 		if($benchmark === null)
 		{
-			$benchmark = services()->benchmark;
+			$benchmark = $this->container->get(Service\Benchmark::SYMBOL);
 			$benchmark->stop();
 		}
 		
 		return $benchmark;
 	}
 	
-	/**
-	 * @return ?Measurement
-	 */
 	public function getTotal(): ?Measurement
 	{
 		if(($benchmark = $this->getBenchmark()) === null)
@@ -46,9 +38,6 @@ class Benchmark extends Helper
 		return $benchmark->getMeasurements()['total'];
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
 		if(($benchmark = $this->getBenchmark()) === null)
