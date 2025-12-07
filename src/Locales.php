@@ -6,7 +6,6 @@ use function class_exists;
 
 /**
  * Locales
- * TODO: rework for container
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>

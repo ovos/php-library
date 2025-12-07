@@ -17,7 +17,6 @@ class Queries extends Helper
 {
 	public function getReporter(): Reporter
 	{
-		// TODO: rework with container?
 		static $reporter;
 		if($reporter === null)
 		{

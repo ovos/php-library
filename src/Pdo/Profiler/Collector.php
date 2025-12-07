@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Pdo\Profiler;
 
 use Ovos\Measurement;
+use Ovos\Singleton;
 use SplQueue;
 
 /**
@@ -14,27 +15,14 @@ use SplQueue;
  */
 class Collector
 {
-	protected static ?self $instance = null;
+	use Singleton;
 	
 	/**
 	 * Contains collected data
 	 */
 	protected SplQueue $queries;
 	
-	/**
-	 * @var int
-	 */
 	public static int $limit = 0;
-	
-	public static function getInstance(): static
-	{
-		if(self::$instance === null)
-		{
-			self::$instance = new static;
-		}
-		
-		return self::$instance;
-	}
 	
 	public function __construct()
 	{
