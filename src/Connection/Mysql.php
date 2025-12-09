@@ -66,7 +66,7 @@ class Mysql extends Connection
 			$this->client = null;
 			$this->logger->log
 			(
-				$exception
+				$exception,
 			);
 			
 			return false;

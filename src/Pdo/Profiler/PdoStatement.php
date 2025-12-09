@@ -38,7 +38,13 @@ class PdoStatement extends \PDOStatement
 	{
 		$this->storeParameter($param, $var);
 		
-		return parent::bindParam($param, $var, $type, $maxLength, $driverOptions);
+		return parent::bindParam(
+			$param,
+			$var,
+			$type,
+			$maxLength,
+			$driverOptions,
+		);
 	}
 	
 	/**
@@ -94,7 +100,8 @@ class PdoStatement extends \PDOStatement
 			$measurement->stop();
 			// pass query and parameters to collector
 			Collector::getInstance()
-				->setQuery($this->queryString,
+				->setQuery(
+					$this->queryString,
 					$this->parameters,
 					$measurement,
 				);
@@ -106,7 +113,8 @@ class PdoStatement extends \PDOStatement
 		
 		// Pass query and parameters to collector
 		Collector::getInstance()
-			->setQuery($this->queryString,
+			->setQuery(
+				$this->queryString,
 				$this->parameters,
 				$measurement,
 			);

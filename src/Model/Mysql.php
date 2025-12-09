@@ -57,10 +57,12 @@ abstract class Mysql
 	
 	protected string $sourceName = 'mysql';
 	
+	/* Some properties use undescores to prevent conflicts with model properties */
+	
 	/**
 	 * A connection between PHP and a database server
 	 */
-	protected ?PDO $source = null;
+	protected ?PDO $_source = null;
 	
 	/**
 	 * List of primary keys
@@ -72,26 +74,17 @@ abstract class Mysql
 	 */
 	protected ?string $autoIncrementKey = 'id';
 	
-	protected array $templates = [];
+	protected array $_templates = [];
+	protected array $_setters = [];
+	protected array $_getters = [];
+	protected array $_gettersCache = [];
+	protected array $_properties = [];
+	protected array $_modified = [];
+	protected array $_references = [];
 	
-	protected array $setters = [];
-	
-	protected array $getters = [];
-	
-	protected array $gettersCache = [];
-	
-	protected array $properties = [];
-	
-	protected array $modified = [];
-	
-	protected array $references = [];
-	
-	/**
-	 * A record exists if it was fetched with PK, otherwise it's considered new
-	 */
-	protected bool $exists = false;
-	
-	protected ?self $updateObject = null;
+	/* A record exists if it was fetched with PK, otherwise it's considered new */
+	protected bool $_exists = false;
+	protected ?self $_updateObject = null;
 	
 	/**
 	 * Filter in or out properties in jsonSerialize
@@ -99,9 +92,8 @@ abstract class Mysql
 	 * Useful in case of:
 	 * - we do not wish JSON to serialize binary fields (e.g., binary value like POINT in MySQL)
 	 */
-	protected ?array $jsonSerializeFilter = null;
-	
-	protected int $jsonSerializeFilterMode = self::FILTER_MODE_OUT;
+	protected ?array $_jsonSerializeFilter = null;
+	protected int $_jsonSerializeFilterMode = self::FILTER_MODE_OUT;
 	
 	public function __construct(
 		?array $properties = null,
@@ -109,7 +101,7 @@ abstract class Mysql
 	{
 		parent::__construct();
 		
-		$this->exists = $this->primaryKeysLoaded();
+		$this->_exists = $this->primaryKeysLoaded();
 		
 		if($properties !== null)
 		{
@@ -123,18 +115,18 @@ abstract class Mysql
 		$this->triggerEvents('setUp');
 	}
 	
-	public function getSource(): PDO
+	public function getSource(): ?PDO
 	{
-		if($this->source === null)
+		if($this->_source === null)
 		{
 			// get database connection
-			$this->source = $this->container
+			$this->_source = $this->container
 				->getClass(Connections::class)
 				->get($this->sourceName)
 				->getConnectedClient();
 		}
 		
-		return $this->source;
+		return $this->_source;
 	}
 	
 	/**
@@ -159,7 +151,7 @@ abstract class Mysql
 		array $filter,
 	): static
 	{
-		$this->jsonSerializeFilter = $filter;
+		$this->_jsonSerializeFilter = $filter;
 		
 		return $this;
 	}
@@ -168,7 +160,7 @@ abstract class Mysql
 		int $filterMode,
 	): static
 	{
-		$this->jsonSerializeFilterMode = $filterMode;
+		$this->_jsonSerializeFilterMode = $filterMode;
 		
 		return $this;
 	}
@@ -193,7 +185,7 @@ abstract class Mysql
 	
 	public function getProperties(): array
 	{
-		return $this->properties;
+		return $this->_properties;
 	}
 	
 	/**
@@ -207,7 +199,7 @@ abstract class Mysql
 		mixed $value,
 	): static
 	{
-		$this->properties[$property] = $value;
+		$this->_properties[$property] = $value;
 		
 		return $this;
 	}
@@ -216,12 +208,12 @@ abstract class Mysql
 		string $property,
 	): mixed
 	{
-		if(array_key_exists($property, $this->properties) === false)
+		if(array_key_exists($property, $this->_properties) === false)
 		{
 			return null;
 		}
 		
-		return $this->properties[$property];
+		return $this->_properties[$property];
 	}
 	
 	/**
@@ -235,21 +227,21 @@ abstract class Mysql
 	{
 		if(
 			// property does not exist
-			array_key_exists($property, $this->properties) === false
+			array_key_exists($property, $this->_properties) === false
 			// property exists and the value was modified 
 			|| (
-				array_key_exists($property, $this->properties)
-				&& array_key_exists($property, $this->modified) === false
-				&& $this->properties[$property] !== $value)
+				array_key_exists($property, $this->_properties)
+				&& array_key_exists($property, $this->_modified) === false
+				&& $this->_properties[$property] !== $value)
 			)
 		{
-			$this->modified[$property] = $value;
+			$this->_modified[$property] = $value;
 		}
 		
 		$this->setProperty($property, $value);
 		
 		// record the change on an update object
-		$this->updateObject?->modifyProperty($property, $value);
+		$this->_updateObject?->modifyProperty($property, $value);
 		
 		return $this;
 	}
@@ -275,7 +267,7 @@ abstract class Mysql
 		mixed $value,
 	): static
 	{
-		$this->references[$property] = $value;
+		$this->_references[$property] = $value;
 		
 		return $this;
 	}
@@ -284,19 +276,19 @@ abstract class Mysql
 		string $property,
 	): mixed
 	{
-		if(array_key_exists($property, $this->references) === false)
+		if(array_key_exists($property, $this->_references) === false)
 		{
 			return $this->null;
 		}
 		
-		return $this->references[$property];
+		return $this->_references[$property];
 	}
 	
 	public function hasReference(
 		string $property,
 	): bool
 	{
-		return array_key_exists($property, $this->references);
+		return array_key_exists($property, $this->_references);
 	}
 	
 	public function reference(
@@ -316,14 +308,14 @@ abstract class Mysql
 		array $modified,
 	): static
 	{
-		$this->modified = $modified;
+		$this->_modified = $modified;
 		
 		return $this;
 	}
 	
 	public function getModified(): array
 	{
-		return $this->modified;
+		return $this->_modified;
 	}
 	
 	public function isModified(
@@ -332,13 +324,13 @@ abstract class Mysql
 	{
 		if(count($properties) === 0)
 		{
-			return count($this->modified) > 0;
+			return count($this->_modified) > 0;
 		}
 		
 		// check if any of the properties passed was modified
 		foreach($properties as $property)
 		{
-			if(array_key_exists($property, $this->modified) !== false)
+			if(array_key_exists($property, $this->_modified) !== false)
 			{
 				return true;
 			}
@@ -349,7 +341,7 @@ abstract class Mysql
 	
 	public function resetModified(): static
 	{
-		$this->modified = [];
+		$this->_modified = [];
 		
 		return $this;
 	}
@@ -358,28 +350,28 @@ abstract class Mysql
 		?self $updateObject,
 	): static
 	{
-		$this->updateObject = $updateObject;
+		$this->_updateObject = $updateObject;
 		
 		return $this;
 	}
 	
 	public function getUpdateObject(): ?static
 	{
-		return $this->updateObject;
+		return $this->_updateObject;
 	}
 	
 	public function addTemplate(
 		Template $template,
 	): static
 	{
-		$this->templates[] = $template;
+		$this->_templates[] = $template;
 		
 		return $this;
 	}
 	
 	public function getTemplates(): array
 	{
-		return $this->templates;
+		return $this->_templates;
 	}
 	
 	public function addSetter(
@@ -388,18 +380,18 @@ abstract class Mysql
 		bool $prepend = false,
 	): static
 	{
-		if(array_key_exists($property, $this->setters) === false)
+		if(array_key_exists($property, $this->_setters) === false)
 		{
-			$this->setters[$property] = [];
+			$this->_setters[$property] = [];
 		}
 		
 		if($prepend)
 		{
-			array_unshift($this->setters[$property], $callback);
+			array_unshift($this->_setters[$property], $callback);
 		}
 		else
 		{
-			array_push($this->setters[$property], $callback);
+			array_push($this->_setters[$property], $callback);
 		}
 		
 		return $this;
@@ -411,19 +403,19 @@ abstract class Mysql
 	): static
 	{
 		// no setters for this property
-		if(array_key_exists($property, $this->setters) === false)
+		if(array_key_exists($property, $this->_setters) === false)
 		{
 			return $this;
 		}
 		
 		is_callable($callback, true, $callableName);
-		foreach($this->setters[$property] as $key => $setter)
+		foreach($this->_setters[$property] as $key => $setter)
 		{
 			is_callable($setter, true, $setterName);
 			
 			if($callableName === $setterName)
 			{
-				unset($this->setters[$property][$key]);
+				unset($this->_setters[$property][$key]);
 				
 				return $this;
 			}
@@ -438,18 +430,18 @@ abstract class Mysql
 		bool $prepend = false,
 	): static
 	{
-		if(array_key_exists($property, $this->getters) === false)
+		if(array_key_exists($property, $this->_getters) === false)
 		{
-			$this->getters[$property] = [];
+			$this->_getters[$property] = [];
 		}
 		
 		if($prepend)
 		{
-			array_unshift($this->getters[$property], $callback);
+			array_unshift($this->_getters[$property], $callback);
 		}
 		else
 		{
-			$this->getters[$property][] = $callback;
+			$this->_getters[$property][] = $callback;
 		}
 		
 		return $this;
@@ -461,19 +453,19 @@ abstract class Mysql
 	): static
 	{
 		// no getters for this property
-		if(array_key_exists($property, $this->getters) === false)
+		if(array_key_exists($property, $this->_getters) === false)
 		{
 			return $this;
 		}
 		
 		is_callable($callback, true, $callableName);
-		foreach($this->getters[$property] as $key => $getter)
+		foreach($this->_getters[$property] as $key => $getter)
 		{
 			is_callable($getter, true, $getterName);
 			
 			if($callableName === $getterName)
 			{
-				unset($this->getters[$property][$key]);
+				unset($this->_getters[$property][$key]);
 				
 				return $this;
 			}
@@ -524,20 +516,20 @@ abstract class Mysql
 		}
 		
 		// run getter
-		if(isset($this->getters[$property]))
+		if(isset($this->_getters[$property]))
 		{
-			if(array_key_exists($property, $this->gettersCache))
+			if(array_key_exists($property, $this->_gettersCache))
 			{
-				return $this->gettersCache[$property];
+				return $this->_gettersCache[$property];
 			}
 			
-			foreach($this->getters[$property] as $callback)
+			foreach($this->_getters[$property] as $callback)
 			{
 				$value = $callback($value, $property, $this);
 			}
 		}
 		
-		$this->gettersCache[$property] = $value;
+		$this->_gettersCache[$property] = $value;
 		
 		return $value;
 	}
@@ -546,8 +538,8 @@ abstract class Mysql
 		string $property,
 	): bool
 	{
-		return array_key_exists($property, $this->properties)
-			|| array_key_exists($property, $this->references);
+		return array_key_exists($property, $this->_properties)
+			|| array_key_exists($property, $this->_references);
 	}
 	
 	/**
@@ -579,11 +571,11 @@ abstract class Mysql
 		
 		// modify a property
 		// run setters
-		if(isset($this->setters[$property]))
+		if(isset($this->_setters[$property]))
 		{
-			unset($this->gettersCache[$property]);
+			unset($this->_gettersCache[$property]);
 			
-			foreach($this->setters[$property] as $callback)
+			foreach($this->_setters[$property] as $callback)
 			{
 				$value = $callback($value, $property, $this);
 			}
@@ -598,16 +590,16 @@ abstract class Mysql
 		string $property,
 	): void
 	{
-		if(array_key_exists($property, $this->properties))
+		if(array_key_exists($property, $this->_properties))
 		{
-			unset($this->properties[$property]);
+			unset($this->_properties[$property]);
 			
 			// record the change on an update object
-			$this->updateObject?->__unset($property);
+			$this->_updateObject?->__unset($property);
 		}
-		else if(array_key_exists($property, $this->references))
+		else if(array_key_exists($property, $this->_references))
 		{
-			unset($this->references[$property]);
+			unset($this->_references[$property]);
 		}
 	}
 	
@@ -755,7 +747,7 @@ abstract class Mysql
 		int $type = self::EXPORT_TYPE_STDCLASS,
 	): void
 	{
-		foreach($this->references as $reference => $value)
+		foreach($this->_references as $reference => $value)
 		{
 			if($filter !== null
 				&& in_array($reference, $filter, true)
@@ -842,8 +834,8 @@ abstract class Mysql
 	public function jsonSerialize(): stdClass
 	{
 		return $this->export(
-			filter: $this->jsonSerializeFilter,
-			filterMode: $this->jsonSerializeFilterMode,
+			filter: $this->_jsonSerializeFilter,
+			filterMode: $this->_jsonSerializeFilterMode,
 			references: true,
 			type: self::EXPORT_TYPE_STDCLASS,
 		);
@@ -851,27 +843,27 @@ abstract class Mysql
 	
 	public function count(): int
 	{
-		return count($this->properties);
+		return count($this->_properties);
 	}
 	
 	public function rewind(): void
 	{
-		reset($this->properties);
+		reset($this->_properties);
 	}
 	
 	public function current(): mixed
 	{
-		return current($this->properties);
+		return current($this->_properties);
 	}
 	
 	public function next(): void
 	{
-		next($this->properties);
+		next($this->_properties);
 	}
 	
 	public function key(): null|int|string
 	{
-		return key($this->properties);
+		return key($this->_properties);
 	}
 	
 	public function valid(): bool
@@ -965,7 +957,7 @@ abstract class Mysql
 			$this->resetModified();
 			
 			// reset getters cache
-			$this->gettersCache = [];
+			$this->_gettersCache = [];
 		}
 		
 		return $result;
@@ -989,7 +981,7 @@ abstract class Mysql
 	
 	public function refresh(): bool
 	{
-		$properties = array_keys($this->properties);
+		$properties = array_keys($this->_properties);
 		
 		// refresh only loaded fields
 		$query = $this->source()->prepare('
@@ -1011,7 +1003,7 @@ abstract class Mysql
 			// reset modified values
 			$this->resetModified();
 			// reset getters cache
-			$this->gettersCache = [];
+			$this->_gettersCache = [];
 		}
 		
 		return $result;
@@ -1044,10 +1036,10 @@ abstract class Mysql
 	{
 		if($exists !== null)
 		{
-			$this->exists = $exists;
+			$this->_exists = $exists;
 		}
 		
-		return $this->exists;
+		return $this->_exists;
 	}
 	
 	/**
@@ -1057,7 +1049,7 @@ abstract class Mysql
 	{
 		foreach($this->primaryKeys as $primaryKey)
 		{
-			if(empty($this->properties[$primaryKey]))
+			if(empty($this->_properties[$primaryKey]))
 			{
 				return false;
 			}
@@ -1091,7 +1083,7 @@ abstract class Mysql
 		foreach($this->primaryKeys as $primaryKey)
 		{
 			$statement->bindValue(':' . $primaryKey,
-				$this->properties[$primaryKey],
+				$this->_properties[$primaryKey],
 				PDO::PARAM_STR,
 			);
 		}
@@ -1103,7 +1095,7 @@ abstract class Mysql
 		
 		foreach($this as $property => $value)
 		{
-			if(array_key_exists($property, $this->modified) === false)
+			if(array_key_exists($property, $this->_modified) === false)
 			{
 				continue;
 			}

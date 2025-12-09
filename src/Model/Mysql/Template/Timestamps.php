@@ -23,7 +23,7 @@ class Timestamps extends Template
 	 */
 	protected array $update = [
 		'preInsert' => 'created_at',
-		'preUpdate' => 'modified_at'
+		'preUpdate' => 'modified_at',
 	];
 	
 	public function __construct(

@@ -82,7 +82,11 @@ class Pdo extends \PDO
 			
 			// pass the query to the collector
 			Collector::getInstance()
-				->setQuery($statement, [], $measurement);
+				->setQuery(
+					$statement,
+					[],
+					$measurement,
+				);
 			
 			throw $exception;
 		}
@@ -91,7 +95,11 @@ class Pdo extends \PDO
 		
 		// pass the query to the collector
 		Collector::getInstance()
-			->setQuery($statement, [], $measurement);
+			->setQuery(
+				$statement,
+				[],
+				$measurement,
+			);
 		
 		return $affectedRows;
 	}

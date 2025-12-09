@@ -44,32 +44,31 @@ abstract class Mysql extends Store
 	
 	protected string $sourceName = 'mysql';
 	
+	/* Some properties use undescores for consistency with Model class */
+	
 	/**
 	 * A connection between PHP and a database server
 	 */
-	protected ?PDO $source = null;
+	protected ?PDO $_source = null;
 	
-	/**
-	 * @return PDO
-	 */
-	public function getSource(): PDO
+	public function getSource(): ?PDO
 	{
-		if($this->source === null)
+		if($this->_source === null)
 		{
 			// get database connection
-			$this->source = $this->container
+			$this->_source = $this->container
 				->getClass(Connections::class)
 				->get($this->sourceName)
 				->getConnectedClient();
 		}
 		
-		return $this->source;
+		return $this->_source;
 	}
 	
 	/**
 	 * Short for getSource
 	 */
-	public function source(): PDO
+	public function source(): ?PDO
 	{
 		return $this->getSource();
 	}
@@ -142,7 +141,9 @@ abstract class Mysql extends Store
 		')->closeCursor();
 	}
 	
-	public function insertQuery(Model $object): false|PDOStatement
+	public function insertQuery(
+		Model $object,
+	): false|PDOStatement
 	{
 		$values = $this->getQueryValues($object);
 		
@@ -514,7 +515,9 @@ abstract class Mysql extends Store
 	/**
 	 * Removed all characters that can break AGAINST (... IN BOOLEAN MODE) queries
 	 */
-	public function sanitizeForBooleanQuery(string $query): string
+	public function sanitizeForBooleanQuery(
+		string $query,
+	): string
 	{
 		return preg_replace('~[^\w ]~u', '', $query);
 	}

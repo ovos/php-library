@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Model\Mysql;
 
+use Models\UserLogin;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Model\Mysql as Model;
@@ -10,6 +11,7 @@ use Ovos\Model\Mysql\Template;
 use Ovos\Store\Mysql as Store;
 use Ovos\Strings;
 use Override;
+use Stores\UsersLogins;
 
 /**
  * Encrypted
