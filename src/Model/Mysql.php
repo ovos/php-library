@@ -123,7 +123,7 @@ abstract class Mysql
 			$this->_source = $this->container
 				->getClass(Connections::class)
 				->get($this->sourceName)
-				->getConnectedClient();
+				->getClient();
 		}
 		
 		return $this->_source;

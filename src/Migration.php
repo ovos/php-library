@@ -58,7 +58,7 @@ abstract class Migration
 			$this->source = $this->container
 				->getClass(Connections::class)
 				->get($this->sourceName)
-				->getConnectedClient();
+				->getClient();
 		}
 		
 		return $this->source;

@@ -29,13 +29,7 @@ class Mysql extends Connection
 	#[Override]
 	public function getClient(): ?ProfilerPdo
 	{
-		return $this->client;
-	}
-	
-	#[Override]
-	public function getConnectedClient(): ?ProfilerPdo
-	{
-		return parent::getConnectedClient();
+		return parent::getClient();
 	}
 	
 	/**

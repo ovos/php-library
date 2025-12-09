@@ -41,20 +41,18 @@ abstract class Connection
 		return $this->config;
 	}
 	
-	abstract public function getClient(): ?object;
-	
-	abstract public function connect(): bool;
-	
-	public function getConnectedClient(): ?object
+	public function getClient(): ?object
 	{
 		if($this->isConnected()
 			|| $this->connect())
 		{
-			return $this->getClient();
+			return $this->client;
 		}
 		
 		return null;
 	}
+	
+	abstract public function connect(): bool;
 	
 	public function isConnected(): bool
 	{

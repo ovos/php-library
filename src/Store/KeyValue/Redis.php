@@ -83,8 +83,7 @@ abstract class Redis extends Tags
 	 */
 	protected array $queueLocks = [];
 	
-	public function __construct
-	(
+	public function __construct(
 		Connection $connection,
 		ArrayObject $config,
 		?string $prefix = null,

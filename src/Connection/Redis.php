@@ -96,13 +96,7 @@ class Redis extends Connection
 	#[Override]
 	public function getClient(): ?RedisClient
 	{
-		return $this->client;
-	}
-	
-	#[Override]
-	public function getConnectedClient(): ?RedisClient
-	{
-		return parent::getConnectedClient();
+		return parent::getClient();
 	}
 	
 	public function connect(): bool
