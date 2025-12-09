@@ -57,8 +57,8 @@ class Encrypted extends Template
 		{
 			$model->addManipulators($property,
 				[$this, 'decrypt'],
-				[$this, 'encrypt'], 
-				true
+				[$this, 'encrypt'],
+				true,
 			);
 		}
 	}
@@ -101,7 +101,7 @@ class Encrypted extends Template
 			OPENSSL_RAW_DATA,
 			$model->cipher_iv);
 		
-		return $string ?: null;	
+		return $string ?: null;
 	}
 	
 	public function decrypt(

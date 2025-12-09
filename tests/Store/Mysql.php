@@ -65,7 +65,8 @@ class Mysql extends Test
 	#[Override]
 	public function finalize(): void
 	{
-		$this->store->source()->exec('TRUNCATE TABLE tests');
+		$this->store->source()
+			->exec('TRUNCATE TABLE tests');
 	}
 	
 	/**
@@ -75,6 +76,7 @@ class Mysql extends Test
 	#[Override]
 	public function deconstruct(): void
 	{
-		$this->store->source()->exec('DROP TABLE IF EXISTS tests');
+		$this->store->source()
+			->exec('DROP TABLE IF EXISTS tests');
 	}
 }

@@ -1,23 +1,23 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Store\Mysql;
+namespace Tests\Model\Mysql;
 
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Model\Mysql as Model;
-use Ovos\Store\Mysql as Store;
 use Ovos\Model\Mysql\Template;
+use Ovos\Store\Mysql as Store;
+use Ovos\Strings;
 use Override;
-use stdClass;
 
 /**
- * Json
+ * Encrypted
  *
  * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
-class Json extends Test
+class Encrypted extends Test
 {
 	protected object $store;
 	
@@ -40,9 +40,9 @@ class Json extends Test
 			
 			public function setUp(): void
 			{
-				$this->addTemplate(new Template\Json(['object'], 
-					Template\Json::TYPE_OBJECT),
-				);
+				$this->addTemplate(new Template\Encrypted([
+					'secret',
+				]));
 			}
 		};
 		$this->model::$store = $this->store;
@@ -50,38 +50,28 @@ class Json extends Test
 		$this->store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-				object JSON NOT NULL,
-				PRIMARY KEY (id)
+				name VARCHAR(64) NULL,
+				secret VARBINARY(80) NULL, -- +16
+				cipher_key VARCHAR(32) NULL,
+				cipher_iv VARBINARY(16) NULL,
+				modified_at DATETIME NULL,
+				active TINYINT UNSIGNED NOT NULL DEFAULT 1,
+				PRIMARY KEY (id),
+				INDEX modified_at (modified_at ASC),
+				INDEX active (active ASC)
 			)
 			ENGINE = InnoDB;
 		');
 	}
 	
-	/**
-	 * https://bugs.mysql.com/bug.php?id=98135
-	 * 
-	 * @return bool
-	 */
-	public function mysqlBug(): bool
+	public function encrypt(): bool
 	{
-		$subObject = new stdClass;
-		$subObject->name = 'test';
-		$subObject->number = 1;
-		$subObject->boolean = true;
-		$subObject->array = ['first', 'second'];
+		$model = new $this->model;
+		$model->name = Strings::random();
+		$model->secret = $model->name;
+		$model->save();
 		
-		$object = new stdClass;
-		$object->url = 'https://test.com';
-		$object->array = [1, 2, 3];
-		$object->subObject = $subObject;
-		
-		$modelInstance = new $this->model;
-		$modelInstance->object = $object;
-		$modelInstance->save();
-		$modelInstance->refresh();
-		$modelInstance->object = $object;
-		
-		return $modelInstance->isModified() === false;
+		return $model->name === $model->secret;
 	}
 	
 	/**

@@ -514,7 +514,7 @@ abstract class Redis extends Tags
 		{
 			// set read timeout to the requested queue lock TTL
 			$this->connection->toggleReadTimeout(
-				Connection::TIMEOUT_READ_CUSTOM, 
+				Connection::TIMEOUT_READ_CUSTOM,
 				$waitTimeJitterMs / 1000, // milliseconds to seconds
 				false,
 			);
