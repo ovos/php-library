@@ -31,11 +31,10 @@ class Session extends Service
 	public const string SYMBOL = 'session';
 	
 	protected ArrayObject $config;
-	
 	protected ArrayObject $cookiesConfig;
-	
 	protected ArrayObject $sessionConfig;
 	
+	protected bool $started = false;
 	protected bool $initialized = false;
 	
 	protected array $session = [];
@@ -66,53 +65,15 @@ class Session extends Service
 				ini_set('session.' . $ini, (string)$value);
 			}
 		}
-		
-		if($this->sessionConfig->autostart)
-		{
-			$this->start();
-		}
-	}
-	
-	protected function initialize(): void
-	{
-		if($this->initialized === false)
-		{
-			session_cache_limiter($this->sessionConfig->cache_limiter);
-			
-			$cookie = session_get_cookie_params();
-			$options = [
-				'lifetime' => $cookie['lifetime'],
-				'path' => SYSTEM_PATH,
-				'domain' => $this->app->getDomain(), // if we pass null here, then the domain will be set to the current domain
-				'secure' => $this->request->isSecure(),
-				'httponly' => true,
-				'samesite' => $this->cookiesConfig->samesite,
-			];
-			// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
-			// SameSite=None works only with Secure
-			if($options['secure'] === false
-				&& ($options['samesite'] === 'None' || $options['samesite'] === null))
-			{
-				$options['samesite'] = 'Lax';
-			}
-			session_set_cookie_params($options);
-			
-			if($this->sessionConfig->cookie_name)
-			{
-				session_name($this->sessionConfig->cookie_name);
-			}
-			
-			if($this->cookiesConfig->prefix)
-			{
-				session_name($this->cookiesConfig->prefix . session_name());
-			}
-			
-			$this->initialized = true;
-		}
 	}
 	
 	public function start(): void
 	{
+		if($this->started === true)
+		{
+			return;
+		}
+		
 		if($this->request->isCli())
 		{
 			return;
@@ -123,7 +84,9 @@ class Session extends Service
 		{
 			throw new Exception('Session could not start.');
 		}
+		
 		$this->session = &$_SESSION;
+		$this->started = true;
 	}
 	
 	public function close(): void
@@ -173,6 +136,8 @@ class Session extends Service
 		string $name,
 	): mixed
 	{
+		$this->start();
+		
 		if($this->__isset($name) === false)
 		{
 			$this->session[$name] = null;
@@ -185,6 +150,8 @@ class Session extends Service
 		string $name,
 	): bool
 	{
+		$this->start();
+		
 		return array_key_exists($name, $this->session);
 	}
 	
@@ -193,6 +160,8 @@ class Session extends Service
 		mixed $value,
 	): void
 	{
+		$this->start();
+		
 		$this->session[$name] = $value;
 	}
 	
@@ -200,6 +169,48 @@ class Session extends Service
 		string $name,
 	): void
 	{
+		$this->start();
+		
 		unset($this->session[$name]);
+	}
+	
+	protected function initialize(): void
+	{
+		if($this->initialized === true)
+		{
+			return;
+		}
+		
+		session_cache_limiter($this->sessionConfig->cache_limiter);
+		
+		$cookie = session_get_cookie_params();
+		$options = [
+			'lifetime' => $cookie['lifetime'],
+			'path' => SYSTEM_PATH,
+			'domain' => $this->app->getDomain(), // if we pass null here, then the domain will be set to the current domain
+			'secure' => $this->request->isSecure(),
+			'httponly' => true,
+			'samesite' => $this->cookiesConfig->samesite,
+		];
+		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+		// SameSite=None works only with Secure
+		if($options['secure'] === false
+			&& ($options['samesite'] === 'None' || $options['samesite'] === null))
+		{
+			$options['samesite'] = 'Lax';
+		}
+		session_set_cookie_params($options);
+		
+		if($this->sessionConfig->cookie_name)
+		{
+			session_name($this->sessionConfig->cookie_name);
+		}
+		
+		if($this->cookiesConfig->prefix)
+		{
+			session_name($this->cookiesConfig->prefix . session_name());
+		}
+		
+		$this->initialized = true;
 	}
 }
