@@ -67,6 +67,20 @@ local function store_hscan_keys(hash_key, count, callback)
 end
 redis.register_function('[prefix]store_hscan_keys', store_hscan_keys)
 
+-- Scans a redis hash for fields using HSCAN, processes them with a callback, and returns the next cursor.
+local function store_hscan_keys_batch(hash_key, cursor, count, callback)
+	local results = redis.call('HSCAN', hash_key, cursor, 'COUNT', count, 'NOVALUES')
+	local new_cursor = results[1]
+	local fields = results[2]
+	
+	for _, field in ipairs(fields) do
+		callback(field)
+	end
+	
+	return new_cursor
+end
+redis.register_function('[prefix]store_hscan_keys_batch', store_hscan_keys_batch)
+
 -- Returns a list of all tags (suffix extracted from matching keys)
 local function store_get_tags(keys, args)
 	local prefix = args[1]
@@ -204,28 +218,35 @@ local function store_unlink_by_tag(keys, args)
 	local tag = args[2]
 	local prefix_ids = prefix .. args[3]
 	local prefix_tag_ids = prefix .. args[4]
+	local cursor = args[5] or '0' -- cursor for HSCAN, '0' for initial call
 	
 	if redis.call('EXISTS', prefix_tag_ids .. tag) == 0 then
-		return 1
+		return {0, '0'} -- tag does not exist, nothing to unlink, scan complete
 	end
 	
 	-- unlink every id matching input ids for the given tag
 	local rems = {}
-	store_hscan_keys(prefix_tag_ids .. tag, 5000, function(id)
-		-- save for removal after the loop
-		table.insert(rems, id)
-		-- remove the id itself
-		redis.call('UNLINK', prefix_ids .. id)
-	end)
+	-- loop the tag in batches to prevent locking redis for too long
+	local cursor_new = store_hscan_keys_batch(
+		prefix_tag_ids .. tag,
+		cursor,
+		7500,
+		function(id)
+			-- save for removal after the loop (within this batch)
+			table.insert(rems, id)
+			-- remove the id itself
+			redis.call('UNLINK', prefix_ids .. id)
+		end
+	)
 	
 	-- remove the ids from the tag hash in batches
 	if #rems > 0 then
-		for from, to in store_batches(#rems) do
+		for from, to in store_batches(#rems) do -- security measure for unpack
 			redis.call('HDEL', prefix_tag_ids .. tag, unpack(rems, from, to))
 		end
 	end
 	
-	return 1
+	return {#rems, cursor_new} -- return count of unlinked IDs and the new cursor
 end
 redis.register_function('[prefix]store_unlink_by_tag', store_unlink_by_tag)
 
@@ -269,29 +290,34 @@ local function store_clean_tag(keys, args)
 	local tag = args[2]
 	local prefix_ids = prefix .. args[3]
 	local prefix_tag_ids = prefix .. args[4]
+	local cursor = args[5] or '0' -- cursor for HSCAN, '0' for initial call
 	
 	if redis.call('EXISTS', prefix_tag_ids .. tag) == 0 then
-		return 0
+		return {0, '0'} -- tag does not exist, nothing to clean, no more to process
 	end
 	
 	local rems = {}
-	
-	-- loop the tag
-	store_hscan_keys(prefix_tag_ids .. tag, 1000, function(id)
-		-- Check if the ID still exists in the main items hash
-		if redis.call('EXISTS', prefix_ids .. id) == 0 then
-			table.insert(rems, id)
+	-- loop the tag in batches to prevent locking redis for too long
+	local cursor_new = store_hscan_keys_batch(
+		prefix_tag_ids .. tag,
+		cursor,
+		7500,
+		function(id)
+			-- check if the ID still exists in the main items hash
+			if redis.call('EXISTS', prefix_ids .. id) == 0 then
+				table.insert(rems, id)
+			end
 		end
-	end)
-		
+	)
+	
 	-- remove hash keys which no longer exist
 	if #rems > 0 then
-		for from, to in store_batches(#rems) do
+		for from, to in store_batches(#rems) do -- security measure for unpack
 			redis.call('HDEL', prefix_tag_ids .. tag, unpack(rems, from, to))
 		end
 	end
 	
-	return #rems -- return count of deleted ids
+	return {#rems, cursor_new} -- return count of deleted IDs and the new cursor for the next batch scan
 end
 redis.register_function('[prefix]store_clean_tag', store_clean_tag)
 
