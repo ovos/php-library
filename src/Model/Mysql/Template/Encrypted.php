@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Model\Mysql\Template;
 
 use Ovos\ArrayObject;
+use Ovos\Exception\MissingException\MissingConfigException;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
 use Override;
@@ -65,7 +66,15 @@ class Encrypted extends Template
 	
 	public function getEncryptionConfig(): ?ArrayObject
 	{
-		return $this->config->database->encryption;
+		$config = $this->config->database->encryption;
+		
+		if($config === null)
+		{
+			throw new MissingConfigException(
+				'"database.encryption" config section is missing.');
+		}
+		
+		return $config;
 	}
 	
 	public function encrypt(
