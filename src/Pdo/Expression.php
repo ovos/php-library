@@ -11,24 +11,17 @@ namespace Ovos\Pdo;
  */
 class Expression
 {
-	/**
-	 * @var string
-	 */
-	protected string $_value;
+	protected string $value;
 	
-	/**
-	 * @param string $value
-	 */
-	public function __construct(string $value)
+	public function __construct(
+		string $value,
+	)
 	{
-		$this->_value = $value;
+		$this->value = $value;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
-		return $this->_value;
+		return $this->value;
 	}
 }

@@ -21,73 +21,51 @@ use function random_bytes;
  */
 class Encryptor
 {
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_method;
+	protected ?string $method;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_key;
+	protected string $key;
 	
-	/**
-	 * @param string $key
-	 * @param ?string $method (optional)
-	 */
-	public function __construct(string $key, ?string $method = null)
+	public function __construct(
+		string $key,
+		?string $method = null,
+	)
 	{
 		$this->setKey($key);
 		$this->setMethod($method);
 	}
 	
-	/**
-	 * @param ?string $method
-	 * 
-	 * @return self
-	 */
-	public function setMethod(?string $method): self
+	public function setMethod(
+		?string $method,
+	): static
 	{
-		$this->_method = $method;
+		$this->method = $method;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getMethod(): ?string
 	{
-		return $this->_method;
+		return $this->method;
 	}
 	
-	/**
-	 * @param string $key
-	 * 
-	 * @return self
-	 */
-	public function setKey($key): self
+	public function setKey(
+		string $key,
+	): static
 	{
-		$this->_key = $key;
+		$this->key = $key;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getKey(): string
 	{
-		return $this->_key;
+		return $this->key;
 	}
 	
-	/**
-	 * @param ?string $string
-	 * @param ?string $method
-	 * 
-	 * @return ?string
-	 */
-	public function encrypt(?string $string, ?string $method = null): ?string
+	public function encrypt(
+		?string $string,
+		?string $method = null,
+	): ?string
 	{
 		if($string === null)
 		{
@@ -122,12 +100,9 @@ class Encryptor
 		return $string ? base64_encode($string) : null;
 	}
 	
-	/**
-	 * @param ?string $string
-	 * 
-	 * @return ?string
-	 */
-	public function decrypt(?string $string): ?string
+	public function decrypt(
+		?string $string,
+	): ?string
 	{
 		if($string === null)
 		{
@@ -148,13 +123,10 @@ class Encryptor
 		return $string ?: null;
 	}
 	
-	/**
-	 * @param array $patterns
-	 * @param array $data
-	 * 
-	 * @return array
-	 */
-	public function encryptArray(array $patterns, array &$data): array
+	public function encryptArray(
+		array $patterns,
+		array &$data,
+	): array
 	{
 		foreach($data as $key => &$value)
 		{

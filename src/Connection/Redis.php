@@ -5,6 +5,7 @@ namespace Ovos\Connection;
 
 use Ovos\ArrayObject;
 use Ovos\Connection;
+use Override;
 use Redis as RedisClient;
 use RedisException;
 
@@ -24,126 +25,93 @@ class Redis extends Connection
 {
 	/**
 	 * Redis object
-	 *
-	 * @var ?RedisClient
 	 */
-	protected ?RedisClient $_client = null;
+	protected ?RedisClient $client = null;
 	
-	/**#@+
-	 * Timeouts
-	 */
+	// Timeouts
 	public const string TIMEOUT_READ = 'read';
 	public const string TIMEOUT_READ_LONG = 'long';
 	public const string TIMEOUT_READ_CUSTOM = 'custom';
-	/**#@-*/
 	
 	/**
 	 * Connect timeout
 	 * Unit: seconds
-	 * 
-	 * @var float
 	 */
-	protected float $_connectTimeout = 1;
+	protected float $connectTimeout = 1;
 	
 	/**
 	 * Read timeout for light operations
 	 * Unit: seconds
-	 *  
-	 * @var float
 	 */
-	protected float $_readTimeout = 1;
+	protected float $readTimeout = 1;
 	
 	/**
 	 * Read timeout for long operations
 	 * Unit: seconds
-	 * 
-	 * @var float
 	 */
-	protected float $_readTimeoutLong = 10;
+	protected float $readTimeoutLong = 10;
 	
 	/**
 	 * Slow log - logs slow Redis queries into file
-	 * 
-	 * @var bool
 	 */
-	protected bool $_slowLogEnabled = false;
+	protected bool $slowLogEnabled = false;
 	
 	/**
 	 * Log queries slower than x seconds
-	 * 
-	 * @var float
 	 */
-	protected float $_slowLogThreshold = 2.0;
+	protected float $slowLogThreshold = 2.0;
 	
 	/**
 	 * Log queries into a file with this filename
-	 * 
-	 * @var string
 	 */
-	protected string $_slowLogFilename = 'redis_slow';
+	protected string $slowLogFilename = 'redis_slow';
 	
-	/**
-	 * @param ArrayObject $config
-	 */
 	public function __construct(ArrayObject $config)
 	{
 		parent::__construct($config);
 		
 		// initialize timeout values taking in consideration default values set in this class
-		$this->_connectTimeout = (float)
+		$this->connectTimeout = (float)
 		(
-			$this->_config->connect_timeout
-			?? $this->_config->timeout
-			?? $this->_connectTimeout
+			$this->config->connect_timeout
+			?? $this->config->timeout
+			?? $this->connectTimeout
 		);
 		
-		$this->_readTimeout = (float)
+		$this->readTimeout = (float)
 		(
-			$this->_config->read_timeout
-			?? $this->_readTimeout
+			$this->config->read_timeout
+			?? $this->readTimeout
 		);
 		
-		$this->_readTimeoutLong = (float)
+		$this->readTimeoutLong = (float)
 		(
-			$this->_config->read_timeout_long
-			?? $this->_readTimeoutLong
+			$this->config->read_timeout_long
+			?? $this->readTimeoutLong
 		);
 		
-		$this->_initSlowLog();
+		$this->initSlowLog();
 	}
 	
-	/**
-	 * @return ?RedisClient
-	 */
+	#[Override]
 	public function getClient(): ?RedisClient
 	{
-		return $this->_client;
+		return parent::getClient();
 	}
 	
-	/**
-	 * @return ?RedisClient
-	 */
-	public function getConnectedClient(): ?RedisClient
-	{
-		return parent::getConnectedClient();
-	}
-	
-	/**
-	 * @return bool
-	 */
 	public function connect(): bool
 	{
-		$port = (int)($this->_config->port ?? 6379);
+		$port = (int)($this->config->port ?? 6379);
 		
 		$connectionOptions = [
-			'host' => $this->_config->host,
+			'host' => $this->config->host,
 			'port' => $port,
-			'connectTimeout' => $this->_connectTimeout,
+			'connectTimeout' => $this->connectTimeout,
 		];
-		$this->_client = new RedisClient($connectionOptions);
+		$this->client = new RedisClient($connectionOptions);
 		
 		$options = [
-			RedisClient::OPT_READ_TIMEOUT => $this->_readTimeout,
+			RedisClient::OPT_READ_TIMEOUT => $this->readTimeout,
 			RedisClient::OPT_SERIALIZER => RedisClient::SERIALIZER_NONE,
 			RedisClient::OPT_REPLY_LITERAL => true, // https://github.com/phpredis/phpredis/issues/1550
 			RedisClient::OPT_MAX_RETRIES => 0, // do not limit the max retries, let the timeout handle it
@@ -155,23 +123,23 @@ class Redis extends Connection
 		// set options
 		foreach($options as $optionName => $optionValue)
 		{
-			$this->_client->setOption($optionName, $optionValue);
+			$this->client->setOption($optionName, $optionValue);
 		}
 		
 		try
 		{
-			$this->_client->select($this->_config->database);
+			$this->client->select($this->config->database);
 		}
 		catch(RedisException $exception)
 		{
-			$this->_client = null;
-			$this->_logger->log
+			$this->client = null;
+			$this->logger->log
 			(
 				new RedisException
 				(
 					sprintf('Could not connect to redis server "%s" on port "%s".',
-						$this->_config->host,
-						$this->_config->port
+						$this->config->host,
+						$this->config->port
 					), 
 					0,
 					$exception, // previous
@@ -184,46 +152,32 @@ class Redis extends Connection
 		return true;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function disconnect(): bool
 	{
-		return $this->_client->close();
+		return $this->client->close();
 	}
 	
-	/**
-	 * @return void
-	 */
-	protected function _initSlowLog(): void
+	protected function initSlowLog(): void
 	{
-		if(($slowLog = $this->_config->offsetGet('slow_log')) === null)
+		if(($slowLog = $this->config->offsetGet('slow_log')) === null)
 		{
 			return;
 		}
 		
 		if($slowLogEnabled = $slowLog->offsetGet('enabled'))
 		{
-			$this->_slowLogEnabled = $slowLogEnabled;
+			$this->slowLogEnabled = $slowLogEnabled;
 		}
 		if($slowLogThreshold = $slowLog->offsetGet('threshold'))
 		{
-			$this->_slowLogThreshold = $slowLogThreshold;
+			$this->slowLogThreshold = $slowLogThreshold;
 		}
 		if($slowLogFilename = $slowLog->offsetGet('filename'))
 		{
-			$this->_slowLogFilename = $slowLogFilename;
+			$this->slowLogFilename = $slowLogFilename;
 		}
 	}
 	
-	/**
-	 * @param callable $callback
-	 * @param string $function
-	 * @param array $keys
-	 * @param array $args
-	 *
-	 * @return mixed
-	 */
 	public function slowLog(
 		callable $callback,
 		string $function,
@@ -231,29 +185,29 @@ class Redis extends Connection
 		array $args,
 	): mixed
 	{
-		if($this->_slowLogEnabled)
+		if($this->slowLogEnabled)
 		{
 			$start = microtime(true);
 		}
 		
 		$result = $callback($function, $keys, $args);
 		
-		if($this->_slowLogEnabled)
+		if($this->slowLogEnabled)
 		{
 			$end = microtime(true);
 			$diff = $end - $start;
 			
-			if($diff >= $this->_slowLogThreshold)
+			if($diff >= $this->slowLogThreshold)
 			{
 				$message = sprintf('%s: %s = %ss' . PHP_EOL,
 					date('Y-m-d H:i:s'),
 					$function,
 					$diff
 				);
-				$this->_logger->log($message);
+				$this->logger->log($message);
 				
 				$filename = sprintf('%s_%s.txt',
-					$this->_slowLogFilename,
+					$this->slowLogFilename,
 					date('Y_m_d')
 				);
 				
@@ -285,12 +239,6 @@ class Redis extends Connection
 	
 	/**
 	 * Can be used to extend and restore timeout to the original value
-	 * 
-	 * @param string $timeout
-	 * @param ?float $timeoutValue
-	 * @param bool $luaScript
-	 *
-	 * @return bool
 	 */
 	public function toggleReadTimeout(
 		string $timeout = self::TIMEOUT_READ,
@@ -305,9 +253,9 @@ class Redis extends Connection
 		
 		$readTimeout = match($timeout)
 		{
-			self::TIMEOUT_READ_LONG => $this->_readTimeoutLong,
+			self::TIMEOUT_READ_LONG => $this->readTimeoutLong,
 			self::TIMEOUT_READ_CUSTOM => $timeoutValue,
-			default => $this->_readTimeout,
+			default => $this->readTimeout,
 		};
 		
 		$client->setOption(RedisClient::OPT_READ_TIMEOUT, $readTimeout);

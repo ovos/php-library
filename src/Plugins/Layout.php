@@ -6,6 +6,7 @@ namespace Ovos\Plugins;
 use Ovos\Controller\Plugin;
 use Ovos\Response;
 use Ovos\View;
+use Override;
 
 use function get_class;
 
@@ -17,84 +18,64 @@ use function get_class;
  */
 class Layout extends Plugin
 {
-	/**
-	 * @var string
-	 */
 	public const string SYMBOL = 'layout';
 	
-	/**
-	 * @var string
-	 */
 	public const string CONTENT_PLACEHOLDER = 'content';
 	
-	/**
-	 * @var View
-	 */
-	protected View $_layout;
+	protected View $layout;
 	
 	/**
 	 * Automatically create these placeholders
-	 *
-	 * @var array
 	 */
-	protected array $_placeholders = [];
+	protected array $placeholders = [];
 	
-	/**
-	 * @param string $layout
-	 */
-	public function __construct(string $layout)
+	public function __construct(
+		string $layout,
+	)
 	{
 		parent::__construct();
 		
 		// disable on XMLHttpRequest
-		if($this->_request->isXmlHttpRequest())
+		if($this->request->isXmlHttpRequest())
 		{
 			$this->disable();
 			return;
 		}
 		
-		$this->_layout = new View\Layout($layout);
-		$this->_layout::placeholders()->clear();
+		$this->layout = new View\Layout($layout);
+		$this->layout::placeholders()->clear();
 		
 		// automatically create these placeholders
-		foreach($this->_placeholders as $placeholder)
+		foreach($this->placeholders as $placeholder)
 		{
-			$this->_layout::placeholders()->{$placeholder};
+			$this->layout::placeholders()->{$placeholder};
 		}
 	}
 	
-	/**
-	 * @return View
-	 */
 	public function getLayout(): View
 	{
-		return $this->_layout;
+		return $this->layout;
 	}
 	
-	/**
-	 * @return void
-	 */
+	#[Override] 
 	public function preDispatch(): void
 	{
 	}
 	
-	/**
-	 * @return void
-	 */
+	#[Override] 
 	public function postDispatch(): void
 	{
-		foreach($this->_layout::placeholders()->toArray() as $placeholder => $value)
+		foreach($this->layout::placeholders()->toArray()
+			as $placeholder => $value)
 		{
-			$this->_layout->$placeholder = $value;
+			$this->layout->$placeholder = $value;
 		}
 		
-		$response = $this->_app->getResponse();
-		if($response instanceof Response
-			&& get_class($response) === Response\Html::class)
+		$response = $this->app->getResponse();
+		if(get_class($response) === Response\Html::class)
 		{
-			/** @var Response\Html $response */
-			$this->_layout->{self::CONTENT_PLACEHOLDER}.= $response->get();
-			$response->set($this->_layout->__toString());
+			$this->layout->{self::CONTENT_PLACEHOLDER}.= $response->get();
+			$response->set($this->layout->__toString());
 		}
 	}
 }

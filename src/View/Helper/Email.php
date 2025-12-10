@@ -14,31 +14,22 @@ use Ovos\Strings;
  */
 class Email extends Helper
 {
-	/**
-	 * @var string
-	 */
 	public const string MAILTO = '&#109;&#97;&#105;&#108;&#116;&#111;&#58;';
 	
-	/**
-	 * @var array
-	 */
-	protected array $_cache = [];
+	protected array $cache = [];
 	
-	/**
-	 * @param string $email
-	 * @param bool $mailto
-	 *
-	 * @return string
-	 */
-	public function protect(string $email, bool $mailto = false): string
+	public function protect(
+		string $email,
+		bool $mailto = false,
+	): string
 	{
-		if(array_key_exists($email, $this->_cache) === false)
+		if(array_key_exists($email, $this->cache) === false)
 		{
-			$this->_cache[$email] = Strings::entities($email);
+			$this->cache[$email] = Strings::entities($email);
 		}
 		
 		return $mailto
-			? self::MAILTO . $this->_cache[$email]
-			: $this->_cache[$email];
+			? self::MAILTO . $this->cache[$email]
+			: $this->cache[$email];
 	}
 }

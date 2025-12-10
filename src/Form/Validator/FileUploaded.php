@@ -18,21 +18,18 @@ use function array_search;
  */
 class FileUploaded extends Validator
 {
-	/**#@+
-	 * Errors
-	 */
+	// Errors
 	public const string ERROR_INPUT_INVALID = 'upload_input_invalid';
 	public const string ERROR_NO_FILE = 'upload_no_file';
 	public const string ERROR_SIZE_EXCEEDED = 'upload_size_exceeded';
 	public const string ERROR_UNKNOWN = 'upload_unknown';
 	public const string ERROR_EMPTY = 'upload_empty';
 	public const string ERROR_FORBIDDEN_TYPE = 'upload_forbidden_type';
-	/**#@-*/
 	
 	/**
 	 * @var string[]
 	 */
-	protected array $_messages =
+	protected array $messages =
 	[
 		self::ERROR_INPUT_INVALID => 'Invalid input parameters.',
 		self::ERROR_NO_FILE => 'No file sent.',
@@ -42,12 +39,9 @@ class FileUploaded extends Validator
 		self::ERROR_FORBIDDEN_TYPE => 'Forbidden type.',
 	];
 	
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	public function isValid(mixed $value): bool
+	public function isValid(
+		mixed $value,
+	): bool
 	{
 		$id = $this->getElement()->getId();
 		
@@ -103,13 +97,10 @@ class FileUploaded extends Validator
 		
 		return true;
 	}
-
-	/**
-	 * @param Error $error
-	 * 
-	 * @return bool
-	 */
-	public function error(Error $error): bool
+	
+	public function error(
+		Error $error,
+	): bool
 	{
 		$this->addError($error);
 		

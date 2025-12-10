@@ -13,260 +13,176 @@ use function filter_var;
  */
 class Request
 {
-	/**#@+
-	 * Methods
-	 * 
-	 * @var string
-	 */
+	// Methods
 	public const string METHOD_GET = 'GET';
 	public const string METHOD_POST = 'POST';
 	public const string METHOD_PUT = 'PUT';
 	public const string METHOD_DELETE = 'DELETE';
 	public const string METHOD_HEAD = 'HEAD';
-	/**#@-*/
 	
-	/**
-	 * @var ?Url
-	 */
-	protected ?Url $_url = null;
+	protected ?Url $url = null;
 	
 	/**
 	 * The locale
-	 *
-	 * @var ?Locale
 	 */
-	protected ?Locale $_locale = null;
+	protected ?Locale $locale = null;
 	
 	/**
 	 * The controller
-	 * 
-	 * @var string
 	 */
-	protected string $_controller = 'index';
+	protected string $controller = 'index';
 	
 	/**
 	 * The controller class
-	 *
-	 * @var string
 	 */
-	protected string $_controllerClass = 'Index';
+	protected string $controllerClass = 'Index';
 	
-	/**
-	 * @var ?Controller
-	 */
-	protected ?Controller $_controllerInstance = null;
+	protected ?Controller $controllerInstance = null;
 	
 	/**
 	 * The action
-	 *
-	 * @var string
 	 */
-	protected string $_action = 'index';
+	protected string $action = 'index';
 	
 	/**
 	 * The action method
-	 *
-	 * @var string
 	 */
-	protected string $_actionMethod = 'index';
+	protected string $actionMethod = 'index';
 	
-	/**
-	 * Params
-	 *
-	 * @var array
-	 */
-	protected array $_params = [];
+	protected array $params = [];
 	
-	/**
-	 * Construct
-	 */
 	public function __construct()
 	{
 	}
 	
-	/**
-	 * @return Url
-	 */
 	public function getUrl(): Url
 	{
-		if($this->_url === null)
+		if($this->url === null)
 		{
-			$this->_url = new Url;
+			$this->url = new Url;
 		}
 		
-		return $this->_url;
+		return $this->url;
 	}
 	
-	/**
-	 * @param Locale $locale
-	 *
-	 * @return self
-	 */
-	public function setLocale(Locale $locale): self
+	public function setLocale(
+		Locale $locale,
+	): static
 	{
-		$this->_locale = $locale;
+		$this->locale = $locale;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return Locale
-	 */
 	public function getLocale(): Locale
 	{
-		if($this->_locale === null)
+		if($this->locale === null)
 		{
-			$this->_locale = $this->getUrl()->getLocale();
+			$this->locale = $this->getUrl()->getLocale();
 		}
 		
-		return $this->_locale;
+		return $this->locale;
 	}
 	
-	/**
-	 * @param string $controller
-	 *
-	 * @return self
-	 */
-	public function setController(string $controller): self
+	public function setController(
+		string $controller,
+	): static
 	{
-		$this->_controller = $controller;
+		$this->controller = $controller;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getController(): string
 	{
-		return $this->_controller;
+		return $this->controller;
 	}
 	
-	/**
-	 * @param string $class
-	 *
-	 * @return self
-	 */
-	public function setControllerClass(string $class): self
+	public function setControllerClass(
+		string $class,
+	): static
 	{
-		$this->_controllerClass = $class;
+		$this->controllerClass = $class;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getControllerClass(): string
 	{
-		return $this->_controllerClass;
+		return $this->controllerClass;
 	}
 	
-	/**
-	 * @param Controller $instance
-	 *
-	 * @return self
-	 */
-	public function setControllerInstance(Controller $instance): self
+	public function setControllerInstance(
+		Controller $instance,
+	): static
 	{
-		$this->_controllerInstance = $instance;
+		$this->controllerInstance = $instance;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return Controller
-	 */
 	public function getControllerInstance(): Controller
 	{
-		return $this->_controllerInstance;
+		return $this->controllerInstance;
 	}
 	
-	/**
-	 * @param string $action
-	 *
-	 * @return self
-	 */
-	public function setAction(string $action): self
+	public function setAction(
+		string $action,
+	): static
 	{
-		$this->_action = $action;
+		$this->action = $action;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getAction(): string
 	{
-		return $this->_action;
+		return $this->action;
 	}
 	
-	/**
-	 * @param string $actionMethod
-	 *
-	 * @return self
-	 */
-	public function setActionMethod(string $actionMethod): self
+	public function setActionMethod(
+		string $actionMethod,
+	): static
 	{
-		$this->_actionMethod = $actionMethod;
+		$this->actionMethod = $actionMethod;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getActionMethod(): string
 	{
-		return $this->_actionMethod;
+		return $this->actionMethod;
 	}
 	
-	/**
-	 * @param mixed $param
-	 *
-	 * @return self
-	 */
-	public function addParam(mixed $param): self
+	public function addParam(
+		mixed $param,
+	): static
 	{
-		$this->_params[] = $param;
+		$this->params[] = $param;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param array $params
-	 *
-	 * @return self
-	 */
-	public function setParams(array $params = []): self
+	public function setParams(
+		array $params = [],
+	): static
 	{
-		$this->_params = $params;
+		$this->params = $params;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getParams(): array
 	{
-		return $this->_params;
+		return $this->params;
 	}
 	
-	/**
-	 * @param ?string $name
-	 * @param ?string $default
-	 * @see http://php.net/filter_var
-	 * @param ?int $filter
-	 * @param int $options
-	 *
-	 * @return null|array|string
-	 */
-	public function get(?string $name = null,
+	public function get(
+		?string $name = null,
 		?string $default = null,
 		?int $filter = null,
-		int $options = FILTER_NULL_ON_FAILURE) : null|array|string // filter_var arguments
+		int $options = FILTER_NULL_ON_FAILURE, // @see http://php.net/filter_var
+	): null|array|string
 	{
 		if($name === null)
 		{
@@ -286,26 +202,19 @@ class Request
 		return $_GET[$name];
 	}
 	
-	/**
-	 * @param ?string $name
-	 * @param null|string|array|int $default
-	 * @see http://php.net/filter_var
-	 * @param ?int $filter
-	 * @param int $options
-	 *
-	 * @return null|array|string
-	 */
-	public function getPost(?string $name = null,
+	public function getPost(
+		?string $name = null,
 		null|string|array|int $default = null,
 		?int $filter = null,
-		int $options = FILTER_NULL_ON_FAILURE): null|array|string // filter_var arguments
+		int $options = FILTER_NULL_ON_FAILURE, // http://php.net/filter_var
+	): null|array|string
 	{
 		if($name === null)
 		{
 			return $_POST;
 		}
 		
-		if(!isset($_POST[$name]))
+		if(isset($_POST[$name]) === false)
 		{
 			if($filter === null)
 			{
@@ -318,14 +227,11 @@ class Request
 		return $_POST[$name];
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return ?string
-	 */
-	public function getServer(string $name): ?string
+	public function getServer(
+		string $name,
+	): ?string
 	{
-		if(!isset($_SERVER[$name]))
+		if(isset($_SERVER[$name]) === false)
 		{
 			return null;
 		}
@@ -333,51 +239,33 @@ class Request
 		return $_SERVER[$name];
 	}
 	
-	/**
-	 * @param string $method
-	 *
-	 * @return bool
-	 */
-	public function isMethod(string $method): bool
+	public function isMethod(
+		string $method,
+	): bool
 	{
 		return $this->getServer('REQUEST_METHOD') === $method;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isGet(): bool
 	{
 		return $this->isMethod(self::METHOD_GET);
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isPost(): bool
 	{
 		return $this->isMethod(self::METHOD_POST);
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isPut(): bool
 	{
 		return $this->isMethod(self::METHOD_PUT);
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isDelete(): bool
 	{
 		return $this->isMethod(self::METHOD_DELETE);
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isHead(): bool
 	{
 		return $this->isMethod(self::METHOD_HEAD);
@@ -387,8 +275,6 @@ class Request
 	 * Is the request a JavaScript XMLHttpRequest?
 	 *
 	 * Supports emulated method with X_REQUESTED_WITH POST param
-	 *
-	 * @return bool
 	 */
 	public function isXmlHttpRequest(): bool
 	{
@@ -397,9 +283,7 @@ class Request
 	}
 	
 	/**
-	 * Is the application run from CLI (command line interface)
-	 *
-	 * @return bool
+	 * Is the application run from CLI (command line interface)?
 	 */
 	public function isCli(): bool
 	{
@@ -408,8 +292,6 @@ class Request
 	
 	/**
 	 * Is the application run from HTTP?
-	 *
-	 * @return bool
 	 */
 	public function isHttp(): bool
 	{
@@ -418,8 +300,6 @@ class Request
 	
 	/**
 	 * Is the request secure?
-	 *
-	 * @return bool
 	 */
 	public function isSecure(): bool
 	{
@@ -440,8 +320,6 @@ class Request
 	
 	/**
 	 * Is this an HTTP debug mode?
-	 *
-	 * @return bool
 	 */
 	public function isHttpDebug(): bool
 	{

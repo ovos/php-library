@@ -14,31 +14,26 @@ use Ovos\Form\Validator;
  */
 class NotHuman extends Validator
 {
-	/**#@+
-	 * Errors
-	 */
+	// Errors
 	public const string ERROR_NOT_HUMAN = 'not_human';
-	/**#@-*/
 	
 	/**
 	 * @var string[]
 	 */
-	protected array $_messages =
+	protected array $messages =
 	[
 		self::ERROR_NOT_HUMAN => '"%s" is not valid.',
 	];
 	
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	public function isValid(mixed $value): bool
+	public function isValid(
+		mixed $value,
+	): bool
 	{
 		$valid = $value === '';
 		if($valid === false)
 		{
-			$error = new Error(self::ERROR_NOT_HUMAN, sprintf($this->getMessage(self::ERROR_NOT_HUMAN),
+			$error = new Error(self::ERROR_NOT_HUMAN,
+				sprintf($this->getMessage(self::ERROR_NOT_HUMAN),
 				$this->getElement()->getName()
 			));
 			$this->addError($error);

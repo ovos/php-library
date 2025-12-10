@@ -17,50 +17,38 @@ class Placeholders extends Helper
 	/**
 	 * @var Placeholder[]
 	 */
-	protected array $_items = [];
+	protected array $items = [];
 	
-	/**
-	 * @param string $placeholder
-	 *
-	 * @return Placeholder
-	 */
-	public function __get(string $placeholder): Placeholder
+	public function __get(
+		string $placeholder,
+	): Placeholder
 	{
-		if(!isset($this->_items[$placeholder]))
+		if(isset($this->items[$placeholder]) === false)
 		{
-			$this->_items[$placeholder] = new Placeholder;
+			$this->items[$placeholder] = new Placeholder;
 		}
 		
-		return $this->_items[$placeholder];
+		return $this->items[$placeholder];
 	}
 	
-	/**
-	 * @param string $placeholder
-	 *
-	 * @return void
-	 */
-	public function __unset(string $placeholder): void
+	public function __unset(
+		string $placeholder,
+	): void
 	{
-		if(isset($this->_items[$placeholder]))
+		if(isset($this->items[$placeholder]))
 		{
-			unset($this->_items[$placeholder]);
+			unset($this->items[$placeholder]);
 		}
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function toArray(): array
 	{
-		return $this->_items;
+		return $this->items;
 	}
 	
-	/**
-	 * @return self
-	 */
-	public function clear(): self
+	public function clear(): static
 	{
-		$this->_items = [];
+		$this->items = [];
 		
 		return $this;
 	}

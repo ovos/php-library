@@ -15,91 +15,61 @@ use function array_values;
  */
 class Command
 {
-	/**
-	 * Application
-	 *
-	 * @var Application
-	 */
-	protected Application $_app;
+	protected Application $app;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_name;
+	protected string $name;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_params;
+	protected array $params;
 	
-	/**
-	 * @param string $name
-	 * @param array $params
-	 */
 	public function __construct(string $name, array $params = [])
 	{
-		$this->_app = app();
+		$this->app = app();
 		
 		$this->setName($name);
 		$this->setParams($params);
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return self
-	 */
-	public function setName(string $name): self
+	public function setName(string $name): static
 	{
-		$this->_name = $name;
+		$this->name = $name;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param array $params
-	 *
-	 * @return self
-	 */
-	public function setParams(array $params): self
+	public function setParams(array $params): static
 	{
-		$this->_params = $params;
+		$this->params = $params;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ArrayObject
-	 */
 	public function getConfig(): ArrayObject
 	{
-		return $this->_app->getConfig()->commands;
+		return $this->app->getConfig()->commands;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function get(): string
 	{
 		$commands = $this->getConfig();
-		if(isset($commands[$this->_name]) === false)
+		if(isset($commands[$this->name]) === false)
 		{
 			return '';
 		}
 		
-		$command = $commands[$this->_name];
+		$command = $commands[$this->name];
 		
-		if(count($this->_params))
+		if(count($this->params))
 		{
-			$command = str_replace(array_keys($this->_params), array_values($this->_params), $command);
+			$command = str_replace(
+				array_keys($this->params),
+				array_values($this->params),
+				$command,
+			);
 		}
 		
 		return $command;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
 		return $this->get();

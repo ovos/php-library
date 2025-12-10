@@ -9,6 +9,7 @@ use Ovos\Store\Redisearch as Store;
 use Ovos\Test\Internal;
 use Ovos\Test\Store\TraitRedis;
 use ReflectionClass;
+use Override;
 
 use function sprintf;
 
@@ -22,37 +23,29 @@ class Redisearch extends Benchmark
 {
 	use TraitRedis;
 	
-	/**
-	 * @var int
-	 */
 	public const int ITEMS = 10000;
 	
-	/**
-	 * @var int
-	 */
 	public const int TAGS_PER_ITEM = 20;
 	
-	/**
-	 * @var ?Store
-	 */
-	protected ?Store $_store = null;
+	protected ?Store $store = null;
 	
 	public function __construct()
 	{
-		$storeClass = $this->_cacheConfig->persistent->store;
-		$currentClass = (new ReflectionClass($this))->getShortName();
+		$storeClass = $this->cacheConfig->persistent->store;
+		$currentClass = (new ReflectionClass($this))
+			->getShortName();
 		if($storeClass !== $currentClass)
 		{
-			$this->setIsDisabled(true,
+			$this->setDisabled(true,
 				sprintf('"store" is set to "%s".', $storeClass)
 			);
 		}
 		
-		$this->_group = KeyValue::GROUP_BENCHMARKS;
-		$this->_store = $this->_getStore(Store::class);
+		$this->group = KeyValue::GROUP_BENCHMARKS;
+		$this->store = $this->getStore(Store::class);
 	}
 	
-	protected function _fill(): void
+	protected function fill(): void
 	{
 		$tags = [];
 		for($i = 1; $i <= self::TAGS_PER_ITEM; $i++)
@@ -62,7 +55,7 @@ class Redisearch extends Benchmark
 		
 		for($i = 1; $i <= self::ITEMS; $i++)
 		{
-			$this->_store->set('item' . $i, 'test', tags: $tags);
+			$this->store->set('item' . $i, 'test', tags: $tags);
 		}
 	}
 	
@@ -72,14 +65,14 @@ class Redisearch extends Benchmark
 	#[Internal]
 	public function prepare(): void
 	{
-		$this->_store->indexRebuild();
-		$this->_fill();
+		$this->store->indexRebuild();
+		$this->fill();
 	}
 	
 	public function invalidateTags(): void
 	{
 		$tags = ['tag1', 'tag2'];
-		$this->_store->invalidateTags($tags);
+		$this->store->invalidateTags($tags);
 	}
 	
 	/**
@@ -88,6 +81,16 @@ class Redisearch extends Benchmark
 	#[Internal]
 	public function finalize(): void
 	{
-		$this->_store->clear();
+		$this->store->clear();
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	#[Override]
+	public function deconstruct(): void
+	{
+		$this->connection->disconnect();
 	}
 }

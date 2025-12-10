@@ -20,11 +20,8 @@ class TypeCallable extends Register
 	use TraitParameters;
 	use TraitCallable;
 	
-	/**
-	 * @param callable $callable
-	 * @param array $parameters
-	 */
-	public function __construct(callable $callable,
+	public function __construct(
+		callable $callable,
 		array $parameters = [],
 	)
 	{

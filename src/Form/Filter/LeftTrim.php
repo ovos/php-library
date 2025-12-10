@@ -13,12 +13,9 @@ use function ltrim;
  */
 class LeftTrim extends Trim
 {
-	/**
-	 * @param mixed $value
-	 *
-	 * @return ?string
-	 */
-	public function filter(mixed $value): ?string
+	public function filter(
+		mixed $value,
+	): ?string
 	{
 		if($value === null)
 		{

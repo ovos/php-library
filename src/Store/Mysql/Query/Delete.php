@@ -13,16 +13,45 @@ use Ovos\Store\Mysql\Query;
  */
 class Delete extends Query
 {
-	/**
-	 * @return string
-	 */
+	// used for multi-table deletes
+	protected array $aliases = [];
+	
+	public function aliases(
+		array $aliases,
+	): static
+	{
+		$this->aliases = $aliases;
+		
+		return $this;
+	}
+	
 	public function getSql(): string
 	{
-		$sql = 'DELETE FROM ' . $this->_table . PHP_EOL;
-		
-		if($this->_conditions !== [])
+		$sql = 'DELETE' . PHP_EOL;
+		if($this->aliases !== [])
 		{
-			$sql.= 'WHERE ' . $this->_getConditionsSql($this->_conditions) . PHP_EOL;
+			$sql.= ' ' . implode(', ', $this->aliases);
+		}
+		$sql.= 'FROM ' . $this->getFrom() . PHP_EOL;
+		
+		if($this->leftJoins !== [])
+		{
+			$sql.= 'LEFT JOIN '
+				. implode(PHP_EOL . 'LEFT JOIN ', $this->leftJoins)
+				. PHP_EOL;
+		}
+		
+		if($this->innerJoins !== [])
+		{
+			$sql.= 'INNER JOIN '
+			. implode(PHP_EOL . 'INNER JOIN ', $this->innerJoins)
+			. PHP_EOL;
+		}
+		
+		if($this->conditions !== [])
+		{
+			$sql.= 'WHERE ' . $this->getConditionsSql($this->conditions)
+				. PHP_EOL;
 		}
 		
 		return $sql;

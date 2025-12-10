@@ -15,45 +15,32 @@ use function trim;
  */
 class Trim extends Filter
 {
-	/**
-	 * @var string
-	 */
-	protected string $_characterMask;
+	protected string $characterMask;
 	
-	/**
-	 * @param string $characterMask
-	 */
-	public function __construct(string $characterMask = " \t\n\r\0\x0B")
+	public function __construct(
+		string $characterMask = " \t\n\r\0\x0B",
+	)
 	{
 		$this->setCharacterMask($characterMask);
 	}
 	
-	/**
-	 * @param string $characterMask
-	 *
-	 * @return self
-	 */
-	public function setCharacterMask(string $characterMask): self
+	public function setCharacterMask(
+		string $characterMask,
+	): static
 	{
-		$this->_characterMask = $characterMask;
+		$this->characterMask = $characterMask;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getCharacterMask(): string
 	{
-		return $this->_characterMask;
+		return $this->characterMask;
 	}
 	
-	/**
-	 * @param mixed $value
-	 *
-	 * @return ?string
-	 */
-	public function filter(mixed $value): ?string
+	public function filter(
+		mixed $value,
+	): ?string
 	{
 		if($value === null)
 		{

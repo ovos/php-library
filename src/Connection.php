@@ -15,89 +15,50 @@ use Ovos\Service\Logger;
  */
 abstract class Connection
 {
-	/**
-	 * @var ?Logger
-	 */
 	#[Inject(Logger::SYMBOL)]
-	protected ?Logger $_logger = null;
+	protected ?Logger $logger = null;
 	
-	/**
-	 * @var ArrayObject
-	 */
 	#[Inject('config')]
 	#[InjectArrayObject('system', 'profilers')]
-	protected ArrayObject $_profilers;
+	protected ArrayObject $profilers;
 	
-	/**
-	 * @var ArrayObject
-	 */
-	protected ArrayObject $_config;
+	protected ArrayObject $config;
 	
-	/**
-	 * @param ArrayObject $config
-	 */
 	public function __construct(ArrayObject $config)
 	{
 		$this->setConfig($config);
 	}
 	
-	/**
-	 * @param ArrayObject $config
-	 * 
-	 * @return self
-	 */
-	public function setConfig(ArrayObject $config): self
+	public function setConfig(ArrayObject $config): static
 	{
-		$this->_config = $config;
+		$this->config = $config;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ArrayObject
-	 */
 	public function getConfig(): ArrayObject
 	{
-		return $this->_config;
+		return $this->config;
 	}
 	
-	/**
-	 * @return ?object
-	 */
-	abstract public function getClient(): ?object;
-	
-	/**
-	 * @return bool
-	 */
-	abstract public function connect(): bool;
-	
-	/**
-	 * @return ?object
-	 */
-	public function getConnectedClient(): ?object
+	public function getClient(): ?object
 	{
 		if($this->isConnected()
 			|| $this->connect())
 		{
-			return $this->getClient();
+			return $this->client;
 		}
 		
 		return null;
 	}
 	
-	/**
-	 * @return bool
-	 */
+	abstract public function connect(): bool;
+	
 	public function isConnected(): bool
 	{
-		return $this->_client !== null;
+		return $this->client !== null;
 	}
 	
-	/**
-	 * @param ArrayObject $config
-	 *
-	 * @return string
-	 */
 	public static function getId(ArrayObject $config): string
 	{
 		return (string)$config->database;
@@ -105,14 +66,10 @@ abstract class Connection
 	
 	/**
 	 * Logs events (messages/errors/exceptions)
-	 *
-	 * @param mixed ...$event
-	 *
-	 * @return self
 	 */
-	public function log(...$event): self
+	public function log(...$event): static
 	{
-		$this->_logger->log(...$event);
+		$this->logger->log(...$event);
 		
 		return $this;
 	}

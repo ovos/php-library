@@ -12,10 +12,9 @@ use ReflectionClass;
 use ReflectionMethod;
 use Throwable;
 
-use function count;
 use function array_map;
+use function count;
 use function in_array;
-use function is_subclass_of;
 use function is_bool;
 
 /**
@@ -26,81 +25,53 @@ use function is_bool;
  */
 class Runner
 {
-	/**
-	 * @var Container
-	 */
 	#[Inject]
-	protected Container $_container;
-
-	/**
-	 * @var string
-	 */
+	protected Container $container;
+	
 	public const string METHOD_ATTRIBUTE_INTERNAL = Internal::class;
 	
-	/**
-	 * @var ReflectionClass
-	 */
 	public ReflectionClass $class;
 	
-	/**
-	 * @var ?Test 
-	 */
-	protected ?Test $_test = null;
+	protected ?Test $test = null;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_testMethods = [];
+	protected array $testMethods = [];
 	
 	/**
 	 * @var Result[] 
 	 */
-	protected array $_results = [];
+	protected array $results = [];
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_filterClass = null;
+	protected ?string $filterClass = null;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_filterMethod = null;
+	protected ?string $filterMethod = null;
 	
-	/**
-	 * @param ReflectionClass $class
-	 */
-	public function __construct(ReflectionClass $class)
+	public function __construct(
+		ReflectionClass $class,
+	)
 	{
 		$this->class = $class;
-		$this->_testMethods = $this->_getTestMethods();
+		$this->testMethods = $this->getTestMethods();
 		
-		foreach($this->_testMethods as $method)
+		foreach($this->testMethods as $method)
 		{
-			$this->_results[] = new Result($class, $method);
+			$this->results[] = new Result($class, $method);
 		}
 	}
 	
-	/**
-	 * @param ?string $filterClass
-	 *
-	 * @return self
-	 */
-	public function filterClass(?string $filterClass): self
+	public function filterClass(
+		?string $filterClass,
+	): static
 	{
-		$this->_filterClass = $filterClass;
+		$this->filterClass = $filterClass;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param ?string $filterMethod
-	 *
-	 * @return self
-	 */
-	public function filterMethod(?string $filterMethod): self
+	public function filterMethod(
+		?string $filterMethod,
+	): static
 	{
-		$this->_filterMethod = $filterMethod;
+		$this->filterMethod = $filterMethod;
 		
 		return $this;
 	}
@@ -111,17 +82,17 @@ class Runner
 	public function run(): array
 	{
 		// skip the entire class
-		if($this->_filterClass !== null
-			&& $this->_filterClass !== $this->getClassName()
+		if($this->filterClass !== null
+			&& $this->filterClass !== $this->getClassName()
 		)
 		{
-			foreach($this->_results as $result)
+			foreach($this->results as $result)
 			{
 				// set SKIPPED on all results
 				$result->setResult(Result::RESULT_SKIPPED);
 			}
 			
-			return $this->_results;
+			return $this->results;
 		}
 		
 		// construct
@@ -131,35 +102,35 @@ class Runner
 		}
 		catch(Throwable $throwable)
 		{
-			foreach($this->_results as $result)
+			foreach($this->results as $result)
 			{
 				$result->setThrowable($throwable);
 				// set FAILED on all results
 				$result->setResult(Result::RESULT_FAILED);
 			}
 			
-			return $this->_results;
+			return $this->results;
 		}
 		
 		// if the test is disabled, set SKIPPED on all results
 		if($test->isDisabled())
 		{
-			foreach($this->_results as $result)
+			foreach($this->results as $result)
 			{
 				$result->setResult(Result::RESULT_SKIPPED);
 				$result->setReason($test->getReason());
 			}
 			
-			return $this->_results;
+			return $this->results;
 		}
 		
 		// instance successfully constructed, 
 		// each public method will have its own result
-		foreach($this->_results as $result)
+		foreach($this->results as $result)
 		{
 			// skip the method, only if the class is not specified or matches the current class
-			if($this->_filterMethod !== null
-				&& $this->_filterMethod !== $result->getMethodName()
+			if($this->filterMethod !== null
+				&& $this->filterMethod !== $result->getMethodName()
 			)
 			{
 				$result->setResult(Result::RESULT_SKIPPED);
@@ -226,45 +197,39 @@ class Runner
 		}
 		catch(Throwable $throwable)
 		{
-			foreach($this->_results as $result)
+			foreach($this->results as $result)
 			{
 				$result->setThrowable($throwable);
 				$result->setResult(Result::RESULT_FAILED);
 			}
 			
-			return $this->_results;
+			return $this->results;
 		}
 		
-		return $this->_results;
+		return $this->results;
 	}
 	
-	/**
-	 * @return Test
-	 */
 	public function getTestInstance(): Test
 	{
-		if($this->_test === null)
+		if($this->test === null)
 		{
 			/** @var Test $test */
-			$test = $this->_container
+			$test = $this->container
 				->injectClass($this->class->name);
 			
-			if(is_subclass_of($test, 'Ovos\Test') === false)
+			if($test instanceof Test === false)
 			{
 				throw new InvalidClassException(
 					'A class has to extend a "Ovos\Test" class.');
 			}
 			
-			$this->_test = $test;
+			$this->test = $test;
 		}
 		
-		return $this->_test;
+		return $this->test;
 	}
 	
-	/**
-	 * @return array
-	 */
-	protected function _getTestMethods(): array
+	protected function getTestMethods(): array
 	{
 		$methods = [];
 		$publicMethods = $this->class
@@ -282,7 +247,8 @@ class Runner
 			
 			$methodAttributes = $method->getAttributes();
 			$methodAttributesArray = array_map(
-				fn($attribute) => $attribute->getName(), $methodAttributes);
+				static fn($attribute) => $attribute->getName(), $methodAttributes
+			);
 			if(in_array(
 				self::METHOD_ATTRIBUTE_INTERNAL,
 				$methodAttributesArray, 
@@ -300,7 +266,7 @@ class Runner
 	
 	public function getCount(): int
 	{
-		return count($this->_results);
+		return count($this->results);
 	}
 	
 	/**
@@ -308,20 +274,14 @@ class Runner
 	 */
 	public function getResults(): array
 	{
-		return $this->_results;
+		return $this->results;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getClassName(): string
 	{
 		return $this->class->name;
 	}
-	
-	/**
-	 * @return string
-	 */
+
 	public function __toString()
 	{
 		return $this->class->name;

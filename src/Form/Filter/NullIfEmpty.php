@@ -13,13 +13,12 @@ use Ovos\Form\Filter;
  */
 class NullIfEmpty extends Filter
 {
-	/**
-	 * @param mixed $value
-	 *
-	 * @return mixed
-	 */
-	public function filter(mixed $value): mixed
+	public function filter(
+		mixed $value,
+	): mixed
 	{
-		return empty($value) ? null : $value;
+		return empty($value)
+			? null
+			: $value;
 	}
 }

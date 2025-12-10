@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace Ovos;
 
 use function count;
-use function str_replace;
-use function preg_replace;
 use function exec;
+use function preg_replace;
 use function sprintf;
+use function str_replace;
 
 /**
  * ShellCommand
@@ -17,38 +17,24 @@ use function sprintf;
  */
 class ShellCommand
 {
-	/**
-	 * @var string
-	 */
-	protected string $_command;
+	protected string $command;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_executedCommand;
+	protected string $executedCommand;
 	
-	/**
-	 * @var ?array
-	 */
-	protected ?array $_output = null;
+	protected ?array $output = null;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_exitStatus;
+	protected int $exitStatus;
 	
-	/**
-	 * @param string|Command $command
-	 */
-	public function __construct(string|Command $command)
+	public function __construct(
+		string|Command $command,
+	)
 	{
 		$this->setCommand($command);
 	}
 	
-	/**
-	 * @param string|Command $command
-	 */
-	public function setCommand(string|Command $command): void
+	public function setCommand(
+		string|Command $command,
+	): void
 	{
 		if($command instanceof Command)
 		{
@@ -60,33 +46,25 @@ class ShellCommand
 		// replace multiple spaces with a single space
 		$command = preg_replace('~(\s){2,}~', ' ', $command);
 		
-		$this->_command = $command;
+		$this->command = $command;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getCommand(): string
 	{
-		return $this->_command;
+		return $this->command;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getExecutedCommand(): string
 	{
-		return $this->_executedCommand;
+		return $this->executedCommand;
 	}
 	
 	/**
 	 * Executes a shell command with given arguments
-	 *
-	 * @param mixed ...$args
-	 *
-	 * @return bool
 	 */
-	public function execute(...$args): bool
+	public function execute(
+		...$args,
+	): bool
 	{
 		$command = $this->getCommand();
 		
@@ -96,28 +74,23 @@ class ShellCommand
 		}
 		
 		// execute the command
-		$this->_exitStatus = 0; // 0: success, 1: error
-		exec($command, $this->_output, $this->_exitStatus);
-		$this->_executedCommand = $command;
+		$this->exitStatus = 0; // 0: success, 1: error
+		exec($command, $this->output, $this->exitStatus);
+		$this->executedCommand = $command;
 		
-		return !$this->_exitStatus;
+		return !$this->exitStatus;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getExitStatus(): int
 	{
-		return $this->_exitStatus;
+		return $this->exitStatus;
 	}
 	
 	/**
 	 * Returns command output
-	 *
-	 * @return array
 	 */
 	public function getOutput(): array
 	{
-		return $this->_output;
+		return $this->output;
 	}
 }

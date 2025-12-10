@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException;
 use PDO;
 use ReflectionClass;
@@ -20,56 +21,51 @@ use function substr;
  */
 abstract class Migration
 {
-	/**#@+
-	 * Directions
-	 */
+	#[Inject]
+	protected Container $container;
+	
+	#[Inject]
+	protected Application $app;
+	
+	#[Inject]
+	protected ArrayObject $config;
+	
+	// Directions
 	public const string DIRECTION_UP = 'up';
 	public const string DIRECTION_DOWN = 'down';
-	/**#@-*/
 	
-	/**
-	 * @var ReflectionClass
-	 */
 	public ReflectionClass $class;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_sourceName = 'database';
+	protected string $sourceName = 'database';
 	
 	/**
 	 * A connection between PHP and a database server
-	 *
-	 * @var ?PDO
 	 */
-	protected ?PDO $_source = null;
+	protected ?PDO $source = null;
 	
-	/**
-	 * @param ReflectionClass $class
-	 */
-	public function __construct(ReflectionClass $class)
+	public function __construct(
+		ReflectionClass $class,
+	)
 	{
 		$this->class = $class;
 	}
 	
-	/**
-	 * @return PDO
-	 */
 	public function getSource(): PDO
 	{
-		if($this->_source === null)
+		if($this->source === null)
 		{
 			// get database connection
-			$this->_source = services()->database->get($this->_sourceName);
+			$this->source = $this->container
+				->getClass(Connections::class)
+				->get($this->sourceName)
+				->getClient();
 		}
 		
-		return $this->_source;
+		return $this->source;
 	}
 	
 	/**
 	 * Short for getSource
-	 *
-	 * @return PDO
 	 */
 	public function source(): PDO
 	{
@@ -80,8 +76,6 @@ abstract class Migration
 	abstract public function down(): void;
 	
 	/**
-	 * @return int|false
-	 *
 	 * @throws NotFoundException
 	 */
 	public function upSql(): int|false
@@ -90,8 +84,6 @@ abstract class Migration
 	}
 	
 	/**
-	 * @return int|false
-	 *
 	 * @throws NotFoundException
 	 */
 	public function downSql(): int|false
@@ -100,12 +92,11 @@ abstract class Migration
 	}
 	
 	/**
-	 * @param string $suffix
-	 *
-	 * @return int|false
 	 * @throws NotFoundException
 	 */
-	public function runSql(string $suffix): int|false
+	public function runSql(
+		string $suffix,
+	): int|false
 	{
 		$sqlFile = $this->getSqlFilepath($suffix);
 		$sql = file_get_contents($sqlFile);
@@ -127,12 +118,9 @@ abstract class Migration
 		return $result;
 	}
 	
-	/**
-	 * @param string $suffix
-	 *
-	 * @return ?string
-	 */
-	public function getSqlFilepath(string $suffix): ?string
+	public function getSqlFilepath(
+		string $suffix,
+	): ?string
 	{
 		$sqlFile = substr($this->class->getFileName(), 0, -4)
 			. sprintf('_%s.sql', $suffix);

@@ -6,84 +6,59 @@ namespace Ovos;
 use Ovos\Environment\Parser;
 
 /**
- * ArrayObject
+ * Environment
  *
  * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Environment
 {
-	/**#@+
-	 * Environments
-	 */
-	public const string ENV_PRODUCTION = 'production';
-	public const string ENV_FILE = '.env';
-	public const string ENV_KEY = 'ENV';
-	/**#@-*/
+	public const string PRODUCTION = 'production';
+	public const string FILE = '.env';
+	public const string KEY = 'ENV';
 	
-	/**
-	 * @var string 
-	 */
-	protected string $_env = self::ENV_PRODUCTION;
+	protected string $env = self::PRODUCTION;
 	
-	/**
-	 * @var array 
-	 */
-	protected array $_config;
+	protected array $config;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_flat;
+	protected array $flat;
 	
-	/**
-	 * @param array $config
-	 */
-	public function __construct(array $config = [])
+	public function __construct(
+		array $config = [],
+	)
 	{
-		$this->_config = $config;
-		if(isset($this->_config[self::ENV_KEY]))
+		$this->config = $config;
+		if(isset($this->config[self::KEY]))
 		{
-			$this->_env = $this->_config[self::ENV_KEY];
+			$this->env = $this->config[self::KEY];
 		}
 		
-		$this->_flat = Arrays::flatten($config);
+		$this->flat = Arrays::flatten($config);
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getEnv(): string
 	{
-		return $this->_env;
+		return $this->env;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getConfig(): array
 	{
-		return $this->_config;
+		return $this->config;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function asFlatArray(): array
 	{
-		return $this->_flat;
+		return $this->flat;
 	}
 	
 	/**
 	 * Parsing callback for YAML tag.
-	 *
-	 * @param mixed $value Data from the YAML file
-	 * @param string $tag Tag that triggered callback
-	 * @param int $flags Scalar entity style (see YAML_*_SCALAR_STYLE)
-	 *
-	 * @return mixed Value that YAML parser should emit for the given value
 	 */
-	public function getYamlTag(mixed $value, string $tag, int $flags): mixed
+	public function getYamlTag(
+		mixed $value, // data from the YAML file
+		string $tag, // tag that triggered callback
+		int $flags, // scalar entity style (see YAML_*_SCALAR_STYLE)
+	): mixed // value that YAML parser should emit for the given value
 	{
 		$default = null;
 		if(str_contains($value, '|'))
@@ -92,22 +67,19 @@ class Environment
 			$default = Parser::parseValue($default);
 		}
 		
-		if(isset($this->_flat[$value]))
+		if(isset($this->flat[$value]))
 		{
-			return $this->_flat[$value];
+			return $this->flat[$value];
 		}
 		
 		return $default;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getYamlTags(): array
 	{
 		return
 		[
-			'!' . self::ENV_KEY => [$this, 'getYamlTag'],
+			'!' . self::KEY => [$this, 'getYamlTag'],
 		];
 	}
 }

@@ -5,8 +5,8 @@ namespace Ovos;
 
 use Ovos\Terminal\Formatter;
 
-use function stream_get_line;
 use function fwrite;
+use function stream_get_line;
 
 /**
  * Terminal
@@ -16,14 +16,8 @@ use function fwrite;
  */
 class Terminal
 {
-	/**
-	 * @var string
-	 */
 	public const string SAPI_CLI = 'cli';
 	
-	/**
-	 * @return ?string
-	 */
 	public static function readLine(): ?string
 	{
 		$line = stream_get_line(STDIN, 1024, PHP_EOL);
@@ -38,13 +32,11 @@ class Terminal
 	
 	/**
 	 * Output the message string
-	 *
-	 * @param string $message
-	 * @param bool $markup
-	 *
-	 * @return void
 	 */
-	public static function output(string $message, bool $markup = false): void
+	public static function output(
+		string $message,
+		bool $markup = false,
+	): void
 	{
 		$message = self::getMessage($message, $markup);
 		
@@ -61,13 +53,11 @@ class Terminal
 	
 	/**
 	 * Parses color markers and returns a formatted message
-	 *
-	 * @param string $message
-	 * @param bool $markup
-	 *
-	 * @return string
 	 */
-	public static function getMessage(string $message, bool $markup = false): string
+	public static function getMessage(
+		string $message,
+		bool $markup = false,
+	): string
 	{
 		$message = PHP_SAPI === self::SAPI_CLI && $markup
 			? Formatter::handleMarkup($message)

@@ -10,7 +10,6 @@ use Ovos\View\Helper;
 use Ovos\View\Helper\Messages\Message;
 use Countable;
 
-use function Ovos\services;
 use function count;
 
 /**
@@ -21,71 +20,52 @@ use function count;
  */
 class Messages extends Helper implements Countable
 {
-	/**
-	 * @var string
-	 */
 	public const string SESSION_NAMESPACE = 'messages';
 	
-	/**
-	 * @var Session|Disabled
-	 */
-	protected Session|Disabled $_session;
+	protected Session|Disabled $session;
 	
 	/**
 	 * Internal namespace
-	 * 
-	 * @var ?string
 	 */
-	protected ?string $_namespace;
+	protected ?string $namespace;
 	
 	/**
 	 * @var ?Message[]
 	 */
-	protected ?array $_items = [];
+	protected ?array $items = [];
 	
-	/**
-	 */
 	public function __construct()
 	{
 		parent::__construct();
 		
-		$this->_session = services()->session;
-		if($this->_session !== null)
+		$this->session = $this->container->get(Session::SYMBOL);
+		if($this->session instanceof Session)
 		{
-			$this->_items = &$this->_session->{self::SESSION_NAMESPACE};
+			$this->items = &$this->session->{self::SESSION_NAMESPACE};
 		}
 	}
 	
-	/**
-	 * @param ?string $namespace
-	 * 
-	 * @return self
-	 */
-	public function messages(?string $namespace = null): self
+	public function messages(
+		?string $namespace = null,
+	): static
 	{
 		$this->setNamespace($namespace);
 		
 		return $this;
 	}
 	
-	/**
-	 * @param ?string $namespace
-	 *
-	 * @return self
-	 */
-	public function setNamespace(?string $namespace): self
+	public function setNamespace(
+		?string $namespace,
+	): static
 	{
-		$this->_namespace = $namespace;
+		$this->namespace = $namespace;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getNamespace(): ?string
 	{
-		return $this->_namespace;
+		return $this->namespace;
 	}
 	
 	/**
@@ -93,34 +73,28 @@ class Messages extends Helper implements Countable
 	 */
 	public function &getItems(): array
 	{
-		if($this->_items === null)
+		if($this->items === null)
 		{
-			$this->_items = [];
+			$this->items = [];
 		}
 		
-		if($this->_namespace === null)
+		if($this->namespace === null)
 		{
-			return $this->_items;
+			return $this->items;
 		}
 		
-		if(isset($this->_items[$this->_namespace]) === false)
+		if(isset($this->items[$this->namespace]) === false)
 		{
-			$this->_items[$this->_namespace] = [];
+			$this->items[$this->namespace] = [];
 		}
 		
-		return $this->_items[$this->_namespace];
+		return $this->items[$this->namespace];
 	}
-
-	/**
-	 * @param ?string $type
-	 * @param ?string $description
-	 * @param ?string $title
-	 *
-	 * @return Message
-	 */
-	public function addMessage(?string $type = null,
+	
+	public function addMessage(
+		?string $type = null,
 		?string $description = null,
-		?string $title = null
+		?string $title = null,
 	): Message
 	{
 		$message = new Message($type, $description, $title);
@@ -129,58 +103,50 @@ class Messages extends Helper implements Countable
 		return $message;
 	}
 	
-	/**
-	 * @param ?string $description
-	 * @param ?string $title
-	 * 
-	 * @return Message
-	 */
 	public function addSuccess(
 		?string $description = null,
-		?string $title = null): Message
+		?string $title = null,
+	): Message
 	{
-		return $this->addMessage(Message::TYPE_SUCCESS, $description, $title);
+		return $this->addMessage(Message::TYPE_SUCCESS, 
+			$description,
+			$title,
+		);
 	}
 	
-	/**
-	 * @param ?string $description
-	 * @param ?string $title
-	 * 
-	 * @return Message
-	 */
-	public function addInfo(?string $description = null,
-		?string $title = null): Message
+	public function addInfo(
+		?string $description = null,
+		?string $title = null,
+	): Message
 	{
-		return $this->addMessage(Message::TYPE_INFO, $description, $title);
+		return $this->addMessage(Message::TYPE_INFO,
+			$description,
+			$title,
+		);
 	}
 	
-	/**
-	 * @param ?string $description
-	 * @param ?string $title
-	 * 
-	 * @return Message
-	 */
-	public function addError(?string $description = null,
-		?string $title = null): Message
+	public function addError(
+		?string $description = null,
+		?string $title = null,
+	): Message
 	{
-		return $this->addMessage(Message::TYPE_ERROR, $description, $title);
+		return $this->addMessage(Message::TYPE_ERROR,
+			$description,
+			$title,
+		);
 	}
 	
-	/**
-	 * @param ?string $description
-	 * @param ?string $title
-	 * 
-	 * @return Message
-	 */
-	public function addWarning(?string $description = null,
-		?string $title = null): Message
+	public function addWarning(
+		?string $description = null,
+		?string $title = null,
+	): Message
 	{
-		return $this->addMessage(Message::TYPE_WARNING, $description, $title);
+		return $this->addMessage(Message::TYPE_WARNING,
+			$description,
+			$title,
+		);
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function hasSuccess(): bool
 	{
 		foreach($this->getItems() as $item)
@@ -194,9 +160,6 @@ class Messages extends Helper implements Countable
 		return false;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function hasError(): bool
 	{
 		foreach($this->getItems() as $item)
@@ -210,9 +173,6 @@ class Messages extends Helper implements Countable
 		return false;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
 		if($this->count() === 0)
@@ -226,9 +186,6 @@ class Messages extends Helper implements Countable
 		return $view->render();
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function count(): int
 	{
 		return count($this->getItems());
@@ -242,7 +199,7 @@ class Messages extends Helper implements Countable
 	public function toArray(): array
 	{
 		$items = $this->getItems(); // copy
-		$this->_items = null;
+		$this->items = null;
 		
 		return $items;
 	}

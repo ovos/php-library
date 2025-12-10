@@ -15,73 +15,56 @@ use Ovos\Form\Validator;
  */
 class SameAs extends Validator
 {
-	/**#@+
-	 * Errors
-	 */
+	// Errors
 	public const string ERROR_DIFFERENT = 'different';
-	/**#@-*/
 	
 	/**
 	 * @var string[]
 	 */
-	protected array $_messages =
+	protected array $messages =
 	[
 		self::ERROR_DIFFERENT => '"%s" should be the same as "%s".',
 	];
 	
-	/**
-	 * @var string
-	 */
-	protected string $_id;
+	protected string $id;
 	
-	/**
-	 * @param string $id
-	 */
-	public function __construct(string $id)
+	public function __construct(
+		string $id,
+	)
 	{
 		$this->setId($id);
 	}
 	
-	/**
-	 * @param string $id
-	 * 
-	 * @return self
-	 */
-	public function setId(string $id): self
+	public function setId(
+		string $id,
+	): static
 	{
-		$this->_id = $id;
+		$this->id = $id;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getId(): string
 	{
-		return $this->_id;
+		return $this->id;
 	}
 	
-	/**
-	 * @return Element
-	 */
 	public function getComparedElement(): Element
 	{
-		return $this->getElement()->getForm()->getElement($this->_id);
+		return $this->getElement()
+			->getForm()
+			->getElement($this->id);
 	}
 	
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	public function isValid(mixed $value): bool
+	public function isValid(
+		mixed $value,
+	): bool
 	{
 		$valid = $this->getComparedElement()->getValue() === $value;
 		if($valid === false)
 		{
 			$error = new Error(self::ERROR_DIFFERENT, sprintf(
-				$this->getMessage(self::ERROR_DIFFERENT), 
+				$this->getMessage(self::ERROR_DIFFERENT),
 				$this->getComparedElement()->getLabel(),
 				$this->getElement()->getLabel()
 			));

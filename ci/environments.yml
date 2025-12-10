@@ -63,6 +63,9 @@ production: &production
   # mysql
   database: &database
     connection: mysql
+    encryption:
+      method: AES-256-CBC
+      key: zA%$6&z9J,s_[;66[7r
   
   # cache
   cache: &cache

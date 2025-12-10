@@ -14,59 +14,38 @@ use function array_key_exists;
  */
 abstract class Validator
 {
-	/**
-	 * @var Element
-	 */
-	protected Element $_element;
+	protected Element $element;
 	
-	/**
-	 * @var Error[]
-	 */
-	protected array $_errors = [];
+	protected array $errors = [];
 	
-	/**
-	 * @var string[]
-	 */
-	protected array $_messages = [];
+	protected array $messages = [];
 	
-	/**
-	 * @param Element $element
-	 *
-	 * @return self
-	 */
-	public function setElement(Element $element): self
+	public function setElement(
+		Element $element,
+	): static
 	{
-		$this->_element = $element;
+		$this->element = $element;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return Element
-	 */
 	public function getElement(): Element
 	{
-		return $this->_element;
+		return $this->element;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function hasErrors(): bool
 	{
-		return count($this->_errors) > 0;
+		return count($this->errors) > 0;
 	}
 	
-	/**
-	 * @param Error $error
-	 *
-	 * @return self
-	 */
-	public function addError(Error $error): self
+	public function addError(
+		Error $error,
+	): static
 	{
 		$error->setValidator($this);
 		
-		$this->_errors[] = $error;
+		$this->errors[] = $error;
 		
 		return $this;
 	}
@@ -76,59 +55,44 @@ abstract class Validator
 	 */
 	public function getErrors(): array
 	{
-		return $this->_errors;
+		return $this->errors;
 	}
 	
-	/**
-	 * @return self
-	 */
-	public function clearErrors(): self
+	public function clearErrors(): static
 	{
-		$this->_errors = [];
+		$this->errors = [];
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getMessages(): array
 	{
-		return $this->_messages;
+		return $this->messages;
 	}
 	
-	/**
-	 * @param string $errorCode
-	 * @param string $value
-	 *
-	 * @return self
-	 */
-	public function setMessage(string $errorCode, string $value): self
+	public function setMessage(
+		string $errorCode,
+		string $value,
+	): static
 	{
-		$this->_messages[$errorCode] = $value;
+		$this->messages[$errorCode] = $value;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string $errorCode
-	 *
-	 * @return ?string
-	 */
-	public function getMessage(string $errorCode): ?string
+	public function getMessage(
+		string $errorCode,
+	): ?string
 	{
-		if(array_key_exists($errorCode, $this->_messages) === false)
+		if(array_key_exists($errorCode, $this->messages) === false)
 		{
 			return null;
 		}
 		
-		return $this->_messages[$errorCode];
+		return $this->messages[$errorCode];
 	}
 	
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	abstract public function isValid(mixed $value): bool;
+	abstract public function isValid(
+		mixed $value,
+	): bool;
 }

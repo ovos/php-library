@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\ArrayObject;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Exception\InvalidException\InvalidClassException;
@@ -17,24 +16,13 @@ use Ovos\Exception\MissingException\MissingConfigException;
  */
 class Connections
 {
-	/**
-	 * @var Container
-	 */
 	#[Inject]
-	protected Container $_container;
+	protected Container $container;
 	
-	/**
-	 * @var ArrayObject
-	 */
 	#[Inject('config')]
 	#[InjectArrayObject('connections')]
-	protected ArrayObject $_config;
+	protected ArrayObject $config;
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return Connection
-	 */
 	public function get(string $name): Connection
 	{
 		$config = $this->getConnectionConfig($name);
@@ -45,19 +33,18 @@ class Connections
 			$class::getId($config),
 		);
 		
-		return $this->_container->getClass($connectionId, $class, [
-			'config' => $config,
-		]);
+		return $this->container->getClass(
+			$connectionId,
+			$class,
+			[
+				'config' => $config,
+			],
+		);
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return ArrayObject
-	 */
 	public function getConnectionConfig(string $name): ArrayObject
 	{
-		foreach($this->_config as $configName => $config)
+		foreach($this->config as $configName => $config)
 		{
 			if($configName !== $name)
 			{
@@ -72,11 +59,6 @@ class Connections
 		);
 	}
 	
-	/**
-	 * @param string $type
-	 *
-	 * @return string
-	 */
 	public function getConnectionClass(string $type): string
 	{
 		return match($type)
@@ -89,11 +71,8 @@ class Connections
 		};
 	}
 	
-	/**
-	 * @return ArrayObject
-	 */
 	public function getConfig(): ArrayObject
 	{
-		return $this->_config;
+		return $this->config;
 	}
 }

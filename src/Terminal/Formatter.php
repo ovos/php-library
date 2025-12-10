@@ -38,7 +38,7 @@ class Formatter
 	
 	/**
 	 * @var string[]
-	 */	
+	 */
 	public static array $colors =
 	[
 		self::COLOR_RESET => "\33[0m",
@@ -60,12 +60,9 @@ class Formatter
 		self::COLOR_WHITE => "\33[1;37m",
 	];
 	
-	/**
-	 * @param string $color
-	 * 
-	 * @return ?string
-	 */
-	public static function getColor(string $color): ?string
+	public static function getColor(
+		string $color,
+	): ?string
 	{
 		if(array_key_exists($color, self::$colors) === false)
 		{
@@ -75,58 +72,59 @@ class Formatter
 		return self::$colors[$color];
 	}
 	
-	/**
-	 * @param string $message
-	 * 
-	 * @return string
-	 */
-	public static function handleMarkup(string $message): string
+	public static function handleMarkup(
+		string $message,
+	): string
 	{
 		foreach(self::$colors as $color => $replace)
 		{
-			$message = str_replace("<$color>", $replace, $message);
+			$message = str_replace("<$color>",
+				$replace,
+				$message,
+			);
 		}
 		
 		return $message;
 	}
 	
-	/**
-	 * @param string $message
-	 * 
-	 * @return string
-	 */
-	public static function stripMarkup(string $message): string
+	public static function stripMarkup(
+		string $message,
+	): string
 	{
 		foreach(self::$colors as $color => $replace)
 		{
-			$message = str_replace("<$color>", '', $message);
+			$message = str_replace("<$color>",
+				'',
+				$message,
+			);
 		}
 		
 		return $message;
 	}
 	
-	/**
-	 * @param string $message
-	 * 
-	 * @return string
-	 */
-	public static function stripTerminalMarkup(string $message): string
+	public static function stripTerminalMarkup(
+		string $message,
+	): string
 	{
 		foreach(self::$colors as $color => $replace)
 		{
-			$message = str_replace($replace, '', $message);
+			$message = str_replace($replace,
+				'',
+				$message,
+			);
 		}
 		
 		return $message;
 	}
 	
-	/**
-	 * @param string $header
-	 * 
-	 * @return string
-	 */
-	public static function getHeader(string $header): string
+	public static function getHeader(
+		string $header,
+	): string
 	{
-		return str_pad(' ' . $header . ' ', 50, '-', STR_PAD_BOTH) . PHP_EOL;
+		return str_pad(' ' . $header . ' ',
+			 50,
+			 '-', STR_PAD_BOTH
+		)
+		. PHP_EOL;
 	}
 }

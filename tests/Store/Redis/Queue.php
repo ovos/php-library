@@ -11,8 +11,8 @@ use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Parallel;
 use Ovos\Test\Store\TraitRedis;
+use Override;
 
-use function Ovos\config;
 use function sprintf;
 
 /**
@@ -25,109 +25,94 @@ class Queue extends Test
 {
 	use TraitRedis;
 	
-	/**
-	 * @var string
-	 */
 	public const string KEY_ITEM = 'item';
 	
-	/**
-	 * @var string
-	 */
 	public const string KEY_ITEM_COUNTER = 'item:counter';
 	
-	/**
-	 * @var int
-	 */
 	public const int CLIENTS = 3;
 	
-	/**
-	 * @var ArrayObject
-	 */
 	#[Inject('config')]
-	protected ArrayObject $_config;
+	protected ArrayObject $config;
 	
-	/**
-	 * @var ?Store
-	 */
-	protected ?Store $_store = null;
+	protected ?Store $store = null;
 	
 	public function __construct()
 	{
-		if($this->_cacheConfig->getPath(['persistent', 'queue', 'enabled']) !== true)
+		if($this->cacheConfig->getPath(['persistent', 'queue', 'enabled']) !== true)
 		{
-			$this->setIsDisabled(true,
+			$this->setDisabled(true,
 				sprintf('"queue" is not enabled in cache config.')
 			);
 			
 			return;
 		}
 		
-		$this->_store = $this->_getStore(Store::class);
+		$this->store = $this->getStore(Store::class);
 	}
 	
 	public function set(): bool
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM) === null)
+			if($this->store->get(self::KEY_ITEM) === null)
 			{
-				$this->_store->set(self::KEY_ITEM, 'test');
+				$this->store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function setManualOverride(): bool
 	{
-		$queueEnabled = $this->_store->isQueueEnabled();
+		$queueEnabled = $this->store->isQueueEnabled();
 		
 		try
 		{
-			$this->_store->setQueueEnabled(false);
-			if($this->_store->get(self::KEY_ITEM, queue: true) === null)
+			$this->store->setQueueEnabled(false);
+			if($this->store->get(self::KEY_ITEM, queue: true) === null)
 			{
-				$this->_store->set(self::KEY_ITEM, 'test');
+				$this->store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null;
 		}
 		finally
 		{
-			$this->_store->setQueueEnabled($queueEnabled);
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->setQueueEnabled($queueEnabled);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
 	public function setManual(): bool
 	{
-		$queueEnabled = $this->_store->isQueueEnabled();
+		$queueEnabled = $this->store->isQueueEnabled();
 		
 		try
 		{
-			$this->_store->setQueueEnabled(false);
-			if($this->_store->get(self::KEY_ITEM) === null)
+			$this->store->setQueueEnabled(false);
+			if($this->store->get(self::KEY_ITEM) === null)
 			{
-				$this->_store->queue(self::KEY_ITEM); // manual queue call
-				$this->_store->set(self::KEY_ITEM, 'test');
+				$this->store->lockAndQueue(self::KEY_ITEM); // manual queue call
+				$this->store->set(self::KEY_ITEM, 'test');
 			}
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null;
 		}
 		finally
 		{
-			$this->_store->setQueueEnabled($queueEnabled);
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->setQueueEnabled($queueEnabled);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -137,7 +122,7 @@ class Queue extends Test
 		
 		try
 		{
-			$result = $this->_store->get(self::KEY_ITEM,
+			$result = $this->store->get(self::KEY_ITEM,
 				resolver: fn() => $value,
 			);
 			
@@ -145,7 +130,7 @@ class Queue extends Test
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -156,18 +141,18 @@ class Queue extends Test
 		
 		try
 		{
-			$value = $this->_store->get(self::KEY_ITEM,
+			$value = $this->store->get(self::KEY_ITEM,
 				resolver: fn() => $value,
 				tags: $tags,
 			);
 			
-			$result = $this->_store->getTags(self::KEY_ITEM);
+			$result = $this->store->getTags(self::KEY_ITEM);
 			
 			return $result === $tags; // have the same key/value pairs in the same order and of the same types.
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -178,7 +163,7 @@ class Queue extends Test
 		
 		try
 		{
-			$value = $this->_store->get(self::KEY_ITEM,
+			$value = $this->store->get(self::KEY_ITEM,
 				resolver: function($store, $key, &$ttl, &$tags) use ($value)
 				{
 					$tags[] = 'tag3';
@@ -188,13 +173,13 @@ class Queue extends Test
 				tags: $tags,
 			);
 			
-			$result = $this->_store->getTags(self::KEY_ITEM);
+			$result = $this->store->getTags(self::KEY_ITEM);
 			
 			return $result !== $tags; // have the same key/value pairs in the same order and of the same types.
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -202,22 +187,22 @@ class Queue extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM) === null)
+			if($this->store->get(self::KEY_ITEM) === null)
 			{
-				$this->_store->releaseActiveLock(self::KEY_ITEM);
+				$this->store->releaseActiveLock(self::KEY_ITEM);
 			}
 			
-			$id = $this->_store
-				->prefix(self::KEY_ITEM, $this->_store->getType());
-			$lockKey = $this->_store
+			$id = $this->store
+				->prefix(self::KEY_ITEM, $this->store->getType());
+			$lockKey = $this->store
 				->prefix(Store::TYPE_LOCK, $id);
 			
-			return $this->_store->getClient()
+			return $this->store->getClient()
 				->exists($lockKey) === 0;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -225,17 +210,17 @@ class Queue extends Test
 	{
 		try
 		{
-			if($this->_store->get(self::KEY_ITEM) === null)
+			if($this->store->get(self::KEY_ITEM) === null)
 			{
-				$this->_store->renewLock(self::KEY_ITEM);
-				$this->_store->set(self::KEY_ITEM, 'value'); // to release the lock
+				$this->store->renewLock(self::KEY_ITEM);
+				$this->store->set(self::KEY_ITEM, 'value'); // to release the lock
 			}
 			
 			return true;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -245,19 +230,19 @@ class Queue extends Test
 		
 		try
 		{
-			$result = $this->_store->get(self::KEY_ITEM,
+			$result = $this->store->get(self::KEY_ITEM,
 				resolver: fn() => $value,
 				queue: false,
 			);
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists !== null
 				&& $result === $value;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM);
 		}
 	}
 	
@@ -265,11 +250,11 @@ class Queue extends Test
 	{
 		try
 		{
-			$result = $this->_store->get(self::KEY_ITEM,
+			$result = $this->store->get(self::KEY_ITEM,
 				queue: false,
 			);
 			
-			$exists = $this->_store->get(self::KEY_ITEM, queue: false);
+			$exists = $this->store->get(self::KEY_ITEM, queue: false);
 			
 			return $exists === null
 				&& $result === null;
@@ -281,21 +266,21 @@ class Queue extends Test
 	
 	public function lockOnly(): bool
 	{
-		$id = $this->_store
-			->prefix(self::KEY_ITEM, $this->_store->getType());
-		$lockKey = $this->_store
+		$id = $this->store
+			->prefix(self::KEY_ITEM, $this->store->getType());
+		$lockKey = $this->store
 			->prefix(Store::TYPE_LOCK, $id);
 		
 		try
 		{
-			$this->_store->queue(self::KEY_ITEM, lockOnly: true);
+			$this->store->lockAndQueue(self::KEY_ITEM, lockOnly: true);
 			
-			$exists = $this->_store->getClient()
+			$exists = $this->store->getClient()
 				->exists($lockKey) === 1;
 			
-			$this->_store->releaseActiveLock(self::KEY_ITEM);
+			$this->store->releaseActiveLock(self::KEY_ITEM);
 			
-			$existsNot = $this->_store->getClient()
+			$existsNot = $this->store->getClient()
 				->exists($lockKey) === 0;
 			
 			return $exists && $existsNot;
@@ -307,7 +292,7 @@ class Queue extends Test
 	
 	public function queue(): bool
 	{
-		$phpBinary = $this->_config->getPath(['cli', 'executable']);
+		$phpBinary = $this->config->getPath(['cli', 'executable']);
 		$phpBinary = $phpBinary ?? 'php';
 		$command = sprintf('%s %s %s', $phpBinary,
 			__DIR__
@@ -320,18 +305,18 @@ class Queue extends Test
 		{
 			Parallel::run($command, self::CLIENTS);
 			
-			$id = $this->_store->prefix(self::KEY_ITEM_COUNTER,
-				$this->_store->getType()
+			$id = $this->store->prefix(self::KEY_ITEM_COUNTER,
+				$this->store->getType()
 			);
 			
-			$count = $this->_store->getClient()->get($id);
+			$count = $this->store->getClient()->get($id);
 			
 			return (int)$count === 1;
 		}
 		finally
 		{
-			$this->_store->delete(self::KEY_ITEM);
-			$this->_store->delete(self::KEY_ITEM_COUNTER);
+			$this->store->delete(self::KEY_ITEM);
+			$this->store->delete(self::KEY_ITEM_COUNTER);
 		}
 	}
 	
@@ -339,8 +324,19 @@ class Queue extends Test
 	 * Called by the runner after each test method
 	 */
 	#[Internal]
+	#[Override]
 	public function finalize(): void
 	{
-		$this->_store->clear();
+		$this->store->clear();
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	#[Override]
+	public function deconstruct(): void
+	{
+		$this->connection->disconnect();
 	}
 }

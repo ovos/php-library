@@ -14,19 +14,16 @@ use Ovos\Store\Mysql\QueryBuilder as BaseQueryBuilder;
  */
 class QueryBuilder extends Test
 {
-	/**
-	 * @var BaseQueryBuilder
-	 */
-	protected BaseQueryBuilder $_queryBuilder;
+	protected BaseQueryBuilder $queryBuilder;
 	
 	public function __construct()
 	{
-		$this->_queryBuilder = new BaseQueryBuilder('tests'); 
+		$this->queryBuilder = new BaseQueryBuilder('tests'); 
 	}
 	
 	public function select(): bool
 	{
-		$query = $this->_queryBuilder->select('t.id, t.name, t.created_at')
+		$query = $this->queryBuilder->select('t.id, t.name, t.created_at')
 			->alias('t')
 			->leftJoin('tests_groups tr ON tr.id_test = t.id')
 			->where('t.finished_at IS NOT NULL')
@@ -53,7 +50,7 @@ class QueryBuilder extends Test
 	
 	public function update(): bool
 	{
-		$query = $this->_queryBuilder->update(name: 'name', modified_at: 'NOW()')
+		$query = $this->queryBuilder->update(name: 'name', modified_at: 'NOW()')
 			->where('finished_at IS NULL');
 		
 		return $query->getSql() === 'UPDATE tests'
@@ -64,7 +61,7 @@ class QueryBuilder extends Test
 	
 	public function insert(): bool
 	{
-		$query = $this->_queryBuilder->insert(name: ':name', created_at: 'NOW()');
+		$query = $this->queryBuilder->insert(name: ':name', created_at: 'NOW()');
 		
 		return $query->getSql() === 'INSERT INTO tests'
 			. PHP_EOL . '(name, created_at)'
@@ -74,11 +71,12 @@ class QueryBuilder extends Test
 	
 	public function delete(): bool
 	{
-		$query = $this->_queryBuilder->delete('active = 0', 
+		$query = $this->queryBuilder->delete('active = 0',
 			'role = :role'
 		);
 		
-		return $query->getSql() === 'DELETE FROM tests'
+		return $query->getSql() === 'DELETE'
+			. PHP_EOL . 'FROM tests'
 			. PHP_EOL . 'WHERE active = 0'
 			. PHP_EOL . 'AND role = :role'
 			. PHP_EOL;
@@ -86,12 +84,14 @@ class QueryBuilder extends Test
 	
 	public function deleteWhere(): bool
 	{
-		$query = $this->_queryBuilder
+		$query = $this->queryBuilder
 			->delete()
-			->where('active = 0', 
-			'role = :role');
-			
-		return $query->getSql() === 'DELETE FROM tests'
+			->where('active = 0',
+				'role = :role'
+			);
+		
+		return $query->getSql() === 'DELETE'
+			. PHP_EOL . 'FROM tests'
 			. PHP_EOL . 'WHERE active = 0'
 			. PHP_EOL . 'AND role = :role'
 			. PHP_EOL;
@@ -99,7 +99,7 @@ class QueryBuilder extends Test
 	
 	public function whereNested(): bool
 	{
-		$query = $this->_queryBuilder->select('id, name, role, active, created_at')
+		$query = $this->queryBuilder->select('id, name, role, active, created_at')
 			->where('created_at > NOW() - INTERVAL 1 MONTH')
 			->where(function($query)
 			{
@@ -123,7 +123,7 @@ class QueryBuilder extends Test
 	public function whereAdditional(): bool
 	{
 		// using multiple conditions with where()
-		$query1 = $this->_queryBuilder->select('id, name, email')
+		$query1 = $this->queryBuilder->select('id, name, email')
 			->where('active = 1', 'created_at > NOW() - INTERVAL 1 MONTH', 'role = "user"');
 		
 		$expected1 = 'SELECT id, name, email'
@@ -134,7 +134,7 @@ class QueryBuilder extends Test
 			. PHP_EOL;
 		
 		// using multiple conditions with orWhere()
-		$query2 = $this->_queryBuilder->select('id, name, email')
+		$query2 = $this->queryBuilder->select('id, name, email')
 			->where('active = 1')
 			->orWhere('role = "admin"', 'role = "manager"', 'role = "supervisor"');
 		
@@ -147,7 +147,7 @@ class QueryBuilder extends Test
 			. PHP_EOL;
 		
 		// combining where() with additionalConditions and nested conditions
-		$query3 = $this->_queryBuilder->select('id, name, email')
+		$query3 = $this->queryBuilder->select('id, name, email')
 			->where('active = 1', 'verified = 1')
 			->where(function($query)
 			{

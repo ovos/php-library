@@ -14,57 +14,42 @@ use Ovos\Test\Internal;
  */
 abstract class Test
 {
-	/**
-	 * @var Container
-	 */
 	#[Inject]
-	protected Container $_container;
-
-	/**
-	 * @var bool
-	 */
-	protected bool $_isDisabled = false;
+	protected Container $container;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_reason = null;
+	#[Inject]
+	protected Application $app;
 	
-	/**
-	 * @param bool $isDisabled
-	 * @param ?string $reason
-	 *
-	 * @return self
-	 */
+	#[Inject]
+	protected ArrayObject $config;
+	
+	protected bool $disabled = false;
+	
+	protected ?string $reason = null;
+	
 	#[Internal]
-	public function setIsDisabled
+	public function setDisabled
 	(
-		bool $isDisabled,
+		bool $disabled,
 		?string $reason = null,
-	): self
+	): static
 	{
-		$this->_isDisabled = $isDisabled;
-		$this->_reason = $reason;
+		$this->disabled = $disabled;
+		$this->reason = $reason;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	#[Internal]
 	public function isDisabled(): bool
 	{
-		return $this->_isDisabled;
+		return $this->disabled;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	#[Internal]
 	public function getReason(): ?string
 	{
-		return $this->_reason;
+		return $this->reason;
 	}
 	
 	/**

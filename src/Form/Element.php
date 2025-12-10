@@ -17,63 +17,45 @@ use function is_array;
  */
 class Element
 {
-	/**
-	 * @var string
-	 */
-	protected string $_id;
+	protected string $id;
 	
-	/**
-	 * @var ?Form
-	 */
-	protected ?Form $_form = null;
+	protected ?Form $form = null;
 	
-	/**
-	 * @var null|string|bool|int|float|array
-	 */
-	protected null|string|bool|int|float|array $_value = null;
+	protected null|string|bool|int|float|array $value = null;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_label = null;
+	protected ?string $label = null;
 	
 	/**
 	 * @var Validator[]
 	 */
-	protected array $_validators = [];
+	protected array $validators = [];
 	
 	/**
 	 * @var Filter[]
 	 */
-	protected array $_filters = [];
+	protected array $filters = [];
 	
 	/**
 	 * @var Error[]
 	 */
-	protected array $_errors = [];
+	protected array $errors = [];
 	
-	/**
-	 * @param string $id
-	 * 
-	 * @return self
-	 */
-	public function setId(string $id): self
+	public function setId(
+		string $id,
+	): static
 	{
-		$this->_id = $id;
+		$this->id = $id;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param bool $withFormId
-	 * 
-	 * @return string
-	 */
-	public function getId(bool $withFormId = true): string
+	public function getId(
+		bool $withFormId = true,
+	): string
 	{
-		$id = $this->_id;
+		$id = $this->id;
 		if($withFormId
-			&& $formId = $this->_form->getId())
+			&& $formId = $this->form->getId())
 		{
 			$id = $formId . '_' . $id;
 		}
@@ -81,16 +63,13 @@ class Element
 		return $id;
 	}
 	
-	/**
-	 * @param bool $withFormId
-	 * 
-	 * @return string
-	 */
-	public function getName(bool $withFormId = true): string
+	public function getName(
+		bool $withFormId = true,
+	): string
 	{
-		$name = $this->_id;
+		$name = $this->id;
 		if($withFormId
-			&& $formId = $this->_form->getId())
+			&& $formId = $this->form->getId())
 		{
 			$name = $formId . '[' . $name . ']';
 		}
@@ -98,67 +77,56 @@ class Element
 		return $name;
 	}
 	
-	/**
-	 * @param ?Form $form
-	 *
-	 * @return self
-	 */
-	public function setForm(?Form $form): self
+	public function setForm(
+		?Form $form,
+	): static
 	{
-		$this->_form = $form;
+		$this->form = $form;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?Form
-	 */
 	public function getForm(): ?Form
 	{
-		if($this->_form === null)
+		if($this->form === null)
 		{
-			throw new Exception('The element is not yet assigned to a form.');
+			throw new Exception(
+				'The element is not yet assigned to a form.');
 		}
 		
-		return $this->_form;
+		return $this->form;
 	}
 	
-	/**
-	 * @param null|string|bool|int|float|array $value
-	 *
-	 * @return self
-	 */
-	public function setValue(null|string|bool|int|float|array $value): self
+	public function setValue(
+		null|string|bool|int|float|array $value,
+	): static
 	{
 		$this->reset(); // clear cache of getValue()
 		$this->getForm()
-			->setValue($this->_id, $value);
+			->setValue($this->id, $value);
 		
 		return $this;
 	}
 	
-	/**
-	 * @param bool $default
-	 * 
-	 * @return null|string|bool|int|float|array
-	 */
-	public function getValue(bool $default = false): null|string|bool|int|float|array
+	public function getValue(
+		bool $default = false,
+	): null|string|bool|int|float|array
 	{
-		$value = $this->_form
-			->getRawValue($this->_id);
+		$value = $this->form
+			->getRawValue($this->id);
 		
 		// return the default value, if no other value is present
 		// do not filter it, we assume it's in filtered state
 		if($value === null
 			&& $default === true)
 		{
-			return $this->_form
-				->getDefaultValue($this->_id);
+			return $this->form
+				->getDefaultValue($this->id);
 		}
 		
 		// if a default value was not requested, process our value & cache it for future calls
 		// some filters also process null values (for example, casting to int)
-		if($this->_value === null)
+		if($this->value === null)
 		{
 			if(is_array($value))
 			{
@@ -173,80 +141,61 @@ class Element
 				$value = $this->filterValue($value);
 			}
 			
-			$this->_value = $value;
+			$this->value = $value;
 		}
 		
 		// return cached value
-		return $this->_value;
+		return $this->value;
 	}
 	
-	/**
-	 * @return null|string|bool|int|float|array
-	 */
-	public function getInputValue(): null|string|bool|int|float|array
+	public function getInputValue(
+	): null|string|bool|int|float|array
 	{
 		return $this->getValue(true);
 	}
 	
-	/**
-	 * @return null|string|bool|int|float|array
-	 */
-	public function getUserValue(): null|string|bool|int|float|array
+	public function getUserValue(
+	): null|string|bool|int|float|array
 	{
 		return $this->getValue(false);
 	}
 	
-	/**
-	 * @return self
-	 */
-	public function reset(): self
+	public function reset(): static
 	{
-		$this->_value = null;
+		$this->value = null;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param ?string $label
-	 * 
-	 * @return self
-	 */
-	public function setLabel(?string $label): self
+	public function setLabel(
+		?string $label,
+	): static
 	{
-		$this->_label = $label;
+		$this->label = $label;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getLabel(): ?string
 	{
-		return $this->_label;
+		return $this->label;
 	}
 	
-	/**
-	 * @param null|string|bool|int|float|array $default
-	 *
-	 * @return self
-	 */
-	public function setDefault(null|string|bool|int|float|array $default): self
+	public function setDefault(
+		null|string|bool|int|float|array $default,
+	): static
 	{
 		$this->getForm()
-			->setDefault($this->_id, $default);
+			->setDefault($this->id, $default);
 		
 		return $this;
-	}	
+	}
 	
-	/**
-	 * @param mixed $value
-	 *
-	 * @return mixed
-	 */
-	public function filterValue(mixed $value): mixed
+	public function filterValue(
+		mixed $value,
+	): mixed
 	{
-		foreach($this->_filters as $filter)
+		foreach($this->filters as $filter)
 		{
 			$value = $filter->filter($value);
 		}
@@ -254,41 +203,32 @@ class Element
 		return $value;
 	}
 	
-	/**
-	 * @param Filter $filter
-	 *
-	 * @return self
-	 */
-	public function addFilter(Filter $filter): self
+	public function addFilter(
+		Filter $filter,
+	): static
 	{
-		$this->_filters[] = $filter;
+		$this->filters[] = $filter;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param Validator $validator
-	 *
-	 * @return self
-	 */
-	public function addValidator(Validator $validator): self
+	public function addValidator(
+		Validator $validator,
+	): static
 	{
-		$this->_validators[] = $validator;
+		$this->validators[] = $validator;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isValid(): bool
 	{
-		$this->_errors = []; // reset errors
+		$this->errors = []; // reset errors
 		$value = $this->getUserValue();
 		
 		$isValid = true;
 		
-		foreach($this->_validators as $validator)
+		foreach($this->validators as $validator)
 		{
 			$validator->setElement($this);
 			if($validator->isValid($value) === false)
@@ -301,25 +241,22 @@ class Element
 		return $isValid;
 	}
 	
-	/**
-	 * @param Error $error
-	 *
-	 * @return self
-	 */
-	public function addError(Error $error): self
+	public function addError(
+		Error $error,
+	): static
 	{
 		$error->setElement($this);
-		$this->_errors[] = $error;
+		$this->errors[] = $error;
 		
 		return $this;
 	}
 	
 	/**
 	 * @param Error[] $errors
-	 *
-	 * @return self
 	 */
-	public function addErrors(array $errors): self
+	public function addErrors(
+		array $errors,
+	): static
 	{
 		foreach($errors as $error)
 		{
@@ -329,20 +266,14 @@ class Element
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function hasErrors(): bool
 	{
-		return count($this->_errors) > 0;
+		return count($this->errors) > 0;
 	}
 	
-	/**
-	 * @return self
-	 */
-	public function clearErrors(): self
+	public function clearErrors(): static
 	{
-		$this->_errors = [];
+		$this->errors = [];
 		
 		return $this;
 	}
@@ -352,24 +283,18 @@ class Element
 	 */
 	public function getErrors(): array
 	{
-		return $this->_errors;
+		return $this->errors;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
 		return (string)$this->getValue();
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function __debugInfo(): array
 	{
 		return [
-			$this->getValue()
+			$this->getValue(),
 		];
 	}
 }

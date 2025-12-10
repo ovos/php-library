@@ -18,41 +18,36 @@ use function sprintf;
  */
 class EmailAddress extends Validator
 {
-	/**#@+
-	 * Errors
-	 */
+	// Errors
 	public const string ERROR_INVALID = 'email_invalid';
-	/**#@-*/
 
 	/**
 	 * @var string[]
 	 */
-	protected array $_messages =
+	protected array $messages =
 	[
 		self::ERROR_INVALID => '"%s" is not a valid e-mail address.',
 	];
-
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	public function isValid(mixed $value): bool
+	
+	public function isValid(
+		mixed $value,
+	): bool
 	{
 		if(empty($value))
 		{
 			return true;
 		}
-	
+		
 		$valid = filter_var($value, FILTER_VALIDATE_EMAIL) !== false;
 		if($valid === false)
 		{
-			$error = new Error(self::ERROR_INVALID, sprintf($this->getMessage(self::ERROR_INVALID),
+			$error = new Error(self::ERROR_INVALID,
+				sprintf($this->getMessage(self::ERROR_INVALID),
 				Strings::escapeForHtml($value)
 			));
 			$this->addError($error);
 		}
-	
+		
 		return $valid;
 	}
 }

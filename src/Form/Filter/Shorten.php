@@ -14,78 +14,59 @@ use Ovos\Strings;
  */
 class Shorten extends Filter
 {
-	/**
-	 * @var int
-	 */
-	protected int $_length;
+	protected int $length;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_ending;
+	protected string $ending;
 	
-	/**
-	 * @param int $length
-	 * @param string $ending
-	 */
-	public function __construct(int $length, string $ending = '...')
+	public function __construct(
+		int $length,
+		string $ending = '...',
+	)
 	{
-		$this->_length = $length;
-		$this->_ending = $ending;
+		$this->length = $length;
+		$this->ending = $ending;
 	}
 	
-	/**
-	 * @param int $length
-	 *
-	 * @return self
-	 */
-	public function setLength(int $length): self
+	public function setLength(
+		int $length,
+	): static
 	{
-		$this->_length = $length;
+		$this->length = $length;
 	
 		return $this;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getLength(): int
 	{
-		return $this->_length;
+		return $this->length;
 	}
 	
-	/**
-	 * @param string $ending
-	 *
-	 * @return self
-	 */
-	public function setEnding(string $ending): self
+	public function setEnding(
+		string $ending,
+	): static
 	{
-		$this->_ending = $ending;
+		$this->ending = $ending;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getEnding(): string
 	{
-		return $this->_ending;
+		return $this->ending;
 	}
 	
-	/**
-	 * @param mixed $value
-	 *
-	 * @return ?string
-	 */
-	public function filter(mixed $value): ?string
+	public function filter(
+		mixed $value,
+	): ?string
 	{
 		if($value === null)
 		{
 			return null;
 		}
 		
-		return Strings::shorten($value, $this->getLength(), $this->getEnding());
+		return Strings::shorten($value,
+			$this->getLength(),
+			$this->getEnding(),
+		);
 	}
 }

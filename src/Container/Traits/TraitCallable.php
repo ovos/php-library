@@ -13,28 +13,19 @@ use Closure;
  */
 trait TraitCallable
 {
-	/**
-	 * @var Closure
-	 */
-	protected Closure $_callable;
+	protected Closure $callable;
 	
-	/**
-	 * @param callable $callable
-	 *
-	 * @return self
-	 */
-	public function setCallable(callable $callable): self
+	public function setCallable(
+		callable $callable,
+	): static
 	{
-		$this->_callable = $callable;
+		$this->callable = $callable;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return Closure
-	 */
 	public function getCallable(): Closure
 	{
-		return $this->_callable;
+		return $this->callable;
 	}
 }

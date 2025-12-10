@@ -4,17 +4,18 @@ declare(strict_types=1);
 namespace Ovos\Translator;
 
 use Ovos\ArrayObject;
-use Ovos\Store\Apcu;
+use Ovos\Container;
+use Ovos\Service\Cache;
 
-use function Ovos\services;
-use function file_exists;
-use function filemtime;
-use function substr;
-use function strlen;
-use function implode;
-use function str_contains;
+use function Ovos\container;
 use function array_key_exists;
 use function explode;
+use function file_exists;
+use function filemtime;
+use function implode;
+use function str_contains;
+use function strlen;
+use function substr;
 
 /**
  * CachedTranslator
@@ -24,22 +25,16 @@ use function explode;
  */
 class CachedAdapter
 {
-	/**
-	 * @var Translation
-	 */
-	protected Translation $_translation;
+	protected Container $container;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_translations = [];
+	protected Translation $translation;
 	
-	/**
-	 * @param Translation $translation
-	 */
+	protected array $translations = [];
+	
 	public function __construct(Translation $translation)
 	{
-		$this->_translation = $translation;
+		$this->container = container();
+		$this->translation = $translation;
 		
 		$filename = $translation->getPath();
 		if(file_exists($filename) === false)
@@ -47,7 +42,8 @@ class CachedAdapter
 			return;
 		}
 		
-		$store = services()->cache->getPerishableStore();
+		$store = $this->container->get(Cache::SYMBOL)
+			->getPerishableStore();
 		
 		$mTime = filemtime($filename);
 		$path = substr($filename, strlen(BASE_DIR));
@@ -71,69 +67,64 @@ class CachedAdapter
 	
 	/**
 	 * Translates a string
-	 *
-	 * @param string $msgid String to be translated
-	 *
-	 * @return string translated string (or original, if not found)
 	 */
-	public function gettext(string $msgid): string
+	public function gettext(
+		string $messageId, // string to be translated
+	): string // translated string (or original, if not found)
 	{
-		return $this->exists($msgid)
-			? $this->_translations[$msgid] : $msgid;
+		return $this->exists($messageId)
+			? $this->translations[$messageId] : $messageId;
 	}
 	
 	/**
 	 * Check if a string is translated
-	 *
-	 * @param string $msgid String to be checked
 	 */
-	public function exists(string $msgid): bool
+	public function exists(
+		string $messageId, // string to be checked
+	): bool
 	{
-		return array_key_exists($msgid, $this->_translations);
+		return array_key_exists($messageId, $this->translations);
 	}
 	
 	/**
 	 * Translate with context
-	 *
-	 * @param string $msgctxt Context
-	 * @param string $msgid   String to be translated
-	 *
-	 * @return string translated plural form
 	 */
-	public function pgettext(string $msgctxt, string $msgid): string
+	public function pgettext(
+		string $messageContext, // context
+		string $messageId, // string to be translated
+	): string // translated plural form
 	{
-		$key = implode(chr(4), [$msgctxt, $msgid]);
-		$ret = $this->gettext($key);
-		if(str_contains($ret, chr(4)))
+		$key = implode(chr(4), [$messageContext, $messageId]);
+		$translated = $this->gettext($key);
+		if(str_contains($translated, chr(4)))
 		{
-			return $msgid;
+			return $messageId;
 		}
 		
-		return $ret;
+		return $translated;
 	}
 	
 	/**
 	 * Plural version of gettext
-	 *
-	 * @param string $msgid       Single form
-	 * @param string $msgidPlural Plural form
-	 * @param int    $number      Number of objects
-	 *
-	 * @return string translated plural form
 	 */
-	public function ngettext(string $msgid, string $msgidPlural, int $number): string
+	public function ngettext(
+		string $messageId, // single form
+		string $messageIdPlural, // plural form
+		int $number, // number of objects
+	): string // translated plural form
 	{
 		// this should contain all strings separated by NULLs
-		$key = implode(chr(0), [$msgid, $msgidPlural]);
+		$key = implode(chr(0), [$messageId, $messageIdPlural]);
 		if($this->exists($key))
 		{
-			return $number !== 1 ? $msgidPlural : $msgid;
+			return $number !== 1 ? $messageIdPlural : $messageId;
 		}
 		
 		$result = $this->gettext($key);
 		
 		// find out the appropriate form
-		$select = $this->_translation->getTranslator()->getPlural($number);
+		$select = $this->translation->getTranslator()
+			->getPlural($number);
 		
 		$list = explode(chr(0), $result);
 		if(isset($list[$select]) === false)
@@ -146,43 +137,35 @@ class CachedAdapter
 	
 	/**
 	 * Plural version of pgettext.
-	 *
-	 * @param string $msgctxt     Context
-	 * @param string $msgid       Single form
-	 * @param string $msgidPlural Plural form
-	 * @param int    $number      Number of objects
-	 *
-	 * @return string translated plural form
 	 */
-	public function npgettext(string $msgctxt, string $msgid, string $msgidPlural, int $number): string
+	public function npgettext(
+		string $messageContext, // context
+		string $messageId, // single form
+		string $messageIdPlural, // plural form
+		int $number, // number of objects
+	): string // translated plural form
 	{
-		$key = implode(chr(4), [$msgctxt, $msgid]);
-		$ret = $this->ngettext($key, $msgidPlural, $number);
-		if(str_contains($ret, chr(4)))
+		$key = implode(chr(4), [$messageContext, $messageId]);
+		$translated = $this->ngettext($key, $messageIdPlural, $number);
+		if(str_contains($translated, chr(4)))
 		{
-			return $msgid;
+			return $messageId;
 		}
 		
-		return $ret;
+		return $translated;
 	}
 	
-	/**
-	 * @param array $translations
-	 *
-	 * @return self
-	 */
-	public function setTranslations(array $translations): self
+	public function setTranslations(
+		array $translations,
+	): static
 	{
-		$this->_translations = $translations;
+		$this->translations = $translations;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getTranslations(): array
 	{
-		return $this->_translations;
+		return $this->translations;
 	}
 }

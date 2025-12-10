@@ -8,21 +8,21 @@ use APCUIterator;
 use Closure;
 use Throwable;
 
-use function is_string;
-use function apcu_store;
+use function apcu_cache_info;
+use function apcu_clear_cache;
+use function apcu_delete;
 use function apcu_entry;
 use function apcu_exists;
 use function apcu_fetch;
-use function apcu_delete;
-use function apcu_cache_info;
-use function apcu_clear_cache;
+use function apcu_store;
+use function array_key_exists;
 use function bin2hex;
+use function is_string;
+use function mb_strtolower;
+use function microtime;
 use function random_bytes;
 use function random_int;
-use function microtime;
 use function usleep;
-use function array_key_exists;
-use function mb_strtolower;
 
 /**
  * Apcu
@@ -32,56 +32,26 @@ use function mb_strtolower;
  */
 class Apcu extends KeyValue
 {
-	/**#@+
-	 * Types
-	 */
+	// Types
 	public const string TYPE_LOCK = 'lock';
-	/**#@-*/
 	
-	/**#@+
-	 * Queue (MemoLock) configuration
-	 */
+	// Queue (MemoLock) configuration
+	protected bool $queueEnabled = true;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_queueEnabled = true;
+	protected int $queueLockTtlS = 1;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_queueLockTtlS = 1;
+	protected int $queueWaitTimeoutS = 2;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_queueWaitTimeoutS = 2;
+	protected int $queueBackoffMinMs = 5;
 	
-	/**
-	 * @var int
-	 */
-	protected int $_queueBackoffMinMs = 5;
-	
-	/**
-	 * @var int
-	 */
-	protected int $_queueBackoffMaxMs = 25;
-	
-	/**#@-*/
+	protected int $queueBackoffMaxMs = 25;
 	
 	/**
 	 * An array of unique values for any active locks,
 	 * indexed by the prefixed cache id
-	 * 
-	 * @var array
 	 */
-	protected array $_queueLocks = [];
+	protected array $queueLocks = [];
 	
-	/**
-	 * @param ?string $prefix
-	 * @param ?string $group
-	 * @param ?ArrayObject $config
-	 */
 	public function __construct(
 		?string $prefix = null,
 		?string $group = null,
@@ -109,18 +79,12 @@ class Apcu extends KeyValue
 		}
 	}
 	
-	/**
-	 * @param ArrayObject $config
-	 * @param ?string $group
-	 *
-	 * @return self
-	 */
 	public static function fromConfig(
 		ArrayObject $config,
 		?string $group = null,
-	): self
+	): static
 	{
-		return new self
+		return new static
 		(
 			$config->prefix,
 			$group ?? self::GROUP_DEFAULT,
@@ -128,67 +92,56 @@ class Apcu extends KeyValue
 		);
 	}
 	
-	/**
-	 * @param ArrayObject $config
-	 *
-	 * @return self
-	 */
-	public function setQueue(ArrayObject $config): self
+	public function setQueue(
+		ArrayObject $config,
+	): static
 	{
 		if(($enabled = $config->offsetGet('enabled')) !== null) // true or false
 		{
-			$this->_queueEnabled = $enabled;
+			$this->queueEnabled = $enabled;
 		}
 		if(($lockTtlS = $config->offsetGet('lock_ttl_s')) !== null)
 		{
-			$this->_queueLockTtlS = $lockTtlS;
+			$this->queueLockTtlS = $lockTtlS;
 		}
 		if(($waitTimeoutS = $config->offsetGet('wait_timeout_s')) !== null)
 		{
-			$this->_queueWaitTimeoutS = $waitTimeoutS;
+			$this->queueWaitTimeoutS = $waitTimeoutS;
 		}
 		if(($backoffMinMs = $config->offsetGet('backoff_min_ms')) !== null)
 		{
-			$this->_queueBackoffMinMs = $backoffMinMs;
+			$this->queueBackoffMinMs = $backoffMinMs;
 		}
 		if(($backoffMaxMs = $config->offsetGet('backoff_max_ms')) !== null)
 		{
-			$this->_queueBackoffMaxMs = $backoffMaxMs;
+			$this->queueBackoffMaxMs = $backoffMaxMs;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param bool $enabled
-	 *
-	 * @return self
-	 */
-	public function setQueueEnabled(bool $enabled): self
+	public function setQueueEnabled(
+		bool $enabled,
+	): static
 	{
-		$this->_queueEnabled = $enabled;
+		$this->queueEnabled = $enabled;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isQueueEnabled(): bool
 	{
-		return $this->_queueEnabled;
+		return $this->queueEnabled;
 	}
 	
 	/**
 	 * Returns "id" to be used as cache id form a path string
 	 * For example: /home/user/my-file.txt -> user-my-file-txt
 	 * or C:\Users\User\Desktop\my-file.txt -> user-my-file-txt
-	 *
-	 * @param string $string
-	 *
-	 * @return string
 	 */
-	public static function pathToId(string $string): string
+	public static function pathToId(
+		string $string,
+	): string
 	{
 		$string = mb_strtolower($string);
 		
@@ -208,13 +161,6 @@ class Apcu extends KeyValue
 		return $string;
 	}
 	
-	/**
-	 * @param string $key
-	 * @param mixed $value
-	 * @param int $ttl
-	 *
-	 * @return bool
-	 */
 	public function set(
 		string $key,
 		mixed $value,
@@ -234,21 +180,12 @@ class Apcu extends KeyValue
 		}
 	}
 	
-	/**
-	 * @param string $key
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param bool $queue override for the config switch
-	 * @param ?int $queueLockTtlS override for the config value
-	 * 
-	 * @return null|mixed
-	 */
 	public function get(
 		string $key,
 		?Closure $resolver = null,
 		int $ttl = 0,
-		?bool $queue = null,
-		?int $queueLockTtlS = null,
+		?bool $queue = null, // override for the config switch
+		?int $queueLockTtlS = null, // override for the config value
 	): mixed
 	{
 		$id = $this->prefix($key, $this->getGroup());
@@ -260,7 +197,7 @@ class Apcu extends KeyValue
 		}
 		
 		// cache miss, queue logic begins
-		return $this->_queue(
+		return $this->queue(
 			$key,
 			$id,
 			$resolver,
@@ -270,26 +207,17 @@ class Apcu extends KeyValue
 		);
 	}
 	
-	/**
-	 * @param string $key
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param ?int $queueLockTtlS override for the config value
-	 * @param bool $lockOnly
-	 *
-	 * @return mixed
-	 */
-	public function queue(
+	public function lockAndQueue(
 		string $key,
 		?Closure $resolver = null,
 		int $ttl = 0,
-		?int $queueLockTtlS = null,
+		?int $queueLockTtlS = null, // override for the config value
 		bool $lockOnly = false,
 	): mixed
 	{
 		$id = $this->prefix($key, $this->getGroup());
 		
-		return $this->_queue(
+		return $this->queue(
 			$key,
 			$id,
 			$resolver,
@@ -300,29 +228,18 @@ class Apcu extends KeyValue
 		);
 	}
 	
-	/**
-	 * @param string $key
-	 * @param string $id
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 * @param bool $queue override for the config switch
-	 * @param ?int $queueLockTtlS override for the config value
-	 * @param bool $lockOnly
-	 * 
-	 * @return mixed
-	 */
-	protected function _queue(
+	protected function queue(
 		string $key,
 		string $id,
 		?Closure $resolver = null,
 		int $ttl = 0,
-		?bool $queue = null,
-		?int $queueLockTtlS = null,
+		?bool $queue = null, // override for the config switch
+		?int $queueLockTtlS = null, // override for the config value
 		bool $lockOnly = false,
 	): mixed
 	{
-		if(($this->_queueEnabled === false && $queue !== true)
-			|| ($this->_queueEnabled === true && $queue === false)
+		if(($this->queueEnabled === false && $queue !== true)
+			|| ($this->queueEnabled === true && $queue === false)
 		)
 		{
 			return $this->setFromResolver($key, $resolver, $ttl);
@@ -330,7 +247,7 @@ class Apcu extends KeyValue
 		
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
 		$lockValue = bin2hex(random_bytes(16));
-		$queueLockTtlS = $queueLockTtlS ?? $this->_queueLockTtlS;
+		$queueLockTtlS = $queueLockTtlS ?? $this->queueLockTtlS;
 		
 		$lockAcquired = false;
 		apcu_entry($lockKey, static function() use (&$lockAcquired, $lockValue)
@@ -343,7 +260,7 @@ class Apcu extends KeyValue
 		if($lockAcquired)
 		{
 			// lock acquired, store it internally for releaseActiveLock()
-			return $this->_lockAcquired($key,
+			return $this->lockAcquired($key,
 				$id,
 				$lockValue,
 				$resolver,
@@ -353,12 +270,12 @@ class Apcu extends KeyValue
 		
 		// lock not acquired
 		$startTime = microtime(true);
-		while((microtime(true) - $startTime) < $this->_queueWaitTimeoutS)
+		while((microtime(true) - $startTime) < $this->queueWaitTimeoutS)
 		{
  			// wait with a short, randomized backoff
 			usleep(random_int(
-				$this->_queueBackoffMinMs,
-				$this->_queueBackoffMaxMs,
+				$this->queueBackoffMinMs,
+				$this->queueBackoffMaxMs,
 			) * 1000);
 			
 			if($lockOnly === false)
@@ -385,7 +302,7 @@ class Apcu extends KeyValue
 				if($lockAcquired)
 				{
 					// lock acquired, store it internally for releaseActiveLock()
-					return $this->_lockAcquired($key,
+					return $this->lockAcquired($key,
 						$id,
 						$lockValue,
 						$resolver,
@@ -401,16 +318,7 @@ class Apcu extends KeyValue
 		return $this->callResolver($resolver);
 	}
 	
-	/**
-	 * @param string $key
-	 * @param string $id
-	 * @param string $lockValue
-	 * @param ?Closure $resolver
-	 * @param int $ttl
-	 *
-	 * @return mixed
-	 */
-	protected function _lockAcquired(
+	protected function lockAcquired(
 		string $key,
 		string $id,
 		string $lockValue,
@@ -418,7 +326,7 @@ class Apcu extends KeyValue
 		int $ttl = 0,
 	): mixed
 	{
-		$this->_queueLocks[$id] = $lockValue;
+		$this->queueLocks[$id] = $lockValue;
 		
 		try
 		{
@@ -437,11 +345,6 @@ class Apcu extends KeyValue
 	 * the get(), for example, when an exception is caught,
 	 * and we know that save() won't be called
 	 * This will enable other processes to acquire the lock faster
-	 * 
-	 * @param string $key
-	 * @param ?string $id
-	 *
-	 * @return bool
 	 */
 	public function releaseActiveLock(
 		string $key,
@@ -453,13 +356,13 @@ class Apcu extends KeyValue
 			$id = $this->prefix($key, $this->getGroup());
 		}
 		
-		if(array_key_exists($id, $this->_queueLocks) === false)
+		if(array_key_exists($id, $this->queueLocks) === false)
 		{
 			return false;
 		}
 		
-		$lockValue = $this->_queueLocks[$id];
-		unset($this->_queueLocks[$id]);
+		$lockValue = $this->queueLocks[$id];
+		unset($this->queueLocks[$id]);
 		
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
 		
@@ -478,24 +381,22 @@ class Apcu extends KeyValue
 	/**
 	 * This function should be used for long-running processes
 	 * which hold the lock for longer than default lock TTL
-	 * 
-	 * @param string $key
-	 * @param ?int $ttlS
-	 *
-	 * @return bool
 	 */
-	public function renewLock(string $key, ?int $ttlS = null): bool
+	public function renewLock(
+		string $key,
+		?int $ttlS = null,
+	): bool
 	{
 		$id = $this->prefix($key, $this->getGroup());
 		
-		if(array_key_exists($id, $this->_queueLocks) === false)
+		if(array_key_exists($id, $this->queueLocks) === false)
 		{
 			return false;
 		}
 		
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
-		$lockValue = $this->_queueLocks[$id];
-		$ttlS = $ttlS ?? $this->_queueLockTtlS;
+		$lockValue = $this->queueLocks[$id];
+		$ttlS = $ttlS ?? $this->queueLockTtlS;
 		
 		// verify lock ownership before extension
 		$lockKeyValue = apcu_fetch($lockKey);
@@ -508,12 +409,9 @@ class Apcu extends KeyValue
 		return false;
 	}
 	
-	/**
-	 * @param string|APCUIterator $key
-	 *
-	 * @return bool
-	 */
-	public function delete(string|APCUIterator $key): bool
+	public function delete(
+		string|APCUIterator $key,
+	): bool
 	{
 		if(is_string($key))
 		{
@@ -523,20 +421,14 @@ class Apcu extends KeyValue
 		return apcu_delete($key);
 	}
 	
-	/**
-	 * @param bool $limited
-	 *
-	 * @return bool|array
-	 */
-	public function info(bool $limited = false): bool|array
+	public function info(
+		bool $limited = false,
+	): bool|array
 	{
 		return apcu_cache_info($limited);
 	}
 	
-	/**
-	 * @return bool - always true
-	 */
-	public function clear(): bool
+	public function clear(): bool // always true
 	{
 		return apcu_clear_cache();
 	}

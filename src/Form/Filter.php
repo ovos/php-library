@@ -11,10 +11,7 @@ namespace Ovos\Form;
  */
 abstract class Filter
 {
-	/**
-	 * @param mixed $value
-	 *
-	 * @return mixed
-	 */
-	abstract public function filter(mixed $value): mixed;
+	abstract public function filter(
+		mixed $value,
+	): mixed;
 }

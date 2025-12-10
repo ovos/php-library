@@ -7,7 +7,7 @@ use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Store\Mysql as Store;
 use Ovos\Pdo\Profiler\Reporter;
-use PDO;
+use Override;
 
 /**
  * Mysql
@@ -17,19 +17,16 @@ use PDO;
  */
 class Mysql extends Test
 {
-	/**
-	 * @var object
-	 */
-	protected object $_store;
+	protected object $store;
 	
 	public function __construct()
 	{
-		$this->_store = (new class() extends Store
+		$this->store = (new class() extends Store
 		{
 			public const ?string TABLE = 'tests';
 		});
 		
-		$this->_store->source()->exec('
+		$this->store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
 				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				name VARCHAR(128) NULL,
@@ -47,7 +44,7 @@ class Mysql extends Test
 	
 	public function reporter(): bool
 	{
-		$this->_store->source()->exec('
+		$this->store->source()->exec('
 			INSERT INTO tests
 			VALUES
 				(1, "Test 1", NOW(), null, 1),
@@ -55,7 +52,7 @@ class Mysql extends Test
 				(3, "Test 3", NOW(), null, 0);
 		');
 		
-		$this->_store->executeFind(whereIn: ['active' => [1]]);
+		$this->store->executeFind(whereIn: ['active' => [1]]);
 		
 		$reporter = new Reporter;
 		return count($reporter->getReport()) > 0;
@@ -65,17 +62,21 @@ class Mysql extends Test
 	 * Called by the runner after each test method
 	 */
 	#[Internal]
+	#[Override]
 	public function finalize(): void
 	{
-		$this->_store->source()->exec('TRUNCATE TABLE tests');
+		$this->store->source()
+			->exec('TRUNCATE TABLE tests');
 	}
 	
 	/**
 	 * Called by the runner after all test methods have been invoked
 	 */
 	#[Internal]
+	#[Override]
 	public function deconstruct(): void
 	{
-		$this->_store->source()->exec('DROP TABLE IF EXISTS tests');
+		$this->store->source()
+			->exec('DROP TABLE IF EXISTS tests');
 	}
 }

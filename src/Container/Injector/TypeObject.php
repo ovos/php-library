@@ -6,9 +6,8 @@ namespace Ovos\Container\Injector;
 use Ovos\Container;
 use Ovos\Container\Injector;
 use Ovos\Container\Traits\TraitInitializer;
-
+use Override;
 use ReflectionObject;
-use Closure;
 
 /**
  * TypeObject
@@ -20,21 +19,12 @@ class TypeObject extends Injector
 {
 	use TraitInitializer;
 	
-	/**
-	 * @var object
-	 */
-	protected object $_object;
+	protected object $object;
 	
-	/**
-	 * @var ?ReflectionObject 
-	 */
-	protected ?ReflectionObject $_reflector = null;
+	protected ?ReflectionObject $reflector = null;
 	
-	/**
-	 * @param object $object
-	 * @param ?callable $initializer
-	 */
-	public function __construct(object $object,
+	public function __construct(
+		object $object,
 		?callable $initializer = null,
 	)
 	{
@@ -42,45 +32,34 @@ class TypeObject extends Injector
 		$this->setInitializer($initializer);
 	}
 	
-	/**
-	 * @param object $object
-	 *
-	 * @return self
-	 */
-	public function setObject(object $object): self
+	public function setObject(
+		object $object,
+	): static
 	{
-		$this->_object = $object;
+		$this->object = $object;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return object
-	 */
 	public function getObject(): object
 	{
-		return $this->_object;
+		return $this->object;
 	}
 	
-	/**
-	 * @return ReflectionObject
-	 */
 	public function getReflector(): ReflectionObject
 	{
-		if($this->_reflector === null)
+		if($this->reflector === null)
 		{
-			$this->_reflector = new ReflectionObject($this->_object);
+			$this->reflector = new ReflectionObject($this->object);
 		}
 		
-		return $this->_reflector;
+		return $this->reflector;
 	}
 	
-	/**
-	 * @param Container $container
-	 *
-	 * @return object
-	 */
-	public function inject(Container $container): object
+	#[Override]
+	public function inject(
+		Container $container,
+	): object
 	{
 		$reflector = $this->getReflector();
 		$object = $this->getObject();

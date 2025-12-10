@@ -8,8 +8,6 @@ use Ovos\Measurement;
 use Ovos\Exception\InvalidException\InvalidClassException;
 use ReflectionClass;
 
-use function is_subclass_of;
-
 /**
  * Runner
  *
@@ -18,46 +16,30 @@ use function is_subclass_of;
  */
 class Runner
 {
-	/**
-	 * @var ReflectionClass
-	 */
 	public ReflectionClass $class;
 	
-	/**
-	 * @var int
-	 */
 	public int $id;
 	
-	/**
-	 * @var ?Measurement
-	 */
 	public ?Measurement $measurement = null;
 	
-	/**
-	 * @param ReflectionClass $class
-	 * @param int $id
-	 */
-	public function __construct(ReflectionClass $class, int $id)
+	public function __construct(ReflectionClass $class,
+		int $id,
+	)
 	{
 		$this->class = $class;
 		$this->id = $id;
 	}
 	
-	/**
-	 * @param string $direction
-	 *
-	 * @return void
-	 *
-	 * @throws InvalidClassException
-	 */
-	public function run(string $direction): void
+	public function run(
+		string $direction,
+	): void
 	{
 		$this->measurement = new Measurement;
 		$this->measurement->start();
 		
 		/** @var Migration $migration */
 		$migration = $this->class->newInstance($this->class);
-		if(is_subclass_of($migration, 'Ovos\Migration') === false)
+		if($migration instanceof Migration === false)
 		{
 			throw new InvalidClassException('A class has to extend an "Ovos\Migration" class.');
 		}
@@ -67,10 +49,7 @@ class Runner
 		$this->measurement->stop();
 	}
 	
-	/**
-	 * @return string
-	 */
-	public function __toString()
+	public function __toString(): string
 	{
 		return $this->class->name;
 	}

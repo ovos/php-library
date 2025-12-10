@@ -15,124 +15,99 @@ use function implode;
  */
 class Select extends Query
 {
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_alias = null;
+	protected array $orderBy = [];
 	
-	/**
-	 * @var array
-	 */
-	protected array $_leftJoins = [];
+	protected array $groupBy = [];
 	
-	/**
-	 * @var array
-	 */
-	protected array $_innerJoins = [];
+	protected array $having = [];
 	
-	/**
-	 * @var array
-	 */
-	protected array $_orderBy = [];
+	protected mixed $limit = null;
 	
-	/**
-	 * @var array
-	 */
-	protected array $_groupBy = [];
-	
-	/**
-	 * @var array
-	 */
-	protected array $_having = [];
-	
-	/**
-	 * @var mixed
-	 */
-	protected mixed $_limit = null;
-	
-	/**
-	 * @var mixed
-	 */
-	protected mixed $_offset = null;
+	protected mixed $offset = null;
 	
 	/**
 	 * @return string
 	 */
 	public function getSql(): string
 	{
-		$sql = 'SELECT ' . implode(', ', $this->_columns) . PHP_EOL;
-		$sql.= 'FROM ' . ($this->_alias === null
-			? $this->_table
-			: $this->_table . ' ' . $this->_alias
-		) . PHP_EOL;
+		$sql = 'SELECT ' . implode(', ', $this->columns) . PHP_EOL;
+		$sql.= 'FROM ' . $this->getFrom() . PHP_EOL;
 		
-		if($this->_leftJoins !== [])
+		if($this->leftJoins !== [])
 		{
-			$sql.= 'LEFT JOIN ' . implode(PHP_EOL . 'LEFT JOIN ', $this->_leftJoins) . PHP_EOL;
+			$sql.= 'LEFT JOIN '
+				. implode(PHP_EOL . 'LEFT JOIN ', $this->leftJoins)
+				. PHP_EOL;
 		}
 		
-		if($this->_innerJoins !== [])
+		if($this->innerJoins !== [])
 		{
-			$sql.= 'INNER JOIN ' . implode(PHP_EOL . 'INNER JOIN ', $this->_innerJoins) . PHP_EOL;
+			$sql.= 'INNER JOIN '
+				. implode(PHP_EOL . 'INNER JOIN ', $this->innerJoins)
+				. PHP_EOL;
 		}
 		
-		if($this->_conditions !== [])
+		if($this->conditions !== [])
 		{
-			$sql.= 'WHERE ' . $this->_getConditionsSql($this->_conditions) . PHP_EOL;
+			$sql.= 'WHERE '
+				. $this->getConditionsSql($this->conditions)
+				. PHP_EOL;
 		}
 		
-		if($this->_groupBy !== [])
+		if($this->groupBy !== [])
 		{
-			$sql.= 'GROUP BY ' . implode( ' , ', $this->_groupBy) . PHP_EOL;
+			$sql.= 'GROUP BY '
+				. implode( ' , ', $this->groupBy)
+				. PHP_EOL;
 		}
 		
-		if($this->_having !== [])
+		if($this->having !== [])
 		{
-			$sql.= 'HAVING ' . implode(PHP_EOL . 'AND ', $this->_having) . PHP_EOL;
+			$sql.= 'HAVING '
+				. implode(PHP_EOL . 'AND ', $this->having)
+				. PHP_EOL;
 		}
 		
-		if($this->_orderBy !== [])
+		if($this->orderBy !== [])
 		{
-			$sql.= 'ORDER BY ' . implode( ' , ', $this->_orderBy) . PHP_EOL;
+			$sql.= 'ORDER BY '
+				. implode( ' , ', $this->orderBy)
+				. PHP_EOL;
 		}
 		
-		if($this->_limit !== null)
+		if($this->limit !== null)
 		{
-			$sql.= 'LIMIT ' . $this->_limit . PHP_EOL;
+			$sql.= 'LIMIT ' . $this->limit
+				. PHP_EOL;
 		}
 		
-		if($this->_offset !== null)
+		if($this->offset !== null)
 		{
-			$sql.= 'OFFSET ' . $this->_offset . PHP_EOL;
+			$sql.= 'OFFSET ' . $this->offset
+				. PHP_EOL;
 		}
 		
 		return $sql;
 	}
 	
-	/**
-	 * @param string ...$fields
-	 *
-	 * @return self
-	 */
-	public function select(string ...$fields): self
+	public function select(
+		string ...$fields,
+	): static
 	{
 		foreach($fields as $field)
 		{
-			$this->_columns[] = $field;
+			$this->columns[] = $field;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string $table
-	 * @param ?string $alias
-	 *
-	 * @return self
-	 */
-	public function from(string $table, ?string $alias = null): self
+	public function from(
+		string $table,
+		?string $alias = null,
+	): static
 	{
-		$this->_table = $table;
+		$this->table = $table;
 		if($alias !== null)
 		{
 			$this->alias($alias);
@@ -140,117 +115,93 @@ class Select extends Query
 		
 		return $this;
 	}
-
-	/**
-	 * @param string $alias
-	 *
-	 * @return self
-	 */
-	public function alias(string $alias): self
+	
+	public function alias(
+		string $alias,
+	): static
 	{
-		$this->_alias = $alias;
+		$this->alias = $alias;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param mixed $limit
-	 *
-	 * @return self
-	 */
-	public function limit(mixed $limit): self
+	public function limit(
+		mixed $limit,
+	): static
 	{
-		$this->_limit = $limit;
+		$this->limit = $limit;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param mixed $offset
-	 *
-	 * @return self
-	 */
-	public function offset(mixed $offset): self
+	public function offset(
+		mixed $offset,
+	): static
 	{
-		$this->_offset = $offset;
+		$this->offset = $offset;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string ...$arguments
-	 *
-	 * @return self
-	 */
-	public function groupBy(string ...$arguments): self
+	public function groupBy(
+		string ...$arguments,
+	): static
 	{
 		foreach($arguments as $argument)
 		{
-			$this->_groupBy[] = $argument;
+			$this->groupBy[] = $argument;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string ...$conditions
-	 *
-	 * @return self
-	 */
-	public function having(string ...$conditions): self
+	public function having(
+		string ...$conditions,
+	): static
 	{
 		foreach($conditions as $condition)
 		{
-			$this->_having[] = $condition;
+			$this->having[] = $condition;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string ...$arguments
-	 *
-	 * @return self
-	 */
-	public function orderBy(string ...$arguments): self
+	public function orderBy(
+		string ...$arguments,
+	): static
 	{
 		foreach($arguments as $argument)
 		{
-			$this->_orderBy[] = $argument;
+			$this->orderBy[] = $argument;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string ...$joins
-	 *
-	 * @return self
-	 */
-	public function innerJoin(string ...$joins): self
+	public function innerJoin(
+		string ...$joins,
+	): static
 	{
-		$this->_leftJoins = [];
+		$this->leftJoins = [];
 		
 		foreach($joins as $join)
 		{
-			$this->_innerJoins[] = $join;
+			$this->innerJoins[] = $join;
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string ...$joins
-	 *
-	 * @return self
-	 */
-	public function leftJoin(string ...$joins): self
+	public function leftJoin(
+		string ...$joins,
+	): static
 	{
-		$this->_innerJoins = [];
+		$this->innerJoins = [];
 		
 		foreach($joins as $join)
 		{
-			$this->_leftJoins[] = $join;
+			$this->leftJoins[] = $join;
 		}
 		
 		return $this;
