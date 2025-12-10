@@ -248,7 +248,7 @@ class Container extends Test
 	/**
 	 * @return BaseArrayObject
 	 */
-	protected function _getExampleArrayObject(): BaseArrayObject
+	protected function getExampleArrayObject(): BaseArrayObject
 	{
 		return Arrays::deepToArrayObject([
 			'system' => [
@@ -264,7 +264,7 @@ class Container extends Test
 	
 	public function attributesProperties(): bool
 	{
-		$arrayObject = $this->_getExampleArrayObject();
+		$arrayObject = $this->getExampleArrayObject();
 		
 		$container = new BaseContainer;
 		$container->registerObject('config', $arrayObject);
@@ -280,7 +280,7 @@ class Container extends Test
 	
 	public function attributesParameters(): bool
 	{
-		$arrayObject = $this->_getExampleArrayObject();
+		$arrayObject = $this->getExampleArrayObject();
 		
 		$container = new BaseContainer;
 		$container->registerObject('config', $arrayObject);

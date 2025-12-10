@@ -11,10 +11,7 @@ namespace Ovos\View\Helper;
  */
 class Body extends Elements
 {
-	/**
-	 * @return self
-	 */
-	public function body(): Elements
+	public function body(): static
 	{
 		return $this->elements()->body;
 	}

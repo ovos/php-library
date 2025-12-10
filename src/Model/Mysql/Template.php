@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 namespace Ovos\Model\Mysql;
 
+use Ovos\Container;
 use Ovos\Model\Mysql;
 use Ovos\Application;
 use Ovos\ArrayObject;
 
-use function Ovos\app;
+use function Ovos\container;
+use function array_keys;
+use function get_object_vars;
 
 /**
  * Template
@@ -17,79 +20,61 @@ use function Ovos\app;
  */
 abstract class Template
 {
-	/**
-	 * Application
-	 *
-	 * @var ?Application
-	 */
-	protected ?Application $_app = null;
+	protected Container $container;
 	
-	/**
-	 * Config
-	 *
-	 * @var ?ArrayObject
-	 */
-	protected ?ArrayObject $_config = null;
-
-	/**
-	 */
+	protected Application $app;
+	
+	protected ArrayObject $config;
+	
 	public function __construct()
 	{
-		$this->__wakeup();
+		$this->__unserialize();
 	}
 	
-	/**
-	 * @return array
-	 */
-	public function __sleep(): array
+	public function __serialize(): array
 	{
 		$properties = get_object_vars($this);
-		unset($properties['_app']);
-		unset($properties['_config']);
+		unset($properties['_app'], $properties['_config']);
 		
 		return array_keys($properties);
 	}
 	
-	/**
-	 */
-	public function __wakeup()
+	public function __unserialize(
+		array $data = [],
+	): void
 	{
-		$this->_app = app();
-		$this->_config = $this->_app->getConfig();
+		$this->container = container();
+		$this->app = $this->container->get(Application::class);
+		$this->config = $this->app->getConfig();
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function setUp(Mysql $model): void
-	{
-	}
-	
-	/**
-	 * @param Mysql $model
-	 */
-	public function preInsert(Mysql $model): void
+	public function setUp(
+		Mysql $model,
+	): void
 	{
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function preUpdate(Mysql $model): void
+	public function preInsert(
+		Mysql $model,
+	): void
 	{
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function preSave(Mysql $model): void
+	public function preUpdate(
+		Mysql $model,
+	): void
 	{
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function preDelete(Mysql $model): void
+	public function preSave(
+		Mysql $model,
+	): void
+	{
+	}
+	
+	public function preDelete(
+		Mysql $model,
+	): void
 	{
 	}
 }

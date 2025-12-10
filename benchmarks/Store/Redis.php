@@ -8,6 +8,7 @@ use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
 use Ovos\Test\Internal;
 use Ovos\Test\Store\TraitRedis;
+use Override;
 
 /**
  * Redis
@@ -19,28 +20,19 @@ class Redis extends Benchmark
 {
 	use TraitRedis;
 	
-	/**
-	 * @var int
-	 */
 	public const int ITEMS = 10000;
 	
-	/**
-	 * @var int
-	 */
 	public const int TAGS_PER_ITEM = 20;
 	
-	/**
-	 * @var ?Store
-	 */
-	protected ?Store $_store = null;
+	protected ?Store $store = null;
 	
 	public function __construct()
 	{
-		$this->_group = KeyValue::GROUP_BENCHMARKS;
-		$this->_store = $this->_getStore(Store::class);
+		$this->group = KeyValue::GROUP_BENCHMARKS;
+		$this->store = $this->getStore(Store::class);
 	}
 	
-	protected function _fill(): void
+	protected function fill(): void
 	{
 		$tags = [];
 		for($i = 1; $i <= self::TAGS_PER_ITEM; $i++)
@@ -50,7 +42,7 @@ class Redis extends Benchmark
 		
 		for($i = 1; $i <= self::ITEMS; $i++)
 		{
-			$this->_store->set('item' . $i, 'test', tags: $tags);
+			$this->store->set('item' . $i, 'test', tags: $tags);
 		}
 	}
 	
@@ -60,13 +52,13 @@ class Redis extends Benchmark
 	#[Internal]
 	public function prepare(): void
 	{
-		$this->_fill();
+		$this->fill();
 	}
 	
 	public function invalidateTags(): void
 	{
 		$tags = ['tag1', 'tag2'];
-		$this->_store->invalidateTags($tags);
+		$this->store->invalidateTags($tags);
 	}
 	
 	/**
@@ -75,6 +67,16 @@ class Redis extends Benchmark
 	#[Internal]
 	public function finalize(): void
 	{
-		$this->_store->clear();
+		$this->store->clear();
+	}
+	
+	/**
+	 * Called by the runner after all test methods have been invoked
+	 */
+	#[Internal]
+	#[Override]
+	public function deconstruct(): void
+	{
+		$this->connection->disconnect();
 	}
 }

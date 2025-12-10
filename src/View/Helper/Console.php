@@ -15,25 +15,23 @@ use Ovos\View\Helper;
  */
 class Console extends Helper
 {
-	/**
-	 * @return int
-	 */
 	public function getCount(): int
 	{
-		return BaseConsole::getInstance()->getCount();
+		return $this->container
+			->getClass(BaseConsole::class)
+			->getCount();
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
-		if($this->_app->getConfig()->system->profilers->enabled === false)
+		if($this->app->getConfig()->system->profilers->enabled === false)
 		{
 			return '';
 		}
 		
-		$messages = BaseConsole::getInstance()->getReport();
+		$messages = $this->container
+			->getClass(BaseConsole::class)
+			->getReport();
 		if(empty($messages))
 		{
 			return '';

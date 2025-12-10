@@ -14,46 +14,33 @@ use Closure;
  */
 class Callback extends Filter
 {
-	/**
-	 * @var Closure
-	 */
-	protected Closure $_callback;
+	protected Closure $callback;
 	
-	/**
-	 * @param Closure $callback
-	 *
-	 * @return self
-	 */
-	public function setCallback(Closure $callback): self
-	{
-		$this->_callback = $callback;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return Closure
-	 */
-	public function getCallback(): Closure
-	{
-		return $this->_callback;
-	}
-	
-	/**
-	 * @param Closure $callback
-	 */
-	public function __construct(Closure $callback)
+	public function __construct(
+		Closure $callback,
+	)
 	{
 		$this->setCallback($callback);
 	}
 	
-	/**
-	 * @param mixed $value
-	 *
-	 * @return mixed
-	 */
-	public function filter(mixed $value): mixed
+	public function setCallback(
+		Closure $callback,
+	): static
 	{
-		return ($this->_callback)($value);
+		$this->callback = $callback;
+		
+		return $this;
+	}
+	
+	public function getCallback(): Closure
+	{
+		return $this->callback;
+	}
+	
+	public function filter(
+		mixed $value,
+	): mixed
+	{
+		return ($this->callback)($value);
 	}
 }

@@ -4,14 +4,17 @@ declare(strict_types=1);
 namespace Ovos\Model\Mysql\Template;
 
 use Ovos\ArrayObject;
+use Ovos\Exception\MissingException\MissingConfigException;
 use Ovos\Model\Mysql;
 use Ovos\Model\Mysql\Template;
+use Override;
 
 use function bin2hex;
 use function openssl_cipher_iv_length;
 use function openssl_decrypt;
 use function openssl_encrypt;
 use function random_bytes;
+use const OPENSSL_RAW_DATA;
 
 /**
  * Encrypted
@@ -21,72 +24,64 @@ use function random_bytes;
  */
 class Encrypted extends Template
 {
-	/**
-	 * @var array
-	 */
-	protected array $_properties = [];
+	protected array $properties = [];
 	
-	/**
-	 * @param array $properties
-	 */
-	public function __construct(array $properties = [])
+	public function __construct(
+		array $properties = [],
+	)
 	{
 		parent::__construct();
 		
 		$this->setProperties($properties);
 	}
 	
-	/**
-	 * @param array $properties
-	 * 
-	 * @return self
-	 */
-	public function setProperties(array $properties): self
+	public function setProperties(
+		array $properties,
+	): static
 	{
-		$this->_properties = $properties;
+		$this->properties = $properties;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getProperties(): array
 	{
-		return $this->_properties;
+		return $this->properties;
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function setUp(Mysql $model): void
+	#[Override]
+	public function setUp(
+		Mysql $model,
+	): void
 	{
 		foreach($this->getProperties() as $property)
 		{
 			$model->addManipulators($property,
 				[$this, 'decrypt'],
-				[$this, 'encrypt'], 
-				true
+				[$this, 'encrypt'],
+				true,
 			);
 		}
 	}
 	
-	/**
-	 * @return ?ArrayObject
-	 */
 	public function getEncryptionConfig(): ?ArrayObject
 	{
-		return $this->_config->database->encryption;
+		$config = $this->config->database->encryption;
+		
+		if($config === null)
+		{
+			throw new MissingConfigException(
+				'"database.encryption" config section is missing.');
+		}
+		
+		return $config;
 	}
 	
-	/**
-	 * @param ?string $string
-	 * @param string $property
-	 * @param Mysql $model
-	 *
-	 * @return ?string
-	 */
-	public function encrypt(?string $string, string $property, Mysql $model): ?string
+	public function encrypt(
+		?string $string,
+		string $property,
+		Mysql $model,
+	): ?string
 	{
 		if($string === null)
 		{
@@ -115,17 +110,14 @@ class Encrypted extends Template
 			OPENSSL_RAW_DATA,
 			$model->cipher_iv);
 		
-		return $string ?: null;	
+		return $string ?: null;
 	}
 	
-	/**
-	 * @param ?string $string
-	 * @param string $property
-	 * @param Mysql $model
-	 *
-	 * @return ?string
-	 */
-	public function decrypt(?string $string, string $property, Mysql $model): ?string
+	public function decrypt(
+		?string $string,
+		string $property,
+		Mysql $model,
+	): ?string
 	{
 		if($string === null)
 		{

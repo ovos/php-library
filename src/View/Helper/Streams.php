@@ -17,20 +17,10 @@ use Ovos\View\Helper;
  */
 class Streams extends Helper
 {
-	/**
-	 * @var ArrayObject
-	 */
-	protected ArrayObject $_config;
-
-	/**
-	 * @var ?Service
-	 */
-	protected ?Service $_streamsService;
+	protected ArrayObject $config;
 	
-	/**
-	 * @param ?Service $streamsService
-	 * @param ArrayObject $config
-	 */
+	protected ?Service $streamsService;
+	
 	public function __construct(
 		#[Inject(Service::SYMBOL)] ?Service $streamsService,
 		#[Inject('config')]
@@ -39,42 +29,30 @@ class Streams extends Helper
 	{
 		parent::__construct();
 		
-		$this->_streamsService = $streamsService;
-		$this->_config = $config;
+		$this->streamsService = $streamsService;
+		$this->config = $config;
 	}
 	
-	/**
-	 * @return self
-	 */
-	public function streams(): self
+	public function streams(): static
 	{
 		return $this;
 	}
 	
-	/**
-	 * @return ?Service
-	 */
 	public function get(): ?Service
 	{
-		return $this->_streamsService;
+		return $this->streamsService;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getRequests(): array
 	{
-		return $this->_streamsService !== null
-			? $this->_streamsService->getRequests()
+		return $this->streamsService !== null
+			? $this->streamsService->getRequests()
 			: [];
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString()
 	{
-		if($this->_config->system->profilers->enabled === false)
+		if($this->config->system->profilers->enabled === false)
 		{
 			return '';
 		}

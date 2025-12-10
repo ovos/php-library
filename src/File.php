@@ -17,12 +17,10 @@ class File
 {
 	/**
 	 * Extract basename and extension
-	 *
-	 * @param string $filename
-	 *
-	 * @return array
 	 */
-	public static function extractFilename(string $filename): array
+	public static function extractFilename(
+		string $filename,
+	): array
 	{
 		$basename = $ext = null;
 		

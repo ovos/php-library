@@ -20,11 +20,8 @@ class TypeClass extends Register
 	use TraitParameters;
 	use TraitInitializer;
 	
-	/**
-	 * @param array $parameters
-	 * @param ?callable $initializer
-	 */
-	public function __construct(array $parameters = [],
+	public function __construct(
+		array $parameters = [],
 		?callable $initializer = null,
 	)
 	{

@@ -14,13 +14,6 @@ use function sprintf;
  */
 class Functions
 {
-	/**
-	 * @param string $line
-	 * @param bool $bold
-	 * @param bool $indent
-	 *
-	 * @return void
-	 */
 	public static function println(
 		string $line = '',
 		bool $bold = false,
@@ -50,6 +43,10 @@ class Functions
 		
 		$line.= PHP_EOL;
 		
-		Terminal::output($isCli ? $line : nl2br($line), true);
+		Terminal::output($isCli
+			? $line
+			: nl2br($line),
+			true,
+		);
 	}
 }

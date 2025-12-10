@@ -16,72 +16,40 @@ use function count;
 class Console
 {
 	/**
-	 * Collector instance
-	 *
-	 * @var ?self
-	 */
-	protected static ?self $instance = null;
-	
-	/**
 	 * Contains collected data
-	 *
-	 * @var SplQueue
 	 */
-	protected SplQueue $_messages;
+	protected SplQueue $messages;
 	
-	/**
-	 * @var int
-	 */
 	public static int $limit = 0;
 	
-	/**
-	 * @return self
-	 */
-	public static function getInstance(): self
-	{
-		if(self::$instance === null)
-		{
-			self::$instance = new self;
-		}
-		
-		return self::$instance;
-	}
-	
-	/**
-	 */
 	public function __construct()
 	{
-		$this->_messages = new SplQueue;
+		$this->messages = new SplQueue;
 	}
 	
 	/**
 	 * Adds a message to a collection
-	 *
-	 * @param mixed $message Message
-	 *
-	 * @return self
 	 */
-	public function setMessage(mixed $message): self
+	public function setMessage(
+		mixed $message,
+	): static
 	{
-		$this->_messages->push([
+		$this->messages->push([
 			'message' => $message,
 		]);
 		
 		// delete the oldest element from the queue if we reached the limit
-		if(self::$limit && $this->_messages->count() > self::$limit)
+		if(self::$limit && $this->messages->count() > self::$limit)
 		{
-			$this->_messages->shift();
+			$this->messages->shift();
 		}
 		
 		return $this;
 	}
 	
-	/**
-	 * @param ...$messages
-	 *
-	 * @return self
-	 */
-	public function setMessages(...$messages): self
+	public function setMessages(
+		...$messages,
+	): static
 	{
 		foreach($messages as $message)
 		{
@@ -93,12 +61,10 @@ class Console
 	
 	/**
 	 * Returns collected data
-	 *
-	 * @return SplQueue
 	 */
 	public function getMessages(): SplQueue
 	{
-		return $this->_messages;
+		return $this->messages;
 	}
 	
 	/**
@@ -110,7 +76,7 @@ class Console
 	{
 		$messages = [];
 		
-		foreach($this->_messages as $message)
+		foreach($this->messages as $message)
 		{
 			$messages[] = new ArrayObject
 			([
@@ -121,11 +87,8 @@ class Console
 		return $messages;
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getCount(): int
 	{
-		return count($this->_messages);
+		return count($this->messages);
 	}
 }

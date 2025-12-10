@@ -17,79 +17,59 @@ use function array_key_exists;
  */
 class File extends Element
 {
-	/**
-	 * @var array
-	 */
-	protected array $_types;
+	protected array $types;
 	
-	/**
-	 * @param array $types
-	 */
-	public function __construct(array $types = [])
+	public function __construct(
+		array $types = [],
+	)
 	{
 		$this->setTypes($types);
 		$this->addValidator(new FileUploaded);
 	}
 	
-	/**
-	 * @param array $types
-	 *
-	 * @return self
-	 */
-	public function setTypes(array $types): self
+	public function setTypes(
+		array $types,
+	): static
 	{
-		$this->_types = $types;
+		$this->types = $types;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getTypes(): array
 	{
-		return $this->_types;
+		return $this->types;
 	}
 	
-	/**
-	 * @param string $key
-	 *
-	 * @return mixed
-	 */
-	public function __get(string $key): mixed
+	public function __get(
+		string $key,
+	): mixed
 	{
-		if(isset($_FILES[$this->_id][$key]) === false)
+		if(isset($_FILES[$this->id][$key]) === false)
 		{
 			return null;
 		}
 		
-		return $_FILES[$this->_id][$key];
+		return $_FILES[$this->id][$key];
 	}
 	
-	/**
-	 * @param string $key
-	 * @param mixed $value
-	 */
-	public function __set(string $key, mixed $value): void
+	public function __set(
+		string $key,
+		mixed $value,
+	): void
 	{
-		$_FILES[$this->_id][$key] = $value;
+		$_FILES[$this->id][$key] = $value;
 	}
 	
-	/**
-	 * @param string $key
-	 *
-	 * @return bool
-	 */
-	public function __isset(string $key): bool
+	public function __isset(
+		string $key,
+	): bool
 	{
-		return array_key_exists($key, $_FILES[$this->_id]);
+		return array_key_exists($key, $_FILES[$this->id]);
 	}
 	
-	/**
-	 * @return ArrayObject
-	 */
 	public function toArrayObject(): ArrayObject
 	{
-		return new ArrayObject($_FILES[$this->_id]);
+		return new ArrayObject($_FILES[$this->id]);
 	}
 }

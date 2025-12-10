@@ -28,39 +28,22 @@ use const JSON_NUMERIC_CHECK;
  */
 class Json extends Template
 {
-	/**#@+
-	 * Types
-	 * 
-	 * @var string
-	 */
+	// Types
 	public const string TYPE_ARRAY = 'array';
 	public const string TYPE_OBJECT = 'object';
-	/**#@-*/
 	
-	/**
-	 * @var array
-	 */
-	protected array $_properties = [];
+	protected array $properties = [];
 	
 	/**
 	 * Type of stored object
-	 *
-	 * @var string
 	 */
-	protected string $_type;
+	protected string $type;
 	
 	/**
 	 * Class of stored object
-	 * 
-	 * @var null|string|Closure
 	 */
-	protected null|string|Closure $_class = null;
+	protected null|string|Closure $class = null;
 	
-	/**
-	 * @param array $properties
-	 * @param string $type
-	 * @param null|string|Closure $class
-	 */
 	public function __construct(
 		array $properties = [],
 		string $type = self::TYPE_ARRAY,
@@ -69,75 +52,57 @@ class Json extends Template
 	{
 		parent::__construct();
 	
-		$this->_properties = $properties;
-		$this->_type = $type;
-		$this->_class = $class;
+		$this->properties = $properties;
+		$this->type = $type;
+		$this->class = $class;
 	}
-
-	/**
-	 * @param array $properties
-	 *
-	 * @return self
-	 */
-	public function setProperties(array $properties): self
+	
+	public function setProperties(
+		array $properties,
+	): static
 	{
-		$this->_properties = $properties;
+		$this->properties = $properties;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getProperties(): array
 	{
-		return $this->_properties;
+		return $this->properties;
 	}
 	
-	/**
-	 * @param string $type
-	 * 
-	 * @return self
-	 */
-	public function setType(string $type): self
+	public function setType(
+		string $type,
+	): static
 	{
-		$this->_type = $type;
+		$this->type = $type;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getType(): string
 	{
-		return $this->_type;
+		return $this->type;
 	}
 	
-	/**
-	 * @param null|string|Closure $class
-	 *
-	 * @return self
-	 */
-	public function setClass(null|string|Closure $class): self
+	public function setClass(
+		null|string|Closure $class,
+	): static
 	{
-		$this->_class = $class;
+		$this->class = $class;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return null|string|Closure
-	 */
-	public function getClass(): null|string|Closure
+	public function getClass(
+	): null|string|Closure
 	{
-		return $this->_class;
+		return $this->class;
 	}
 	
-	/**
-	 * @param Mysql $model
-	 */
-	public function setUp(Mysql $model): void
+	public function setUp(
+		Mysql $model,
+	): void
 	{
 		foreach($this->getProperties() as $property)
 		{
@@ -149,14 +114,11 @@ class Json extends Template
 		}
 	}
 	
-	/**
-	 * @param mixed $object
-	 * @param string $property
-	 * @param Mysql $model
-	 *
-	 * @return ?string
-	 */
-	public function encode(mixed $object, string $property, Mysql $model): ?string
+	public function encode(
+		mixed $object,
+		string $property,
+		Mysql $model,
+	): ?string
 	{
 		if($object === null)
 		{
@@ -171,7 +133,7 @@ class Json extends Template
 		$string = json_encode($object, JSON_THROW_ON_ERROR
 			| JSON_UNESCAPED_UNICODE
 			| JSON_UNESCAPED_SLASHES
-		 	| JSON_NUMERIC_CHECK
+			| JSON_NUMERIC_CHECK
 		);
 		
 		// escape backslashes
@@ -182,23 +144,25 @@ class Json extends Template
 		$string = str_replace('\'', '\\\'', $string);
 		
 		// compatibility with MySQL format, @see https://bugs.mysql.com/bug.php?id=98135
-		$query = $model->source()->query('SELECT CAST(\'' . $string . '\' as JSON)', PDO::FETCH_COLUMN, 0);
+		$query = $model
+			->source()
+			->query('SELECT CAST(\'' . $string . '\' as JSON)',
+				PDO::FETCH_COLUMN,
+				0,
+			);
 		$string = $query->fetch();
 		
 		return $string ?: null;
 	}
 	
-	/**
-	 * @param string $string
-	 * @param string $property
-	 * @param Mysql $model
-	 * 
-	 * @return null|array|stdClass
-	 */
-	public function decode(string $string, string $property, Mysql $model): mixed
+	public function decode(
+		string $string,
+		string $property,
+		Mysql $model,
+	): mixed
 	{
 		$object = json_decode($string,
-			associative: $this->_type === self::TYPE_ARRAY,
+			associative: $this->type === self::TYPE_ARRAY,
 			flags: JSON_THROW_ON_ERROR
 		);
 		
@@ -206,23 +170,24 @@ class Json extends Template
 		{
 			return null;
 		}
-		if($this->_type === self::TYPE_ARRAY
+		
+		if($this->type === self::TYPE_ARRAY
 			&& is_array($object))
 		{
 			return $object;
 		}
 		
-		if($this->_type === self::TYPE_ARRAY)
+		if($this->type === self::TYPE_ARRAY)
 		{
 			return (array)$object;
 		}
 		
 		// restore class of object
-		if($this->_class !== null)
+		if($this->class !== null)
 		{
-			$class = $this->_class instanceof Closure
-				? call_user_func($this->_class)
-				: $this->_class;
+			$class = $this->class instanceof Closure
+				? call_user_func($this->class)
+				: $this->class;
 			
 			$object = $class::import($object, exists: true);
 		}

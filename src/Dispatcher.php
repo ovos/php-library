@@ -5,10 +5,9 @@ namespace Ovos;
 
 use Ovos\Exception\NotFoundException;
 
-use function preg_match;
 use function class_exists;
-use function is_subclass_of;
 use function method_exists;
+use function preg_match;
 
 /**
  * Dispatcher
@@ -18,52 +17,47 @@ use function method_exists;
  */
 class Dispatcher
 {
-	/**
-	 * @var Container
-	 */
-	protected Container $_container;
+	protected Container $container;
 	
-	/**
-	 * @param Container $container
-	 */
-	public function __construct(Container $container)
+	public function __construct(
+		Container $container,
+	)
 	{
-		$this->_container = $container;
+		$this->container = $container;
 	}
 	
-	/**
-	 * @param Request $request
-	 *
-	 * @return ?Response
-	 *
-	 * @throws NotFoundException
-	 */
-	public function dispatch(Request $request): ?Response
+	public function dispatch(
+		Request $request,
+	): ?Response
 	{
 		$controllerClass = $request->getControllerClass();
-		if(!preg_match('~[[:alnum:]\\\?]+~i', $controllerClass)) // alnum + \
+		if(preg_match('~[[:alnum:]\\\?]+~i', $controllerClass) === false) // alnum + \
 		{
-			throw new NotFoundException('Invalid controller name.');
+			throw new NotFoundException(
+				'Invalid controller name.');
 		}
 		$controllerClassNs = Controller::NAMESPACE . $controllerClass;
-		if(!class_exists($controllerClassNs))
+		if(class_exists($controllerClassNs) === false)
 		{
-			throw new NotFoundException('Controller class does not exist "%s".', $controllerClassNs);
+			throw new NotFoundException(
+				'Controller class does not exist "%s".', $controllerClassNs);
 		}
 		
 		/** @var Controller $controller */
-		$controller = $this->_container
+		$controller = $this->container
 			->getClass($controllerClassNs, $controllerClassNs);
 		if($controller instanceof Controller === false)
 		{
-			throw new NotFoundException('A controller has to extend a "Ovos\Controller" class.');
+			throw new NotFoundException(
+				'A controller has to extend a "Ovos\Controller" class.');
 		}
 		$controller->setParams($request->getParams());
 		
 		$action = $request->getActionMethod();
-		if(!method_exists($controller, $action))
+		if(method_exists($controller, $action) === false)
 		{
-			throw new NotFoundException('No method matching action name on controller "%s".', $controllerClass);
+			throw new NotFoundException(
+				'No method matching action name on controller "%s".', $controllerClass);
 		}
 		
 		return $controller->dispatch($action, $request->getParams());

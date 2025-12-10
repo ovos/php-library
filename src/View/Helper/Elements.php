@@ -19,63 +19,49 @@ class Elements extends Helper
 {
 	/**
 	 * Elements
-	 *
-	 * @var array
 	 */
-	protected array $_elements = [];
+	protected array $elements = [];
 	
 	/**
 	 * Classes
-	 *
-	 * @var array
 	 */
-	protected array $_classes = [];
+	protected array $classes = [];
 	
-	/**
-	 * @return self
-	 */
-	public function elements(): self
+	public function elements(): static
 	{
 		return $this;
 	}
 	
-	/**
-	 * @param string $name
-	 *
-	 * @return self
-	 */
-	public function __get(string $name): self
+	public function __get(
+		string $name,
+	): static
 	{
-		if(!isset($this->_elements[$name]))
+		if(isset($this->elements[$name]) === false)
 		{
-			$this->_elements[$name] = new self;
+			$this->elements[$name] = new static;
 		}
 		
-		return $this->_elements[$name];
+		return $this->elements[$name];
 	}
 	
 	/**
 	 * Adds class
-	 *
-	 * @param string $class
-	 *
-	 * @return self
 	 */
-	public function addClass(string $class): self
+	public function addClass(
+		string $class,
+	): static
 	{
-		$this->_classes[$class] = $class;
+		$this->classes[$class] = $class;
 		
 		return $this;
 	}
 	
 	/**
-	 * Ads classes
-	 *
-	 * @param mixed $classes
-	 *
-	 * @return self
+	 * Adds classes
 	 */
-	public function addClasses(mixed $classes): self
+	public function addClasses(
+		mixed $classes,
+	): static
 	{
 		if(is_string($classes))
 		{
@@ -84,7 +70,7 @@ class Elements extends Helper
 		
 		foreach($classes as $class)
 		{
-			$this->_classes[$class] = $class;
+			$this->classes[$class] = $class;
 		}
 		
 		return $this;
@@ -92,38 +78,32 @@ class Elements extends Helper
 	
 	/**
 	 * Has class
-	 *
-	 * @param string $class
-	 *
-	 * @return bool
 	 */
-	public function hasClass(string $class): bool
+	public function hasClass(
+		string $class,
+	): bool
 	{
-		return isset($this->_classes[$class]);
+		return isset($this->classes[$class]);
 	}
 	
 	/**
 	 * Has any classes
-	 *
-	 * @return bool
 	 */
 	public function hasAnyClasses(): bool
 	{
-		return empty($this->_classes) === false;
+		return empty($this->classes) === false;
 	}
 	
 	/**
 	 * Removes class
-	 *
-	 * @param string $class
-	 *
-	 * @return self
 	 */
-	public function removeClass(string $class): self
+	public function removeClass(
+		string $class,
+	): static
 	{
-		if(isset($this->_classes[$class]))
+		if(isset($this->classes[$class]))
 		{
-			unset($this->_classes[$class]);
+			unset($this->classes[$class]);
 		}
 		
 		return $this;
@@ -131,12 +111,10 @@ class Elements extends Helper
 	
 	/**
 	 * Removes classes
-	 *
-	 * @param mixed $classes
-	 *
-	 * @return self
 	 */
-	public function removeClasses(mixed $classes): self
+	public function removeClasses(
+		mixed $classes,
+	): static
 	{
 		if(is_string($classes))
 		{
@@ -145,9 +123,9 @@ class Elements extends Helper
 		
 		foreach($classes as $class)
 		{
-			if(isset($this->_classes[$class]))
+			if(isset($this->classes[$class]))
 			{
-				unset($this->_classes[$class]);
+				unset($this->classes[$class]);
 			}
 		}
 		
@@ -156,41 +134,30 @@ class Elements extends Helper
 	
 	/**
 	 * Returns classes
-	 *
-	 * @return array
 	 */
 	public function getClasses(): array
 	{
-		return $this->_classes;
+		return $this->classes;
 	}
 	
 	/**
 	 * Converts classes string to array
-	 *
-	 * @param string $classes
-	 *
-	 * @return array
 	 */
-	public function stringToArray(string $classes): array
+	public function stringToArray(
+		string $classes,
+	): array
 	{
 		return preg_split('~\s+~', $classes);
 	}
 	
 	/**
 	 * Returns classes as string
-	 *
-	 * @return string
 	 */
 	public function getClassesAsString(): string
 	{
-		return implode(' ', $this->_classes);
+		return implode(' ', $this->classes);
 	}
 	
-	/**
-	 * __toString
-	 *
-	 * @return string
-	 */
 	public function __toString(): string
 	{
 		return $this->getClassesAsString();

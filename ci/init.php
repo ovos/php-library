@@ -12,7 +12,7 @@ namespace Ovos;
 /**
  * Set a default timezone if not defined in php config
  */
-if(!date_default_timezone_get())
+if(date_default_timezone_get() === '')
 {
 	date_default_timezone_set('Europe/Vienna');
 }

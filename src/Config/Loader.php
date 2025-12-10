@@ -11,7 +11,6 @@ use Ovos\Service\Memory;
 
 use function basename;
 use function filemtime;
-use function str_replace;
 
 /**
  * Loader
@@ -21,34 +20,22 @@ use function str_replace;
  */
 class Loader
 {
-	/**
-	 * @var Memory
-	 */
-	protected Memory $_memoryService;
+	protected Memory $memoryService;
 	
-	/**
-	 * @param Memory $memoryService
-	 */
 	public function __construct(
 		#[Inject(Memory::SYMBOL)] Memory $memoryService,
 	)
 	{
-		$this->_memoryService = $memoryService;
+		$this->memoryService = $memoryService;
 	}
 	
-	/**
-	 * @param string $file
-	 * @param Environment $environment
-	 * @param ?string $cacheId
-	 *
-	 * @return ?ArrayObject
-	 */
-	public function load(string $file,
+	public function load(
+		string $file,
 		Environment $environment,
-		?string $cacheId = null
+		?string $cacheId = null,
 	): ?ArrayObject
 	{
-		$store = $this->_memoryService->getStore();
+		$store = $this->memoryService->getStore();
 		
 		$rootSection = $environment->getEnv();
 		$mTime = filemtime($file);

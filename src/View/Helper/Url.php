@@ -18,16 +18,19 @@ class Url extends Helper
 {
 	/**
 	 * @param string[] $urlComponents
-	 *
-	 * @return BaseUrl|string
 	 */
-	public function url(...$urlComponents): BaseUrl|string
+	public function url(
+		...$urlComponents,
+	): BaseUrl|string
 	{
 		if(count($urlComponents) === 0)
 		{
-			return $this->_app->getRequest()->getUrl()->getClone();
+			return $this->app->getRequest()
+				->getUrl()
+				->getClone();
 		}
 		
-		return $this->_app->getRouter()->assemble(...$urlComponents);
+		return $this->app->getRouter()
+			->assemble(...$urlComponents);
 	}
 }

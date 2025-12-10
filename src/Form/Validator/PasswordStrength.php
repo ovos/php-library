@@ -15,64 +15,41 @@ use Ovos\Strings;
  */
 class PasswordStrength extends Validator
 {
-	/**#@+
-	 * Errors
-	 */
+	// Errors
 	public const string ERROR_WEAK = 'password_weak';
-	/**#@-*/
 	
 	/**
 	 * @var string[]
 	 */
-	protected array $_messages =
+	protected array $messages =
 	[
 		self::ERROR_WEAK => 'Password is not strong enough.',
 	];
 	
-	/**
-	 * @var int
-	 */
-	protected int $_length;
+	protected int $length;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_uppercase;	
+	protected bool $uppercase;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_digits;
+	protected bool $digits;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_special;
+	protected bool $special;
 	
-	/**
-	 * @param int $length
-	 * @param bool $uppercase
-	 * @param bool $digits
-	 * @param bool $special
-	 */
-	public function __construct(int $length = 8,
+	public function __construct(
+		int $length = 8,
 		bool $uppercase = true,
 		bool $digits = true,
 		bool $special = true,
 	)
 	{
-		$this->_length = $length;
-		$this->_uppercase = $uppercase;
-		$this->_digits = $digits;
-		$this->_special = $special;
+		$this->length = $length;
+		$this->uppercase = $uppercase;
+		$this->digits = $digits;
+		$this->special = $special;
 	}
 	
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	public function isValid(mixed $value): bool
+	public function isValid(
+		mixed $value,
+	): bool
 	{
 		if(empty($value))
 		{
@@ -81,35 +58,36 @@ class PasswordStrength extends Validator
 		
 		$valid = true;
 		
-		if(strlen($value) < $this->_length)
+		if(strlen($value) < $this->length)
 		{
 			$valid = false;
 		}
 		
 		// digits
-		if($this->_digits
-			&& preg_match("~[0-9]~", $value) === 0)
+		if($this->digits
+			&& preg_match('~[0-9]~', $value) === 0)
 		{
 			$valid = false;
 		}
 		
 		// uppercase
-		if($this->_uppercase
-			&& preg_match("~[A-Z]~", $value) === 0)
+		if($this->uppercase
+			&& preg_match('~[A-Z]~', $value) === 0)
 		{
 			$valid = false;
-		}		
+		}
 		
 		// special
-		if($this->_special
-			&& preg_match("~[^\w]~", $value) === 0)
+		if($this->special
+			&& preg_match('~[^\w]~', $value) === 0)
 		{
 			$valid = false;
 		}
 		
 		if($valid === false)
 		{
-			$error = new Error(self::ERROR_WEAK, sprintf($this->getMessage(self::ERROR_WEAK),
+			$error = new Error(self::ERROR_WEAK,
+			sprintf($this->getMessage(self::ERROR_WEAK),
 				Strings::escapeForHtml($value)
 			));
 			$this->addError($error);

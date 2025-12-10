@@ -10,10 +10,10 @@ use Ovos\Store\KeyValue;
 use Ovos\Store\Redis as Store;
 use Ovos\Test\Store\TraitRedis;
 
-use function dirname;
 use function define;
-use function is_dir;
+use function dirname;
 use function getmypid;
+use function is_dir;
 use function microtime;
 use function sleep;
 use function Ovos\container;
@@ -42,35 +42,23 @@ class QueueClient extends Controller\Cli
 {
 	use TraitRedis;
 	
-	/**
-	 * @var string
-	 */
 	public const string KEY_ITEM = 'item';
 	
-	/**
-	 * @var string
-	 */
 	public const string KEY_ITEM_COUNTER = 'item:counter';
 	
-	/**
-	 * @var ArrayObject
-	 */
 	#[Inject('config')]
-	protected ArrayObject $_config;
+	protected ArrayObject $config;
 	
-	/**
-	 * @var Store
-	 */
-	protected Store $_store;
+	protected Store $store;
 	
 	public function __construct()
 	{
 		parent::__construct();
 		
-		$this->_config->system->profilers->enabled = false;
+		$this->config->system->profilers->enabled = false;
 		
-		$this->_group = $_SERVER['argv'][1] ?? KeyValue::GROUP_TESTS;
-		$this->_store = $this->_getStore(Store::class);
+		$this->group = $_SERVER['argv'][1] ?? KeyValue::GROUP_TESTS;
+		$this->store = $this->getStore(Store::class);
 	}
 	
 	/**
@@ -78,7 +66,7 @@ class QueueClient extends Controller\Cli
 	 */
 	public function run(): void
 	{
-		$result = $this->_store->get(self::KEY_ITEM,
+		$result = $this->store->get(self::KEY_ITEM,
 			resolver: function(Store $store)
 			{
 				$client = $store->getClient();

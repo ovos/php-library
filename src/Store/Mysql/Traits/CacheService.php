@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Store\Mysql\Traits;
 
 use Ovos\Service\Cache;
-use Ovos\Services;
 
 /**
  * CacheService
@@ -14,32 +13,27 @@ use Ovos\Services;
  */
 trait CacheService
 {
-	/**
-	 * @var Cache
-	 */
-	protected Cache $_cacheService;
+	protected Cache $cacheService;
 	
-	/**
-	 * @return void
-	 */
 	public function initCacheService(): void
 	{
 		/** @var Cache $cacheService */
-		$cacheService = $this->_app->getServices()->get(Cache::SYMBOL);
-		$this->_cacheService = $cacheService;
+		$cacheService = $this->container->get(Cache::SYMBOL);
+		$this->cacheService = $cacheService;
 	}
 	
-	/**
-	 * @param ?string $cacheKey
-	 *
-	 * @return bool
-	 */
 	public function invalidateCache(
 		?string $cacheKey = null,
 		bool $persistent = true,
 	): bool
 	{
-		$store = $this->_cacheService->getStore( $persistent);
+		$store = $this->cacheService
+			->getStore($persistent);
+		if($store === null)
+		{
+			return false;
+		}
+		
 		$cacheId = self::TABLE;
 		if($cacheKey !== null)
 		{

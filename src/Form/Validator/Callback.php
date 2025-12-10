@@ -15,57 +15,42 @@ use Closure;
  */
 class Callback extends Validator
 {
-	/**#@+
-	 * Errors
-	 */
+	// Errors
 	public const string ERROR_CALLBACK = 'callback';
-	/**#@-*/
 	
-	/**
-	 * @var Closure
-	 */
-	protected Closure $_callback;
+	protected Closure $callback;
 	
-	/**
-	 * @param Closure $callback
-	 */
-	public function __construct(Closure $callback)
+	public function __construct(
+		Closure $callback,
+	)
 	{
 		$this->setCallback($callback);
 	}
 	
-	/**
-	 * @param Closure $callback
-	 *
-	 * @return self
-	 */
-	public function setCallback(Closure $callback): self
+	public function setCallback(
+		Closure $callback,
+	): static
 	{
-		$this->_callback = $callback->bindTo($this, $this);
+		$this->callback = $callback->bindTo($this, $this);
 		
 		return $this;
 	}
 	
-	/**
-	 * @return Closure
-	 */
 	public function getCallback(): Closure
 	{
-		return $this->_callback;
+		return $this->callback;
 	}
 	
-	/**
-	 * @param null|mixed $value
-	 *
-	 * @return bool
-	 */
-	public function isValid(mixed $value): bool
+	public function isValid(
+		mixed $value,
+	): bool
 	{
-		$valid = ($this->_callback)($value);
+		$valid = ($this->callback)($value);
 		
 		if($valid === false)
 		{
-			$error = new Error(self::ERROR_CALLBACK, sprintf($this->getMessage(self::ERROR_CALLBACK),
+			$error = new Error(self::ERROR_CALLBACK,
+				sprintf($this->getMessage(self::ERROR_CALLBACK),
 				$this->getElement()->getName()
 			));
 			$this->addError($error);

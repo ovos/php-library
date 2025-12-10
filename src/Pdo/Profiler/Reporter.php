@@ -25,27 +25,22 @@ use function trim;
 class Reporter
 {
 	/**
-	 * Contains data taken from collector
-	 *
-	 * @var SplQueue
+	 * Contains data taken from a collector
 	 */
-	protected SplQueue $_queries;
+	protected SplQueue $queries;
 	
 	/**
 	 * Stores collector data into internal array
 	 */
 	public function __construct()
 	{
-		$this->_queries = Collector::getInstance()
+		$this->queries = Collector::getInstance()
 			->getQueries();
 	}
 	
-	/**
-	 * @return int
-	 */
 	public function getCount(): int
 	{
-		return count($this->_queries);
+		return count($this->queries);
 	}
 	
 	/**
@@ -55,17 +50,17 @@ class Reporter
 	 */
 	public function getReport(): ?array
 	{
-		if(empty($this->_queries))
+		if(empty($this->queries))
 		{
 			return null;
 		}
 		
 		$report = [];
-		foreach($this->_queries as $key => $query)
+		foreach($this->queries as $key => $query)
 		{
 			$report[] = new ArrayObject(
 			[
-				'sql' => $this->_parseSql($query['sql'], $query['parameters']),
+				'sql' => $this->parseSql($query['sql'], $query['parameters']),
 				'parameters' => $query['parameters'],
 				'time' => $query['measurement']->getTotalTime(),
 				'memory' => $query['measurement']->getTotalMemory(),
@@ -77,18 +72,16 @@ class Reporter
 	
 	/**
 	 * Parse and beautify SQL query
-	 *
-	 * @param string $sql SQL statement
-	 * @param array $parameters Statement parameters
-	 *
-	 * @return string
 	 */
-	protected function _parseSql(string $sql, array $parameters): string
+	protected function parseSql(
+		string $sql,
+		array $parameters,
+	): string
 	{
 		if(!empty($parameters))
 		{
-			// Quote the values
-			array_walk($parameters, function(&$value)
+			// quote the values
+			array_walk($parameters, static function(&$value)
 			{
 				if(null === $value)
 				{
@@ -98,14 +91,20 @@ class Reporter
 				$value = "'" . $value . "'";
 			});
 			
-			// Replace values
+			// replace the values
 			foreach($parameters as $parameter => $value)
 			{
-				$token = is_numeric($parameter) ? '?' : ':' . $parameter;
+				$token = is_numeric($parameter)
+					? '?'
+					: ':' . $parameter;
 				$tokenPosition = strpos($sql, $token);
 				if($tokenPosition !== false)
 				{
-					$sql = substr_replace($sql, $value, $tokenPosition, strlen($token));
+					$sql = substr_replace($sql,
+						$value,
+						$tokenPosition,
+						strlen($token),
+					);
 				}
 			}
 		}

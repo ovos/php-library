@@ -17,111 +17,76 @@ use function is_array;
  */
 class Option
 {
-	/**
-	 * @var Options
-	 */
-	protected Options $_options;
+	protected Options $options;
 	
-	/**
-	 * @var null|mixed
-	 */
-	protected mixed $_value = null;
+	protected mixed $value = null;
 	
-	/**
-	 * @var null|mixed
-	 */
-	protected mixed $_label = null;
+	protected mixed $label = null;
 	
 	/**
 	 * Object associated with the option
 	 * Can be used for further processing of the option
-	 *
-	 * @var ?object
 	 */
-	protected ?object $_object = null;
+	protected ?object $object = null;
 	
-	/**
-	 * @param mixed $value
-	 * @param null|mixed $label
-	 * @param ?object $object
-	 */
-	public function __construct(mixed $value,
+	public function __construct(
+		mixed $value,
 		mixed $label = null,
-		?object $object = null)
+		?object $object = null,
+	)
 	{
 		$this->setValue($value);
 		$this->setLabel($label);
 		$this->setObject($object);
 	}
 	
-	/**
-	 * @param Options $options
-	 *
-	 * @return self
-	 */
-	public function setOptions(Options $options): self
+	public function setOptions(
+		Options $options,
+	): static
 	{
-		$this->_options = $options;
+		$this->options = $options;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return Options
-	 */
 	public function getOptions(): Options
 	{
-		return $this->_options;
+		return $this->options;
 	}
 	
-	/**
-	 * @param mixed $value
-	 *
-	 * @return self
-	 */
-	public function setValue($value): self
+	public function setValue(
+		mixed $value,
+	): static
 	{
-		$this->_value = $value;
+		$this->value = $value;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return mixed
-	 */
 	public function getValue(): mixed
 	{
-		return $this->_value;
+		return $this->value;
 	}
 	
-	/**
-	 * @param null|mixed $label
-	 *
-	 * @return self
-	 */
-	public function setLabel($label): self
+	public function setLabel(
+		mixed $label,
+	): static
 	{
-		$this->_label = $label;
+		$this->label = $label;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return null|mixed
-	 */
 	public function getLabel(): mixed
 	{
-		if($this->_label !== null)
+		if($this->label !== null)
 		{
-			return $this->_label;
+			return $this->label;
 		}
 		
 		return $this->getValue();
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isSelected(): bool
 	{
 		// avoid selecting '' options, where no option is selected
@@ -142,23 +107,17 @@ class Option
 		return $selectedValue === $thisValue;
 	}
 	
-	/**
-	 * @param ?object $object
-	 *
-	 * @return self
-	 */
-	public function setObject(?object $object): self
+	public function setObject(
+		?object $object,
+	): static
 	{
-		$this->_object = $object;
+		$this->object = $object;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?object
-	 */
 	public function getObject(): ?object
 	{
-		return $this->_object;
+		return $this->object;
 	}
 }

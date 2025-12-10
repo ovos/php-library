@@ -15,14 +15,9 @@ use function yaml_parse_file;
  */
 class Parser
 {
-	/**
-	 * @param string $file
-	 * @param ?Environment $environment
-	 *
-	 * @return ?array
-	 */
-	public static function parse(string $file,
-		?Environment $environment = null
+	public static function parse(
+		string $file,
+		?Environment $environment = null,
 	): ?array
 	{
 		$result = yaml_parse_file(

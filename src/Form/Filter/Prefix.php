@@ -15,56 +15,43 @@ use function str_starts_with;
  */
 class Prefix extends Filter
 {
-	/**
-	 * @var string
-	 */
-	protected string $_prefix;
+	protected string $prefix;
 	
-	/**
-	 * @param string $prefix
-	 *
-	 * @return self
-	 */
-	public function setPrefix(string $prefix): self
-	{
-		$this->_prefix = $prefix;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return string
-	 */
-	public function getPrefix(): string
-	{
-		return $this->_prefix;
-	}
-	
-	/**
-	 * @param string $prefix
-	 */
-	public function __construct(string $prefix)
+	public function __construct(
+		string $prefix,
+	)
 	{
 		$this->setPrefix($prefix);
 	}
 	
-	/**
-	 * @param mixed $value
-	 *
-	 * @return ?string
-	 */
-	public function filter(mixed $value): ?string
+	public function setPrefix(
+		string $prefix,
+	): static
+	{
+		$this->prefix = $prefix;
+		
+		return $this;
+	}
+	
+	public function getPrefix(): string
+	{
+		return $this->prefix;
+	}
+	
+	public function filter(
+		mixed $value,
+	): ?string
 	{
 		if($value === null)
 		{
 			return null;
 		}
 		
-		if(str_starts_with($value, $this->_prefix) === false)
+		if(str_starts_with($value, $this->prefix) === false)
 		{
 			return $value;
 		}
 		
-		return $this->_prefix . $value;
+		return $this->prefix . $value;
 	}
 }

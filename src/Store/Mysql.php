@@ -14,16 +14,15 @@ use PDO;
 use PDOStatement;
 use Closure;
 
-use function sprintf;
-use function is_bool;
-use function is_integer;
+use function array_column;
 use function array_keys;
 use function array_map;
 use function array_unique;
-use function array_column;
 use function implode;
+use function is_bool;
 use function preg_replace;
 use function reset;
+use function sprintf;
 
 /**
  * Mysql
@@ -35,42 +34,32 @@ abstract class Mysql extends Store
 {
 	/**
 	 * Primary table name
-	 *
-	 * @var ?string
 	 */
 	public const ?string TABLE = null;
 	
 	/**
 	 * Related model name
-	 *
-	 * @var ?string
 	 */
 	public const ?string MODEL = null;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_sourceName = 'mysql';
+	protected string $sourceName = 'mysql';
+	
+	/* Some properties use undescores for consistency with Model class */
 	
 	/**
 	 * A connection between PHP and a database server
-	 *
-	 * @var ?PDO
 	 */
 	protected ?PDO $_source = null;
 	
-	/**
-	 * @return PDO
-	 */
-	public function getSource(): PDO
+	public function getSource(): ?PDO
 	{
 		if($this->_source === null)
 		{
 			// get database connection
-			$this->_source = $this->_container
+			$this->_source = $this->container
 				->getClass(Connections::class)
-				->get($this->_sourceName)
-				->getConnectedClient();
+				->get($this->sourceName)
+				->getClient();
 		}
 		
 		return $this->_source;
@@ -78,17 +67,12 @@ abstract class Mysql extends Store
 	
 	/**
 	 * Short for getSource
-	 *
-	 * @return PDO
 	 */
-	public function source(): PDO
+	public function source(): ?PDO
 	{
 		return $this->getSource();
 	}
 	
-	/**
-	 * @return string
-	 */
 	public static function getTable(): string
 	{
 		if(static::TABLE === null)
@@ -99,9 +83,6 @@ abstract class Mysql extends Store
 		return static::TABLE;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public static function getModel(): string
 	{
 		if(static::MODEL === null)
@@ -115,47 +96,36 @@ abstract class Mysql extends Store
 	/**
 	 * Only used for getSql() calls, never used to query the database
 	 * or fetch results
-	 *
-	 * @return QueryBuilder
 	 */
 	public function query(): QueryBuilder
 	{
 		return new QueryBuilder(static::TABLE);
 	}
 	
-	/**
-	 * @param Query $query
-	 *
-	 * @return false|PDOStatement
-	 */
-	public function prepareQuery(Query $query): false|PDOStatement
+	public function prepareQuery(
+		Query $query,
+	): false|PDOStatement
 	{
-		return $this->getSource()->prepare($query->getSql());
+		return $this->getSource()
+			->prepare($query->getSql());
 	}
 	
-	/**
-	 * @param Query $query
-	 *
-	 * @return false|int
-	 */
-	public function executeQuery(Query $query): false|int
+	public function executeQuery(
+		Query $query,
+	): false|int
 	{
-		return $this->getSource()->exec($query->getSql());
+		return $this->getSource()
+			->exec($query->getSql());
 	}
 	
-	/**
-	 * @param Query $query
-	 *
-	 * @return false|PDOStatement
-	 */
-	public function runQuery(Query $query): false|PDOStatement
+	public function runQuery(
+		Query $query,
+	): false|PDOStatement
 	{
-		return $this->getSource()->query($query->getSql());
+		return $this->getSource()
+			->query($query->getSql());
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function tableExists(): bool
 	{
 		return $this->getSource()->query('
@@ -163,9 +133,6 @@ abstract class Mysql extends Store
 		')->fetch(PDO::FETCH_NUM) !== false;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function optimize(): bool
 	{
 		return $this->getSource()->query('
@@ -174,17 +141,17 @@ abstract class Mysql extends Store
 		')->closeCursor();
 	}
 	
-	/**
-	 * @param Model $object
-	 *
-	 * @return false|PDOStatement
-	 */
-	public function insertQuery(Model $object): false|PDOStatement
+	public function insertQuery(
+		Model $object,
+	): false|PDOStatement
 	{
 		$values = $this->getQueryValues($object);
 		
 		$sql = 'INSERT INTO ' . self::getTable() . ' (%s) VALUES (%s);';
-		$sql = sprintf($sql, implode(', ', array_keys($values)), implode(', ', $values));
+		$sql = sprintf($sql,
+			implode(', ', array_keys($values)),
+			implode(', ', $values)
+		);
 		
 		$statement = $this->getSource()->prepare($sql);
 		$this->bindValues($statement, $object);
@@ -194,10 +161,6 @@ abstract class Mysql extends Store
 	
 	/**
 	 * @deprecated
-	 * @param Model $object
-	 * @param array $conditions
-	 *
-	 * @return false|PDOStatement
 	 */
 	/*
 	public function insertUpdateQuery(Model $object, array $conditions = [])
@@ -223,13 +186,10 @@ abstract class Mysql extends Store
 	}
 	*/
 	
-	/**
-	 * @param Model $model
-	 * @param Model $updateObject
-	 *
-	 * @return false|PDOStatement
-	 */
-	public function updateQuery(Model $model, Model $updateObject): false|PDOStatement
+	public function updateQuery(
+		Model $model,
+		Model $updateObject,
+	): false|PDOStatement
 	{
 		$sets = $this->getQueryValues($updateObject, true);
 		
@@ -244,13 +204,10 @@ abstract class Mysql extends Store
 		return $statement;
 	}
 	
-	/**
-	 * @param Model|array $fields
-	 * @param bool $sets
-	 *
-	 * @return array
-	 */
-	public function getQueryValues(Model|array $fields, bool $sets = false): array
+	public function getQueryValues(
+		Model|array $fields,
+		bool $sets = false,
+	): array
 	{
 		$values = [];
 		
@@ -274,11 +231,10 @@ abstract class Mysql extends Store
 		return $values;
 	}
 	
-	/**
-	 * @param PDOStatement $statement
-	 * @param Model|array $fields
-	 */
-	public function bindValues(PDOStatement $statement, Model|array $fields): void
+	public function bindValues(
+		PDOStatement $statement,
+		Model|array $fields,
+	): void
 	{
 		foreach($fields as $field => $value)
 		{
@@ -289,56 +245,28 @@ abstract class Mysql extends Store
 			
 			$bindType = PDO::PARAM_STR;
 			$bindType = is_bool($value) ? PDO::PARAM_BOOL : $bindType;
-			$bindType = is_integer($value) ? PDO::PARAM_INT : $bindType;
+			$bindType = is_int($value) ? PDO::PARAM_INT : $bindType;
 			
 			// ':' prefix is optional, $field can be also numerical, starting from 1
 			$statement->bindValue($field, $value, $bindType);
 		}
 	}
 	
-	/**
-	 * @param Model $object
-	 * @param Model $objectUpdate
-	 *
-	 * @return bool
-	 */
-	public function update(Model $object, Model $objectUpdate): bool
+	public function update(
+		Model $object,
+		Model $objectUpdate,
+	): bool
 	{
 		return $object->update($objectUpdate);
 	}
 	
-	/**
-	 * @param Model $model
-	 *
-	 * @return bool
-	 */
-	public function insert(Model $model): bool
+	public function insert(
+		Model $model,
+	): bool
 	{
 		return $model->insert();
 	}
 	
-	/**
-	 * @param array $where
-	 * @param string $select
-	 * @param array $options
-	 * @param ?string $alias
-	 * @param array $orWhere
-	 * @param array $whereIn
-	 * @param array $whereNotIn
-	 * @param array $isNull
-	 * @param array $isNotNull
-	 * @param array $like
-	 * @param array $notLike
-	 * @param mixed $limit
-	 * @param mixed $offset
-	 * @param array $groupBy
-	 * @param array $having
-	 * @param array $orderBy
-	 * @param array $leftJoin
-	 * @param array $innerJoin
-	 *
-	 * @return false|PDOStatement
-	 */
 	public function executeFind(
 		array $where = [],
 		string $select = '*',
@@ -472,28 +400,16 @@ abstract class Mysql extends Store
 		return $query;
 	}
 	
-	/**
-	 * @param PDOStatement $statement
-	 * @param string $class
-	 *
-	 * @return array
-	 */
-	public function fetchGrouped(PDOStatement $statement, string $class): array
+	public function fetchGrouped(
+		PDOStatement $statement,
+		string $class,
+	): array
 	{
 		$result = $statement
 			->fetchAll(PDO::FETCH_CLASS | PDO::FETCH_GROUP, $class); // group by the first column
 		return array_map(static fn($row) => reset($row), $result);
 	}
 	
-	/**
-	 * @param array $referenced
-	 * @param string $referencedBy
-	 * @param string $class
-	 * @param ?Closure $queryCallback
-	 * @param string $groupBy
-	 *
-	 * @return array
-	 */
 	public function fetchReferenced(
 		array $referenced,
 		string $referencedBy,
@@ -520,19 +436,11 @@ abstract class Mysql extends Store
 		return $this->fetchGrouped($query, $class);
 	}
 	
-	/**
-	 * @param array $referenced
-	 * @param string $referencedBy
-	 * @param string $class
-	 * @param ?Closure $queryCallback
-	 *
-	 * @return array
-	 */
 	public function fetchByReference(
 		array $referenced,
 		string $referencedBy,
 		string $class,
-		?Closure $queryCallback = null
+		?Closure $queryCallback = null,
 	): array
 	{
 		$ids = array_keys($referenced);
@@ -550,18 +458,10 @@ abstract class Mysql extends Store
 		}
 		
 		$query = $this->getSource()->query($query->getSql());
+		
 		return $query->fetchAll(PDO::FETCH_CLASS, $class);
 	}
 	
-	/**
-	 * @param array $referenced
-	 * @param string $referencedBy
-	 * @param string $reference
-	 * @param array $items
-	 * @param string $key
-	 *
-	 * @return array
-	 */
 	public function assignByReference(
 		array $referenced,
 		string $referencedBy,
@@ -587,26 +487,11 @@ abstract class Mysql extends Store
 			}
 			
 			$model->getReference($reference)[$item->$key] = $item;
-			
-			/*
-			$array = $model->getReference($reference);
-			$array[$item->$key] = $item;
-			
-			$model->setReference($reference, $array);
-			*/
 		}
 		
 		return $referenced;
 	}
 	
-	/**
-	 * @param array $referenced
-	 * @param string $referencedBy
-	 * @param string $reference
-	 * @param array $items
-	 *
-	 * @return array
-	 */
 	public function assignReferenced(
 		array $referenced,
 		string $referencedBy,
@@ -629,12 +514,10 @@ abstract class Mysql extends Store
 	
 	/**
 	 * Removed all characters that can break AGAINST (... IN BOOLEAN MODE) queries
-	 * 
-	 * @param string $query
-	 *
-	 * @return string
 	 */
-	public function sanitizeForBooleanQuery(string $query): string
+	public function sanitizeForBooleanQuery(
+		string $query,
+	): string
 	{
 		return preg_replace('~[^\w ]~u', '', $query);
 	}

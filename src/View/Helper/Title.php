@@ -17,32 +17,17 @@ use function implode;
  */
 class Title extends Helper
 {
-	/**
-	 * @var string
-	 */
-	protected string $_defaultTitle;
+	protected string $defaultTitle;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_title = null;
+	protected ?string $title = null;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_separator = ' &raquo; ';
+	protected string $separator = ' &raquo; ';
 	
-	/**
-	 * @var array
-	 */
-	protected array $_items = [];
+	protected array $items = [];
 	
-	/**
-	 * @param ?string $defaultTitle
-	 *
-	 * @return self
-	 */
-	public function title(?string $defaultTitle = null): self
+	public function title(
+		?string $defaultTitle = null,
+	): static
 	{
 		if($defaultTitle !== null)
 		{
@@ -52,86 +37,63 @@ class Title extends Helper
 		return $this;
 	}
 	
-	/**
-	 * @param string $title
-	 *
-	 * @return self
-	 */
-	public function set(string $title): self
+	public function set(
+		string $title,
+	): static
 	{
-		$this->_title = $title;
+		$this->title = $title;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function get(): string
 	{
-		return $this->_title;
+		return $this->title;
 	}
 	
-	/**
-	 * @param string $defaultTitle
-	 *
-	 * @return self
-	 */
-	public function setDefault(string $defaultTitle): self
+	public function setDefault(
+		string $defaultTitle,
+	): static
 	{
-		$this->_defaultTitle = $defaultTitle;
+		$this->defaultTitle = $defaultTitle;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getDefault(): string
 	{
-		return $this->_defaultTitle;
+		return $this->defaultTitle;
 	}
 	
-	/**
-	 * @param string $separator
-	 *
-	 * @return self
-	 */
-	public function setSeparator(string $separator): self
+	public function setSeparator(
+		string $separator,
+	): static
 	{
-		$this->_separator = $separator;
+		$this->separator = $separator;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string $item
-	 *
-	 * @return self
-	 */
-	public function add(string $item): self
+	public function add(
+		string $item,
+	): static
 	{
-		$this->_items[] = $item;
+		$this->items[] = $item;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function __toString(): string
 	{
-		$items = $this->_items;
-		array_unshift($items, $this->_title ?: $this->_defaultTitle);
+		$items = $this->items;
+		array_unshift($items,
+			$this->title ?: $this->defaultTitle);
 		
-		return implode($this->_separator, array_reverse($items));
+		return implode($this->separator, array_reverse($items));
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function toArray(): array
 	{
-		return $this->_items;
+		return $this->items;
 	}
 }

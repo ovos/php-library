@@ -7,15 +7,15 @@ use Ovos\Controller\Plugin;
 use Ovos\Exception\RuntimeException;
 use ReflectionMethod;
 
-use function count;
-use function array_key_exists;
-use function in_array;
 use function array_column;
+use function array_key_exists;
 use function array_shift;
 use function class_exists;
+use function count;
+use function in_array;
 use function method_exists;
-use function substr;
 use function strpos;
+use function substr;
 
 /**
  * Controller
@@ -27,77 +27,43 @@ class Controller
 {
 	use Translatable;
 	
-	/**
-	 * @var string
-	 */
 	public const string NAMESPACE = 'Controllers\\';
 	
-	/**
-	 * @var string
-	 */	
 	public const string WILDCARD = '*';
 	
-	/**
-	 * @var Container
-	 */
-	protected Container $_container;
+	protected Container $container;
 	
-	/**
-	 * @var Application
-	 */
-	protected Application $_app;
+	protected Application $app;
 	
-	/**
-	 * @var Request
-	 */
-	protected Request $_request;
+	protected Request $request;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_dispatchedAction;
+	protected string $dispatchedAction;
 	
-	/**
-	 * @var bool
-	 */
-	protected bool $_dispatched = false;
+	protected bool $dispatched = false;
 	
-	/**
-	 * Params
-	 *
-	 * @var array
-	 */
-	protected array $_params = [];
+	protected array $params = [];
 	
-	/**
-	 * Plugins
-	 *
-	 * @var array
-	 */
-	protected array $_plugins = [];
+	protected array $plugins = [];
 	
 	/**
 	 */
 	public function __construct()
 	{
-		$this->_container = container();
-		$this->_app = $this->_container
+		$this->container = container();
+		$this->app = $this->container
 			->getClass(Application::class);
 		
-		$this->_request = $this->_app->getRequest();
-		$this->_request->setControllerInstance($this);
+		$this->request = $this->app->getRequest();
+		$this->request->setControllerInstance($this);
 		
 		$this->registerSystemPlugins();
 		$this->registerPlugins();
 	}
 	
-	/**
-	 * @param string $action
-	 * @param array $requestParams
-	 *
-	 * @return ?Response
-	 */
-	public function dispatch(string $action, array $requestParams = []): ?Response
+	public function dispatch(
+		string $action,
+		array $requestParams = [],
+	): ?Response
 	{
 		$this->setDispatchedAction($action);
 		
@@ -114,23 +80,20 @@ class Controller
 		{
 			if(($response instanceof Response) === false)
 			{
-				$response = $this->_app->getResponse($response->__toString());
+				$response = $this->app->getResponse($response->__toString());
 			}
 		
-			$this->_app->setResponse($response); // for postDispatch
+			$this->app->setResponse($response); // for postDispatch
 		}
 		$this->postDispatch();
 		
 		return $response;
 	}
 	
-	/**
-	 * @param string $action
-	 * @param array $requestParams
-	 *
-	 * @return array
-	 */
-	public function getActionParams(string $action, array $requestParams = []): array
+	public function getActionParams(
+		string $action,
+		array $requestParams = [],
+	): array
 	{
 		$count = count($requestParams);
 		if($count === 0)
@@ -143,7 +106,7 @@ class Controller
 		
 		if($count === 1)
 		{
-			return $this->_getCastedParams($methodParams, $requestParams);
+			return $this->getCastedParams($methodParams, $requestParams);
 		}
 		
 		$namesOfMethodParams = array_column($methodParams, 'name');
@@ -165,23 +128,20 @@ class Controller
 		}
 		
 		// handle casting of unnamed
-		$requestParamsUnnamed = $this->_getCastedParams($methodParams, $requestParamsUnnamed);
+		$requestParamsUnnamed = $this->getCastedParams($methodParams, $requestParamsUnnamed);
 		// handle casting of named
-		$requestParamsNamed = $this->_getCastedParams($methodParams, $requestParamsNamed, true);
+		$requestParamsNamed = $this->getCastedParams($methodParams, $requestParamsNamed, true);
 		
 		// merge them into one array that will be passed as params, first unnamed, then named
 		return array_merge($requestParamsUnnamed, $requestParamsNamed);
 	}
 	
-	/**
-	 * @param array $methodParams
-	 * @param array $requestParams
-	 * @param bool $named
-	 *
-	 * @return array
-	 */
-	protected function _getCastedParams(
-		array $methodParams, array $requestParams, bool $named = false): array
+	protected function getCastedParams
+	(
+		array $methodParams,
+		array $requestParams,
+		bool $named = false,
+	): array
 	{
 		foreach($methodParams as $key => $methodParam)
 		{
@@ -210,109 +170,73 @@ class Controller
 		return $requestParams;
 	}
 	
-	/**
-	 * @param string $dispatchedAction
-	 *
-	 * @return self
-	 */
-	public function setDispatchedAction(string $dispatchedAction): self
+	public function setDispatchedAction(
+		string $dispatchedAction,
+	): static
 	{
-		$this->_dispatchedAction = $dispatchedAction;
+		$this->dispatchedAction = $dispatchedAction;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return string
-	 */
 	public function getDispatchedAction(): string
 	{
-		return $this->_dispatchedAction;
+		return $this->dispatchedAction;
 	}
 	
-	/**
-	 * @param array $params
-	 *
-	 * @return self
-	 */
-	public function setParams(array $params): self
+	public function setParams(
+		array $params,
+	): static
 	{
-		$this->_params = $params;
+		$this->params = $params;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return array
-	 */
 	public function getParams(): array
 	{
-		return $this->_params;
+		return $this->params;
 	}
 	
-	/**
-	 * preDispatch
-	 * 
-	 * @param array $actionParams
-	 */
-	public function preDispatch(array $actionParams): void
+	public function preDispatch(
+		array $actionParams,
+	): void
 	{
 		$this->preDispatchPlugins();
 	}
 	
-	/**
-	 * postDispatch
-	 */
 	public function postDispatch(): void
 	{
 		$this->postDispatchPlugins();
 	}
 	
-	/**
-	 * Returns request
-	 *
-	 * @return Request
-	 */
 	public function getRequest(): Request
 	{
-		return $this->_app->getRequest();
+		return $this->app->getRequest();
 	}
 	
-	/**
-	 * Returns router
-	 *
-	 * @return Router
-	 */
 	public function getRouter(): Router
 	{
-		return $this->_app->getRouter();
+		return $this->app->getRouter();
 	}
 	
-	/**
-	 * @param bool $dispatched
-	 *
-	 * @return self
-	 */
-	public function setDispatched(bool $dispatched): self
+	public function setDispatched(
+		bool $dispatched,
+	): static
 	{
-		$this->_dispatched = $dispatched;
+		$this->dispatched = $dispatched;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isDispatched(): bool
 	{
-		return $this->_dispatched;
+		return $this->dispatched;
 	}
 	
-	/**
-	 */
 	public function registerSystemPlugins(): void
 	{
-		$systemConfig = $this->_app->getConfig()->system;
+		$systemConfig = $this->app->getConfig()->system;
 		if($systemConfig->plugins === null)
 		{
 			return;
@@ -320,7 +244,7 @@ class Controller
 		
 		// fetch default plugins
 		$plugins = $systemConfig->plugins->default
-			->get($this->_app->getInterface());
+			->get($this->app->getInterface());
 		if($plugins === null)
 		{
 			return;
@@ -333,17 +257,12 @@ class Controller
 			$plugins = $this->getGroupsPlugins($plugins, $groups);
 		}
 		
-		$this->_loadPluginsFromConfig($plugins);
+		$this->loadPluginsFromConfig($plugins);
 	}
 	
-	/**
-	 * @param ArrayObject $plugins
-	 * @param ArrayObject $groups
-	 *
-	 * @return ArrayObject
-	 */
-	public function getGroupsPlugins(ArrayObject $plugins,
-		ArrayObject $groups
+	public function getGroupsPlugins(
+		ArrayObject $plugins,
+		ArrayObject $groups,
 	): ArrayObject
 	{
 		if($groups->count() === 0)
@@ -356,7 +275,11 @@ class Controller
 		
 		foreach($groups as $group)
 		{
-			$plugins = $this->getGroupPlugins($plugins, $group, $currentController);
+			$plugins = $this->getGroupPlugins(
+				$plugins,
+				$group,
+				$currentController,
+			);
 		}
 		
 		return $plugins;
@@ -364,8 +287,6 @@ class Controller
 	
 	/**
 	 * Name of the class without \Controllers\ namespace
-	 * 
-	 * @return string
 	 */
 	public function getName(): string
 	{
@@ -373,16 +294,10 @@ class Controller
 			strpos(static::class, '\\') + 1);
 	}
 	
-	/**
-	 * @param ArrayObject $plugins
-	 * @param ArrayObject $group
-	 * @param string $currentController
-	 *
-	 * @return ArrayObject
-	 */
-	public function getGroupPlugins(ArrayObject $plugins,
+	public function getGroupPlugins(
+		ArrayObject $plugins,
 		ArrayObject $group,
-		string $currentController
+		string $currentController,
 	): ArrayObject
 	{
 		if($group->controllers === null
@@ -399,11 +314,14 @@ class Controller
 				continue;
 			}
 			
-			$controllerPlugins = $group->get($this->_app->getInterface());
+			$controllerPlugins = $group->get($this->app->getInterface());
 			
 			if($controllerPlugins !== null)
 			{
-				$plugins = $this->getControllerPlugins($plugins, $controllerPlugins);
+				$plugins = $this->getControllerPlugins(
+					$plugins,
+					$controllerPlugins,
+				);
 			}
 			
 			break; // no need to check further
@@ -412,14 +330,9 @@ class Controller
 		return $plugins;
 	}
 	
-	/**
-	 * @param ArrayObject $plugins
-	 * @param ArrayObject $controllerPlugins
-	 *
-	 * @return ArrayObject
-	 */
-	public function getControllerPlugins(ArrayObject $plugins,
-		ArrayObject $controllerPlugins
+	public function getControllerPlugins(
+		ArrayObject $plugins,
+		ArrayObject $controllerPlugins,
 	): ArrayObject
 	{
 		// skip
@@ -468,14 +381,9 @@ class Controller
 		return $plugins;
 	}
 	
-	/**
-	 * @param ?ArrayObject $plugins
-	 *
-	 * @return self
-	 *
-	 * @throws RuntimeException
-	 */
-	protected function _loadPluginsFromConfig(?ArrayObject $plugins): self
+	protected function loadPluginsFromConfig(
+		?ArrayObject $plugins,
+	): static
 	{
 		if($plugins === null)
 		{
@@ -494,7 +402,7 @@ class Controller
 			}
 			
 			/** @var Plugin $instance */
-			$instance = $this->_container
+			$instance = $this->container
 				->injectClass($pluginClass);
 			$this->addPlugin($instance);
 		}
@@ -502,44 +410,36 @@ class Controller
 		return $this;
 	}
 	
-	/**
-	 */
 	public function registerPlugins(): void
 	{
 	}
 	
-	/**
-	 * @param Plugin $plugin
-	 * @param ?string $symbol
-	 *
-	 * @return self
-	 */
-	public function addPlugin(Plugin $plugin, ?string $symbol = null): self
+	public function addPlugin(
+		Plugin $plugin,
+		?string $symbol = null,
+	): static
 	{
 		if($symbol === null)
 		{
 			$symbol = $plugin->getSymbol();
 		}
 		
-		$this->_plugins[$symbol] = $plugin;
+		$this->plugins[$symbol] = $plugin;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param ?string $symbol
-	 * @param array $arguments
-	 *
-	 * @return mixed
-	 */
-	public function getPlugin(?string $symbol = null, array $arguments = []): mixed
+	public function getPlugin(
+		?string $symbol = null,
+		array $arguments = [],
+	): mixed
 	{
 		if($this->hasPlugin($symbol) === false)
 		{
 			return null;
 		}
 		
-		$instance = $this->_plugins[$symbol];
+		$instance = $this->plugins[$symbol];
 		if(method_exists($instance, $symbol))
 		{
 			return $instance->$symbol($arguments);
@@ -548,45 +448,33 @@ class Controller
 		return $instance;
 	}
 	
-	/**
-	 * @param ?string $symbol
-	 *
-	 * @return bool
-	 */
-	public function hasPlugin(?string $symbol = null): bool
+	public function hasPlugin(
+		?string $symbol = null,
+	): bool
 	{
-		return array_key_exists($symbol, $this->_plugins);
+		return array_key_exists($symbol, $this->plugins);
 	}
 	
-	/**
-	 * @param string $symbol
-	 * @param array $arguments
-	 *
-	 * @return mixed
-	 */
-	public function __call(string $symbol, array $arguments): mixed
+	public function __call(
+		string $symbol,
+		array $arguments,
+	): mixed
 	{
 		return $this->getPlugin($symbol, $arguments);
 	}
 	
-	/**
-	 * @param string $symbol
-	 *
-	 * @return self
-	 */
-	public function removePlugin(string $symbol): self
+	public function removePlugin(
+		string $symbol,
+	): static
 	{
-		unset($this->_plugins[$symbol]);
+		unset($this->plugins[$symbol]);
 		
 		return $this;
 	}
 	
-	/**
-	 * preDispatch
-	 */
 	public function preDispatchPlugins(): void
 	{
-		foreach($this->_plugins as $plugin)
+		foreach($this->plugins as $plugin)
 		{
 			if($this->isDispatched())
 			{
@@ -602,12 +490,9 @@ class Controller
 		}
 	}
 	
-	/**
-	 * postDispatch
-	 */
 	public function postDispatchPlugins(): void
 	{
-		foreach($this->_plugins as $plugin)
+		foreach($this->plugins as $plugin)
 		{
 			if($this->isDispatched())
 			{

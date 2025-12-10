@@ -5,6 +5,7 @@ namespace Ovos\Pdo\Profiler;
 use Ovos\Measurement;
 use PDOStatement;
 use PDOException;
+use Override;
 
 use function func_get_args;
 
@@ -17,15 +18,19 @@ use function func_get_args;
 class Pdo extends \PDO
 {
 	/**
-	 * Measures time while executing query, returns result
+	 * Measures time while executing a query, returns a result
 	 * @see https://www.php.net/manual/en/pdo.query
-	 * @inheritDoc
 	 */
-	public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): false|PDOStatement
+	#[Override]
+	public function query(
+		string $query,
+		?int $fetchMode = null,
+		mixed ...$fetchModeArgs,
+	): false|PDOStatement
 	{
 		$args = func_get_args();
 		
-		// Execute query and measure time & memory usage
+		// execute the query and measure time & memory usage
 		$measurement = new Measurement;
 		$measurement->start();
 		
@@ -37,7 +42,7 @@ class Pdo extends \PDO
 		{
 			// log the query for debugging
 			$measurement->stop();
-			// pass query to collector
+			// pass the query to the collector
 			Collector::getInstance()
 				->setQuery($query, [], $measurement);
 			
@@ -46,7 +51,7 @@ class Pdo extends \PDO
 		
 		$measurement->stop();
 		
-		// Pass query  to collector
+		// pass the query to the collector
 		Collector::getInstance()
 			->setQuery($query, [], $measurement);
 		
@@ -54,13 +59,15 @@ class Pdo extends \PDO
 	}
 	
 	/**
-	 * Measures time while executing query, returns number of affected rows
+	 * Measures time while executing a query, returns the number of affected rows
 	 * @see https://www.php.net/manual/en/pdo.exec.php
-	 * @inheritDoc
 	 */
-	public function exec(string $statement): int|false
+	#[Override]
+	public function exec(
+		string $statement,
+	): int|false
 	{
-		// Execute query and measure time & memory usage
+		// execute the query and measure time & memory usage
 		$measurement = new Measurement;
 		$measurement->start();
 		
@@ -73,18 +80,26 @@ class Pdo extends \PDO
 			// log the query for debugging
 			$measurement->stop();
 			
-			// pass query to collector
+			// pass the query to the collector
 			Collector::getInstance()
-				->setQuery($statement, [], $measurement);
+				->setQuery(
+					$statement,
+					[],
+					$measurement,
+				);
 			
 			throw $exception;
 		}
 		
 		$measurement->stop();
 		
-		// Pass query  to collector
+		// pass the query to the collector
 		Collector::getInstance()
-			->setQuery($statement, [], $measurement);
+			->setQuery(
+				$statement,
+				[],
+				$measurement,
+			);
 		
 		return $affectedRows;
 	}

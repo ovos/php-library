@@ -9,7 +9,6 @@ use Ovos\Connections;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Store\KeyValue;
-use Ovos\Test\Internal;
 
 use function sprintf;
 
@@ -21,43 +20,34 @@ use function sprintf;
  */
 trait TraitRedis
 {
-	/**
-	 * @var ArrayObject
-	 */
 	#[Inject('config')]
 	#[InjectArrayObject('cache')]
-	protected ArrayObject $_cacheConfig;
+	protected ArrayObject $cacheConfig;
 	
-	/**
-	 * @var ?Connection
-	 */
-	protected ?Connection $_connection = null;
+	protected ?Connection $connection = null;
 	
-	/**
-	 * @var string
-	 */
-	protected string $_group = KeyValue::GROUP_TESTS;
+	protected string $group = KeyValue::GROUP_TESTS;
 	
-	protected function _getConnections(): Connections
+	protected function getConnections(): Connections
 	{
-		return $this->_container
+		return $this->container
 			->getClass(Connections::class);
 	}
 	
-	protected function _getConnection(): Connection
+	protected function getConnection(): Connection
 	{
 		/** @var Connection $connection */
-		$connection = $this->_getConnections()
-			->get($this->_cacheConfig->persistent->connection);
+		$connection = $this->getConnections()
+			->get($this->cacheConfig->persistent->connection);
 		
 		return $connection;
 	}
 	
-	protected function _connect(): Connection
+	protected function connect(): Connection
 	{
-		if($this->_connection === null)
+		if($this->connection === null)
 		{
-			$connection = $this->_getConnection();
+			$connection = $this->getConnection();
 			if($connection->connect() === false)
 			{
 				throw new RedisException
@@ -69,30 +59,23 @@ trait TraitRedis
 				);
 			}
 			
-			$this->_connection = $connection;
+			$this->connection = $connection;
 		}
 		
-		return $this->_connection;
+		return $this->connection;
 	}
 	
-	protected function _getStore($storeClass): object
+	protected function getStore(
+		string $storeClass,
+	): object
 	{
 		return new $storeClass
 		(
-			$this->_connect(),
-			$this->_cacheConfig->persistent,
-			$this->_cacheConfig->prefix,
-			$this->_group,
+			$this->connect(),
+			$this->cacheConfig->persistent,
+			$this->cacheConfig->prefix,
+			$this->group,
 		);
-	}
-	
-	/**
-	 * Called by the runner after all test methods have been invoked
-	 */
-	#[Internal]
-	public function deconstruct(): void
-	{
-		$this->_connection->disconnect();
 	}
 }
 

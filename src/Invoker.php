@@ -13,13 +13,10 @@ use function random_int;
  */
 class Invoker
 {
-	/**
-	 * @param callable $callback
-	 * @param int $chance
-	 *
-	 * @return void
-	 */
-	public static function invokeWithChance(callable $callback, int $chance = 10): void
+	public static function invokeWithChance(
+		callable $callback,
+		int $chance = 10,
+	): void
 	{
 		if(random_int(1, $chance) === $chance)
 		{

@@ -16,38 +16,34 @@ use Ovos\Store\Mysql\Query\Update;
  */
 class QueryBuilder
 {
-	/**
-	 * @var string
-	 */
-	protected string $_table;
+	protected string $table;
 	
-	public function __construct(string $table)
+	public function __construct(
+		string $table,
+	)
 	{
 		$this->setTable($table);
 	}
 	
-	public function setTable(string $table): self
+	public function setTable(
+		string $table,
+	): static
 	{
-		$this->_table = $table;
+		$this->table = $table;
 		
 		return $this;
 	}
 	
 	public function getTable(): string
 	{
-		return $this->_table;
+		return $this->table;
 	}
 	
-	/**
-	 * @param null|string|callable ...$conditions
-	 *
-	 * @return Delete
-	 */
 	public function delete(
 		null|string|callable ...$conditions,
 	): Delete
 	{
-		$query = new Delete($this->_table);
+		$query = new Delete($this->table);
 		$query->where(...$conditions);
 		
 		return $query;
@@ -56,27 +52,22 @@ class QueryBuilder
 	/**
 	 * Example usage:
 	 * ->columns(name: ':name', created_at: 'NOW()')
-	 *
-	 * @param mixed ...$columns
-	 *
-	 * @return Insert
 	 */
-	public function insert(mixed ...$columns): Insert
+	public function insert(
+		mixed ...$columns,
+	): Insert
 	{
-		$query = new Insert($this->_table);
+		$query = new Insert($this->table);
 		$query->columns(...$columns);
 		
 		return $query;
 	}
 	
-	/**
-	 * @param string ...$fields
-	 *
-	 * @return Select
-	 */
-	public function select(string ...$fields): Select
+	public function select(
+		string ...$fields,
+	): Select
 	{
-		$query = new Select($this->_table);
+		$query = new Select($this->table);
 		if(empty($fields))
 		{
 			$fields = ['*'];
@@ -89,14 +80,12 @@ class QueryBuilder
 	/**
 	 * Example usage:
 	 * ->set(name: ':name', created_at: 'NOW()')
-	 *
-	 * @param mixed ...$columns
-	 *
-	 * @return Update
 	 */
-	public function update(mixed ...$columns): Update
+	public function update(
+		mixed ...$columns,
+	): Update
 	{
-		$query = new Update($this->_table);
+		$query = new Update($this->table);
 		$query->set(...$columns);
 		
 		return $query;

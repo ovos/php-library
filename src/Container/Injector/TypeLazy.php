@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Container\Injector;
 
 use Ovos\Container;
+use Override;
 
 /**
  * TypeLazy
@@ -13,12 +14,10 @@ use Ovos\Container;
  */
 class TypeLazy extends TypeClass
 {
-	/**
-	 * @param Container $container
-	 *
-	 * @return object
-	 */
-	public function inject(Container $container): object
+	#[Override]
+	public function inject(
+		Container $container,
+	): object
 	{
 		$reflector = $this->getReflector();
 		$parameters = $this->getParameters();

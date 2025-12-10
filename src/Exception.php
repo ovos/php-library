@@ -14,11 +14,11 @@ use function sprintf;
 class Exception extends \Exception
 {
 	/**
-	 * Construct the exception.
-	 *
 	 * @param string|string[] ...$message [optional] The Exception message to throw.
 	 */
-	public function __construct(...$message)
+	public function __construct(
+		...$message,
+	)
 	{
 		$count = count($message);
 		if($count > 1)

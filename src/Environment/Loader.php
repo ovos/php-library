@@ -6,7 +6,6 @@ namespace Ovos\Environment;
 use Ovos\Environment;
 use Ovos\Service\Memory;
 use Ovos\Container\Inject;
-use Ovos\Store\Apcu;
 
 use function basename;
 
@@ -18,32 +17,21 @@ use function basename;
  */
 class Loader
 {
-	/**
-	 * @var Memory
-	 */
-	protected Memory $_memoryService;
+	protected Memory $memoryService;
 	
-	/**
-	 * @param Memory $memoryService
-	 */
 	public function __construct(
 		#[Inject(Memory::SYMBOL)] Memory $memoryService,
 	)
 	{
-		$this->_memoryService = $memoryService;
+		$this->memoryService = $memoryService;
 	}
 	
-	/**
-	 * @param string $file
-	 * @param ?string $cacheId
-	 *
-	 * @return ?Environment
-	 */
-	public function load(string $file,
+	public function load(
+		string $file,
 		?string $cacheId = null
 	): ?Environment
 	{
-		$store = $this->_memoryService->getStore();
+		$store = $this->memoryService->getStore();
 		
 		$cacheId = ($cacheId ?? $store::pathToId(basename($file)));
 		if(($value = $store->get($cacheId)))

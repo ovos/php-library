@@ -16,30 +16,21 @@ use function str_replace;
  */
 class Memory extends Service
 {
-	/**
-	 * @var string
-	 */
 	public const string SYMBOL = 'memory';
 	
-	/**
-	 * @var ?Apcu
-	 */
-	protected ?Apcu $_store = null;
+	protected ?Apcu $store = null;
 	
-	/**
-	 * @return Apcu
-	 */
 	public function getStore(): Apcu
 	{
-		if($this->_store === null)
+		if($this->store === null)
 		{
 			$home = getenv('HOME', true);
 			$baseDirHomeless = $home === false
 				? BASE_DIR
 				: substr(BASE_DIR, strlen($home));
-			$this->_store = new Apcu(Apcu::pathToId($baseDirHomeless)); // path as a prefix
+			$this->store = new Apcu(Apcu::pathToId($baseDirHomeless)); // path as a prefix
 		}
 		
-		return $this->_store;
+		return $this->store;
 	}
 }

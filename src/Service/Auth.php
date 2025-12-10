@@ -14,41 +14,24 @@ use Ovos\Service;
  */
 class Auth extends Service
 {
-	/**
-	 * @var string
-	 */
 	public const string SYMBOL = 'auth';
 	
-	/**
-	 * @var ?User
-	 */
-	protected ?User $_user = null;
+	protected ?User $user = null;
 	
-	/**
-	 * @param ?User $user
-	 *
-	 * @return self
-	 */
-	public function setUser(?User $user): self
+	public function setUser(?User $user): static
 	{
-		$this->_user = $user;
+		$this->user = $user;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function hasUser(): bool
 	{
-		return $this->_user !== null;
+		return $this->user !== null;
 	}
 	
-	/**
-	 * @return ?User
-	 */
 	public function getUser(): ?User
 	{
-		return $this->_user;
+		return $this->user;
 	}
 }

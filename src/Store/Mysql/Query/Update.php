@@ -15,21 +15,22 @@ use function implode;
  */
 class Update extends Query
 {
-	/**
-	 * @return string
-	 */
 	public function getSql(): string
 	{
-		$sql = 'UPDATE ' . $this->_table . PHP_EOL;
+		$sql = 'UPDATE ' . $this->table . PHP_EOL;
 		
-		if($this->_columns !== [])
+		if($this->columns !== [])
 		{
-			$sql.= 'SET ' . implode( ', ', $this->_columns) . PHP_EOL;
+			$sql.= 'SET '
+				. implode( ', ', $this->columns)
+				. PHP_EOL;
 		}
 		
-		if($this->_conditions !== [])
+		if($this->conditions !== [])
 		{
-			$sql.= 'WHERE ' . $this->_getConditionsSql($this->_conditions) . PHP_EOL;
+			$sql.= 'WHERE '
+				. $this->getConditionsSql($this->conditions)
+				. PHP_EOL;
 		}
 		
 		return $sql;
@@ -38,16 +39,12 @@ class Update extends Query
 	/**
 	 * Example usage:
 	 * ->set(name: ':name', created_at: 'NOW()')
-	 *
-	 * @param mixed ...$columns
-	 *
-	 * @return self
 	 */
-	public function set(mixed ...$columns): self
+	public function set(mixed ...$columns): static
 	{
 		foreach($columns as $column => $value)
 		{
-			$this->_columns[] = $column . ' = ' . $value;
+			$this->columns[] = $column . ' = ' . $value;
 		}
 		
 		return $this;

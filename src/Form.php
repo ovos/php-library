@@ -7,13 +7,12 @@ use Ovos\Form\Element;
 use Ovos\Form\Error;
 use Iterator;
 
-use function reset;
-use function current;
-use function next;
-use function key;
-use function array_merge;
-use function count;
 use function array_key_exists;
+use function array_merge;
+use function current;
+use function key;
+use function next;
+use function reset;
 
 /**
  * Form
@@ -25,70 +24,50 @@ class Form implements Iterator
 {
 	use Translatable;
 	
-	/**
-	 * @var Application
-	 */
-	protected Application $_app;
+	protected Application $app;
 	
-	/**
-	 * @var ?string
-	 */
-	protected ?string $_id = null;
+	protected ?string $id = null;
 	
 	/**
 	 * Parent form
-	 *
-	 * @var ?Form
 	 */
-	protected ?Form $_form = null;
+	protected ?Form $form = null;
 	
-	/**
-	 * @var Url
-	 */
-	protected Url $_action;
+	protected Url $action;
 	
 	/**
 	 * Element and Form objects, ordered
 	 *
 	 * @var Element[]|Form[]
 	 */
-	protected array $_elements = [];
+	protected array $elements = [];
 	
-	/**
-	 * @var array
-	 */
-	protected array $_values = [];
+	protected array $values = [];
 	
 	/**
 	 * @var string[]
 	 */
-	protected array $_defaults = [];
+	protected array $defaults = [];
 	
-	/**
-	 * @param ?string $id
-	 */
-	public function __construct(?string $id = null)
+	public function __construct(
+		?string $id = null,
+	)
 	{
-		$this->_app = app();
-		$this->_id = $id;
+		$this->app = app();
+		$this->id = $id;
 		
 		$this->init();
 	}
 	
-	/**
-	 */
 	public function init(): void
 	{
 	}
 	
-	/**
-	 * @return self
-	 */
-	public function reset(): self
+	public function reset(): static
 	{
-		$this->_values = [];
+		$this->values = [];
 		
-		foreach($this->_elements as $element)
+		foreach($this->elements as $element)
 		{
 			$element->reset();
 		}
@@ -96,110 +75,83 @@ class Form implements Iterator
 		return $this;
 	}
 	
-	/**
-	 * @param ?string $id
-	 *
-	 * @return self
-	 */
-	public function setId(?string $id): self
+	public function setId(
+		?string $id,
+	): static
 	{
-		$this->_id = $id;
+		$this->id = $id;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getId(): ?string
 	{
-		$id = $this->_id;
-		if($this->_form !== null)
+		$id = $this->id;
+		if($this->form !== null)
 		{
-			$id = $this->_form->getId() . '_' . $id;
+			$id = $this->form->getId() . '_' . $id;
 		}
 		
 		return $id;
 	}
 	
-	/**
-	 * @param Form $form
-	 *
-	 * @return self
-	 */
-	public function setForm(Form $form): self
+	public function setForm(
+		Form $form,
+	): static
 	{
-		$this->_form = $form;
+		$this->form = $form;
 		
 		return $this;
 	}
 	
-	/**
-	 * @param Url $action
-	 * 
-	 * @return self
-	 */
-	public function setAction(Url $action): self
+	public function setAction(
+		Url $action,
+	): static
 	{
-		$this->_action = $action;
+		$this->action = $action;
 		
 		return $this;
 	}
 	
-	/**
-	 * @return null|Url
-	 */
 	public function getAction(): ?Url
 	{
-		return $this->_action;
+		return $this->action;
 	}
 	
-	/**
-	 * Set value
-	 * 
-	 * @param string $id
-	 * @param null|string|bool|int|float|array $value
-	 * 
-	 * @return self
-	 */
-	public function setValue(string $id, null|string|bool|int|float|array $value): self
+	public function setValue(
+		string $id,
+		null|string|bool|int|float|array $value,
+	): static
 	{
-		$this->_values[$id] = $value;
+		$this->values[$id] = $value;
 		
 		return $this;
 	}
 	
-	/**
-	 * Set values
-	 * 
-	 * @param array $values
-	 *
-	 * @return self
-	 */
-	public function setValues(array $values): self
+	public function setValues(
+		array $values,
+	): static
 	{
-		if($this->_id !== null && isset($values[$this->_id]))
+		if($this->id !== null && isset($values[$this->id]))
 		{
-			$values = $values[$this->_id];
+			$values = $values[$this->id];
 		}
 		
-		$this->_values = array_merge($this->_values, $values);
+		$this->values = array_merge($this->values, $values);
 		
 		return $this;
 	}
 	
 	/**
 	 * Raw value (unfiltered)
-	 * 
-	 * @param string $id
-	 *
-	 * @return null|string|bool|int|float|array
 	 */
-	public function getRawValue(string $id): null|string|bool|int|float|array
+	public function getRawValue(
+		string $id,
+	): null|string|bool|int|float|array
 	{
-		if(isset($this->_values[$id]))
+		if(isset($this->values[$id]))
 		{
-			return $this->_values[$id];
+			return $this->values[$id];
 		}
 		
 		return null;
@@ -207,60 +159,52 @@ class Form implements Iterator
 	
 	/**
 	 * Raw values
-	 * 
-	 * @return array
 	 */
 	public function getRawValues(): array
 	{
-		return $this->_values;
+		return $this->values;
 	}
 	
 	/**
 	 * Set default value
-	 * 
-	 * @param string $id
-	 * @param null|string|bool|int|float|array $default
-	 * 
-	 * @return self
 	 */
-	public function setDefault(string $id, null|string|bool|int|float|array $default): self
+	public function setDefault(
+		string $id,
+		null|string|bool|int|float|array $default,
+	): static
 	{
-		$this->_defaults[$id] = $default;
+		$this->defaults[$id] = $default;
 		
 		return $this;
 	}
 	
 	/**
 	 * Set default values
-	 * 
-	 * @param array $defaults
-	 *
-	 * @return self
 	 */
-	public function setDefaults(array $defaults): self
+	public function setDefaults(
+		array $defaults,
+	): static
 	{
-		if($this->_id !== null && isset($defaults[$this->_id]))
+		if($this->id !== null && isset($defaults[$this->id]))
 		{
-			$defaults = $defaults[$this->_id];
+			$defaults = $defaults[$this->id];
 		}
 		
-		$this->_defaults = array_merge($this->_defaults, $defaults);
+		$this->defaults = array_merge($this->defaults, $defaults);
 		
 		return $this;
 	}
 	
 	/**
 	 * Default value
-	 * 
-	 * @param string $id
-	 *
-	 * @return null|string|bool|int|float|array
 	 */
-	public function getDefaultValue(string $id): null|string|bool|int|float|array
+	public function getDefaultValue(
+		string $id,
+	): null|string|bool|int|float|array
 	{
-		if(isset($this->_defaults[$id]))
+		if(isset($this->defaults[$id]))
 		{
-			return $this->_defaults[$id];
+			return $this->defaults[$id];
 		}
 		
 		return null;
@@ -268,21 +212,14 @@ class Form implements Iterator
 	
 	/**
 	 * Default values
-	 * 
-	 * @return array
 	 */
 	public function getDefaultValues(): array
 	{
-		return $this->_defaults;
+		return $this->defaults;
 	}
 	
 	/**
 	 * Value (filtered)
-	 * 
-	 * @param string $id
-	 * @param bool $default
-	 *
-	 * @return null|string|bool|int|float|array
 	 */
 	public function getValue(
 		string $id,
@@ -294,10 +231,6 @@ class Form implements Iterator
 	
 	/**
 	 * Input value (filtered)
-	 * 
-	 * @param string $id
-	 *
-	 * @return null|string|bool|int|float|array
 	 */
 	public function getInputValue(
 		string $id,
@@ -308,10 +241,6 @@ class Form implements Iterator
 	
 	/**
 	 * User value (filtered)
-	 * 
-	 * @param string $id
-	 *
-	 * @return null|string|bool|int|float|array
 	 */
 	public function getUserValue(
 		string $id,
@@ -322,16 +251,14 @@ class Form implements Iterator
 	
 	/**
 	 * Validated and filtered values
-	 * 
-	 * @param bool $default
-	 * 
-	 * @return array
 	 */
-	public function getValues(bool $default = false): array
+	public function getValues(
+		bool $default = false,
+	): array
 	{
 		$values = [];
 		
-		foreach($this->_elements as $element)
+		foreach($this->elements as $element)
 		{
 			$values[$element->getId(withFormId: false)] 
 				= $element->getValue($default);
@@ -342,8 +269,6 @@ class Form implements Iterator
 	
 	/**
 	 * Validated and filtered input values
-	 * 
-	 * @return array
 	 */
 	public function getInputValues(): array
 	{
@@ -352,20 +277,15 @@ class Form implements Iterator
 	
 	/**
 	 * Validated and filtered user values
-	 * 
-	 * @return array
 	 */
 	public function getUserValues(): array
 	{
 		return $this->getValues(false);
 	}
 	
-	/**
-	 * @param string $id
-	 *
-	 * @return Element
-	 */
-	public function __get(string $id): Element
+	public function __get(
+		string $id,
+	): Element
 	{
 		if($this->__isset($id) === false)
 		{
@@ -373,72 +293,56 @@ class Form implements Iterator
 			$this->__set($id, $element); // default type
 		}
 		
-		return $this->_elements[$id];
+		return $this->elements[$id];
 	}
 	
-	/**
-	 * @param string $id
-	 *
-	 * @return Element
-	 */
-	public function getElement(string $id): Element
+	public function getElement(
+		string $id,
+	): Element
 	{
 		return $this->__get($id);
 	}
 	
-	/**
-	 * @param string $id
-	 * @param Element $element
-	 */
-	public function __set(string $id, Element $element): void
+	public function __set(
+		string $id,
+		Element $element,
+	): void
 	{
 		$element->setForm($this);
 		$element->setId($id);
 		
-		$this->_elements[$id] = $element;
+		$this->elements[$id] = $element;
 	}
 	
-	/**
-	 * @param string $id
-	 * @param Element $element
-	 * 
-	 * @return self
-	 */
-	public function setElement(string $id, Element $element): self
+	public function setElement(
+		string $id,
+		Element $element,
+	): static
 	{
 		$this->__set($id, $element);
 		
 		return $this;
 	}
 	
-	/**
-	 * @param string $id
-	 * 
-	 * @return bool
-	 */
-	public function __isset(string $id): bool
+	public function __isset(
+		string $id,
+	): bool
 	{
-		return array_key_exists($id, $this->_elements);
+		return array_key_exists($id, $this->elements);
 	}
 	
-	/**
-	 * @param string $id
-	 * 
-	 * @return bool
-	 */
-	public function hasElement(string $id): bool
+	public function hasElement(
+		string $id,
+	): bool
 	{
 		return $this->__isset($id);
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function isValid(): bool
 	{
 		$isValid = true;
 		
-		foreach($this->_elements as $element)
+		foreach($this->elements as $element)
 		{
 			$isValid = $isValid
 				&& $element->isValid();
@@ -454,7 +358,7 @@ class Form implements Iterator
 	{
 		$errors = [[]];
 		
-		foreach($this->_elements as $element)
+		foreach($this->elements as $element)
 		{
 			$errors[] = $element->getErrors();
 		}
@@ -462,12 +366,9 @@ class Form implements Iterator
 		return array_merge(...$errors);
 	}
 	
-	/**
-	 * @return Form
-	 */
 	public function getForm(): Form
 	{
-		return $this->_form;
+		return $this->form;
 	}
 	
 	/**
@@ -475,44 +376,30 @@ class Form implements Iterator
 	 */
 	public function toArray(): array
 	{
-		return $this->_elements;
+		return $this->elements;
 	}
 	
-	/**
-	 * @return void
-	 */
 	public function rewind(): void
 	{
-		reset($this->_elements);
+		reset($this->elements);
 	}
 	
-	/**
-	 * @return mixed
-	 */
-	public function current(): mixed
+	public function current(
+	): Form|Element|false
 	{
-		return current($this->_elements);
+		return current($this->elements);
 	}
 	
-	/**
-	 * @return void
-	 */
 	public function next(): void
 	{
-		next($this->_elements);
+		next($this->elements);
 	}
 	
-	/**
-	 * @return mixed
-	 */
 	public function key(): mixed
 	{
-		return key($this->_elements);
+		return key($this->elements);
 	}
 	
-	/**
-	 * @return bool
-	 */
 	public function valid(): bool
 	{
 		$key = $this->key();

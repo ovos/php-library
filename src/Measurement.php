@@ -16,83 +16,65 @@ use function memory_get_usage;
  */
 class Measurement
 {
-	/**
-	 * @var stdClass
-	 */
-	protected stdClass $_time;
+	protected stdClass $time;
 	
-	/**
-	 * @var stdClass
-	 */
-	protected stdClass $_memory;
+	protected stdClass $memory;
 	
-	/**
-	 */
 	public function __construct()
 	{
-		$this->_time = new stdClass;
-		$this->_memory = new stdClass;
+		$this->time = new stdClass;
+		$this->memory = new stdClass;
 	}
 	
-	/**
-	 * @return self
-	 */
-	public function start(): self
+	public function start(): static
 	{
-		$this->_time->start = microtime(true);
-		$this->_memory->start = memory_get_usage(false);
+		$this->time->start = microtime(true);
+		$this->memory->start = memory_get_usage(false);
 		
 		return $this;
 	}
 	
-	/**
-	 * @return self
-	 */
-	public function stop(): self
+	public function stop(): static
 	{
-		$this->_time->end = microtime(true);
-		$this->_memory->end = memory_get_usage(false);
+		$this->time->end = microtime(true);
+		$this->memory->end = memory_get_usage(false);
 		
 		return $this;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getTotalTime(): ?string
 	{
-		if(isset($this->_time->total) === false)
+		if(isset($this->time->total) === false)
 		{
-			if(isset($this->_time->start, $this->_time->end) === false)
+			if(isset($this->time->start, $this->time->end) === false)
 			{
 				return null;
 			}
 			
-			$this->_time->total = Measurements::formatTime(
-				$this->_time->start,
-				$this->_time->end);
+			$this->time->total = Measurements::formatTime(
+				$this->time->start,
+				$this->time->end,
+			);
 		}
 	
-		return $this->_time->total;
+		return $this->time->total;
 	}
 	
-	/**
-	 * @return ?string
-	 */
 	public function getTotalMemory(): ?string
 	{
-		if(isset($this->_memory->total) === false)
+		if(isset($this->memory->total) === false)
 		{
-			if(isset($this->_memory->start, $this->_memory->end) === false)
+			if(isset($this->memory->start, $this->memory->end) === false)
 			{
 				return null;
 			}
 			
-			$this->_memory->total = Measurements::formatMemory(
-				$this->_memory->start,
-				$this->_memory->end);
+			$this->memory->total = Measurements::formatMemory(
+				$this->memory->start,
+				$this->memory->end,
+			);
 		}
 		
-		return $this->_memory->total;
+		return $this->memory->total;
 	}
 }

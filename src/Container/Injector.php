@@ -13,5 +13,7 @@ use Ovos\Container;
  */
 abstract class Injector
 {
-	abstract public function inject(Container $container): object;
+	abstract public function inject(
+		Container $container,
+	): object;
 }

@@ -19,14 +19,14 @@ class Insert extends Query
 {
 	/**
 	 * Meant to be used with prepared statements, that is why string values are not enclosed in quotes
-	 *
-	 * @return string
 	 */
 	public function getSql(): string
 	{
-		$sql = 'INSERT INTO ' . $this->_table . PHP_EOL;
-		$sql.= '(' . implode( ', ', array_keys($this->_columns)) . ')' . PHP_EOL;
-		$sql.= 'VALUES (' . implode( ', ', array_values($this->_columns)) . ')' . PHP_EOL;
+		$sql = 'INSERT INTO ' . $this->table . PHP_EOL;
+		$sql.= '(' . implode( ', ', array_keys($this->columns)) . ')'
+			. PHP_EOL;
+		$sql.= 'VALUES (' . implode( ', ', array_values($this->columns)) . ')'
+			. PHP_EOL;
 		
 		return $sql;
 	}
@@ -34,14 +34,12 @@ class Insert extends Query
 	/**
 	 * Example usage:
 	 * ->columns(name: ':name', created_at: 'NOW()')
-	 *
-	 * @param string ...$columns
-	 *
-	 * @return self
 	 */
-	public function columns(mixed ...$columns): self
+	public function columns(
+		mixed ...$columns,
+	): static
 	{
-		$this->_columns = $columns;
+		$this->columns = $columns;
 		
 		return $this;
 	}
