@@ -489,6 +489,8 @@ abstract class Redis extends Tags
 		$lockValue = bin2hex(random_bytes(16));
 		$queueLockTtlMs = $queueLockTtlMs ?? $this->queueLockTtlMs;
 		
+		$this->connection->debug('queue: ' . $id);
+		
 		// try to acquire a distributed lock
 		$lockAcquired = $client->set($lockKey, $lockValue, [
 			'NX',
@@ -497,6 +499,8 @@ abstract class Redis extends Tags
 		
 		if($lockAcquired)
 		{
+			$this->connection->debug('lock acquired: ' . $id);
+			
 			// lock acquired, store it internally for releaseActiveLock()
 			return $this->lockAcquired($key,
 				$id,
@@ -518,12 +522,19 @@ abstract class Redis extends Tags
 				false,
 			);
 			
+			$success = false;
+			
 			try
 			{
+				$this->connection->debug('subscribe: ' . $id);
+				
 				// block and wait for a message on the channel or a timeout (when no message is received)
-				$client->subscribe([$channelName],
-					function($client, $channelName, $message)
+				$success = $client->subscribe([$channelName],
+					function($client, $channelName, $message) use ($id)
 					{
+						$this->connection->debug(
+							'unsubscribe: ' . $id);
+						
 						$client->unsubscribe([$channelName]);
 					}
 				);
@@ -535,7 +546,11 @@ abstract class Redis extends Tags
 				// shorten the wait time on the next attempt
 				$waitTimeMs/= 2;
 				// add jitter to the wait time (0-50%)
-				$waitTimeJitterMs = $waitTimeMs + random_int(0, (int)($waitTimeMs * 0.5));
+				$waitTimeJitterMs = $waitTimeMs
+					+ random_int(0, (int)($waitTimeMs * 0.5));
+				
+				$this->connection->debug('timeout: ' . $id
+					. PHP_EOL . $exception->getMessage(), timeout: true);
 			}
 			finally
 			{
@@ -546,6 +561,11 @@ abstract class Redis extends Tags
 			// either we got the message or we timed-out
 			try
 			{
+				if($lockOnly === true && $success === true)
+				{
+					return true;
+				}
+				
 				if($lockOnly === false)
 				{
 					// check if data is already there
@@ -555,6 +575,9 @@ abstract class Redis extends Tags
 					);
 					if($value !== false)
 					{
+						$this->connection->debug(
+							'timeout & data found: ' . $id);
+						
 						return $this->unserialize($this->decompress($value));
 					}
 				}
@@ -570,6 +593,9 @@ abstract class Redis extends Tags
 					
 					if($lockAcquired)
 					{
+						$this->connection->debug(
+							'timeout & lock acquired: ' . $id);
+						
 						// lock acquired, store it internally for releaseActiveLock()
 						return $this->lockAcquired($key,
 							$id,
@@ -580,6 +606,11 @@ abstract class Redis extends Tags
 						);
 					}
 				}
+				else
+				{
+					$this->connection->debug(
+						'lock still exists for: ' . $id);
+				}
 			}
 			catch(RedisException $exception)
 			{
@@ -588,8 +619,19 @@ abstract class Redis extends Tags
 			// if the lock still exists, or we failed to acquire it, loop to wait again
 		}
 		
+		$this->connection->debug(
+			'queue, timeout & returning value: ' . $id);
+		
 		// we tried, time to fetch the data ourselves
-		return $this->callResolver($resolver);
+		// even if we timed out, we proceed as if we acquired the lock,
+		// this allows the process to work and notify other waiters when it's finished
+		return $this->lockAcquired($key,
+			$id,
+			$lockValue,
+			$resolver,
+			$ttl,
+			$tags,
+		);
 	}
 	
 	protected function lockAcquired(
@@ -631,6 +673,8 @@ abstract class Redis extends Tags
 			$id = $this->prefix($key, $this->getType());
 		}
 		
+		$this->connection->debug('release lock: ' . $id, true);
+		
 		if(array_key_exists($id, $this->queueLocks) === false)
 		{
 			return false;
@@ -642,11 +686,18 @@ abstract class Redis extends Tags
 		$lockKey = $this->prefix(self::TYPE_LOCK, $id);
 		$channelName = $this->prefix(self::TYPE_CHANNEL, $id);
 		
-		// atomically release the lock and notify any waiters using the Lua script
-		return (bool)$this->functionCall('store_release_lock_and_publish',
-			[$lockKey, $channelName],
-			[$lockValue],
-		);
+		try
+		{
+			// atomically release the lock and notify any waiters using the Lua script
+			return (bool)$this->functionCall('store_release_lock_and_publish',
+				[$lockKey, $channelName],
+				[$lockValue],
+			);
+		}
+		finally
+		{
+			$this->connection->debug('lock released: ' . $id);
+		}
 	}
 	
 	/**

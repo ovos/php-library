@@ -256,6 +256,8 @@ class Redis extends Store
 		}
 		finally
 		{
+			$this->connection->debug('set: ' . $id);
+			
 			$this->releaseActiveLock($key, $id);
 		}
 		
