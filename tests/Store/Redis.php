@@ -227,6 +227,20 @@ class Redis extends Test
 		return $result === null;
 	}
 	
+	public function number(): bool
+	{
+		$this->store->set(self::KEY_ITEM, 1);
+		
+		try
+		{
+			return $this->store->get(self::KEY_ITEM, queue: false) === '1';
+		}
+		finally
+		{
+			$this->store->delete(self::KEY_ITEM);
+		}
+	}
+	
 	/**
 	 * Called by the runner after each test method
 	 */

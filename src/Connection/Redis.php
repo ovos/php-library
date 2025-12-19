@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Connection;
 
 use Ovos\ArrayObject;
+use Ovos\Client;
 use Ovos\Connection;
 use Override;
 use Redis as RedisClient;
@@ -65,6 +66,13 @@ class Redis extends Connection
 	 * Log queries into a file with this filename
 	 */
 	protected string $slowLogFilename = 'redis_slow';
+	
+	/**
+	 * Debug
+	 */
+	protected string $debugFilename = 'redis_debug';
+	protected bool $debug = false;
+	protected bool $debugTimeouts = false;
 	
 	public function __construct(ArrayObject $config)
 	{
@@ -235,6 +243,52 @@ class Redis extends Connection
 		}
 		
 		return $result;
+	}
+	
+	public function debug(
+		string $message,
+		bool $trace = false,
+		bool $timeout = false,
+	): void
+	{
+		if($this->debug === false
+			&& ($this->debugTimeouts === true
+				&& $timeout === true) === false
+		)
+		{
+			return;
+		}
+		
+		$filename = sprintf('%s_%s.txt',
+			$this->debugFilename,
+			date('Y_m_d'),
+		);
+		
+		static $requestId = null;
+		if($requestId === null)
+		{
+			$requestId = substr(bin2hex(
+				random_bytes(4)
+			), 0, 8);
+		}
+		
+		$message = sprintf(
+			'%s [%s] %s: %s' . PHP_EOL,
+			Client::getIp(),
+			$requestId,
+			(new DateTime())->format('Y-m-d H:i:s.u'),
+			$message,
+		);
+		
+		if($trace)
+		{
+			$backtrace = new Exception;
+			$message.= $backtrace->getTraceAsString() . PHP_EOL;
+		}
+		
+		file_put_contents(LOGS_DIR . $filename,
+			$message
+		, FILE_APPEND);
 	}
 	
 	/**

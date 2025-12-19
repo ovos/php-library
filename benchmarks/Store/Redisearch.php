@@ -47,6 +47,8 @@ class Redisearch extends Benchmark
 	
 	protected function fill(): void
 	{
+		echo 'Filling...', PHP_EOL;
+		
 		$tags = [];
 		for($i = 1; $i <= self::TAGS_PER_ITEM; $i++)
 		{
