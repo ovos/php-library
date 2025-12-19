@@ -17,7 +17,6 @@ use function count;
 use function explode;
 use function implode;
 use function is_array;
-use function is_int;
 
 /**
  * Redis
@@ -257,6 +256,8 @@ class Redis extends Store
 		}
 		finally
 		{
+			$this->connection->debug('set: ' . $id);
+			
 			$this->releaseActiveLock($key, $id);
 		}
 		
@@ -313,12 +314,29 @@ class Redis extends Store
 			
 			foreach($tags as $tag)
 			{
-				$this->functionCall('store_unlink_by_tag', [], [
-					$group,
-					$tag,
-					$typeItems,
-					$typeTags,
-				], long: true);
+				// initialize the batch cursor for each tag
+				$cursor = '0';
+				
+				do
+				{
+					$result = $this->functionCall('store_unlink_by_tag', [], [
+						$group,
+						$tag,
+						$typeItems,
+						$typeTags,
+						$cursor,
+					], long: true);
+					
+					if(is_array($result) === false
+						|| count($result) !== 2)
+					{
+						break; // stop processing this tag if the result is invalid
+					}
+					
+					$cursor = $result[1];
+				}
+				// continue as long as the cursor is not '0' (meaning there are more items to scan)
+				while($cursor !== '0');
 			}
 			
 			if($error = $client->getLastError())
@@ -463,17 +481,30 @@ class Redis extends Store
 			
 			foreach($tags as $tag)
 			{
-				$result = $this->functionCall('store_clean_tag', [], [
-					$group,
-					$tag,
-					$typeItems,
-					$typeTags,
-				], long: true);
+				// initialize the batch cursor for each tag
+				$cursor = '0';
 				
-				if(is_int($result))
+				do
 				{
-					$count+= $result;
+					$result = $this->functionCall('store_clean_tag', [], [
+						$group,
+						$tag,
+						$typeItems,
+						$typeTags,
+						$cursor,
+					], long: true);
+					
+					if(is_array($result) === false
+						|| count($result) !== 2)
+					{
+						break; // stop processing this tag if the result is invalid
+					}
+					
+					$count += (int)$result[0];
+					$cursor = $result[1];
 				}
+				// continue as long as the cursor is not '0' (meaning there are more items to scan)
+				while($cursor !== '0');
 			}
 			
 			if($error = $client->getLastError())
