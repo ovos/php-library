@@ -10,6 +10,8 @@ use Closure;
 use function function_exists;
 use function gzcompress;
 use function gzuncompress;
+use function zstd_compress;
+use function zstd_uncompress;
 use function is_array;
 use function is_object;
 use function serialize;

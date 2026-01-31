@@ -24,7 +24,7 @@ class Redisearch extends Store
 {
 	// Libraries
 	/**
-	 * The array of function libraries used by this lass
+	 * An array of function libraries used by this class
 	 */
 	public const array LIBRARIES = [
 		'store' =>

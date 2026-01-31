@@ -13,11 +13,8 @@ abstract class Store
 {
 	protected Container $container;
 	
-	protected Application $app;
-	
 	public function __construct()
 	{
 		$this->container = container();
-		$this->app = $this->container->get(Application::class);
 	}
 }

@@ -36,6 +36,8 @@ abstract class Tags extends KeyValue
 			return null;
 		}
 		
+		// order of arguments is determined by the compatibility
+		// with backends with no tags
 		$value = $resolver($this, $key, $ttl, $tags);
 		$this->set($key, $value, $ttl, $tags);
 		
