@@ -8,7 +8,6 @@ use function ltrim;
 /**
  * LeftTrim
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class LeftTrim extends Trim

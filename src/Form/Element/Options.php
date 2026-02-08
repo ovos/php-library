@@ -17,7 +17,6 @@ use function is_array;
 /**
  * Options
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Options extends Element

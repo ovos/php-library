@@ -6,7 +6,6 @@ namespace Ovos\Pdo;
 /**
  * Expression
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Expression

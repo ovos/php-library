@@ -21,7 +21,6 @@ use function sprintf;
 /**
  * Cli
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Cli extends Controller

@@ -13,7 +13,6 @@ use function strlen;
 /**
  * Cookies
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Cookies extends Service
@@ -23,6 +22,7 @@ class Cookies extends Service
 	protected ArrayObject $config;
 	
 	protected ArrayObject $cookiesConfig;
+	protected ArrayObject $sessionConfig;
 	
 	protected ?string $prefix = null;
 	
@@ -36,6 +36,12 @@ class Cookies extends Service
 			throw new Exception('"cookies" config section is missing.');
 		}
 		$this->cookiesConfig = $this->config->cookies;
+		if($this->config->session === null)
+		{
+			throw new Exception(
+				'"session" config section is missing.');
+		}
+		$this->sessionConfig = $this->config->session;
 		
 		$this->prefix = $this->cookiesConfig->prefix;
 		$this->stripPrefixes();
@@ -54,6 +60,12 @@ class Cookies extends Service
 		foreach($_COOKIE as $name => $value)
 		{
 			if(str_starts_with($name, $this->prefix) === false)
+			{
+				continue;
+			}
+			
+			// do not touch the session cookie
+			if($name === $this->prefix . $this->sessionConfig->cookie_name)
 			{
 				continue;
 			}

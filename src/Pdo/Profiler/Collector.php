@@ -10,7 +10,6 @@ use SplQueue;
 /**
  * Collector
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Collector

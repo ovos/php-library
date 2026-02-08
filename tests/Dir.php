@@ -9,7 +9,6 @@ use Ovos\Dir as BaseDir;
 /**
  * Dir
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Dir extends Test

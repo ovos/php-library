@@ -8,7 +8,6 @@ use function parse_ini_file;
 /**
  * Parser
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Parser

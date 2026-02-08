@@ -27,7 +27,6 @@ use function sprintf;
 /**
  * Mysql
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Mysql extends Store

@@ -11,7 +11,6 @@ use function simplexml_load_string;
 /**
  * Xml
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Xml

@@ -9,7 +9,6 @@ use Ovos\Form\Validator;
 /**
  * NotEmpty
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class NotEmpty extends Validator

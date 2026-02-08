@@ -6,7 +6,6 @@ namespace Ovos\Response;
 /**
  * Csv
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Csv extends Html

@@ -9,7 +9,6 @@ use Override;
 /**
  * ExternalRedirect
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class ExternalRedirect extends Redirect

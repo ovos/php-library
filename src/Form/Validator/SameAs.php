@@ -10,7 +10,6 @@ use Ovos\Form\Validator;
 /**
  * SameAs
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class SameAs extends Validator

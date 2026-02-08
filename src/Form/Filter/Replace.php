@@ -10,7 +10,6 @@ use function preg_replace;
 /**
  * Replace
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Replace extends Filter

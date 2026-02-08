@@ -6,7 +6,6 @@ namespace Ovos\Response;
 /**
  * Xml
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Xml extends Html

@@ -17,7 +17,6 @@ use function reset;
 /**
  * Form
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Form implements Iterator

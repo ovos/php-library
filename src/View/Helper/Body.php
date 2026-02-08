@@ -6,7 +6,6 @@ namespace Ovos\View\Helper;
 /**
  * Body
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Body extends Elements

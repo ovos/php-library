@@ -14,7 +14,6 @@ use ErrorException;
 /**
  * Streams
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Streams extends Service

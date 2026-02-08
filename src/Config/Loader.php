@@ -5,6 +5,7 @@ namespace Ovos\Config;
 
 use Ovos\Arrays;
 use Ovos\ArrayObject;
+use Ovos\Cache\Key;
 use Ovos\Container\Inject;
 use Ovos\Environment;
 use Ovos\Service\Memory;
@@ -15,7 +16,6 @@ use function filemtime;
 /**
  * Loader
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Loader
@@ -42,7 +42,7 @@ class Loader
 		
 		if($cacheId === null)
 		{
-			$fileId = $store::pathToId(basename($file));
+			$fileId = Key::fromPath(basename($file));
 			$cacheId = $store->prefix($rootSection, $fileId);
 		}
 		

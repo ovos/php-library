@@ -10,7 +10,6 @@ use Ovos\View\Helper;
 /**
  * Locales
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Locales extends Helper

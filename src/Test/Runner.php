@@ -20,7 +20,6 @@ use function is_bool;
 /**
  * Runner
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Runner

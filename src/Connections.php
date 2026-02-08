@@ -11,7 +11,6 @@ use Ovos\Exception\MissingException\MissingConfigException;
 /**
  * Connections
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Connections
@@ -23,12 +22,21 @@ class Connections
 	#[InjectArrayObject('connections')]
 	protected ArrayObject $config;
 	
-	public function get(string $name): Connection
+	public function get(
+		string $name,
+		?string $modifier = null,
+	): Connection
 	{
 		$config = $this->getConnectionConfig($name);
 		$class = $this->getConnectionClass($config->type);
 		
-		$connectionId = sprintf('connection.%s.%s',
+		$id = 'connection.%s.%s';
+		if($modifier !== null)
+		{
+			$id .= '.' . $modifier;
+		}
+		
+		$connectionId = sprintf($id,
 			$config->type,
 			$class::getId($config),
 		);
@@ -42,7 +50,9 @@ class Connections
 		);
 	}
 	
-	public function getConnectionConfig(string $name): ArrayObject
+	public function getConnectionConfig(
+		string $name,
+	): ArrayObject
 	{
 		foreach($this->config as $configName => $config)
 		{
@@ -59,7 +69,9 @@ class Connections
 		);
 	}
 	
-	public function getConnectionClass(string $type): string
+	public function getConnectionClass(
+		string $type,
+	): string
 	{
 		return match($type)
 		{

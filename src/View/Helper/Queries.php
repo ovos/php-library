@@ -10,7 +10,6 @@ use Ovos\View\Helper;
 /**
  * Queries
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Queries extends Helper

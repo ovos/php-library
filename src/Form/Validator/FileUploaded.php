@@ -13,7 +13,6 @@ use function array_search;
 /**
  * FileUploaded
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class FileUploaded extends Validator

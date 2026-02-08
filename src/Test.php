@@ -9,7 +9,6 @@ use Ovos\Test\Internal;
 /**
  * Test
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Test

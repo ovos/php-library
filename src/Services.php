@@ -11,12 +11,10 @@ use Ovos\Service\Logger;
 use Ovos\Service\Session;
 use Ovos\Service\Cookies;
 use Ovos\Service\Cache;
-use Ovos\Service\Database;
 
 /**
  * Services
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  *
  * @property Memory $memory

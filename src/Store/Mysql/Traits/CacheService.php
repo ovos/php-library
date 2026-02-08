@@ -8,7 +8,6 @@ use Ovos\Service\Cache;
 /**
  * CacheService
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait CacheService
@@ -27,12 +26,7 @@ trait CacheService
 		bool $persistent = true,
 	): bool
 	{
-		$store = $this->cacheService
-			->getStore($persistent);
-		if($store === null)
-		{
-			return false;
-		}
+		$store = $this->cacheService->getStore($persistent);
 		
 		$cacheId = self::TABLE;
 		if($cacheKey !== null)

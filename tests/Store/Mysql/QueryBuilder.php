@@ -9,7 +9,6 @@ use Ovos\Store\Mysql\QueryBuilder as BaseQueryBuilder;
 /**
  * QueryBuilder
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class QueryBuilder extends Test

@@ -23,7 +23,6 @@ use function ucwords;
 /**
  * Strings
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Strings

@@ -15,7 +15,6 @@ use function get_object_vars;
 /**
  * Template
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Template

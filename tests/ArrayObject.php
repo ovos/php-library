@@ -10,7 +10,6 @@ use Ovos\ArrayObject as BaseArrayObject;
 /**
  * ArrayObject
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class ArrayObject extends Test

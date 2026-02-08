@@ -12,7 +12,6 @@ use Ovos\View\Helper;
 /**
  * Streams
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Streams extends Helper

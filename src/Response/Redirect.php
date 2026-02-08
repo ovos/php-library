@@ -12,7 +12,6 @@ use function count;
 /**
  * Redirect
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Redirect extends Response

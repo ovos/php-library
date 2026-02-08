@@ -9,7 +9,6 @@ use PDO;
 /**
  * Find
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait Find

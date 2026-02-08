@@ -8,7 +8,6 @@ use Ovos\Exception;
 /**
  * ProfilerException
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class ProfilerException extends Exception

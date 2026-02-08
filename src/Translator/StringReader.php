@@ -21,7 +21,6 @@ use const PHP_INT_MAX;
  * Simple wrapper around a string buffer for
  * random access and value parsing.
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class StringReader

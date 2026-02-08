@@ -12,7 +12,6 @@ use function is_array;
 /**
  * Option
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Option

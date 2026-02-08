@@ -16,7 +16,6 @@ use Stores\UsersLogins;
 /**
  * Encrypted
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Encrypted extends Test

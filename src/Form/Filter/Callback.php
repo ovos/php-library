@@ -9,7 +9,6 @@ use Closure;
 /**
  * Callback
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Callback extends Filter

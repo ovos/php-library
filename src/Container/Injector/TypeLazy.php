@@ -9,7 +9,6 @@ use Override;
 /**
  * TypeLazy
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class TypeLazy extends TypeClass

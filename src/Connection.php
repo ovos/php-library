@@ -10,7 +10,6 @@ use Ovos\Service\Logger;
 /**
  * Connection
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Connection
@@ -24,12 +23,16 @@ abstract class Connection
 	
 	protected ArrayObject $config;
 	
-	public function __construct(ArrayObject $config)
+	public function __construct(
+		ArrayObject $config,
+	)
 	{
 		$this->setConfig($config);
 	}
 	
-	public function setConfig(ArrayObject $config): static
+	public function setConfig(
+		ArrayObject $config,
+	): static
 	{
 		$this->config = $config;
 		
@@ -59,7 +62,9 @@ abstract class Connection
 		return $this->client !== null;
 	}
 	
-	public static function getId(ArrayObject $config): string
+	public static function getId(
+		ArrayObject $config,
+	): string
 	{
 		return (string)$config->database;
 	}
@@ -67,7 +72,9 @@ abstract class Connection
 	/**
 	 * Logs events (messages/errors/exceptions)
 	 */
-	public function log(...$event): static
+	public function log(
+		...$event,
+	): static
 	{
 		$this->logger->log(...$event);
 		

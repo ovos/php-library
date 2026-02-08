@@ -11,7 +11,6 @@ use ReflectionClass;
 /**
  * Runner
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Runner

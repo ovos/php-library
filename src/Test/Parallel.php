@@ -12,7 +12,6 @@ use function usleep;
 /**
  * Parallel
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Parallel

@@ -8,7 +8,6 @@ use Ovos\Form\Filter;
 /**
  * Integer
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Integer extends Filter

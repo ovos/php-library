@@ -23,7 +23,6 @@ use function session_write_close;
 /**
  * Session
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Session extends Service

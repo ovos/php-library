@@ -13,7 +13,6 @@ use ReflectionClass;
 /**
  * TypeClass
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class TypeClass extends Injector

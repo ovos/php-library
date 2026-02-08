@@ -19,7 +19,6 @@ use function trim;
  * Reporter
  * @url https://github.com/spiritix/pdo-profiler
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Reporter

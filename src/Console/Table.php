@@ -14,7 +14,6 @@ use function is_string;
 /**
  * Table
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Table extends Console_Table

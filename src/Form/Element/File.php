@@ -12,7 +12,6 @@ use function array_key_exists;
 /**
  * File
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class File extends Element

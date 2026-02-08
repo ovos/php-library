@@ -12,7 +12,6 @@ use function implode;
 /**
  * Query
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Query

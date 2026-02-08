@@ -8,7 +8,6 @@ use Closure;
 /**
  * TraitInitializer
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait TraitInitializer
