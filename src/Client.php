@@ -11,7 +11,6 @@ use function ip2long;
 /**
  * Client
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Client

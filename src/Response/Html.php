@@ -9,7 +9,6 @@ use Override;
 /**
  * Html
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Html extends Response

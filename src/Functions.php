@@ -9,7 +9,6 @@ use function sprintf;
 /**
  * Functions
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Functions

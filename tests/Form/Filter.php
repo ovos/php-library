@@ -5,13 +5,11 @@ namespace Tests\Form;
 
 use Ovos\Test;
 use Ovos\Form;
-use Ovos\Form\Element as BaseElement;
 use Ovos\Form\Filter as Filters;
 
 /**
  * Filter
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Filter extends Test

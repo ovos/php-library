@@ -10,7 +10,6 @@ use function strip_tags;
 /**
  * StripTags
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class StripTags extends Filter

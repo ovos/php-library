@@ -20,7 +20,6 @@ use function preg_match;
 /**
  * Router
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Router
@@ -250,7 +249,8 @@ class Router
 	{
 		$cacheId = self::CACHE_ID_CONTROLLERS;
 		
-		$store = $this->cacheService->getPerishableStore();
+		$store = $this->cacheService->getPerishable()
+			->getStore();
 		if($item = $store->get($cacheId))
 		{
 			return $item;

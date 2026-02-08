@@ -12,7 +12,6 @@ use function range;
 /**
  * Pager
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Pager

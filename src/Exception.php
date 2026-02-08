@@ -8,7 +8,6 @@ use function sprintf;
 /**
  * Exception
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Exception extends \Exception

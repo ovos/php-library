@@ -15,7 +15,6 @@ use function count;
 /**
  * Messages
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Messages extends Helper implements Countable

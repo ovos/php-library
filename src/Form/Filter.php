@@ -6,7 +6,6 @@ namespace Ovos\Form;
 /**
  * Filter
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Filter

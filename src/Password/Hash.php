@@ -6,7 +6,6 @@ namespace Ovos\Password;
 /**
  * Hash
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Hash

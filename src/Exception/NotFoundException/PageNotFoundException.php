@@ -8,7 +8,6 @@ use Ovos\Exception\NotFoundException;
 /**
  * PageNotFoundException
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class PageNotFoundException extends NotFoundException

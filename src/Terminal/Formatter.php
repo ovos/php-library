@@ -13,7 +13,6 @@ use const PHP_EOL;
 /**
  * Formatter
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Formatter

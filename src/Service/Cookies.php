@@ -13,7 +13,6 @@ use function strlen;
 /**
  * Cookies
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Cookies extends Service

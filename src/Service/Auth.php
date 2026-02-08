@@ -9,7 +9,6 @@ use Ovos\Service;
 /**
  * Auth
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Auth extends Service

@@ -8,7 +8,6 @@ use Ovos\Service\Memory;
 /**
  * MemoryService
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait MemoryService

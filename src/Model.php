@@ -9,7 +9,6 @@ use function get_object_vars;
 /**
  * Model
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Model

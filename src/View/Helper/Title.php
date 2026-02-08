@@ -12,7 +12,6 @@ use function implode;
 /**
  * Title
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Title extends Helper

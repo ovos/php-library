@@ -10,7 +10,6 @@ use Ovos\Service;
 /**
  * Benchmark
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Benchmark extends Service

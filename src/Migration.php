@@ -16,7 +16,6 @@ use function substr;
 /**
  * Migration
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Migration

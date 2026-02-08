@@ -12,7 +12,6 @@ use ReflectionObject;
 /**
  * TypeObject
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class TypeObject extends Injector

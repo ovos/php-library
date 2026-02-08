@@ -20,7 +20,6 @@ use function key;
 /**
  * Events
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Events

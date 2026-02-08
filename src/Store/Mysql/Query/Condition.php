@@ -6,7 +6,6 @@ namespace Ovos\Store\Mysql\Query;
 /**
  * Condition
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Condition

@@ -10,7 +10,6 @@ use function implode;
 /**
  * Update
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Update extends Query

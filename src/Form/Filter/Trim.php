@@ -10,7 +10,6 @@ use function trim;
 /**
  * Trim
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Trim extends Filter

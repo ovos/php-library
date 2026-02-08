@@ -9,7 +9,6 @@ use Ovos\Measurement;
 /**
  * Request
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Request

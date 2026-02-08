@@ -10,7 +10,6 @@ use function implode;
 /**
  * Select
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Select extends Query

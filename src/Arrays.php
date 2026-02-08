@@ -20,7 +20,6 @@ use function str_replace;
 /**
  * Arrays
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Arrays
@@ -64,7 +63,9 @@ class Arrays
 	 * Different from array_merge
 	 * If string keys have arrays for values, these arrays will merge recursively.
 	 */
-	public static function deepMerge(...$arrays)
+	public static function deepMerge(
+		...$arrays,
+	)
 	{
 		switch(count($arrays))
 		{
@@ -131,7 +132,9 @@ class Arrays
 	 * Group values in pairs:
 	 * name => value
 	 */
-	public static function getPairs(array $values): array
+	public static function getPairs(
+		array $values,
+	): array
 	{
 		$paired = [];
 		
@@ -156,7 +159,9 @@ class Arrays
 	 * will be transformed to
 	 * 		['Data[first_name]' => 'Hannes']
 	 */
-	public static function flatten(array $array): array
+	public static function flatten(
+		array $array,
+	): array
 	{
 		$flat = [];
 		foreach($array as $key => $value)
@@ -189,12 +194,18 @@ class Arrays
 		return $flat;
 	}
 	
-	public static function prefixValues(string $prefix, array $values): array
+	public static function prefixValues(
+		string $prefix,
+		array $values,
+	): array
 	{
 		return array_map(static fn($value) => $prefix . $value, $values);
 	}
 	
-	public static function prefixKeys(string $prefix, array $values): array
+	public static function prefixKeys(
+		string $prefix,
+		array $values,
+	): array
 	{
 		return array_combine
 		(

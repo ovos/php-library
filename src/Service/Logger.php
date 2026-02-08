@@ -25,7 +25,6 @@ use function sprintf;
 /**
  * Logger
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Logger extends Service

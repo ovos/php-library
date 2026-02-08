@@ -9,7 +9,6 @@ use Ovos\Strings;
 /**
  * Email
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Email extends Helper

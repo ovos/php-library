@@ -6,7 +6,6 @@ namespace Ovos;
 /**
  * Singleton
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait Singleton

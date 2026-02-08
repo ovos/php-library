@@ -8,7 +8,6 @@ use Ovos\Container;
 /**
  * Injector
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Injector

@@ -12,7 +12,6 @@ use function implode;
 /**
  * Elements
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Elements extends Helper

@@ -12,7 +12,6 @@ use function is_array;
 /**
  * Element
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Element

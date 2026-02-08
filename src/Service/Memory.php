@@ -4,14 +4,18 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\Service;
-use Ovos\Store\Apcu;
+use Ovos\Cache\Key;
+use Ovos\Cache\Store\Apcu;
 
-use function str_replace;
+use function getenv;
+use function substr;
+use function strlen;
+
+use const BASE_DIR;
 
 /**
  * Memory
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Memory extends Service
@@ -28,7 +32,7 @@ class Memory extends Service
 			$baseDirHomeless = $home === false
 				? BASE_DIR
 				: substr(BASE_DIR, strlen($home));
-			$this->store = new Apcu(Apcu::pathToId($baseDirHomeless)); // path as a prefix
+			$this->store = new Apcu(Key::fromPath($baseDirHomeless)); // path as a prefix
 		}
 		
 		return $this->store;

@@ -11,7 +11,6 @@ use function file_put_contents;
 /**
  * Trait File
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait TraitFile

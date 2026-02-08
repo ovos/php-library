@@ -4,10 +4,12 @@ declare(strict_types=1);
 namespace Ovos\Translator;
 
 use Ovos\ArrayObject;
+use Ovos\Cache\Key;
 use Ovos\Container;
 use Ovos\Service\Cache;
 
 use function Ovos\container;
+
 use function array_key_exists;
 use function explode;
 use function file_exists;
@@ -17,10 +19,11 @@ use function str_contains;
 use function strlen;
 use function substr;
 
+use const BASE_DIR;
+
 /**
  * CachedTranslator
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class CachedAdapter
@@ -43,11 +46,11 @@ class CachedAdapter
 		}
 		
 		$store = $this->container->get(Cache::SYMBOL)
-			->getPerishableStore();
+			->getPerishable()->getStore();
 		
 		$mTime = filemtime($filename);
 		$path = substr($filename, strlen(BASE_DIR));
-		$cacheId = $store->pathToId($path); // a static method accessed from the instance
+		$cacheId = Key::fromPath($path); // a static method accessed from the instance
 		
 		if(($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)

@@ -9,7 +9,6 @@ use Ovos\Controller;
 /**
  * Url
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Router extends Test

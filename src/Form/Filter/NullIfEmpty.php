@@ -8,7 +8,6 @@ use Ovos\Form\Filter;
 /**
  * NullIfEmpty
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class NullIfEmpty extends Filter

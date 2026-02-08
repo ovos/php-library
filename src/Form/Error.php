@@ -6,7 +6,6 @@ namespace Ovos\Form;
 /**
  * Element
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Error

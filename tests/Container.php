@@ -15,7 +15,6 @@ use Ovos\Container\Register\TypeLazy;
 /**
  * Container
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Container extends Test

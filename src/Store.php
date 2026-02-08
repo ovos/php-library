@@ -6,7 +6,6 @@ namespace Ovos;
 /**
  * Store
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Store

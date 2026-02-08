@@ -16,7 +16,6 @@ use function random_bytes;
 /**
  * Encryptor
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Encryptor

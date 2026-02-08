@@ -13,7 +13,6 @@ use function Ovos\container;
 /**
  * Widget
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Widget

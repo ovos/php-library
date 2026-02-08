@@ -13,7 +13,6 @@ use function sprintf;
 /**
  * EmailAddress
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class EmailAddress extends Validator

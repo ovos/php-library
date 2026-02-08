@@ -12,7 +12,6 @@ use function substr;
 /**
  * StripPrefix
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class StripPrefix extends Filter

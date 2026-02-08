@@ -9,7 +9,6 @@ use Ovos\Url as BaseUrl;
 /**
  * Url
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Url extends Test

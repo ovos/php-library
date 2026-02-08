@@ -14,7 +14,6 @@ use stdClass;
 /**
  * Json
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Json extends Test

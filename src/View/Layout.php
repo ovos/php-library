@@ -8,7 +8,6 @@ use Ovos\View;
 /**
  * View
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Layout extends View

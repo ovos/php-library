@@ -10,7 +10,6 @@ use function array_values;
 /**
  * Command
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Command
@@ -21,7 +20,10 @@ class Command
 	
 	protected array $params;
 	
-	public function __construct(string $name, array $params = [])
+	public function __construct(
+		string $name,
+		array $params = [],
+	)
 	{
 		$this->app = app();
 		
@@ -29,14 +31,18 @@ class Command
 		$this->setParams($params);
 	}
 	
-	public function setName(string $name): static
+	public function setName(
+		string $name,
+	): static
 	{
 		$this->name = $name;
 		
 		return $this;
 	}
 	
-	public function setParams(array $params): static
+	public function setParams(
+		array $params,
+	): static
 	{
 		$this->params = $params;
 		

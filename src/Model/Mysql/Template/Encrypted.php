@@ -19,7 +19,6 @@ use const OPENSSL_RAW_DATA;
 /**
  * Encrypted
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Encrypted extends Template

@@ -8,7 +8,6 @@ use Ovos\Exception\InvalidException;
 /**
  * InvalidClassException
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class InvalidClassException extends InvalidException

@@ -9,7 +9,6 @@ use Ovos\Form\Validator;
 /**
  * NotHuman
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class NotHuman extends Validator

@@ -6,7 +6,6 @@ namespace Ovos\Container;
 /**
  * Register
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Register

@@ -15,7 +15,6 @@ use function sprintf;
 /**
  * FormElement
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class FormElement extends Helper

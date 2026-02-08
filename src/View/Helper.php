@@ -11,7 +11,6 @@ use function Ovos\container;
 /**
  * Helper
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Helper

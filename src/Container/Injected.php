@@ -6,7 +6,6 @@ namespace Ovos\Container;
 /**
  * Injected
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 interface Injected

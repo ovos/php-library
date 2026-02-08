@@ -12,7 +12,6 @@ use function str_replace;
 /**
  * ShellCommand
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class ShellCommand

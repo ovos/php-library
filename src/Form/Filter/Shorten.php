@@ -9,7 +9,6 @@ use Ovos\Strings;
 /**
  * Shorten
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Shorten extends Filter

@@ -11,7 +11,6 @@ use function memory_get_usage;
 /**
  * Measurement
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Measurement
