@@ -9,7 +9,6 @@ use Ovos\View\Helper;
 /**
  * Placeholders
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Placeholders extends Helper

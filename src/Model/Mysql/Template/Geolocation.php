@@ -11,7 +11,6 @@ use Override;
 /**
  * Geolocation
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Geolocation extends Template

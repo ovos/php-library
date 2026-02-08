@@ -8,7 +8,6 @@ use Ovos\Translator;
 /**
  * Translation
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Translation

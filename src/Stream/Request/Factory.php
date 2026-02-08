@@ -10,7 +10,6 @@ use Ovos\Stream\Request;
  * Factory
  * Use this factory to group types of requests (URL & Context)
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Factory

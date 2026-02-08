@@ -11,7 +11,6 @@ use Throwable;
 /**
  * Result
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Result

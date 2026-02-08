@@ -10,7 +10,6 @@ use Ovos\View\Helper;
 /**
  * Console
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Console extends Helper

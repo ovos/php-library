@@ -10,7 +10,6 @@ use Ovos\Form\Validator;
 /**
  * IfChecked
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class IfChecked extends Validator

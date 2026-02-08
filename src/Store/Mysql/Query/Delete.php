@@ -8,7 +8,6 @@ use Ovos\Store\Mysql\Query;
 /**
  * Delete
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Delete extends Query

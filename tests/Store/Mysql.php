@@ -12,7 +12,6 @@ use Override;
 /**
  * Mysql
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Mysql extends Test

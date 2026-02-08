@@ -27,7 +27,6 @@ use function register_shutdown_function;
 /**
  * Application
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Application
@@ -214,7 +213,7 @@ class Application
 		
 		$this->config = $this->getConfig(
 			$configsDir . 'environments.yml',
-			$environment
+			$environment,
 		);
 		$this->container
 			->registerObject(Environment::class, $this->environment)

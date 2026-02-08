@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
+use Ovos\Cache\Key;
 use Ovos\Service\Cache;
 use Ovos\Service\Events;
 use Ovos\View\Helper;
@@ -12,7 +13,6 @@ use ErrorException;
 /**
  * Asset
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Asset extends Helper
@@ -57,8 +57,9 @@ class Asset extends Helper
 		$filename = $this->getFilename();
 		
 		// fetch mtime from memory
-		$store = $this->cacheService->getPerishableStore();
-		$cacheId = $store::pathToId($this->asset); // a static method accessed from the instance
+		$store = $this->cacheService->getPerishable()
+			->getStore();
+		$cacheId = Key::fromPath($this->asset); // a static method accessed from the instance
 		if($mDate = $store->get($cacheId))
 		{
 			return $this->asset . '?' . $mDate;

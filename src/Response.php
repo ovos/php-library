@@ -10,7 +10,6 @@ use function ob_get_length;
 /**
  * Response
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Response

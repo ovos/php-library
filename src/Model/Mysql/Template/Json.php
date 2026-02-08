@@ -23,7 +23,6 @@ use const JSON_NUMERIC_CHECK;
 /**
  * Json
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Json extends Template

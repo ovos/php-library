@@ -10,7 +10,6 @@ use Ovos\Strings;
 /**
  * PasswordStrength
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class PasswordStrength extends Validator

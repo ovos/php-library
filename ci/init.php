@@ -5,7 +5,6 @@ namespace Ovos;
 /**
  * Bootstrap initialization (should be included in a bootstrap)
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 

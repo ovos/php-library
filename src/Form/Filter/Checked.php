@@ -8,7 +8,6 @@ use Ovos\Form\Filter;
 /**
  * Checked
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Checked extends Filter

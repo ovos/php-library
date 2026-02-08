@@ -13,7 +13,6 @@ use function is_string;
 /**
  * ArrayObject
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class ArrayObject extends BaseArrayObject
@@ -27,12 +26,16 @@ class ArrayObject extends BaseArrayObject
 		parent::__construct($array, $flags, $iteratorClass);
 	}
 	
-	public function get(mixed $key): mixed
+	public function get(
+		mixed $key,
+	): mixed
 	{
 		return $this->offsetGet($key);
 	}
 	
-	public function getArray(mixed $key = null): array
+	public function getArray(
+		mixed $key = null,
+	): array
 	{
 		if($key === null)
 		{
@@ -48,7 +51,9 @@ class ArrayObject extends BaseArrayObject
 			->getArrayCopy();
 	}
 	
-	public function offsetGet(mixed $key): mixed
+	public function offsetGet(
+		mixed $key,
+	): mixed
 	{
 		if($this->offsetExists($key) === false)
 		{
@@ -67,7 +72,10 @@ class ArrayObject extends BaseArrayObject
 		return $value;
 	}
 	
-	public function offsetSet(mixed $key, mixed $value): void
+	public function offsetSet(
+		mixed $key,
+		mixed $value,
+	): void
 	{
 		if(is_array($value))
 		{
@@ -78,19 +86,26 @@ class ArrayObject extends BaseArrayObject
 		parent::offsetSet($key, $value);
 	}
 	
-	public function __get(string $key): mixed
+	public function __get(
+		string $key,
+	): mixed
 	{
 		return $this->offsetExists($key)
 			? $this->offsetGet($key)
 			: null;
 	}
 	
-	public function __set(string $key, mixed $value): void
+	public function __set(
+		string $key,
+		mixed $value,
+	): void
 	{
 		$this->offsetSet($key, $value);
 	}
 	
-	public function __isset(string $name): bool
+	public function __isset(
+		string $name,
+	): bool
 	{
 		return $this->offsetExists($name);
 	}
@@ -136,7 +151,9 @@ class ArrayObject extends BaseArrayObject
 		return null;
 	}
 	
-	public function merge(array $toMerge): static
+	public function merge(
+		array $toMerge,
+	): static
 	{
 		$this->exchangeArray(array_merge($this->getArrayCopy(), $toMerge));
 		
@@ -165,7 +182,9 @@ class ArrayObject extends BaseArrayObject
 		return explode($separator, $value);
 	}
 	
-	public static function factory(array $array = []): static
+	public static function factory(
+		array $array = [],
+	): static
 	{
 		return new static($array, static::ARRAY_AS_PROPS);
 	}

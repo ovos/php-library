@@ -12,7 +12,6 @@ use function preg_match;
 /**
  * Dispatcher
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Dispatcher

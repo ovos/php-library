@@ -15,7 +15,6 @@ use function strcmp;
  * Modified on MoParser class from motranslator
  * @see https://github.com/phpmyadmin/motranslator
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 final class MoParser

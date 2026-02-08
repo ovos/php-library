@@ -20,7 +20,6 @@ use	function count;
  * JSON
  * Set GET variable "debug" to see formatted JSON on output
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  * @author Maciej Hołyszko <mh@ovos.at>
  */

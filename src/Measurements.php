@@ -9,13 +9,12 @@ use function number_format;
 /**
  * Measurements
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Measurements
 {
 	/**
-	 * Calculates, rounds and formats execution time
+	 * Calculates, rounds, and formats execution time
 	 */
 	public static function formatTime(
 		float $startTime,

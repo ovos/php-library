@@ -10,7 +10,6 @@ use function yaml_parse_file;
 /**
  * Parser
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Parser

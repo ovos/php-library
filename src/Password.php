@@ -18,7 +18,6 @@ use function sqrt;
 /**
  * Password
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Password

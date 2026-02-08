@@ -6,7 +6,6 @@ namespace Ovos\Response;
 /**
  * Cli
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Cli extends Html

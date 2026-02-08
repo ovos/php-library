@@ -13,7 +13,6 @@ use function get_class;
 /**
  * Layout
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Layout extends Plugin

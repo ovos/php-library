@@ -25,7 +25,6 @@ use function count;
 /**
  * Container
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Container

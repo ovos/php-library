@@ -9,7 +9,6 @@ use Ovos\Arrays as BaseArrays;
 /**
  * Arrays
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Arrays extends Test

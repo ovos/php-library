@@ -5,20 +5,20 @@ namespace Ovos\Service;
 
 use Ovos\Application;
 use Ovos\ArrayObject;
+use Ovos\Cache\MemoLock\Apcu as MemoLockApcu;
+use Ovos\Cache\MemoLock\Redis as MemoLockRedis;
+use Ovos\Cache\Store\Apcu as StoreApcu;
+use Ovos\Cache\Store\Redis as StoreRedis;
+use Ovos\Cache\Store\Redisearch as StoreRedisearch;
 use Ovos\Container;
-use Ovos\Connections;
-use Ovos\Connection\Redis as Connection;
 use Ovos\Exception\MissingException\MissingConfigException;
 use Ovos\Service;
-use Ovos\Store\Apcu;
-use Ovos\Store\KeyValue\Redis as RedisStore;
-use Ovos\Store\Redis;
-use Ovos\Store\Redisearch;
+use Ovos\Service\Cache\Perishable;
+use Ovos\Service\Cache\Persistent;
 
 /**
  * Cache
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Cache extends Service
@@ -27,14 +27,8 @@ class Cache extends Service
 	
 	protected ArrayObject $config;
 	
-	/**
-	 * Connection to a persistent database
-	 */
-	protected ?Connection $persistentConnection = null;
-	
-	protected ?RedisStore $persistentStore = null;
-	
-	protected ?Apcu $perishableStore = null;
+	protected ?Persistent $persistent = null;
+	protected ?Perishable $perishable = null;
 	
 	public function __construct(
 		ArrayObject $config,
@@ -66,59 +60,47 @@ class Cache extends Service
 		]);
 	}
 	
-	public function getPersistentConnection(): ?Connection
+	public function getPersistent(): Persistent
 	{
-		if($this->persistentConnection === null)
+		if($this->persistent === null)
 		{
-			if($this->config->persistent->connection === null)
-			{
-				throw new MissingConfigException('"connection" config section is missing.');
-			}
-			
-			$this->persistentConnection = $this->container
-				->getClass(Connections::class)
-				->get($this->config->persistent->connection);
+			$this->persistent = $this->container
+				->getClass(Persistent::class, parameters: [
+					'config' => $this->config,
+				]);
 		}
 		
-		return $this->persistentConnection;
+		return $this->persistent;
+	}
+	
+	public function getPerishable(): Perishable
+	{
+		if($this->perishable === null)
+		{
+			$this->perishable = $this->container
+				->getClass(Perishable::class, parameters: [
+					'config' => $this->config,
+				]);
+		}
+		
+		return $this->perishable;
 	}
 	
 	public function getStore(
 		bool $persistent = true,
-	): null|Redis|Redisearch|Apcu
+	): StoreApcu|StoreRedis|StoreRedisearch
 	{
-		return $persistent ?
-			$this->getPersistentStore()
-			: $this->getPerishableStore();
+		return $persistent
+			? $this->getPersistent()->getStore()
+			: $this->getPerishable()->getStore();
 	}
 	
-	public function getPersistentStore(
-	): null|Redis|Redisearch
+	public function getQueue(
+		bool $persistent = true,
+	): MemoLockApcu|MemoLockRedis
 	{
-		if($this->persistentStore === null)
-		{
-			/** @var Redis $storeClass */
-			$storeClass = 'Ovos\Store\\'
-				. ($this->config->persistent->store ?? 'Redis');
-			$store = $storeClass::fromConfig
-			(
-				$this->getPersistentConnection(),
-				$this->config,
-			);
-			
-			$this->persistentStore = $store;
-		}
-		
-		return $this->persistentStore;
-	}
-	
-	public function getPerishableStore(): Apcu
-	{
-		if($this->perishableStore === null)
-		{
-			$this->perishableStore = Apcu::fromConfig($this->config);
-		}
-		
-		return $this->perishableStore;
+		return $persistent
+			? $this->getPersistent()->getQueue()
+			: $this->getPerishable()->getQueue();
 	}
 }

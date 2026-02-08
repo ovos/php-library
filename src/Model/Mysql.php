@@ -31,7 +31,6 @@ use function reset;
 /**
  * Mysql
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  *
  * @property string $created_at

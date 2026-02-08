@@ -10,7 +10,6 @@ use function mb_substr;
 /**
  * File
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class File

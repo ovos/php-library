@@ -17,7 +17,6 @@ use function sprintf;
 /**
  * Mysql
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Mysql extends Connection

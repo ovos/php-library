@@ -31,7 +31,6 @@ use function unlink;
  * Dir
  * Recursive directory creation and removal
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Dir

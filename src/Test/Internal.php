@@ -8,7 +8,6 @@ use Attribute;
 /**
  * Internal
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 #[Attribute(Attribute::TARGET_METHOD)]

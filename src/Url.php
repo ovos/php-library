@@ -21,7 +21,6 @@ use function substr;
 /**
  * Url
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Url

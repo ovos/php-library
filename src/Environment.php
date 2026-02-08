@@ -8,7 +8,6 @@ use Ovos\Environment\Parser;
 /**
  * Environment
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Environment

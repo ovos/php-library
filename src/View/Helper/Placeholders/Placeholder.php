@@ -13,7 +13,6 @@ use function sprintf;
 /**
  * Placeholder
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Placeholder

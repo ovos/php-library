@@ -12,7 +12,6 @@ use function func_get_args;
 /**
  * Pdo
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Pdo extends \PDO

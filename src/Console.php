@@ -10,7 +10,6 @@ use function count;
 /**
  * Console
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Console

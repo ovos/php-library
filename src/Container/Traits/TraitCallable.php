@@ -8,7 +8,6 @@ use Closure;
 /**
  * TraitCallable
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait TraitCallable

@@ -11,7 +11,6 @@ use Ovos\Form\Validator;
 /**
  * Form
  *
- * @package Tests
  * @author Marcin Gil <mg@ovos.at>
  */
 class Form extends Test

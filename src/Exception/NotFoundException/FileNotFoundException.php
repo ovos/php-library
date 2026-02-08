@@ -8,7 +8,6 @@ use Ovos\Exception\NotFoundException;
 /**
  * FileNotFoundException
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class FileNotFoundException extends NotFoundException

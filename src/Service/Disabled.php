@@ -8,7 +8,6 @@ use Ovos\Service;
 /**
  * Disabled
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Disabled extends Service

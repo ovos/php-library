@@ -13,7 +13,6 @@ use function floor;
 /**
  * Size
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Size

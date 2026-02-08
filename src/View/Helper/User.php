@@ -11,7 +11,6 @@ use Models\User as Model;
 /**
  * User
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class User extends Helper

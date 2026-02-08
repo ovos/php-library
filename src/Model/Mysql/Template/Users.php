@@ -14,7 +14,6 @@ use function array_merge;
 /**
  * Users
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Users extends Template

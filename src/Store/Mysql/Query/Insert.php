@@ -12,7 +12,6 @@ use function array_values;
 /**
  * Insert
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Insert extends Query

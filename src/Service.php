@@ -3,13 +3,11 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use Ovos\Exception\RuntimeException;
 use Ovos\Container\Inject;
 
 /**
  * Service
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 abstract class Service

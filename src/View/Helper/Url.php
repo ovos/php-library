@@ -11,7 +11,6 @@ use function count;
 /**
  * User
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Url extends Helper

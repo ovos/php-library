@@ -8,7 +8,6 @@ use Attribute;
 /**
  * TypeLazy
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 #[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_PARAMETER)]

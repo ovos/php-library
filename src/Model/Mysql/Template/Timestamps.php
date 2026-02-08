@@ -13,7 +13,6 @@ use function array_merge;
 /**
  * Template
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Timestamps extends Template

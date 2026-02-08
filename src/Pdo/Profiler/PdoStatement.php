@@ -13,7 +13,6 @@ use function ltrim;
 /**
  * PdoStatement
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class PdoStatement extends \PDOStatement

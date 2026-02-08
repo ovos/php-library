@@ -11,7 +11,6 @@ use function stream_get_line;
 /**
  * Terminal
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Terminal

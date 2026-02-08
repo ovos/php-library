@@ -10,7 +10,6 @@ use function str_starts_with;
 /**
  * Prefix
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Prefix extends Filter

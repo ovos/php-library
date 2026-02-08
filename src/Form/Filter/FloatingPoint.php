@@ -8,7 +8,6 @@ use Ovos\Form\Filter;
 /**
  * FloatingPoint
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class FloatingPoint extends Filter

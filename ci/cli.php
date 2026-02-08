@@ -5,7 +5,6 @@ namespace Ovos;
 /**
  * Bootstrap file for CLI application
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 

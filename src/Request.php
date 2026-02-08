@@ -8,7 +8,6 @@ use function filter_var;
 /**
  * Response
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Request

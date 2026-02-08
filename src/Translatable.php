@@ -6,7 +6,6 @@ namespace Ovos;
 /**
  * Translatable
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 trait Translatable

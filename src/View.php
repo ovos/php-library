@@ -18,7 +18,6 @@ use function ob_start;
 /**
  * View
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  *
  * @method static Helper\Asset asset

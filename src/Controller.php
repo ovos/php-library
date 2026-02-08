@@ -20,7 +20,6 @@ use function substr;
 /**
  * Controller
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class Controller

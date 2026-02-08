@@ -11,7 +11,6 @@ use Ovos\Store\Mysql\Query\Update;
 /**
  * QueryBuilder
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class QueryBuilder

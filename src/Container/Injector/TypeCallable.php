@@ -12,7 +12,6 @@ use Override;
 /**
  * TypeCallable
  *
- * @package Ovos
  * @author Marcin Gil <mg@ovos.at>
  */
 class TypeCallable extends Injector
