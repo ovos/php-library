@@ -188,17 +188,12 @@ class Request
 			return $_GET;
 		}
 		
-		if(!isset($_GET[$name]))
+		if(isset($_GET[$name]) === false)
 		{
-			if($filter === null)
-			{
-				return $default;
-			}
-			
-			return filter_var($filter, $options);
+			return $default;
 		}
 		
-		return $_GET[$name];
+		return filter_var($_GET[$name], $filter, $options);
 	}
 	
 	public function getPost(
@@ -215,15 +210,10 @@ class Request
 		
 		if(isset($_POST[$name]) === false)
 		{
-			if($filter === null)
-			{
-				return $default;
-			}
-			
-			return filter_var($filter, $options);
+			return $default;
 		}
 		
-		return $_POST[$name];
+		return filter_var($_POST[$name], $filter, $options);
 	}
 	
 	public function getServer(

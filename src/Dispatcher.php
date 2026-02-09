@@ -30,7 +30,7 @@ class Dispatcher
 	): ?Response
 	{
 		$controllerClass = $request->getControllerClass();
-		if(preg_match('~[[:alnum:]\\\?]+~i', $controllerClass) === false) // alnum + \
+		if(preg_match('~^[[:alnum:]\\\\]+$~i', $controllerClass) !== 1) // alnum + \
 		{
 			throw new NotFoundException(
 				'Invalid controller name.');

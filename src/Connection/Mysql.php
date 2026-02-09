@@ -65,7 +65,7 @@ class Mysql extends Connection
 			return false;
 		}
 		
-		if($this->profilers->enabled)
+		if($this->profilers?->enabled)
 		{
 			$this->client->setAttribute(PDO::ATTR_STATEMENT_CLASS, [
 				PdoStatement::class,

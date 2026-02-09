@@ -1,150 +1,191 @@
-# MemoLock and Cache Stampede Protection
+# MemoLock - Cache Stampede Protection
 
-MemoLock is a queue-based stampede protection mechanism used by the cache
-stores in this library. It prevents multiple requests from rebuilding the
-same missing cache item at once by ensuring only one request holds the lock
-while other contenders wait.
+MemoLock prevents **cache stampedes** - a critical production issue where many
+concurrent requests try to rebuild the same expired cache key at the same time,
+overwhelming the database.
+
+See also: [README.CACHE.md](README.CACHE.md) for general cache usage.
+
+## The problem: cache stampedes
+
+Consider a popular cache key like "all job categories" that expires every 60
+seconds. At the moment it expires:
+
+**Without MemoLock:**
+```
+Request 1 → cache miss → queries database → rebuilds cache
+Request 2 → cache miss → queries database → rebuilds cache  (wasted)
+Request 3 → cache miss → queries database → rebuilds cache  (wasted)
+Request 4 → cache miss → queries database → rebuilds cache  (wasted)
+...50 more requests all hitting the database simultaneously
+```
+
+This causes a **thundering herd**: the database gets hammered with identical
+queries, response times spike, and the system may become unresponsive.
+
+**With MemoLock:**
+```
+Request 1 → cache miss → acquires lock → queries database → rebuilds cache → releases lock
+Request 2 → cache miss → waits for lock → gets cached value from Request 1
+Request 3 → cache miss → waits for lock → gets cached value from Request 1
+Request 4 → cache miss → waits for lock → gets cached value from Request 1
+...50 more requests all get the value without touching the database
+```
+
+Only one request does the work. Everyone else waits and benefits from the result.
+
+## How it works
 
 Two backends are supported:
-- Redis: distributed lock plus Pub/Sub queue.
-- APCu: in-process lock with a short randomized backoff.
 
-This document describes how to use MemoLock through the cache stores and how
-to use MemoLock as a standalone locking mechanism.
+| Backend | Lock mechanism | Wait mechanism | Scope |
+|---------|---------------|----------------|-------|
+| **Redis** | Distributed Redis lock | Pub/Sub subscription | All workers/servers |
+| **APCu** | In-process lock | Randomized backoff polling | Single worker |
 
-## References
+**Redis MemoLock** is ideal for production - it coordinates across all PHP workers
+and servers using Redis Pub/Sub. When the lock holder calls `set()`, it publishes
+a notification and all waiting requests receive the cached value simultaneously.
 
-1. https://blog.lucas-simon.com/how-i-took-down-my-site-and-fixed-it-with-memolock  
-Implementation in TypeScript:
-https://github.com/demipixel/redis-memolock-node/blob/master/src/index.ts
-1. https://redis.io/blog/caches-promises-locks/
-Implementation in Go:  
-https://github.com/kristoff-it/redis-memolock/tree/master
+**APCu MemoLock** is simpler - it uses a local lock with short randomized backoff
+retries. Good for per-worker caches where distributed coordination isn't needed.
 
-## Cache stores and MemoLock
+## Using MemoLock (you probably already are)
 
-Cache stores integrate MemoLock automatically:
-- `Ovos\Cache\Store\Redis` (supports tags)
-- `Ovos\Cache\Store\Apcu` (local memory, no tags)
-
-When using `get()` with a resolver, the store acquires the lock, calls the
-resolver, and releases the lock as part of `set()`. You typically do not need
-to call `releaseActiveLock()` yourself in this path.
-
-### Common workflow (resolver)
-
-The resolver-first approach keeps the locking and saving in one call.
+MemoLock is **integrated into the cache stores** and **enabled by default**. If
+you use `get()` with a resolver, MemoLock is protecting you automatically:
 
 ```php
+// MemoLock protects this automatically:
 $value = $cache->get(
-    'key',
-    resolver: fn() => $expensiveCall(),
-    ttl: 30, // override of the default cache TTL
+    'popular-key',
+    resolver: fn() => $this->expensiveQuery(),
+    ttl: 60,
 );
 ```
 
-### Traditional workflow (get/set)
-
-If you prefer the traditional get/set flow, MemoLock still protects the window
-between `get()` and `set()` (when queueing is enabled).
+The traditional get/set flow is also protected when queueing is enabled:
 
 ```php
-if ($cache->get('key') === null)
+// MemoLock also protects the window between get() and set():
+if($cache->get('key') === null)
 {
-    $value = $expensiveCall();
-    $cache->set('key', $value, ttl: 30);
+    $value = $this->expensiveQuery();
+    $cache->set('key', $value, ttl: 60);
+    // Lock is released automatically when set() completes
 }
 ```
 
-### Redis cache example (with tags)
+## Per-call overrides
+
+### Skip queueing for a specific call
+
+For non-critical keys where stampede isn't a concern:
 
 ```php
 $value = $cache->get(
     'key',
-    resolver: fn() => $expensiveCall(),
-    ttl: 30,
-    tags: ['tag1', 'tag2'],
+    resolver: fn() => $this->cheapQuery(),
+    queue: false,   // No lock, no waiting
 );
 ```
 
-### Resolver that modifies tags
+### Custom lock TTL
 
-The resolver can modify arguments passed to `get`.  
-The first argument is the cache store object
-or the memolock object when used as a standalone mechanism (outside of cache stores).
+For slow operations (API calls, image processing), increase the lock duration
+so waiters don't give up too early:
 
 ```php
+// Redis: lock TTL in milliseconds
+$value = $cache->get(
+    'external-api-result',
+    resolver: fn() => $this->callSlowExternalAPI(),
+    queueLockTtlMs: 10000,   // 10 seconds
+);
+
+// APCu: lock TTL in seconds
 $value = $cache->get(
     'key',
-    resolver: function($store, $key, &$ttl, &$tags) use ($value)
-    {
-        $tags[] = 'tag3';
-        return $value;
-    },
-    ttl: 30,
-    tags: ['tag1', 'tag2'],
+    resolver: fn() => $this->computation(),
+    queueLockTtlS: 5,
 );
 ```
 
-### Per-call queue overrides
+**How to choose the lock TTL:**
+- Set it to the expected maximum time your resolver needs to complete.
+- **Too low**: waiters time out and rebuild in parallel (defeats the purpose).
+- **Too high**: if the lock holder dies, others wait longer before retaking the lock.
+- Default: 2000ms for Redis, 1s for APCu - good for typical database queries.
 
-You can override queue usage for a single call
-and skip queueing for a resolver (immediate set):
+## Manual lock control
 
-```php
-$value = $cache->get(
-    'key',
-    resolver: fn() => $expensiveCall(),
-    queue: false,
-);
-```
+For advanced scenarios where you need explicit control over the lock lifecycle.
 
-You can also override the lock TTL per call:
-
-```php
-$value = $cache->get(
-    'key',
-    resolver: fn() => $expensiveCall(),
-    queueLockTtlMs: 5000, // Redis store
-);
-```
-
-How to choose `queueLockTtlMs` (Redis):
-- Set it to the expected maximum time between `get()` and `set()` for that key.
-- Use a higher value for slower work (API calls, image processing, bulk IO).
-- Too low means more contenders may time out and rebuild in parallel.
-- Too high means more time before other contenders can take over if the worker dies.
-
-For APCu, the argument is `queueLockTtlS` (seconds).
-
-### Manual queue control with the cache store
-
-If you want to control the lock manually:
+### Lock, compute, set
 
 ```php
 if($cache->get('key', queue: false) === null)
 {
-    $cache->lockAndQueue('key');
-    $cache->set('key', $value, ttl: 30);
+    $cache->lockAndQueue('key');         // Acquire lock, others start waiting
+    $value = $this->expensiveWork();
+    $cache->set('key', $value, ttl: 60); // Set value AND release lock
 }
 ```
 
-If you decide not to call `set()` (e.g., error path), release the lock:
+### Error handling - release without setting
+
+If you acquire a lock but can't produce a value (e.g., an error), release
+the lock so others can try:
 
 ```php
-$cache->releaseActiveLock('key');
-```
-
-For long-running processes, extend the lock while you work:
-
-```php
-while($stillWorking)
+$cache->lockAndQueue('key');
+try
 {
-    $cache->renewLock('key');
+    $value = $this->riskyOperation();
+    $cache->set('key', $value, ttl: 60);
+}
+catch(Throwable $e)
+{
+    $cache->releaseActiveLock('key');   // Release lock without setting a value
+    throw $e;
 }
 ```
 
-Force queueing for a single call even when queueing is disabled globally:
+### Extend the lock for long-running work
+
+If your computation takes longer than the lock TTL, renew the lock
+periodically to prevent others from stealing it:
+
+```php
+$cache->lockAndQueue('key');
+foreach($largeDataSet as $item)
+{
+    $this->processItem($item);
+    $cache->renewLock('key');   // Reset the lock TTL
+}
+$cache->set('key', $result, ttl: 300);
+```
+
+### Critical section (lock-only, no cache)
+
+Use MemoLock purely as a distributed mutex to prevent parallel execution:
+
+```php
+$cache->lockAndQueue('import:companies');
+try
+{
+    // Only one worker can run this at a time
+    $this->importCompanies();
+}
+finally
+{
+    $cache->releaseActiveLock('import:companies');
+}
+```
+
+### Force queueing for a single call
+
+Override the global queue setting for one call:
 
 ```php
 $wasEnabled = $cache->isQueueEnabled();
@@ -152,75 +193,19 @@ $cache->setQueueEnabled(false);
 
 $value = $cache->get(
     'key',
-    resolver: fn() => $expensiveCall(),
-    queue: true,
+    resolver: fn() => $this->compute(),
+    queue: true,   // Force queue even though globally disabled
 );
 
 $cache->setQueueEnabled($wasEnabled);
 ```
 
-Lock-only mode for a critical section.
-It will never be executed in parallel (one at a time rate-limited).
+## Standalone MemoLock (without cache stores)
 
-```php
-$cache->lockAndQueue('key');
-try
-{
-    // critical section
-}
-finally
-{
-    $cache->releaseActiveLock('key');
-}
-```
+You can use MemoLock directly for non-cache scenarios like file generation
+or resource provisioning.
 
-## MemoLock configuration
-
-MemoLock reads queue settings from the cache config. The keys differ between
-Redis and APCu:
-
-Redis queue config:
-
-```php
-$config = new ArrayObject([
-    'queue' => [
-        'enabled' => true,
-        'lock_ttl_ms' => 2000,
-        'wait_attempts' => 3,
-        'debug' => [
-            'enabled' => false,
-            'timeouts' => false,
-            'filename' => 'memolock_debug',
-        ],
-    ],
-]);
-```
-
-APCu queue config:
-
-```php
-$config = new ArrayObject([
-    'queue' => [
-        'enabled' => true,
-        'lock_ttl_s' => 1,
-        'wait_timeout_s' => 2,
-        'backoff_min_ms' => 5,
-        'backoff_max_ms' => 25,
-        'debug' => [
-            'enabled' => false,
-            'timeouts' => false,
-            'filename' => 'memolock_debug',
-        ],
-    ],
-]);
-```
-
-## MemoLock as a standalone mechanism
-
-You can use MemoLock directly to protect any critical section. This is useful
-when no cache item is involved.
-
-Redis MemoLock:
+### Redis MemoLock
 
 ```php
 $id = 'thumbnails:' . $file;
@@ -228,23 +213,25 @@ $memoLock->lockAndQueue(
     $id,
     fetcher: function(?RedisMemoLock $memoLock = null) use ($file)
     {
+        // Check if the resource already exists
         clearstatcache(true, $file);
-        return file_exists($file) ? true : null;
+        return file_exists($file) ? true : null;  // null = needs work
     },
     resolver: function(?RedisMemoLock $memoLock = null) use ($file)
     {
-        // generate the file
-        // ...
+        // Generate the resource
+        $this->generateThumbnail($file);
         $memoLock?->debug('thumbnail created: ' . $file);
         return true;
     },
     queueLockTtlMs: 5000,
 );
-
 $memoLock->releaseActiveLock($id);
 ```
 
-APCu MemoLock uses the same flow, but the lock TTL uses seconds:
+### APCu MemoLock
+
+Same pattern, but lock TTL uses seconds:
 
 ```php
 $memoLock->lockAndQueue(
@@ -255,3 +242,63 @@ $memoLock->lockAndQueue(
 );
 $memoLock->releaseActiveLock($id);
 ```
+
+## Configuration
+
+MemoLock reads its settings from the cache config.
+
+### Redis queue config
+
+```yaml
+persistent:
+  queue:
+    enabled: yes              # Enable/disable MemoLock for this tier
+    connection: redis          # Redis connection for Pub/Sub (separate from data)
+    lock_ttl_ms: 2000          # Lock duration in milliseconds
+    wait_attempts: 3           # Number of Pub/Sub subscribe attempts
+    debug:
+      enabled: no              # Log MemoLock operations
+      timeouts: no             # Log timeout events
+      filename: memolock_debug # Log file name (in LOGS_DIR)
+```
+
+### APCu queue config
+
+```yaml
+perishable:
+  queue:
+    enabled: yes
+    lock_ttl_s: 1              # Lock duration in seconds
+    wait_timeout_s: 2          # Total max wait time
+    backoff_min_ms: 5          # Minimum sleep between retries
+    backoff_max_ms: 25         # Maximum sleep between retries
+    debug:
+      enabled: no
+      timeouts: no
+      filename: memolock_debug
+```
+
+## When to care about stampedes
+
+**High risk** (always use MemoLock):
+- Popular keys accessed by many concurrent users (homepage data, navigation)
+- Expensive queries (JOINs, aggregations, full-text search)
+- External API calls cached locally
+
+**Low risk** (MemoLock still helps but less critical):
+- Per-user data with few concurrent hits
+- Very fast queries (simple primary key lookups)
+- Rarely accessed pages
+
+Since MemoLock is enabled by default and the overhead is minimal (one extra
+Redis command per cache miss), there's no reason to disable it unless you're
+debugging.
+
+## References
+
+1. https://blog.lucas-simon.com/how-i-took-down-my-site-and-fixed-it-with-memolock
+   Implementation in TypeScript:
+   https://github.com/demipixel/redis-memolock-node/blob/master/src/index.ts
+2. https://redis.io/blog/caches-promises-locks/
+   Implementation in Go:
+   https://github.com/kristoff-it/redis-memolock/tree/master

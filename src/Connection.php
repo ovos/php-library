@@ -19,7 +19,7 @@ abstract class Connection
 	
 	#[Inject('config')]
 	#[InjectArrayObject('system', 'profilers')]
-	protected ArrayObject $profilers;
+	protected ?ArrayObject $profilers = null;
 	
 	protected ArrayObject $config;
 	
@@ -76,7 +76,7 @@ abstract class Connection
 		...$event,
 	): static
 	{
-		$this->logger->log(...$event);
+		$this->logger?->log(...$event);
 		
 		return $this;
 	}
