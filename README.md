@@ -1,4 +1,4 @@
-# ovos PHP library
+# ovos php library
 
 ### GitHub
 https://github.com/ovos/php-library
@@ -71,8 +71,8 @@ Host ovos.php-library
     "ext-yaml": "*",
     "ext-intl": "*",
     "ext-pdo": "*",
-    "ovos/php-library": "dev-release/3.0",
-    "ovos/php-module-system": "dev-release/3.0"
+    "ovos/php-library": "dev-release/8.5",
+    "ovos/php-module-system": "dev-release/8.5"
   },
   "autoload": {
     "psr-4": {

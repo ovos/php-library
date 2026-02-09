@@ -296,9 +296,9 @@ debugging.
 
 ## References
 
-1. https://blog.lucas-simon.com/how-i-took-down-my-site-and-fixed-it-with-memolock
-   Implementation in TypeScript:
+1. https://blog.lucas-simon.com/how-i-took-down-my-site-and-fixed-it-with-memolock  
+   Implementation in TypeScript:  
    https://github.com/demipixel/redis-memolock-node/blob/master/src/index.ts
-2. https://redis.io/blog/caches-promises-locks/
-   Implementation in Go:
+2. https://redis.io/blog/caches-promises-locks/  
+   Implementation in Go:  
    https://github.com/kristoff-it/redis-memolock/tree/master
