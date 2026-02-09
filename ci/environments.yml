@@ -65,7 +65,7 @@ production: &production
     connection: mysql
     encryption:
       method: AES-256-CBC
-      key: zA%$6&z9J,s_[;66[7r
+      key: !ENV DATABASE_ENCRYPTION[KEY]
   
   # cache
   cache: &cache
@@ -93,8 +93,12 @@ production: &production
       # cache queueing
       queue:
         enabled: yes
+        connection: redis
         lock_ttl_ms: 2000
         wait_attempts: 3
+        debug:
+          enabled: no
+          timeouts: no
 
 development: &development
   <<: *production
@@ -104,4 +108,4 @@ development: &development
     # profilers
     profilers:
       <<: *profilers
-      enabled: yes    
+      enabled: yes

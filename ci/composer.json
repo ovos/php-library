@@ -35,8 +35,8 @@
     "ext-curl": "*",
     "ext-openssl": "*",
     "ext-zend-opcache": "*",
-    "ovos/php-library": "dev-release/3.0",
-    "ovos/php-module-system": "dev-release/3.0"
+    "ovos/php-library": "dev-release/8.5",
+    "ovos/php-module-system": "dev-release/8.5"
   },
   "minimum-stability": "dev",
   "prefer-stable": true,
