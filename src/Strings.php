@@ -102,12 +102,14 @@ class Strings
 	): string
 	{
 		$str = '';
-		$i = 0;
-		while($i < $length)
+		$maxIndex = strlen($characters) - 1;
+		
+		for($i = 0; $i < $length; $i++)
 		{
-			$str.= $characters[mt_rand() % strlen($characters)];
-			$i++;
+			// random_int is cryptographically secure and requires a range
+			$str.= $characters[random_int(0, $maxIndex)];
 		}
+		
 		return $str;
 	}
 	

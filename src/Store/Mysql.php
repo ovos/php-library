@@ -417,24 +417,26 @@ abstract class Mysql extends Store
 		string $groupBy = 'id',
 	): array
 	{
-		$ids = array_unique(array_column($referenced, $referencedBy));
+		$ids = array_values(array_unique(array_column($referenced, $referencedBy)));
 		if(empty($ids))
 		{
 			return [];
 		}
 		
+		$placeholders = implode(', ', array_fill(0, count($ids), '?'));
 		$query = $this->query()
 			->select($groupBy . ', ' . static::TABLE . '.*')
-			->where(sprintf($groupBy . ' IN (%s)', implode( ', ', $ids)));
+			->where($groupBy . ' IN (' . $placeholders . ')');
 		if($queryCallback)
 		{
 			$queryCallback($query);
 		}
 		
-		$query = $this->getSource()->query($query->getSql());
-		return $this->fetchGrouped($query, $class);
+		$statement = $this->getSource()->prepare($query->getSql());
+		$statement->execute($ids);
+		return $this->fetchGrouped($statement, $class);
 	}
-	
+
 	public function fetchByReference(
 		array $referenced,
 		string $referencedBy,
@@ -442,23 +444,25 @@ abstract class Mysql extends Store
 		?Closure $queryCallback = null,
 	): array
 	{
-		$ids = array_keys($referenced);
+		$ids = array_values(array_keys($referenced));
 		if(empty($ids))
 		{
 			return [];
 		}
 		
+		$placeholders = implode(', ', array_fill(0, count($ids), '?'));
 		$query = $this->query()
 			->select(static::TABLE . '.*')
-			->where(sprintf($referencedBy . ' IN (%s)', implode( ', ', $ids)));
+			->where($referencedBy . ' IN (' . $placeholders . ')');
 		if($queryCallback)
 		{
 			$queryCallback($query);
 		}
 		
-		$query = $this->getSource()->query($query->getSql());
+		$statement = $this->getSource()->prepare($query->getSql());
+		$statement->execute($ids);
 		
-		return $query->fetchAll(PDO::FETCH_CLASS, $class);
+		return $statement->fetchAll(PDO::FETCH_CLASS, $class);
 	}
 	
 	public function assignByReference(

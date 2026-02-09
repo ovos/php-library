@@ -150,18 +150,17 @@ class Controller
 			{
 				$typeName = $type->getName();
 				
-				// int
-				if($typeName === 'int'
-					|| ($typeName === '?int'))
+				if($typeName === 'int')
 				{
 					$requestParams[$valueKey] = (int)$requestParams[$valueKey];
 				}
-				
-				// float
-				if($typeName === 'float'
-					|| ($typeName === '?float'))
+				else if($typeName === 'float')
 				{
 					$requestParams[$valueKey] = (float)$requestParams[$valueKey];
+				}
+				else if($typeName === 'bool')
+				{
+					$requestParams[$valueKey] = (bool)$requestParams[$valueKey];
 				}
 			}
 		}

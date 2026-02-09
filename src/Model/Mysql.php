@@ -561,9 +561,9 @@ abstract class Mysql
 	): static
 	{
 		// modify a reference
-		if($reference = $this->getReference($property))
+		if($this->hasReference($property))
 		{
-			$reference = $value;
+			$this->_references[$property] = $value;
 			
 			return $this;
 		}
