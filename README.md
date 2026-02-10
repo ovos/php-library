@@ -41,6 +41,13 @@ It is designed to work with:
 - [Migrations](#migrations)
 - [Cache](#cache)
 - [CLI Commands](#cli-commands)
+- [Forms](#forms)
+  - [Creating a Form Component](#creating-a-form-component)
+  - [Elements](#elements)
+  - [Filters](#filters)
+  - [Validators](#validators)
+  - [Using Forms in Controllers](#using-forms-in-controllers)
+  - [Rendering Forms in Views](#rendering-forms-in-views)
 
 ---
 
@@ -1780,6 +1787,535 @@ php cli.php system collector                 # Run garbage collectors
 php cli.php system sessions clear            # Clear sessions
 php cli.php system tools encrypt "text"      # Encrypt a string
 php cli.php system tools decrypt "cipher"    # Decrypt a string
+```
+
+---
+
+## Forms
+
+The framework includes a form component system for building, validating, filtering, and rendering HTML forms. Forms are defined as PHP classes, used in controllers, and rendered in views via a helper.
+
+### Creating a Form Component
+
+Create form classes in `application/components/`. Each form extends `Ovos\Form` and configures its elements in the `init()` method:
+
+```php
+<?php
+declare(strict_types=1);
+
+namespace Components\User;
+
+use Ovos\Form;
+use Ovos\Form\Filter;
+use Ovos\Form\Validator;
+
+/**
+ * @property Form\Element $username
+ * @property Form\Element $password
+ * @property Form\Element $remember
+ * @property Form\Element $not_human
+ */
+class LoginForm extends Form
+{
+    public function init(): void
+    {
+        $this->username
+            ->setLabel($this->_('E-mail'))
+            ->addFilter(new Filter\Trim)
+            ->addValidator(new Validator\NotEmpty)
+            ->addValidator(new Validator\EmailAddress);
+
+        $this->password
+            ->setLabel($this->_('Password'))
+            ->addFilter(new Filter\Trim)
+            ->addValidator(new Validator\NotEmpty);
+
+        $this->remember
+            ->addFilter(new Filter\Checked);
+
+        $this->not_human
+            ->addValidator(new Validator\NotHuman);
+    }
+}
+```
+
+**Key conventions:**
+
+- Extend `Ovos\Form` and override `init()` for element configuration
+- Use `@property` docblocks for IDE autocompletion on dynamic elements
+- Elements are created automatically when accessed via `$this->elementName` (magic `__get`)
+- All setters return `$this` for fluent method chaining
+- Use `$this->_('...')` for translatable labels and messages (via the `Translatable` trait)
+
+**Assigning typed elements explicitly:**
+
+For `Options` or `File` elements, assign them explicitly rather than relying on auto-creation:
+
+```php
+use Ovos\Form\Element\Options;
+use Ovos\Form\Element\Options\Option;
+
+public function init(): void
+{
+    $this->gender = (new Options)
+        ->addOptions([
+            new Option('male', $this->_('male')),
+            new Option('female', $this->_('female')),
+            new Option('misc', $this->_('diverse')),
+        ])
+        ->addValidator(new Validator\NotEmpty);
+}
+```
+
+**Constructor injection for dependencies:**
+
+When a form needs external data, accept it via constructor:
+
+```php
+class CompaniesForm extends Form
+{
+    public function __construct(
+        protected readonly array $selectedJobs,
+        ?string $id = null,
+    )
+    {
+        parent::__construct($id);
+    }
+
+    public function init(): void
+    {
+        $this->setId('companies');
+
+        $this->jobs = (new Options)
+            ->fromObjects($this->selectedJobs, 'id', 'name');
+        $this->jobs->setValue(array_column($this->selectedJobs, 'id'));
+    }
+}
+```
+
+**Form inheritance:**
+
+Forms can extend other forms to reuse field definitions:
+
+```php
+class SearchForm extends Form
+{
+    public function init(): void
+    {
+        $this->query = (new Element)
+            ->addValidator(new NotEmpty);
+    }
+}
+
+// Extended form adds fields
+class ExtendedSearchForm extends SearchForm
+{
+    public function init(): void
+    {
+        parent::init();
+        $this->setId('search-form');
+
+        $this->limit = (new Element)
+            ->addFilter(new Integer);
+        $this->limit->setDefault(10);
+    }
+}
+```
+
+### Elements
+
+#### Element (default)
+
+The base `Ovos\Form\Element` is created automatically when you access any property on a form. Suitable for text inputs, passwords, hidden fields, and checkboxes.
+
+```php
+$form->username->setLabel('Username');
+$form->username->setValue('john');
+$form->username->setDefault('guest');
+
+// Value retrieval (after filters are applied)
+$form->username->getValue();       // Filtered value (with default fallback)
+$form->username->getInputValue();  // Filtered value with default
+$form->username->getUserValue();   // Filtered value without default (null if no input)
+```
+
+#### Options
+
+`Ovos\Form\Element\Options` is used for select dropdowns, radio buttons, and checkbox groups. The rendered type depends on the view helper configuration.
+
+```php
+use Ovos\Form\Element\Options;
+use Ovos\Form\Element\Options\Option;
+
+// From key-value array
+$this->country = (new Options)
+    ->addOptions([
+        'AT' => 'Austria',
+        'DE' => 'Germany',
+    ]);
+
+// From Option objects (when you need specific values and labels)
+$this->gender = (new Options)
+    ->addOptions([
+        new Option('male', $this->_('male')),
+        new Option('female', $this->_('female')),
+    ]);
+
+// From database objects
+$this->jobs = (new Options)
+    ->fromObjects($jobs, 'id', 'name');
+
+// Access options
+foreach ($this->jobs->getOptions() as $option) {
+    $option->getValue();      // The value attribute
+    $option->getLabel();      // The display label
+    $option->isSelected();    // Whether currently selected
+    $option->getObject();     // Original object (when using fromObjects)
+}
+```
+
+Options automatically validates that submitted values exist in the available options.
+
+#### File
+
+`Ovos\Form\Element\File` handles file uploads with MIME type validation. It automatically adds a `FileUploaded` validator.
+
+```php
+use Ovos\Form\Element\File;
+
+$this->avatar = (new File([
+    'jpg' => 'image/jpeg',
+    'png' => 'image/png',
+]))->setLabel($this->_('Avatar'));
+
+// After validation, access file properties
+$file->name;      // Original filename
+$file->tmp_name;  // Temporary path
+$file->size;      // File size in bytes
+$file->type;      // MIME type (set by validator)
+$file->ext;       // Extension (set by validator)
+```
+
+### Filters
+
+Filters transform values before validation. They are applied in the order they are added.
+
+```php
+$this->username
+    ->addFilter(new Filter\Trim)
+    ->addFilter(new Filter\StripTags)
+    ->addFilter(new Filter\NullIfEmpty);
+```
+
+| Filter | Description | Example |
+|--------|-------------|---------|
+| `Trim($mask?)` | Trim whitespace (or custom characters) | `new Trim()`, `new Trim('.,')` |
+| `LeftTrim($mask?)` | Trim from left only | `new LeftTrim('0')` |
+| `StripTags($allowed?)` | Remove HTML tags | `new StripTags(['<b>', '<i>'])` |
+| `Integer` | Cast to int | `'42'` → `42` |
+| `FloatingPoint` | Cast to float | `'3.14'` → `3.14` |
+| `Checked` | Checkbox to boolean int | `'on'` → `1`, `''` → `0` |
+| `NullIfEmpty` | Empty to null | `''` → `null` |
+| `Prefix($prefix)` | Add prefix if not present | `new Prefix('+43')` |
+| `StripPrefix($prefix)` | Remove prefix | `new StripPrefix('https://')` |
+| `Replace($pattern, $replacement)` | Regex replacement | `new Replace('/[^0-9]/', '')` |
+| `Shorten($length, $ending)` | Truncate string | `new Shorten(100, '...')` |
+| `Callback($fn)` | Custom filter function | `new Callback(fn($v) => strtolower($v))` |
+
+### Validators
+
+Validators check values after filters have been applied. A form element can have multiple validators, all of which must pass. Validators that fail produce `Ovos\Form\Error` objects.
+
+```php
+$this->email
+    ->addValidator(new Validator\NotEmpty)
+    ->addValidator(new Validator\EmailAddress);
+```
+
+| Validator | Description | Error Code |
+|-----------|-------------|------------|
+| `NotEmpty` | Value must not be empty | `empty` |
+| `EmailAddress` | Valid email (allows empty — combine with `NotEmpty` if required) | `email_invalid` |
+| `PasswordStrength($length, $uppercase, $digits, $special)` | Password complexity rules | `password_weak` |
+| `SameAs($elementId)` | Must match another field's value | `different` |
+| `IfChecked($elementId)` | Conditional: validates dependency between checkboxes | `not_checked` |
+| `NotHuman` | Honeypot: valid only if empty (bot protection) | `not_human` |
+| `FileUploaded` | Validates file upload (auto-added by `File` element) | various |
+| `Callback($fn)` | Custom validation logic | `callback` |
+
+**Custom error messages:**
+
+```php
+$validator = new Validator\NotEmpty;
+$validator->setMessage(
+    Validator\NotEmpty::ERROR_EMPTY,
+    'This field is required!'
+);
+$this->field->addValidator($validator);
+```
+
+**Custom validator with element access:**
+
+Callback closures are bound to the validator instance, giving access to the element and the full form:
+
+```php
+$this->birthdate->addValidator(
+    (new Validator\Callback(function (mixed $value) {
+        if ($value === null) return true;
+        return $value >= 1901 && $value <= idate('Y');
+    }))->setMessage(
+        Validator\Callback::ERROR_CALLBACK,
+        $this->_('The year of birth must be between 1901 and {0}', idate('Y'))
+    )
+);
+```
+
+### Using Forms in Controllers
+
+The standard controller workflow: create the form, populate with POST data, validate, and process or display errors.
+
+#### Basic workflow
+
+```php
+use Components\User\LoginForm;
+use Ovos\Response;
+use Ovos\View;
+
+public function login(): Response
+{
+    $form = new LoginForm;
+    $view = new View('user/login.phtml');
+    $view->form = $form;
+
+    if ($this->request->isPost())
+    {
+        $form->setValues($this->request->getPost());
+
+        if ($form->isValid() === false)
+        {
+            $this->form()->handleErrors($form);
+        }
+        else
+        {
+            // Process valid data
+            $username = $form->username->getValue();
+            $password = $form->password->getValue();
+
+            // ... authenticate, save, etc.
+            return new Response\Redirect('dashboard');
+        }
+    }
+
+    return new Response\Html($view->render());
+}
+```
+
+#### Error handling
+
+The `Form` plugin (registered in `environments.yml` as a default plugin) provides `handleErrors()` which iterates over all form errors and adds them as flash messages via `View::messages()`:
+
+```php
+// Standard — all errors displayed as flash messages
+$this->form()->handleErrors($form);
+
+// Skip specific error codes (to handle them manually)
+$this->form()->handleErrors($form, [Validator\NotEmpty::ERROR_EMPTY]);
+
+// Manual error handling
+foreach ($form->getErrors() as $error)
+{
+    $error->getMessage();    // Error message string
+    $error->getCode();       // Error code constant
+    $error->getElement();    // The Element that failed
+    $error->getValidator();  // The Validator that produced the error
+}
+```
+
+#### Populating forms with existing data
+
+```php
+// From a model/array
+$form->setValues([
+    'first_name' => $user->first_name,
+    'email' => $user->email,
+]);
+
+// Set defaults (used when no user input is provided)
+$form->setDefaults(['role' => 'user']);
+
+// Populate Options from database objects
+$form->interests
+    ->fromObjects($interests, 'id', 'name')
+    ->setValue($selectedInterestIds);
+```
+
+#### Resetting form state
+
+When handling checkboxes via AJAX, unchecked checkboxes are not sent in POST data. Call `reset()` before `setValues()` to clear cached values:
+
+```php
+$form->reset();
+$form->setValues($this->request->getPost());
+```
+
+#### Accessing values
+
+```php
+// Single field
+$form->username->getValue();        // Filtered value
+$form->username->getUserValue();    // Filtered, no default fallback
+$form->username->getInputValue();   // Filtered, with default fallback
+
+// All fields
+$form->getValues();        // All filtered values
+$form->getUserValues();    // All filtered, no defaults
+$form->getInputValues();   // All filtered, with defaults
+
+// Save model from form
+$values = $form->getValues();
+$model->fromArray($values);
+$model->save();
+```
+
+### Rendering Forms in Views
+
+Forms are rendered in `.phtml` views using the `formElement()` view helper. The helper accepts an element and returns a chainable configuration object.
+
+#### Basic rendering
+
+```php
+<form method="post" class="form" action="<?= $this->url('user', 'login') ?>" autocomplete="off">
+
+    <?= $this->formElement($form->username)
+        ->setType('email')
+        ->setPlaceholder($form->username->getLabel())
+    ?>
+
+    <?= $this->formElement($form->password)
+        ->setType('password')
+        ->setPlaceholder($form->password->getLabel())
+    ?>
+
+    <?= $this->formElement($form->remember->setLabel($this->_('Keep me logged in')))
+        ->setType('checkbox')
+    ?>
+
+    <button type="submit" class="button max">
+        <?= $this->_('Sign in') ?>
+    </button>
+
+</form>
+```
+
+#### Supported types
+
+The `setType()` value determines which template is rendered:
+
+| Type | Element Class | Template | Description |
+|------|--------------|----------|-------------|
+| `text`, `email`, `password`, `search`, `number` | `Element` | `element-input.phtml` | Standard input fields |
+| `checkbox` | `Element` | `element-checkbox.phtml` | Single checkbox with hidden "off" input |
+| `file` | `File` | `element-file.phtml` | File upload input |
+| (default) | `Options` | `options-select.phtml` | Select dropdown |
+| `radio` | `Options` | `options-radio.phtml` | Radio button group |
+| `checkbox` | `Options` | `options-checkbox.phtml` | Checkbox group |
+
+The template is automatically selected based on the element type (`Element` vs `Options`) combined with `setType()`.
+
+#### Helper configuration methods
+
+| Method | Description |
+|--------|-------------|
+| `setType($type)` | Input type (`text`, `email`, `password`, `checkbox`, `radio`, `file`, `search`) |
+| `setPlaceholder($text)` | Placeholder text |
+| `setDescription($text)` | Description text shown below the label |
+| `setElementClass($class)` | CSS class on the wrapper `div.form-element` |
+| `setFieldClass($class)` | CSS class on the inner `div.form-field` |
+| `setLabelClass($class)` | CSS class on the label element |
+| `setLabelInsert($placeholder)` | Extra content next to the label (e.g., "Forgot password?" link) |
+| `setInputInsert($placeholder)` | Extra content inside the input wrapper (e.g., password toggle button) |
+| `setFieldInsert($placeholder)` | Extra content after the input (e.g., password strength indicator) |
+| `setAttribute($name, $value)` | HTML attribute on the wrapper element |
+| `setInputAttribute($name, $value)` | HTML attribute on the input element |
+| `setOptionLabelCallback($fn)` | Custom label rendering for each option |
+| `setOptionClassCallback($fn)` | Custom CSS class per option |
+| `setOptionAttributesCallback($fn)` | Custom HTML attributes per option |
+
+#### Using inserts for custom content
+
+Inserts allow injecting additional HTML into specific positions within a form element. Use `Ovos\View\Placeholder` to capture content blocks:
+
+```php
+<?php use Ovos\View\Placeholder; ?>
+
+<?php ($labelInsert = new Placeholder)->captureStart(); ?>
+    <a href="<?= $this->url('user/password-reset') ?>">
+        <?= $this->_('Password forgotten?') ?>
+    </a>
+<?php $labelInsert->captureEnd(); ?>
+
+<?php ($inputInsert = new Placeholder)->captureStart(); ?>
+    <button type="button" class="form-password-toggle icon-eye"
+        title="<?= $this->_('Toggle password visibility') ?>"></button>
+<?php $inputInsert->captureEnd(); ?>
+
+<?= $this->formElement($form->password)
+    ->setType('password')
+    ->setPlaceholder($form->password->getLabel())
+    ->setLabelInsert($labelInsert)
+    ->setInputInsert($inputInsert)
+?>
+```
+
+#### Rendering Options as checkbox or radio groups
+
+```php
+<?= $this->formElement($form->interests)
+    ->setType('checkbox')
+    ->setElementClass('select scrollable')
+    ->setFieldClass('selectable')
+?>
+
+<?= $this->formElement($form->gender)
+    ->setType('radio')
+?>
+```
+
+#### CSS class structure
+
+The form element templates generate a consistent CSS structure:
+
+```
+div.form-element.form-element-type-{type}.form-element-{id}[.errors]
+├── div.form-element-label
+│   ├── label.form-label[.error]
+│   └── {labelInsert}
+├── div.form-element-description
+├── div.form-element-errors.messages
+│   └── div.form-element-error.message.message-error (per error)
+│       ├── div.message-icon.icon-exclamation-circle
+│       └── div.message-body > p
+└── div.form-field
+    ├── div.form-input
+    │   ├── input.form-control / select.form-control
+    │   └── {inputInsert}
+    └── {fieldInsert}
+```
+
+Errors are displayed inline within each form element. Elements with errors receive the `.errors` class on the wrapper and `.error` on the label, enabling CSS-based error styling.
+
+#### Auto-save forms
+
+For forms that submit automatically on change (e.g., via AJAX), add the `save-on-change` class and handle submission with JavaScript:
+
+```php
+<form method="post" class="form save-on-change"
+    action="<?= $this->url('children', 'change-name', $child->id) ?>"
+    autocomplete="off">
+    <?= $this->formElement($form->name)
+        ->setPlaceholder($this->_('Name'))
+    ?>
+</form>
 ```
 
 ---
