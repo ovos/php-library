@@ -76,6 +76,11 @@ abstract class Redis extends Tags
 		$this->configure($config);
 	}
 	
+	public function getFunctions(): Functions
+	{
+		return $this->functions;
+	}
+	
 	public function configure(
 		?ArrayObject $config = null,
 	): static
