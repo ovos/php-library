@@ -193,6 +193,11 @@ class Request
 			return $default;
 		}
 		
+		if($filter === null)
+		{
+			return $_GET[$name];
+		}
+		
 		return filter_var($_GET[$name], $filter, $options);
 	}
 	
@@ -211,6 +216,11 @@ class Request
 		if(isset($_POST[$name]) === false)
 		{
 			return $default;
+		}
+		
+		if($filter === null)
+		{
+			return $_POST[$name];
 		}
 		
 		return filter_var($_POST[$name], $filter, $options);
