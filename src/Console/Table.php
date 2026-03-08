@@ -3,22 +3,25 @@ declare(strict_types=1);
 
 namespace Ovos\Console;
 
-use Ovos\Terminal\Formatter;
-use Override;
-use Console_Table;
-
-use function count;
-use function is_array;
-use function is_string;
+use Symfony\Component\Console\Helper\Table as SymfonyTable;
+use Symfony\Component\Console\Output\BufferedOutput;
 
 /**
  * Table
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Table extends Console_Table
+class Table
 {
+	protected SymfonyTable $table;
+	protected BufferedOutput $output;
 	protected bool $hasMarkup = false;
+	
+	public function __construct()
+	{
+		$this->output = new BufferedOutput(BufferedOutput::VERBOSITY_NORMAL, true);
+		$this->table = new SymfonyTable($this->output);
+	}
 	
 	public function hasMarkup(
 		bool $hasMarkup,
@@ -29,47 +32,24 @@ class Table extends Console_Table
 		return $this;
 	}
 	
-	/**
-	 * Calculates the maximum length for each column of a row.
-	 */
-	#[Override] 
-	function _calculateCellLengths(
-		$row, // the row data
-	)
+	public function setHeaders(
+		array $headers,
+	): void
 	{
-		if(is_array($row) === false)
-		{
-			return;
-		}
-		
-		for($i = 0,
-			$iMax = count($row); $i < $iMax; $i++)
-		{
-			if(!isset($this->_cell_lengths[$i]))
-			{
-				$this->_cell_lengths[$i] = 0;
-			}
-			$rowValue = $this->hasMarkup && is_string($row[$i])
-				? Formatter::stripTerminalMarkup($row[$i])
-				: $row[$i];
-			
-			$this->_cell_lengths[$i] = max($this->_cell_lengths[$i],
-				$this->_strlen($rowValue));
-		}
+		$this->table->setHeaders($headers);
 	}
 	
-	/**
-	 * Returns the character length of a string.
-	 */
-	#[Override]
-	function _strlen(
-		$str, // a multibyte or singlebyte string.
-	)
+	public function addRow(
+		array $row,
+	): void
 	{
-		$str = $this->hasMarkup && is_string($str)
-			? Formatter::stripTerminalMarkup($str)
-			: $str;
+		$this->table->addRow($row);
+	}
+	
+	public function getTable(): string
+	{
+		$this->table->render();
 		
-		return parent::_strlen($str);
+		return $this->output->fetch();
 	}
 }
