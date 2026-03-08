@@ -5,6 +5,7 @@ namespace Tests;
 
 use Ovos\ArrayObject as BaseArrayObject;
 use Ovos\Arrays;
+use Ovos\Exception;
 use Ovos\Test;
 use Ovos\Container as BaseContainer;
 use Ovos\Container\ArrayObject;
@@ -355,6 +356,91 @@ class Container extends Test
 			&& $instance->dependency2 instanceof Dependency2
 			&& $instance->value === 'test';
 	}
+	
+	public function circularDependencyDetection(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(CircularA::class);
+		$container->registerClass(CircularB::class);
+		
+		try
+		{
+			$container->get(CircularA::class);
+			return false;
+		}
+		catch(Exception $exception)
+		{
+			return str_contains($exception->getMessage(),
+				'Circular dependency detected');
+		}
+	}
+	
+	public function transientClass(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Dependency1::class, transient: true);
+		
+		$a = $container->get(Dependency1::class);
+		$b = $container->get(Dependency1::class);
+		
+		return $a instanceof Dependency1
+			&& $b instanceof Dependency1
+			&& $a !== $b;
+	}
+	
+	public function transientCallable(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerCallable(Dependency1::class,
+			fn() => new Dependency1,
+			transient: true,
+		);
+		
+		$a = $container->get(Dependency1::class);
+		$b = $container->get(Dependency1::class);
+		
+		return $a instanceof Dependency1
+			&& $b instanceof Dependency1
+			&& $a !== $b;
+	}
+	
+	public function singletonByDefault(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Dependency1::class);
+		
+		$a = $container->get(Dependency1::class);
+		$b = $container->get(Dependency1::class);
+		
+		return $a === $b;
+	}
+	
+	public function call(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Dependency1::class);
+		
+		$service = new CallableService;
+		$result = $container->call($service, 'doWork', [
+			'value' => 'test',
+		]);
+		
+		return $result === 'test'
+			&& $service->dependency1 instanceof Dependency1;
+	}
+	
+	public function callWithInjectAttribute(): bool
+	{
+		$arrayObject = $this->getExampleArrayObject();
+		
+		$container = new BaseContainer;
+		$container->registerObject('config', $arrayObject);
+		
+		$service = new CallableService;
+		$result = $container->call($service, 'doWorkWithConfig');
+		
+		return $result === 'root';
+	}
 }
 
 class Service1
@@ -447,4 +533,46 @@ class Dependency1
 
 class Dependency2
 {
+}
+
+class CircularA
+{
+	public function __construct(
+		public CircularB $b,
+	)
+	{
+	}
+}
+
+class CircularB
+{
+	public function __construct(
+		public CircularA $a,
+	)
+	{
+	}
+}
+
+class CallableService
+{
+	public ?Dependency1 $dependency1 = null;
+	
+	public function doWork(
+		Dependency1 $dependency1,
+		string $value,
+	): string
+	{
+		$this->dependency1 = $dependency1;
+		
+		return $value;
+	}
+	
+	public function doWorkWithConfig(
+		#[Inject('config')]
+		#[ArrayObject('system', 'database', 'credentials')]
+		BaseArrayObject $config,
+	): string
+	{
+		return $config->offsetGet('username');
+	}
 }

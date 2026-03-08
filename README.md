@@ -17,7 +17,7 @@ It is designed to work with:
 ## Requirements
 
 * PHP 8.3 - 8.5
-* MySQL 8.0 - 9.0
+* MySQL 8.0 - 9.6
 * Extensions: `apcu`, `yaml`, `redis`, `intl`, `mbstring`, `pdo`, `json`, `simplexml`, `openssl`, `curl`, `zend-opcache`
 
 ## Table of Contents
@@ -37,6 +37,15 @@ It is designed to work with:
 - [Plugins](#plugins)
 - [Services](#services)
 - [Dependency Injection (Container)](#dependency-injection-container)
+  - [Registration Methods](#registration-methods)
+  - [Lazy Registration (PHP 8.4+)](#lazy-registration-php-84)
+  - [Transient Scope](#transient-scope)
+  - [Constructor Injection](#constructor-injection)
+  - [Attribute-Based Injection](#attribute-based-injection)
+  - [Property Injection](#property-injection)
+  - [Config Path Extraction](#config-path-extraction)
+  - [Method Call Autowiring](#method-call-autowiring)
+  - [Circular Dependency Detection](#circular-dependency-detection)
 - [Translations](#translations)
 - [Migrations](#migrations)
 - [Cache](#cache)
@@ -1413,6 +1422,8 @@ $auth = container()->get('auth');
 ## Dependency Injection (Container)
 
 The framework uses a singleton DI container accessible via `container()`.
+Dependencies are resolved automatically by type, with zero-config auto-registration —
+unregistered types are resolved on the fly without manual wiring.
 
 ### Registration Methods
 
@@ -1421,15 +1432,15 @@ use function Ovos\container;
 
 $c = container();
 
-// Register a class (lazy - instantiated on first get())
+// Register a class (instantiated on first get())
 $c->registerClass('my_service', MyService::class, ['param1' => 'value']);
 
 // Register and immediately get an instance
 $instance = $c->getClass(MyService::class);
 
 // Register a factory callable
-$c->registerCallable('mailer', function() {
-    return new Mailer(config()->smtp);
+$c->registerCallable('mailer', function(Container $c) {
+    return new Mailer($c->get('config')->smtp);
 });
 
 // Register an existing object instance
@@ -1438,6 +1449,47 @@ $c->registerObject('config', $configObject);
 // Register a raw value
 $c->registerValue('app_name', 'My Application');
 ```
+
+All resolved dependencies are **singletons by default** — `get()` returns the same instance.
+See [Transient Scope](#transient-scope) for creating fresh instances on every call.
+
+### Lazy Registration (PHP 8.4+)
+
+On PHP 8.4+, `registerLazy()` creates a [lazy proxy](https://www.php.net/manual/en/language.oop5.lazy-objects.php)
+that defers instantiation until the object is actually accessed. On older PHP versions, it falls back to `registerClass()`.
+
+```php
+// The class is not instantiated until a property or method is accessed
+$c->registerLazy(HeavyService::class);
+
+$service = $c->get(HeavyService::class); // Returns a lightweight proxy
+$service->doWork();                       // Now the real object is created
+```
+
+### Transient Scope
+
+By default, every resolved dependency is a singleton (cached after first creation).
+Use `transient: true` to get a **fresh instance on every `get()` call**:
+
+```php
+// Every get() creates a new instance
+$c->registerClass(FormBuilder::class, transient: true);
+
+$a = $c->get(FormBuilder::class);
+$b = $c->get(FormBuilder::class);
+// $a !== $b
+
+// Also works with callables
+$c->registerCallable(RequestLogger::class,
+    fn() => new RequestLogger(microtime(true)),
+    transient: true,
+);
+```
+
+Transient is available on `registerClass()` and `registerCallable()` — the two registration
+types where creating new instances makes sense. `registerObject()` and `registerValue()` are
+inherently singletons (pre-built instances), and `registerLazy()` defers creation rather than
+repeating it.
 
 ### Constructor Injection
 
@@ -1491,6 +1543,92 @@ class MyService extends Service
     #[Inject]
     protected Request $request;         // Auto-injected by type
 }
+```
+
+Properties marked with `#[Inject]` are resolved **before** the constructor is called,
+so constructor code can use injected properties.
+
+### Config Path Extraction
+
+The `#[ArrayObject]` attribute works as a post-processor on injected values,
+extracting nested paths from configuration objects:
+
+```php
+use Ovos\Container\Inject;
+use Ovos\Container\ArrayObject as InjectArrayObject;
+
+class Benchmark extends Service
+{
+    // Injects config->system->profilers as an ArrayObject
+    #[Inject('config')]
+    #[InjectArrayObject('system', 'profilers')]
+    protected ?ArrayObject $profilers = null;
+}
+```
+
+This also works on constructor parameters:
+
+```php
+class MyService
+{
+    public function __construct(
+        #[Inject('config')]
+        #[InjectArrayObject('system', 'database', 'credentials')]
+        private ArrayObject $credentials,
+    )
+    {
+    }
+}
+```
+
+### Method Call Autowiring
+
+The `call()` method resolves a method's parameters from the container and invokes it —
+using the same resolution chain as constructor injection (by name, `#[Inject]` key, or type):
+
+```php
+class ReportGenerator
+{
+    public function generate(
+        UsersStore $users,                  // Auto-resolved from container
+        string $format,                     // Matched by name from $values
+    ): Report
+    {
+        // ...
+    }
+}
+
+$generator = new ReportGenerator;
+$report = $container->call($generator, 'generate', [
+    'format' => 'pdf',
+]);
+```
+
+Method parameters support the full attribute chain, including `#[Inject]` and `#[ArrayObject]`:
+
+```php
+public function configure(
+    #[Inject('config')]
+    #[InjectArrayObject('system', 'profilers')]
+    ArrayObject $profilers,
+): void
+{
+    // ...
+}
+
+$container->call($service, 'configure');
+```
+
+### Circular Dependency Detection
+
+The container detects circular dependencies and throws an exception with the full chain:
+
+```php
+// If A depends on B and B depends on A:
+$c->registerClass(A::class);
+$c->registerClass(B::class);
+$c->get(A::class);
+// throws: "Circular dependency detected: A -> B -> A."
 ```
 
 ### Using the Container in Controllers
