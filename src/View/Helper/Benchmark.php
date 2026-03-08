@@ -39,6 +39,11 @@ class Benchmark extends Helper
 	
 	public function __toString(): string
 	{
+		if($this->app->getConfig()->system->profilers->enabled === false)
+		{
+			return '';
+		}
+		
 		if(($benchmark = $this->getBenchmark()) === null)
 		{
 			return '';

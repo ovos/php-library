@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace Ovos\Service;
 
+use Ovos\ArrayObject;
+use Ovos\Container\Inject;
+use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Exception;
 use Ovos\Measurement;
 use Ovos\Service;
@@ -18,6 +21,10 @@ class Benchmark extends Service
 	
 	public const string TOTAL = 'total';
 	
+	#[Inject('config')]
+	#[InjectArrayObject('system', 'profilers')]
+	protected ?ArrayObject $profilers = null;
+	
 	/**
 	 * @var Measurement[]
 	 */
@@ -32,6 +39,12 @@ class Benchmark extends Service
 		string $name = self::TOTAL,
 	): static
 	{
+		if($this->profilers !== null
+			&& $this->profilers->enabled === false)
+		{
+			return $this;
+		}
+		
 		$this->measurements[$name] = new Measurement;
 		$this->measurements[$name]->start();
 		
@@ -42,8 +55,12 @@ class Benchmark extends Service
 		string $name = self::TOTAL,
 	): static
 	{
-		$this->get($name)
-			->stop();
+		if(isset($this->measurements[$name]) === false)
+		{
+			return $this;
+		}
+		
+		$this->measurements[$name]->stop();
 		
 		return $this;
 	}
