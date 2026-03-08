@@ -21,7 +21,7 @@
     "ext-openssl": "*",
     "ext-zend-opcache": "*",
     "ext-zlib": "*",
-    "pear/console_table": "^1.3",
+    "symfony/console": "^7",
     "cocur/slugify": "^4"
   },
   "suggest": {
