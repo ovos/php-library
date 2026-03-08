@@ -23,10 +23,10 @@ class Mysql extends Connection
 {
 	protected ArrayObject $config;
 	
-	protected ?ProfilerPdo $client = null;
+	protected ?PDO $client = null;
 	
 	#[Override]
-	public function getClient(): ?ProfilerPdo
+	public function getClient(): ?PDO
 	{
 		return parent::getClient();
 	}
@@ -42,17 +42,38 @@ class Mysql extends Connection
 			$this->config->host,
 		);
 		
+		$options = [
+			PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_OBJ,
+			PDO::ATTR_EMULATE_PREPARES => false,
+			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+		];
+		
 		try
 		{
-			$this->client = new ProfilerPdo($dsn,
-				$this->config->username,
-				$this->config->password,
-				[
-					PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_OBJ,
-					PDO::ATTR_EMULATE_PREPARES => false,
-					PDO::ATTR_ERRMODE => Pdo::ERRMODE_EXCEPTION,
-				],
-			);
+			if($this->profilers?->enabled)
+			{
+				$this->client = new ProfilerPdo($dsn,
+					$this->config->username,
+					$this->config->password,
+					$options,
+				);
+				
+				$this->client->setAttribute(PDO::ATTR_STATEMENT_CLASS, [
+					PdoStatement::class,
+				]);
+				if($this->profilers->offsetExists('queries'))
+				{
+					Collector::$limit = $this->profilers->queries->limit;
+				}
+			}
+			else
+			{
+				$this->client = new PDO($dsn,
+					$this->config->username,
+					$this->config->password,
+					$options,
+				);
+			}
 		}
 		catch(PDOException $exception)
 		{
@@ -63,17 +84,6 @@ class Mysql extends Connection
 			);
 			
 			return false;
-		}
-		
-		if($this->profilers?->enabled)
-		{
-			$this->client->setAttribute(PDO::ATTR_STATEMENT_CLASS, [
-				PdoStatement::class,
-			]);
-			if($this->profilers->offsetExists('queries'))
-			{
-				Collector::$limit = $this->profilers->queries->limit;
-			}
 		}
 		
 		return true;
