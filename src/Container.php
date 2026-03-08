@@ -13,6 +13,7 @@ use Ovos\Container\Register\TypeCallable;
 
 use ReflectionAttribute;
 use ReflectionClass;
+use ReflectionMethod;
 use ReflectionParameter;
 use ReflectionType;
 use ReflectionNamedType;
@@ -21,6 +22,7 @@ use ReflectionProperty;
 
 use function array_keys;
 use function count;
+use function implode;
 
 /**
  * Container
@@ -36,6 +38,8 @@ class Container
 	
 	protected array $resolved = [];
 	
+	protected array $resolving = [];
+	
 	/**
 	 * Register a class
 	 */
@@ -45,6 +49,7 @@ class Container
 		array $parameters = [],
 		?callable $initializer = null,
 		bool $overwrite = false,
+		bool $transient = false,
 	): static
 	{
 		if(isset($this->injectors[$key]) // already registered
@@ -53,11 +58,13 @@ class Container
 			return $this;
 		}
 		
-		$this->injectors[$key] = new Injector\TypeClass(
+		$injector = new Injector\TypeClass(
 			$class ?? $key,
 			$parameters,
 			$initializer,
 		);
+		$injector->setTransient($transient);
+		$this->injectors[$key] = $injector;
 		
 		return $this;
 	}
@@ -157,6 +164,7 @@ class Container
 		callable $callable,
 		array $parameters = [],
 		bool $overwrite = false,
+		bool $transient = false,
 	): static
 	{
 		if(isset($this->injectors[$key]) // already registered
@@ -165,10 +173,12 @@ class Container
 			return $this;
 		}
 		
-		$this->injectors[$key] = new Injector\TypeCallable(
+		$injector = new Injector\TypeCallable(
 			$callable,
 			$parameters,
 		);
+		$injector->setTransient($transient);
+		$this->injectors[$key] = $injector;
 		
 		return $this;
 	}
@@ -312,14 +322,41 @@ class Container
 		{
 			return null;
 		}
-			
+		
 		if(($this->injectors[$key] instanceof Injector) === false)
 		{
 			return null;
 		}
 		
-		return $this->resolved[$key]
-			= $this->inject($this->injectors[$key]);
+		if(isset($this->resolving[$key]))
+		{
+			$chain = array_keys($this->resolving);
+			$chain[] = $key;
+			
+			throw new Exception(
+				'Circular dependency detected: %s.',
+				implode(' -> ', $chain),
+			);
+		}
+		
+		$this->resolving[$key] = true;
+		
+		try
+		{
+			$injector = $this->injectors[$key];
+			$result = $this->inject($injector);
+			
+			if($injector->isTransient() === false)
+			{
+				$this->resolved[$key] = $result;
+			}
+			
+			return $result;
+		}
+		finally
+		{
+			unset($this->resolving[$key]);
+		}
 	}
 	
 	/**
@@ -420,6 +457,32 @@ class Container
 		}
 		
 		return $parameters;
+	}
+	
+	/**
+	 * Resolve method parameters and invoke it
+	 */
+	public function call(
+		object $target,
+		string $method,
+		array $values = [],
+	): mixed
+	{
+		$reflector = new ReflectionMethod($target, $method);
+		
+		$parameters = [];
+		foreach($reflector->getParameters() as $parameter)
+		{
+			if(($resolved
+				= $this->injectParameter($parameter, $values)) === null)
+			{
+				continue;
+			}
+			
+			$parameters[$parameter->getName()] = $resolved;
+		}
+		
+		return $reflector->invokeArgs($target, $parameters);
 	}
 	
 	/**
