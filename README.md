@@ -33,6 +33,8 @@ It is designed to work with:
 - [Controllers](#controllers)
 - [Models](#models)
 - [Stores](#stores)
+  - [Using the Find Trait](#using-the-find-trait)
+  - [Query Builder](#query-builder)
 - [Views](#views)
 - [Plugins](#plugins)
 - [Services](#services)
@@ -992,16 +994,71 @@ class Users extends Mysql
 
 ### Using the Find Trait
 
-The `Find` trait adds convenient lookup methods:
+The `Find` trait adds `find()` — a convenience wrapper around `executeFind()` that automatically
+fetches results as model instances.
 
 ```php
 $store = new Users;
 
-// Find by primary key(s)
-$user = $store->find(['id' => 42]);               // Returns User|false
+// Find a single record — returns User|false
+$user = $store->find(where: ['id' => 42]);
 
-// Find multiple records
-$users = $store->findAll(['role' => 'admin']);      // Returns User[]
+// Find multiple records — returns User[]
+$users = $store->find(where: ['active' => 1], many: true);
+```
+
+`find()` accepts the same named parameters as `executeFind()`, plus `many`:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `where` | `array` | `['column' => value]` — AND equality conditions |
+| `select` | `string` | Column list (default `'*'`) |
+| `orWhere` | `array` | `['column' => value]` — OR equality conditions |
+| `whereIn` | `array` | `['column' => [values]]` — IN clause |
+| `whereNotIn` | `array` | `['column' => [values]]` — NOT IN clause |
+| `isNull` | `array` | `['column', ...]` — IS NULL conditions |
+| `isNotNull` | `array` | `['column', ...]` — IS NOT NULL conditions |
+| `like` | `array` | `['column' => pattern]` — LIKE conditions |
+| `notLike` | `array` | `['column' => pattern]` — NOT LIKE conditions |
+| `query` | `?callable` | Callback receiving the `Select` query builder for structural options |
+| `many` | `bool` | `false` = single model, `true` = array of models (Find trait only) |
+
+#### Query callback
+
+The `query` callback receives the `Select` query builder object, giving access to ordering,
+limits, joins, grouping, and any other structural query options:
+
+```php
+// Order and limit
+$users = $store->find(
+    where: ['active' => 1],
+    query: fn($q) => $q->orderBy('created_at DESC')->limit(10),
+    many: true,
+);
+
+// Group by with aggregate
+$statement = $store->executeFind(
+    select: 'role, COUNT(*) as total',
+    query: fn($q) => $q->groupBy('role')->orderBy('total DESC'),
+);
+
+// Left join
+$users = $store->find(
+    select: 'users.*, orders.total',
+    query: fn($q) => $q
+        ->leftJoin('orders ON orders.user_id = users.id')
+        ->orderBy('users.id ASC'),
+    many: true,
+);
+
+// Combine value conditions with structural options
+$users = $store->find(
+    where: ['active' => 1],
+    whereIn: ['role' => ['admin', 'editor']],
+    notLike: ['email' => '%example.com'],
+    query: fn($q) => $q->orderBy('username ASC')->limit(20)->offset(40),
+    many: true,
+);
 ```
 
 ### Query Builder
