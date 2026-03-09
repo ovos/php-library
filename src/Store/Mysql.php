@@ -269,8 +269,6 @@ abstract class Mysql extends Store
 	public function executeFind(
 		array $where = [],
 		string $select = '*',
-		array $options = [],
-		?string $alias = null,
 		array $orWhere = [],
 		array $whereIn = [],
 		array $whereNotIn = [],
@@ -278,44 +276,17 @@ abstract class Mysql extends Store
 		array $isNotNull = [],
 		array $like = [],
 		array $notLike = [],
-		mixed $limit = null,
-		mixed $offset = null,
-		array $groupBy = [],
-		array $having = [],
-		array $orderBy = [],
-		array $leftJoin = [],
-		array $innerJoin = [],
+		?callable $query = null,
 	): false|PDOStatement
 	{
-		if($options)
-		{
-			if(isset($options['order'])) // bc
-			{
-				$options['orderBy'] = $options['order'];
-				unset($options['order']);
-			}
-			if(isset($options['group'])) // bc
-			{
-				$options['groupBy'] = $options['group'];
-				unset($options['group']);
-			}
-			
-			extract($options, EXTR_IF_EXISTS);
-		}
+		$values = array_values($where);
 		
-		$values = array_values($where) ;
-		
-		$query = $this->query()
+		$select = $this->query()
 			->select($select);
-		
-		if($alias !== null)
-		{
-			$query->alias($alias);
-		}
-		
+			
 		foreach($where as $property => $value)
 		{
-			$query->andWhere($property . ' = ?');
+			$select->andWhere($property . ' = ?');
 		}
 		
 		$orConditions = [];
@@ -326,77 +297,47 @@ abstract class Mysql extends Store
 		}
 		if($orConditions)
 		{
-			$query->andWhere('(' . implode(' OR ', $orConditions) . ')');
+			$select->andWhere('(' . implode(' OR ', $orConditions) . ')');
 		}
 		
 		foreach($whereIn as $property => $whereValues)
 		{
-			$query->andWhereIn($property, $whereValues);
+			$select->andWhereIn($property, $whereValues);
 		}
 		foreach($whereNotIn as $property => $whereValues)
 		{
-			$query->andWhereNotIn($property, $whereValues);
+			$select->andWhereNotIn($property, $whereValues);
 		}
 		
 		foreach($like as $property => $value)
 		{
-			$query->andWhere($property . ' LIKE ?');
+			$select->andWhere($property . ' LIKE ?');
 			$values[] = $value;
 		}
 		foreach($notLike as $property => $value)
 		{
-			$query->andWhere($property . ' NOT LIKE ?');
+			$select->andWhere($property . ' NOT LIKE ?');
 			$values[] = $value;
 		}
 		
 		foreach($isNull as $property)
 		{
-			$query->andWhere($property . ' IS NULL');
+			$select->andWhere($property . ' IS NULL');
 		}
 		foreach($isNotNull as $property)
 		{
-			$query->andWhere($property . ' IS NOT NULL');
+			$select->andWhere($property . ' IS NOT NULL');
 		}
 		
-		if($limit !== null)
+		if($query !== null)
 		{
-			$query->limit($limit);
+			$query($select);
 		}
 		
-		if($offset !== null)
-		{
-			$query->offset($offset);
-		}
+		$statement = $this->prepareQuery($select);
+		$statement->execute($values);
 		
-		if($groupBy)
-		{
-			$query->groupBy(...$groupBy);
-		}
-		
-		if($having)
-		{
-			$query->having(...$having);
-		}
-		
-		if($orderBy)
-		{
-			$query->orderBy(...$orderBy);
-		}
-		
-		if($leftJoin)
-		{
-			$query->leftJoin(...$leftJoin);
-		}
-		
-		if($innerJoin)
-		{
-			$query->innerJoin(...$innerJoin);
-		}
-		
-		$query = $this->prepareQuery($query);
-		$query->execute($values);
-		
-		return $query;
+		return $statement;
 	}
 	
 	public function fetchGrouped(
@@ -436,7 +377,7 @@ abstract class Mysql extends Store
 		$statement->execute($ids);
 		return $this->fetchGrouped($statement, $class);
 	}
-
+	
 	public function fetchByReference(
 		array $referenced,
 		string $referencedBy,
