@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Cache;
+namespace Ovos\Cache\Key;
 
 use function mb_strtolower;
 use function str_replace;
@@ -9,11 +9,11 @@ use function substr;
 use function trim;
 
 /**
- * Key
+ * Normalizer
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Key
+class Normalizer
 {
 	/**
 	 * Returns a "key" to be used as a cache key from a file path string

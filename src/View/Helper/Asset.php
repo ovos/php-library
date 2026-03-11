@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\View\Helper;
 
-use Ovos\Cache\Key;
+use Ovos\Cache\Key\Normalizer;
 use Ovos\Service\Cache;
 use Ovos\Service\Events;
 use Ovos\View\Helper;
@@ -59,7 +59,7 @@ class Asset extends Helper
 		// fetch mtime from memory
 		$store = $this->cacheService->getPerishable()
 			->getStore();
-		$cacheId = Key::fromPath($this->asset); // a static method accessed from the instance
+		$cacheId = Normalizer::fromPath($this->asset); // a static method accessed from the instance
 		if($mDate = $store->get($cacheId))
 		{
 			return $this->asset . '?' . $mDate;

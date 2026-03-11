@@ -82,7 +82,7 @@ class Apcu extends MemoLock
 		?Closure $fetcher = null, // no fetcher = lock-only mode
 		?Closure $resolver = null,
 		?bool $queue = null,
-		?int $queueLockTtlS = null,
+		?int $queueLockTtlMs = null,
 	): mixed
 	{
 		if(($this->queueEnabled === false && $queue !== true)
@@ -97,7 +97,9 @@ class Apcu extends MemoLock
 		$lockKey = $this->prefixer
 			->prefix(static::TYPE_LOCK, $id);
 		$lockValue = bin2hex(random_bytes(16));
-		$queueLockTtlS = $queueLockTtlS ?? $this->queueLockTtlS;
+		$queueLockTtlS = $queueLockTtlMs !== null
+			? (int)ceil($queueLockTtlMs / 1000)
+			: $this->queueLockTtlS;
 		
 		$this->debug('queue: ' . $id);
 		

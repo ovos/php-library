@@ -144,7 +144,7 @@ abstract class Redis extends Tags
 		// (when there is no cache hit)
 		if($this->memoLock === null)
 		{
-			// pub/sub requires a separate connection, 
+			// pub/sub requires a separate connection,
 			// otherwise we will be getting "subscribe" & "unsubscribe"
 			// messages on hGet
 			$this->memoLock = new MemoLock(
