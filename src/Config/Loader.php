@@ -5,7 +5,7 @@ namespace Ovos\Config;
 
 use Ovos\Arrays;
 use Ovos\ArrayObject;
-use Ovos\Cache\Key;
+use Ovos\Cache\Key\Normalizer;
 use Ovos\Container\Inject;
 use Ovos\Environment;
 use Ovos\Service\Memory;
@@ -42,7 +42,7 @@ class Loader
 		
 		if($cacheId === null)
 		{
-			$fileId = Key::fromPath(basename($file));
+			$fileId = Normalizer::fromPath(basename($file));
 			$cacheId = $store->prefix($rootSection, $fileId);
 		}
 		

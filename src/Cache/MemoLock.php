@@ -133,6 +133,7 @@ abstract class MemoLock
 		?Closure $fetcher = null,
 		?Closure $resolver = null,
 		?bool $queue = null,
+		?int $queueLockTtlMs = null,
 	): mixed;
 	
 	abstract public function releaseActiveLock(

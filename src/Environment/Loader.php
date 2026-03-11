@@ -6,7 +6,7 @@ namespace Ovos\Environment;
 use Ovos\Environment;
 use Ovos\Service\Memory;
 use Ovos\Container\Inject;
-use Ovos\Cache\Key;
+use Ovos\Cache\Key\Normalizer;
 
 use function basename;
 
@@ -33,7 +33,7 @@ class Loader
 	{
 		$store = $this->memoryService->getStore();
 		
-		$cacheId = ($cacheId ?? Key::fromPath(basename($file)));
+		$cacheId = ($cacheId ?? Normalizer::fromPath(basename($file)));
 		if(($value = $store->get($cacheId)))
 		{
 			return $value;

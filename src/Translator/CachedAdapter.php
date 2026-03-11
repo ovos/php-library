@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Translator;
 
 use Ovos\ArrayObject;
-use Ovos\Cache\Key;
+use Ovos\Cache\Key\Normalizer;
 use Ovos\Container;
 use Ovos\Service\Cache;
 
@@ -50,7 +50,7 @@ class CachedAdapter
 		
 		$mTime = filemtime($filename);
 		$path = substr($filename, strlen(BASE_DIR));
-		$cacheId = Key::fromPath($path); // a static method accessed from the instance
+		$cacheId = Normalizer::fromPath($path); // a static method accessed from the instance
 		
 		if(($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)

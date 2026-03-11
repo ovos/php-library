@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\Service;
-use Ovos\Cache\Key;
+use Ovos\Cache\Key\Normalizer;
 use Ovos\Cache\Store\Apcu;
 
 use function getenv;
@@ -32,7 +32,7 @@ class Memory extends Service
 			$baseDirHomeless = $home === false
 				? BASE_DIR
 				: substr(BASE_DIR, strlen($home));
-			$this->store = new Apcu(Key::fromPath($baseDirHomeless)); // path as a prefix
+			$this->store = new Apcu(Normalizer::fromPath($baseDirHomeless)); // path as a prefix
 		}
 		
 		return $this->store;
