@@ -218,12 +218,21 @@ class Redis extends Store
 					$key,
 					null,
 				);
-				
-				// expire the id in the list at the same time as id expires
-				if($ttl)
+			}
+			
+			// Always refresh HEXPIRE for all tags (not just new ones).
+			// Without this, re-saving an item with the same tags extends the item's
+			// EXPIRE but leaves the tag hash field's HEXPIRE stale, eventually
+			// making the item invisible to tag-based clearing.
+			if($ttl)
+			{
+				foreach($tags as $tag)
 				{
-					$client->rawCommand('HEXPIRE', 
-					$tagId,
+					$tagId = $this->prefixer
+						->prefix($tag, $this->getType(static::TYPE_TAGS));
+					
+					$client->rawCommand('HEXPIRE',
+						$tagId,
 						$ttl,
 						'FIELDS',
 						1,
