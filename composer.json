@@ -22,6 +22,7 @@
     "ext-zend-opcache": "*",
     "ext-zlib": "*",
     "symfony/console": "^7",
+    "symfony/string": "^7",
     "cocur/slugify": "^4"
   },
   "suggest": {
