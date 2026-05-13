@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Migration;
 
+use Ovos\Container;
+use Ovos\Container\Inject;
 use Ovos\Migration;
 use Ovos\Measurement;
 use Ovos\Exception\InvalidException\InvalidClassException;
@@ -15,6 +17,9 @@ use ReflectionClass;
  */
 class Runner
 {
+	#[Inject]
+	protected Container $container;
+	
 	public ReflectionClass $class;
 	
 	public int $id;
@@ -37,10 +42,17 @@ class Runner
 		$this->measurement->start();
 		
 		/** @var Migration $migration */
-		$migration = $this->class->newInstance($this->class);
+		$migration = $this->container
+			->injectClass(
+				$this->class->name,
+				['class' => $this->class],
+			);
+		
 		if($migration instanceof Migration === false)
 		{
-			throw new InvalidClassException('A class has to extend an "Ovos\Migration" class.');
+			throw new InvalidClassException(
+				'A class has to extend an "Ovos\Migration" class.'
+			);
 		}
 		
 		$migration->{$direction}();

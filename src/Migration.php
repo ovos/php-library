@@ -35,7 +35,7 @@ abstract class Migration
 	
 	public ReflectionClass $class;
 	
-	protected string $sourceName = 'database';
+	protected string $sourceName = 'mysql';
 	
 	/**
 	 * A connection between PHP and a database server
