@@ -13,6 +13,12 @@ use Ovos\Url as BaseUrl;
  */
 class Url extends Test
 {
+	public function homepage()
+	{
+		$url = new BaseUrl('');
+		return '/' === $url->getUrl(true);
+	}
+	
 	public function fromArray()
 	{
 		$url = new BaseUrl('test', 'param');
