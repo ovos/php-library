@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos;
 
-use function array_keys;
 use function get_object_vars;
 
 /**
@@ -27,9 +26,13 @@ abstract class Model
 	public function __serialize(): array
 	{
 		$properties = get_object_vars($this);
-		unset($properties['_app'], $properties['_config']);
+		unset(
+			$properties['container'],
+			$properties['app'],
+			$properties['config'],
+		);
 		
-		return array_keys($properties);
+		return $properties;
 	}
 	
 	public function __unserialize(
@@ -39,6 +42,11 @@ abstract class Model
 		$this->container = container();
 		$this->app = $this->container->get(Application::class);
 		$this->config = $this->app->getConfig();
+		
+		foreach($data as $property => $value)
+		{
+			$this->$property = $value;
+		}
 	}
 	
 	abstract public static function getStoreClass(): string;

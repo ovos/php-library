@@ -822,6 +822,14 @@ abstract class Mysql
 		};
 	}
 	
+	public function __serialize(): array
+	{
+		$properties = parent::__serialize();
+		unset($properties['_source']);
+		
+		return $properties;
+	}
+	
 	public function __debugInfo(): array
 	{
 		return $this->export(
