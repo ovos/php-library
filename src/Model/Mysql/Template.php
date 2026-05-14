@@ -9,7 +9,6 @@ use Ovos\Application;
 use Ovos\ArrayObject;
 
 use function Ovos\container;
-use function array_keys;
 use function get_object_vars;
 
 /**
@@ -33,15 +32,24 @@ abstract class Template
 	public function __serialize(): array
 	{
 		$properties = get_object_vars($this);
-		unset($properties['_app'], $properties['_config']);
+		unset(
+			$properties['container'],
+			$properties['app'],
+			$properties['config'],
+		);
 		
-		return array_keys($properties);
+		return $properties;
 	}
 	
 	public function __unserialize(
 		array $data = [],
 	): void
 	{
+		foreach($data as $property => $value)
+		{
+			$this->$property = $value;
+		}
+		
 		$this->container = container();
 		$this->app = $this->container->get(Application::class);
 		$this->config = $this->app->getConfig();
