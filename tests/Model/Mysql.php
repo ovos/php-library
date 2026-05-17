@@ -10,6 +10,8 @@ use Ovos\Store\Mysql as Store;
 use Ovos\Model\Mysql\Template;
 use Override;
 
+use function array_key_exists;
+
 /**
  * Mysql
  *
@@ -178,6 +180,70 @@ class Mysql extends Test
 		$model->save();
 		
 		return $model->id === 1;
+	}
+	
+	/**
+	 * __serialize must strip the injected dependencies inherited
+	 * from the base Model (container, app, config).
+	 */
+	public function serializeStripsInjected(): bool
+	{
+		/** @var Model $model */
+		$model = new $this->model;
+		$serialized = $model->__serialize();
+		
+		return array_key_exists('container', $serialized) === false
+			&& array_key_exists('app', $serialized) === false
+			&& array_key_exists('config', $serialized) === false;
+	}
+	
+	/**
+	 * __serialize must strip the PDO connection (_source), otherwise
+	 * the serialized payload pulls in an unserializable resource.
+	 */
+	public function serializeStripsSource(): bool
+	{
+		/** @var Model $model */
+		$model = new $this->model;
+		// force _source to be populated with a PDO connection
+		$model->source();
+		
+		$serialized = $model->__serialize();
+		
+		return array_key_exists('_source', $serialized) === false;
+	}
+	
+	/**
+	 * Regression test: full __serialize -> __unserialize round-trip
+	 * on a Mysql model must preserve _properties, _modified state
+	 * and re-inject the dependencies. Without the bug-fix the
+	 * rehydrated model was empty.
+	 */
+	public function serializeUnserializeRoundtrip(): bool
+	{
+		$this->store->source()->exec('
+			INSERT INTO tests
+			VALUES
+				(1, "Test 1", null, null, 1);
+		');
+		
+		$query = $this->store->executeFind(where: ['id' => 1]);
+		/** @var Model $model */
+		$model = $query->fetchObject($this->model::class);
+		$model->name = 'Test modified';
+		
+		$serialized = $model->__serialize();
+		
+		/** @var Model $rehydrated */
+		$rehydrated = new $this->model;
+		$rehydrated->__unserialize($serialized);
+		
+		$properties = $rehydrated->getProperties();
+		
+		return $properties['id'] === 1
+			&& $properties['name'] === 'Test modified'
+			&& $rehydrated->isModified('name')
+			&& $rehydrated->exists();
 	}
 	
 	/**
