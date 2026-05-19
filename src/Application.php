@@ -533,9 +533,8 @@ class Application
 			if($module->translations)
 			{
 				Translator::addTranslationsPath(BASE_DIR
-					. $module->path
-					. DIRECTORY_SEPARATOR . 'translations'
-					. DIRECTORY_SEPARATOR
+					. $module->path . DIRECTORY_SEPARATOR
+					. 'translations' . DIRECTORY_SEPARATOR
 				);
 			}
 			
