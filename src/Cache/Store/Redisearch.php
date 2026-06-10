@@ -117,6 +117,7 @@ class Redisearch extends Store
 	
 	public function invalidateTags(
 		array $tags,
+		string $matching = self::MATCHING_ANY,
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
@@ -145,14 +146,19 @@ class Redisearch extends Store
 			$client->clearLastError();
 			
 			/**
-			 * Matches any of the tags given
-			 * We could also reference all matching tags using the following syntax:
-			 * @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}"
+			 * Matching modes
+			 * * any: @tags:{New York|Los Angeles|Barcelona}
+			 * * all: @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}
 			 */
+			$query = $matching === static::MATCHING_ALL
+				? '@tags:{' . implode('} @tags:{', $tags) . '}' // matches all of the tags
+				: '@tags:{' . implode('|', $tags) . '}' // matches any of the tags
+			;
+			
 			$this->functions
 				->call('cache_search_unlink_by_tags', [], [
 					$type,
-					'@tags:{' . implode('|', $tags) . '}', // matches any of the tags
+					$query,
 				]);
 			
 			return true;

@@ -80,6 +80,31 @@ class Redisearch extends Test
 		}
 	}
 	
+	public function invalidateTagsMatchingAll(): bool
+	{
+		$this->store->indexRebuild();
+		
+		$this->store->set('item1', 'test', tags: ['tag1', 'tag2']);
+		$this->store->set('item2', 'test', tags: ['tag1']);
+		
+		$this->store->invalidateTags(['tag1', 'tag2'], Store::MATCHING_ALL);
+		
+		$item1 = $this->store->get('item1', queue: false);
+		$item2 = $this->store->get('item2', queue: false);
+		
+		try
+		{
+			// only the item having all the tags is invalidated
+			return $item1 === null
+				&& $item2 === 'test';
+		}
+		finally
+		{
+			$this->store->delete('item1');
+			$this->store->delete('item2');
+		}
+	}
+	
 	public function clear(): bool
 	{
 		$this->store->indexRebuild();

@@ -14,6 +14,10 @@ use Closure;
  */
 abstract class Tags extends KeyValue
 {
+	// Tag matching modes
+	public const string MATCHING_ANY = 'any';
+	public const string MATCHING_ALL = 'all';
+	
 	#[Override]
 	abstract public function get(
 		string $key,
