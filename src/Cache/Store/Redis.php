@@ -11,6 +11,7 @@ use Redis as RedisClient;
 use RedisException;
 
 use function array_diff;
+use function array_intersect;
 use function array_merge;
 use function array_push;
 use function array_unique;
@@ -282,6 +283,7 @@ class Redis extends Store
 	
 	public function invalidateTags(
 		array $tags,
+		string $matching = self::MATCHING_ANY,
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
@@ -292,6 +294,12 @@ class Redis extends Store
 		if(count($tags) === 0)
 		{
 			return true;
+		}
+		
+		// invalidate only the items having all of the tags
+		if($matching === static::MATCHING_ALL)
+		{
+			return $this->invalidateTagsMatchingAll($tags);
 		}
 		
 		$group = $this->getGroup() . Prefixer::SEPARATOR_PREFIX;
@@ -372,12 +380,81 @@ class Redis extends Store
 		return false;
 	}
 	
+	/**
+	 * Invalidates only the items having all of the tags given
+	 */
+	protected function invalidateTagsMatchingAll(
+		array $tags,
+	): bool
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		$ids = $this->getIdsMatchingAllTags($tags);
+		
+		if(count($ids) === 0)
+		{
+			return true;
+		}
+		
+		$group = $this->getGroup() . Prefixer::SEPARATOR_PREFIX;
+		$typeItems = static::TYPE_ITEMS . Prefixer::SEPARATOR_PREFIX;
+		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
+		
+		try
+		{
+			$client->clearLastError();
+			
+			if($this->cleanTags === true)
+			{
+				// unlink the ids and remove them from all of their tags
+				$this->functions
+					->batchCall('cache_unlink_clean_tags', $ids, [
+						$group,
+						$typeItems,
+						$typeTags,
+						static::KEY_TAGS,
+					], long: true);
+			}
+			else
+			{
+				// unlink the ids and remove them from the matched tags only;
+				// references left in other tags are removed by the garbage collector
+				foreach($tags as $tag)
+				{
+					$this->functions
+						->batchCall('cache_unlink_ids_by_tag', $ids, [
+							$group,
+							$tag,
+							$typeItems,
+							$typeTags,
+						], long: true);
+				}
+			}
+			
+			if($error = $client->getLastError())
+			{
+				$this->log($error);
+			}
+			
+			return true;
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return false;
+	}
+	
 	public function getIdsMatchingAnyTags(
 		array $tags,
 	): array
 	{
 		// return a unique list of ids matching any of the tags
-		$ids = $this->getIdsMatchingAllTags($tags);
+		$ids = $this->getIdsGroupedByTags($tags);
 		$countIds = count($ids);
 		
 		if($countIds === 1)
@@ -393,6 +470,31 @@ class Redis extends Store
 	}
 	
 	public function getIdsMatchingAllTags(
+		array $tags,
+	): array
+	{
+		// return a unique list of ids matching all of the tags
+		$ids = $this->getIdsGroupedByTags($tags);
+		$countIds = count($ids);
+		
+		// a missing list for any of the tags means no id can match them all
+		if($countIds === 0 || $countIds < count($tags))
+		{
+			return [];
+		}
+		
+		if($countIds === 1)
+		{
+			return array_unique($ids[0]);
+		}
+		
+		return array_unique(array_intersect(...$ids));
+	}
+	
+	/**
+	 * Returns lists of ids grouped by each of the tags given
+	 */
+	public function getIdsGroupedByTags(
 		array $tags,
 	): array
 	{

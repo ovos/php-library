@@ -291,6 +291,13 @@ $store->invalidateTags(['user:42']);     // Invalidate everything tagged with us
 $store->invalidateTags(['products']);    // Invalidate all product-related caches
 ```
 
+By default items matching **any** of the given tags are invalidated. Pass
+`MATCHING_ALL` to only invalidate items carrying **all** of the given tags:
+
+```php
+$store->invalidateTags(['user:42', 'products'], $store::MATCHING_ALL);
+```
+
 ### When to invalidate
 
 Always invalidate after data changes:

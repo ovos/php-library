@@ -11,6 +11,7 @@ use Override;
 
 use function count;
 use function array_diff;
+use function in_array;
 
 /**
  * Redis
@@ -108,6 +109,29 @@ class Redis extends Test
 		}
 	}
 	
+	public function getIdsMatchingAllTags(): bool
+	{
+		$this->store->set('item1', 'test', tags: ['tag1', 'tag2']);
+		$this->store->set('item2', 'test', tags: ['tag1']);
+		$this->store->set('item3', 'test', tags: ['tag2', 'tag1']);
+		
+		// may return more ids (the list was not garbage collected)
+		$ids = $this->store->getIdsMatchingAllTags(['tag1', 'tag2']);
+		
+		try
+		{
+			// items having all the tags are present in $ids, other items are not
+			return count(array_diff(['item1', 'item3'], $ids)) === 0
+				&& in_array('item2', $ids, true) === false;
+		}
+		finally
+		{
+			$this->store->delete('item1');
+			$this->store->delete('item2');
+			$this->store->delete('item3');
+		}
+	}
+	
 	public function addTags(): bool
 	{
 		$tags = ['tag1', 'tag2'];
@@ -166,6 +190,31 @@ class Redis extends Test
 		}
 	}
 	
+	public function invalidateTagsMatchingAll(): bool
+	{
+		$this->store->setCleanTags(false);
+		
+		$this->store->set('item1', 'test', tags: ['tag1', 'tag2']);
+		$this->store->set('item2', 'test', tags: ['tag1']);
+		
+		$this->store->invalidateTags(['tag1', 'tag2'], Store::MATCHING_ALL);
+		
+		$item1 = $this->store->get('item1', queue: false);
+		$item2 = $this->store->get('item2', queue: false);
+		
+		try
+		{
+			// only the item having all the tags is invalidated
+			return $item1 === null
+				&& $item2 === 'test';
+		}
+		finally
+		{
+			$this->store->delete('item1');
+			$this->store->delete('item2');
+		}
+	}
+	
 	public function cleanTags(): bool
 	{
 		$this->store->setCleanTags(true);
@@ -177,6 +226,31 @@ class Redis extends Test
 		// check if the ID still exists within the tag field
 		$tagId = $this->store
 			->prefix($tags[1], $this->store->getType($this->store::TYPE_TAGS));
+		$exists = $this->store->getClient()
+			->hGet($tagId, self::KEY_ITEM);
+		
+		try
+		{
+			return $exists === false;
+		}
+		finally
+		{
+			$this->store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	public function cleanTagsMatchingAll(): bool
+	{
+		$this->store->setCleanTags(true);
+		
+		$tags = ['tag1', 'tag2', 'tag3'];
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->invalidateTags(['tag1', 'tag2'], Store::MATCHING_ALL);
+		
+		// check if the ID was removed from the tag field,
+		// also within the tag which was not a part of the invalidation
+		$tagId = $this->store
+			->prefix($tags[2], $this->store->getType($this->store::TYPE_TAGS));
 		$exists = $this->store->getClient()
 			->hGet($tagId, self::KEY_ITEM);
 		
