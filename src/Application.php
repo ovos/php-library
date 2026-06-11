@@ -624,12 +624,24 @@ class Application
 	{
 		if($error = error_get_last())
 		{
-			$this->getServices()->events->handleError(
-				$error['type'],
-				$error['message'],
-				$error['file'],
-				$error['line'],
-			);
+			try
+			{
+				$this->getServices()->events->handleError(
+					$error['type'],
+					$error['message'],
+					$error['file'],
+					$error['line'],
+				);
+			}
+			catch(Throwable $throwable)
+			{
+				// handleError() throws the converted ErrorException — during
+				// shutdown that would abort this handler before the response
+				// is sent; collect it like a regular event instead
+				$this->getServices()->events
+					->add($throwable)
+					->log($throwable);
+			}
 		}
 		
 		// get the response to be sent
@@ -697,7 +709,20 @@ class Application
 		{
 			$this->getServices()->events->log($throwable);
 		}
-		
+
+		// report collected events to the error console — after the
+		// response, so the user never waits for it (best effort)
+		try
+		{
+			$this->container
+				->get(Service\Console\Sender::SYMBOL)
+				->flush();
+		}
+		catch(Throwable)
+		{
+			// sender not registered or unavailable
+		}
+
 		if($hasEvents)
 		{
 			exit(1); // exit with error status for github actions
