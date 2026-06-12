@@ -38,10 +38,10 @@ final class Payload
 				default => 3, // error
 			};
 		}
-
+		
 		return 3; // any other uncaught throwable = error
 	}
-
+	
 	/**
 	 * Exception chain as v1 events, outermost first
 	 */
@@ -51,7 +51,7 @@ final class Payload
 	{
 		$events = [];
 		$previous = false;
-
+		
 		do
 		{
 			$events[] = [
@@ -62,14 +62,14 @@ final class Payload
 				'backtrace' => $event->getTraceAsString(),
 				'previous' => $previous,
 			];
-
+			
 			$previous = true;
 		}
 		while(($event = $event->getPrevious()) !== null);
-
+		
 		return $events;
 	}
-
+	
 	/**
 	 * Complete v1 error object (context is added by the Sender)
 	 */
@@ -88,7 +88,7 @@ final class Payload
 			'extra' => $extra,
 		];
 	}
-
+	
 	public static function fromMessage(
 		string $message,
 		int $priority = 5,

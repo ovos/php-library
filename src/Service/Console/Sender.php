@@ -48,17 +48,17 @@ use function spl_object_id;
 class Sender extends Service
 {
 	public const string SYMBOL = 'consoleSender';
-
+	
 	protected ?ArrayObject $config;
-
+	
 	/**
 	 * Queued payloads, keyed by spl_object_id for throwables so the
 	 * Events service and the Logger hook never double-report one object
 	 */
 	protected array $queue = [];
-
+	
 	protected static bool $flushing = false;
-
+	
 	public function __construct(
 		#[Inject('config')]
 		#[InjectArrayObject('console')]
@@ -67,7 +67,7 @@ class Sender extends Service
 	{
 		$this->config = $config;
 	}
-
+	
 	public function isEnabled(): bool
 	{
 		return $this->config !== null
@@ -75,12 +75,12 @@ class Sender extends Service
 			&& (string)$this->config->url !== ''
 			&& (string)$this->config->key !== '';
 	}
-
+	
 	public function getLogLevel(): int
 	{
 		return (int)($this->config?->log_level ?? 5);
 	}
-
+	
 	public function captureException(
 		Throwable $event,
 		array $extra = [],
@@ -96,10 +96,10 @@ class Sender extends Service
 		{
 			// never break the host application
 		}
-
+		
 		return $this;
 	}
-
+	
 	public function captureMessage(
 		string $message,
 		int $priority = 5,
@@ -114,10 +114,10 @@ class Sender extends Service
 		{
 			// never break the host application
 		}
-
+		
 		return $this;
 	}
-
+	
 	/**
 	 * Builds and posts the batch — called once from handleShutdown()
 	 * after the response went out
@@ -128,9 +128,9 @@ class Sender extends Service
 		{
 			return;
 		}
-
+		
 		self::$flushing = true;
-
+		
 		try
 		{
 			// merge uncaught events collected by the Events service
@@ -142,10 +142,10 @@ class Sender extends Service
 					$this->captureException($event);
 				}
 			}
-
+			
 			$logLevel = $this->getLogLevel();
 			$context = null;
-
+			
 			$errors = [];
 			foreach($this->queue as $payload)
 			{
@@ -153,17 +153,17 @@ class Sender extends Service
 				{
 					continue;
 				}
-
+				
 				$context ??= $this->buildContext();
-
+				
 				$payload['type'] = $context['type'];
 				$payload['context'] = $context['context']
 					+ ['extra' => $payload['extra']];
 				unset($payload['extra']);
-
+				
 				$errors[] = $payload;
 			}
-
+			
 			if($errors !== [])
 			{
 				$this->send((string)json_encode($errors,
@@ -180,18 +180,18 @@ class Sender extends Service
 			self::$flushing = false;
 		}
 	}
-
+	
 	/**
 	 * @return array{type: string, context: array}
 	 */
 	protected function buildContext(): array
 	{
 		$isCli = $this->app->isInterfaceCli();
-
+		
 		$context = [
 			'dir' => defined('BASE_DIR') ? rtrim(BASE_DIR, '/\\') : '',
 		];
-
+		
 		if($isCli)
 		{
 			$context['host'] = (string)($this->app->getConfig()->system->domain ?? '');
@@ -207,21 +207,21 @@ class Sender extends Service
 			$context['referer'] = (string)($_SERVER['HTTP_REFERER'] ?? '');
 			$context['ip'] = (string)Client::getIp();
 			$context['ua'] = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
-
+			
 			if(session_status() === PHP_SESSION_ACTIVE)
 			{
 				$context['sessionId'] = (string)session_id();
 			}
-
+			
 			$context['request'] = $this->buildRequest();
 		}
-
+		
 		return [
 			'type' => $isCli ? 'cli' : 'http',
 			'context' => $context,
 		];
 	}
-
+	
 	/**
 	 * Request variables, redacted with the Logger patterns
 	 * (the console scrubs again server-side as a backstop)
@@ -229,11 +229,11 @@ class Sender extends Service
 	protected function buildRequest(): array
 	{
 		$request = [];
-
+		
 		try
 		{
 			$logger = $this->container->get(Logger::SYMBOL);
-
+			
 			if(!empty($_GET))
 			{
 				$request['get'] = $logger->remove($_GET);
@@ -247,10 +247,10 @@ class Sender extends Service
 		{
 			// logger unavailable — send without request variables
 		}
-
+		
 		return $request;
 	}
-
+	
 	protected function send(
 		string $json,
 	): void
@@ -262,10 +262,10 @@ class Sender extends Service
 		{
 			@fastcgi_finish_request();
 		}
-
+		
 		$handle = curl_init(
 			rtrim((string)$this->config->url, '/') . '/api/v1/ingest');
-
+		
 		curl_setopt_array($handle, [
 			CURLOPT_POST => true,
 			CURLOPT_POSTFIELDS => $json,
@@ -277,7 +277,7 @@ class Sender extends Service
 			CURLOPT_CONNECTTIMEOUT_MS => 300,
 			CURLOPT_TIMEOUT_MS => (int)($this->config->timeout_ms ?? 1000),
 		]);
-
+		
 		curl_exec($handle);
 	}
 }
