@@ -20,7 +20,7 @@ class Payload extends Test
 	{
 		return ConsolePayload::priorityFor(new RuntimeException('x')) === 3;
 	}
-
+	
 	public function errorSeverityMapsToSyslog(): bool
 	{
 		return ConsolePayload::priorityFor(new ErrorException('x', 0, E_USER_ERROR)) === 2
@@ -28,14 +28,14 @@ class Payload extends Test
 			&& ConsolePayload::priorityFor(new ErrorException('x', 0, E_NOTICE)) === 5
 			&& ConsolePayload::priorityFor(new ErrorException('x', 0, E_DEPRECATED)) === 6;
 	}
-
+	
 	public function eventsChainOutermostFirst(): bool
 	{
 		$inner = new LogicException('inner cause');
 		$outer = new RuntimeException('outer message', 0, $inner);
-
+		
 		$events = ConsolePayload::events($outer);
-
+		
 		return count($events) === 2
 			&& $events[0]['className'] === RuntimeException::class
 			&& $events[0]['previous'] === false
@@ -43,12 +43,12 @@ class Payload extends Test
 			&& $events[1]['previous'] === true
 			&& $events[1]['message'] === 'inner cause';
 	}
-
+	
 	public function fromThrowableShape(): bool
 	{
 		$payload = ConsolePayload::fromThrowable(
 			new RuntimeException('boom'), null, ['orderId' => 7]);
-
+		
 		return $payload['v'] === 1
 			&& $payload['priority'] === 3
 			&& $payload['message'] === 'boom'

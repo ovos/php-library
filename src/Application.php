@@ -709,7 +709,7 @@ class Application
 		{
 			$this->getServices()->events->log($throwable);
 		}
-
+		
 		// report collected events to the error console — after the
 		// response, so the user never waits for it (best effort)
 		try
@@ -722,7 +722,7 @@ class Application
 		{
 			// sender not registered or unavailable
 		}
-
+		
 		if($hasEvents)
 		{
 			exit(1); // exit with error status for github actions
