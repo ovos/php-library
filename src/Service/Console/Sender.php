@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Console;
 
+use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
@@ -17,8 +18,8 @@ use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
 use function defined;
-use function function_exists;
 use function json_encode;
+use function mb_substr;
 use function rtrim;
 use function session_id;
 use function session_status;
@@ -40,6 +41,7 @@ use function spl_object_id;
  *     key: !ENV CONSOLE[KEY]            # project api_key
  *     log_level: 5                      # send priority <= this (0-7)
  *     timeout_ms: 1000
+ *     release: !ENV CONSOLE[RELEASE]    # optional deploy label (git sha, svn rev, …)
  *
  * plus "- Console\Sender" in system.services.http and .cli lists.
  *
@@ -52,12 +54,22 @@ class Sender extends Service
 	protected ?ArrayObject $config;
 	
 	/**
-	 * Queued payloads, keyed by spl_object_id for throwables so the
-	 * Events service and the Logger hook never double-report one object
+	 * Queued payloads. Throwables are keyed "object:<spl_object_id>" so the
+	 * Events service and the Logger hook never double-report one object, and
+	 * the string key cannot collide with the integer keys that
+	 * captureMessage() appends; messages are appended.
 	 */
 	protected array $queue = [];
 	
 	protected static bool $flushing = false;
+	
+	/**
+	 * The Application instance flush() is registered on. The hook is
+	 * re-armed when the instance changes so it always lands on the one
+	 * whose handleShutdown() actually runs, not just the construction-
+	 * time instance.
+	 */
+	protected ?Application $registeredWith = null;
 	
 	public function __construct(
 		#[Inject('config')]
@@ -66,6 +78,11 @@ class Sender extends Service
 	)
 	{
 		$this->config = $config;
+		
+		// register the post-response flush eagerly (services boot once per
+		// request): flush() must run even when nothing was captured
+		// explicitly, to drain the Events service's uncaught errors
+		$this->registerFlush();
 	}
 	
 	public function isEnabled(): bool
@@ -81,15 +98,44 @@ class Sender extends Service
 		return (int)($this->config?->log_level ?? 5);
 	}
 	
+	/**
+	 * Registers the post-response flush on the *current* Application,
+	 * re-registering when the instance changes. The construction-time
+	 * instance is not guaranteed to be the one whose handleShutdown()
+	 * fires for a later request, so the capture paths re-arm the hook.
+	 */
+	protected function registerFlush(): void
+	{
+		if($this->isEnabled() === false)
+		{
+			return;
+		}
+		
+		$application = Application::$instance;
+		if($application !== null
+			&& $application !== $this->registeredWith)
+		{
+			$application->afterResponse([$this, 'flush']);
+			$this->registeredWith = $application;
+		}
+	}
+	
 	public function captureException(
 		Throwable $event,
 		array $extra = [],
 		?int $priority = null,
 	): static
 	{
+		if($this->isEnabled() === false)
+		{
+			return $this;
+		}
+		
+		$this->registerFlush();
+		
 		try
 		{
-			$this->queue[spl_object_id($event)] =
+			$this->queue['object:' . spl_object_id($event)] =
 				Payload::fromThrowable($event, $priority, $extra);
 		}
 		catch(Throwable)
@@ -106,6 +152,13 @@ class Sender extends Service
 		array $extra = [],
 	): static
 	{
+		if($this->isEnabled() === false)
+		{
+			return $this;
+		}
+		
+		$this->registerFlush();
+		
 		try
 		{
 			$this->queue[] = Payload::fromMessage($message, $priority, $extra);
@@ -124,8 +177,18 @@ class Sender extends Service
 	 */
 	public function flush(): void
 	{
-		if(self::$flushing || $this->isEnabled() === false)
+		// re-entrancy guard: the outer call owns the queue, leave it intact
+		if(self::$flushing)
 		{
+			return;
+		}
+		
+		// disabled: drop anything queued so it cannot pile up in a
+		// long-lived service or bleed into a later request
+		if($this->isEnabled() === false)
+		{
+			$this->queue = [];
+			
 			return;
 		}
 		
@@ -133,15 +196,19 @@ class Sender extends Service
 		
 		try
 		{
-			// merge uncaught events collected by the Events service
-			foreach($this->container->get(Events::SYMBOL) as $event)
+			// merge uncaught errors collected by the Events service, then drain
+			// it: flush() is the terminal post-response consumer, so leaving them
+			// in place would re-report on the next request in a reused worker
+			$events = $this->container->get(Events::SYMBOL);
+			foreach($events as $event)
 			{
 				if($event instanceof Throwable
-					&& isset($this->queue[spl_object_id($event)]) === false)
+					&& isset($this->queue['object:' . spl_object_id($event)]) === false)
 				{
 					$this->captureException($event);
 				}
 			}
+			$events->clear();
 			
 			$logLevel = $this->getLogLevel();
 			$context = null;
@@ -160,6 +227,13 @@ class Sender extends Service
 				$payload['context'] = $context['context']
 					+ ['extra' => $payload['extra']];
 				unset($payload['extra']);
+				
+				// optional deploy label (git sha, svn revision, any string)
+				$release = (string)($this->config?->release ?? '');
+				if($release !== '')
+				{
+					$payload['release'] = mb_substr($release, 0, 64);
+				}
 				
 				$errors[] = $payload;
 			}
@@ -255,14 +329,6 @@ class Sender extends Service
 		string $json,
 	): void
 	{
-		// the response is already sent — release the connection so the
-		// HTTP call is invisible to the end user
-		if(function_exists('fastcgi_finish_request')
-			&& $this->app->isInterfaceHttp())
-		{
-			@fastcgi_finish_request();
-		}
-		
 		$handle = curl_init(
 			rtrim((string)$this->config->url, '/') . '/api/v1/ingest');
 		
