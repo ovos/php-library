@@ -108,7 +108,7 @@ class Logger extends Service
 			{
 				$this->container
 					->get(Console\Sender::SYMBOL)
-					->captureException($event[0]);
+					->captureException($event[0], $extras);
 			}
 			catch(Throwable)
 			{
