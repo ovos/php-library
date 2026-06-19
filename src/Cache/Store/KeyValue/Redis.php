@@ -320,6 +320,19 @@ abstract class Redis extends Tags
 	}
 	
 	/**
+	 * Reclaims whatever a store accumulates that does not expire on its own.
+	 * The default is a no-op: items carry a TTL and there is no side index to
+	 * sweep. The tag-hash store overrides this to prune dangling tag -> id
+	 * references; the versioned stores keep the default (their rules stream
+	 * self-trims and stale items expire by TTL). Defined here so the cache
+	 * maintenance cron can call collectGarbage() on any persistent store.
+	 */
+	public function collectGarbage(): bool|int
+	{
+		return true;
+	}
+	
+	/**
 	 * Logs events (messages/errors/exceptions)
 	 */
 	public function log(

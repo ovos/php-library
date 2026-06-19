@@ -3,14 +3,14 @@ declare(strict_types=1);
 
 namespace Tests\Cache\Store;
 
-use Ovos\Cache\Store\RedisCluster as Store;
+use Ovos\Cache\Store\RedisClusterVersioned as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitRedisCluster;
 use Override;
 
 /**
- * RedisCluster
+ * RedisClusterVersioned
  *
  * Mirrors the RedisVersioned suite against a real Redis Cluster, plus a
  * cross-node invalidation test. Requires the "redis_cluster" and
@@ -19,7 +19,7 @@ use Override;
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class RedisCluster extends Test
+class RedisClusterVersioned extends Test
 {
 	use TraitRedisCluster;
 	

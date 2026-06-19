@@ -1,4 +1,4 @@
-# Cache Stores (APCu, Redis, Redisearch, RedisVersioned, RedisCluster)
+# Cache Stores (APCu, Redis, Redisearch, RedisVersioned, RedisClusterVersioned)
 
 This library provides a two-tier cache system designed to minimize database load
 and speed up response times. **Every store query that returns the same data for
@@ -23,7 +23,7 @@ menus). Caching these results means:
 | Tier | Backend | Shared? | Speed | Survives restart? | Tags? |
 |------|---------|---------|-------|-------------------|-------|
 | **Perishable** | APCu | No (per-worker) | Fastest (~1μs) | No | No |
-| **Persistent** | Redis / Redisearch / RedisVersioned / RedisCluster | Yes (all workers/servers) | Fast (~1ms) | Yes | Yes |
+| **Persistent** | Redis / Redisearch / RedisVersioned / RedisClusterVersioned | Yes (all workers/servers) | Fast (~1ms) | Yes | Yes |
 
 **Use perishable (APCu)** for data that is read frequently and changes rarely
 within a single request cycle - like lookup tables, categories, and reference data.
@@ -52,6 +52,15 @@ $store = $cacheService->getStore(persistent: false);        // APCu
 
 ## Store differences
 
+The four persistent stores split into two families by **what `invalidateTags()`
+actually does**. The tag-hash (`Redis`) and RediSearch (`Redisearch`) stores
+**delete the matched items eagerly**, so the work grows with the number of
+matches. The versioned stores (`RedisVersioned`, `RedisClusterVersioned`) **append a
+single invalidation rule** and let reads resolve staleness lazily, so the cost
+is constant no matter how many items match.
+
+![Cache backends - invalidation strategy compared](docs/cache/comparison.svg)
+
 ### APCu (`Ovos\Cache\Store\Apcu`)
 - In-process memory cache (per PHP worker).
 - Fastest option, but not shared across servers or processes.
@@ -64,6 +73,8 @@ $store = $cacheService->getStore(persistent: false);        // APCu
 - Uses Redis Pub/Sub for MemoLock queueing (needs a separate queue connection).
 - Best for: shared state, session-adjacent data, anything needing tag invalidation.
 
+![Redis store - write, read and invalidate flow](docs/cache/redis.svg)
+
 ### Redisearch (`Ovos\Cache\Store\Redisearch`)
 - Distributed cache with tag invalidation powered by RediSearch.
 - Uses a RediSearch TAG index for fast tag-based invalidation.
@@ -73,12 +84,15 @@ $store = $cacheService->getStore(persistent: false);        // APCu
   `getTags()` or `getAllTags()`.
 - Best for: projects with many tagged cache entries where invalidation speed matters.
 
+![Redisearch store - write, read and invalidate flow](docs/cache/redisearch.svg)
+
 ### RedisVersioned (`Ovos\Cache\Store\RedisVersioned`)
 - Distributed cache with **rule based (logical) tag invalidation**:
   `invalidateTags()` appends one rule to a stream instead of deleting the
-  matched items - **O(1) whether 10 or 700000 items match**. Reads evaluate
-  the rules server side; stale items are lazily unlinked and physically
-  expire by their TTL.
+  matched items - **O(1) whether 10 or 700000 items match**. Reads fetch the
+  item in one `HMGET` and evaluate the rules in PHP over a short-lived local
+  rule cache (`rules_cache_ms`); stale items are lazily unlinked and
+  physically expire by their TTL.
 - `clear()` is logical as well (one rule matching everything);
   `clearPhysical()` wipes the whole group for maintenance.
 - `rules_retention_s` (default 30 days) is the default **and maximum** item
@@ -88,7 +102,17 @@ $store = $cacheService->getStore(persistent: false);        // APCu
 - Best for: projects with very large tag invalidations, where deleting the
   matched items at invalidation time is too expensive.
 
-### RedisCluster (`Ovos\Cache\Store\RedisCluster`)
+![RedisVersioned store - write, read and invalidate flow](docs/cache/redis-versioned.svg)
+
+A closer look at the read path - how a `get()` fetches the item in one
+`HMGET` and uses its `mark` (the version it was stamped with) to evaluate,
+in PHP over a short-lived local rule cache (`rules_cache_ms`), only the
+invalidation rules it has not seen yet (id > mark), matches them against the
+item's tags, and serves a fresh hit or lazily unlinks a stale item:
+
+![RedisVersioned cache GET - tags, versions and XRANGE](docs/cache/redis-versioned-get.svg)
+
+### RedisClusterVersioned (`Ovos\Cache\Store\RedisClusterVersioned`)
 - The RedisVersioned store on a **Redis Cluster**: same data model and
   semantics; reads evaluate the invalidation rules on the PHP side behind a
   short-lived local cache (`rules_cache_ms`).
@@ -97,12 +121,102 @@ $store = $cacheService->getStore(persistent: false);        // APCu
   pub/sub (see the configuration reference below).
 - No RediSearch module required on the cluster nodes.
 
+![RedisClusterVersioned store - write, read and invalidate flow](docs/cache/redis-cluster.svg)
+
+### Cost at a glance
+
+Theoretical per-operation cost, where **N** = items carrying the invalidated
+tag, **T** = tags on the item being written, and **R** = invalidation rules
+newer than a read's item that still have to be evaluated:
+
+| Backend | `get()` hit | `set()` | `invalidateTags()` | `clear()` |
+|---------|-------------|---------|--------------------|-----------|
+| **APCu** | O(1) | O(1) | &mdash; *(no tags)* | O(n) |
+| **Redis** (tag-hash) | O(1) | O(T) | **O(N)** | O(n) |
+| **Redisearch** | O(1) | O(1) ‡ | **O(N)** ‡ | O(n) |
+| **RedisVersioned** | O(1 + R) | O(1) | **O(1)** | **O(1)** |
+| **RedisClusterVersioned** | O(1 + R) | O(1) | **O(1)** | **O(1)** † |
+
+‡ RediSearch maintains the tag index itself: `set()` is a single write (no
+per-tag bookkeeping like the tag-hash store's O(T)), and `invalidateTags()`
+finds the N matches through the index instead of scanning a tag hash &mdash; the
+same O(N) eager delete, with a smaller constant.
+† `clear()` is O(1) logically (one rule); `clearPhysical()` is O(number of masters).
+
+- **Invalidation is the real fork.** Redis and Redisearch delete every matched
+  item when you invalidate, so the call is O(N) &mdash; instant for a handful of
+  items, a latency spike when a tag fans out to thousands. The versioned stores
+  append one rule and return in O(1) no matter how many items match; staleness is
+  resolved later, lazily, on read.
+- **Versioned reads stay ~O(1).** R counts only the rules written *after* the
+  item was last stamped; rules age out by `rules_retention_s`, and a rebuilt item
+  is re-stamped to the newest version, so R falls back toward 0. Reads do not
+  degrade as invalidations pile up.
+- **Round trips, not big-O, set the floor.** Each persistent op above is one
+  server round trip (Lua / pipeline); the versioned read refreshes its rule set
+  at most once per `rules_cache_ms`, shared across every read in that window. A
+  round trip is ~0.1-1 ms on a LAN; an in-process APCu hit is ~1 µs &mdash; big-O
+  only starts to bite once N or R is large.
+
+Bottom line: reads are O(1)-ish on every backend, so the choice comes down to
+**invalidation** &mdash; pick a versioned store when tags match many items or you
+invalidate often; the tag-hash / RediSearch stores are fine when invalidations
+are rare and always small, or when you need `getTags()`/`getAllTags()` (only the
+tag-hash `Redis` store exposes them).
+
+### Measured
+
+One local run of `php cli.php benchmarks run` (loopback Redis, single machine).
+Absolute seconds depend on the benchmark's iteration constants, so read them as
+**cross-store ratios**, not wall-clock truth; on loopback the round trips are
+near-free, so these mostly expose CPU/algorithmic cost. Time in seconds, lower
+is faster:
+
+| Backend | `readHits` | `readHits` + large backlog | `invalidateMatchingAll` | `invalidateRepeated` | `writeOverwrite` | `churn` |
+|---------|-----------|----------------------------|--------------------------|----------------------|------------------|---------|
+| **Redis** (tag-hash) | 3.06 | 4.10 | 0.0254 | 0.94 | 6.08 | 3.66 |
+| **Redisearch** | 3.24 | 3.88 | 0.0397 | 0.73 | 3.24 | 2.76 |
+| **RedisVersioned** | 3.19 | 4.72 | **0.0005** | **0.38** | 3.62 | 2.98 |
+| **RedisClusterVersioned** | 4.66 | 6.80 | **0.0006** | 0.53 | 4.96 | 4.16 |
+
+What the run confirms:
+
+- **O(1) vs O(N) invalidation is the headline.** A versioned `invalidateTags()`
+  lands in ~0.5 ms versus ~25 ms (Redis) and ~40 ms (Redisearch) &mdash; about
+  **50× and 80× faster**, and the gap widens with the match count.
+- **`set()`'s O(T) shows up.** The tag-hash store's `writeOverwrite` (6.08 s) is
+  ~1.7-1.9× the single-write stores (3.2-3.6 s): that is the per-tag
+  `HSET`/`HEXPIRE` bookkeeping. Redisearch and the versioned stores write once and
+  pay nothing per tag.
+- **Reads stay ~O(1) until R grows.** Steady `readHits` are within ~6 % across
+  Redis, Redisearch and RedisVersioned (3.1-3.2 s). After a large invalidation
+  backlog the versioned read climbs to 4.72 s (~20 % over Redisearch) as more
+  unseen rules are evaluated and held client-side &mdash; it shows up in the
+  memory column (~460 KB of cached rules), not as a cliff.
+- **`churn` (wide fan-out, sparse re-reads) separates them.** When each round
+  invalidates a wide slice but only a hot subset is re-read, the tag-hash Redis is
+  slowest (3.66 s) &mdash; it eagerly deletes the whole slice every round and pays
+  O(T) per rebuild &mdash; while Redisearch (2.76 s) and RedisVersioned (2.98 s)
+  stay close. The versioned store beats the legacy tag-hash by ~20 %; Redisearch
+  edges it here because its reads are flat (no rule eval) and an indexed delete is
+  still cheap at this fan-out. Widen the fan-out further, or count the
+  invalidation-call latency rather than throughput, and the versioned O(1) pulls
+  ahead.
+- **Cluster overhead is the client, not the algorithm.** RedisClusterVersioned
+  trails the standalone versioned by ~1.4-1.6× across the board (`churn` 4.16 vs
+  2.98 s), matching the raw cluster-client cost (`Connection\RedisCluster`: 1.41 s
+  cluster vs 0.92 s standalone). Invalidation is still O(1) (~0.6 ms) on the
+  cluster.
+
+(APCu is a different tier &mdash; in-process, no tags &mdash; so it is not part
+of this persistent-store run.)
+
 Selecting the store is done in config:
 
 ```yaml
 cache:
   persistent:
-    store: Redisearch   # Redis, Redisearch, RedisVersioned or RedisCluster
+    store: Redisearch   # Redis, Redisearch, RedisVersioned or RedisClusterVersioned
 ```
 
 ## Real-world usage patterns
@@ -323,7 +437,7 @@ By default items matching **any** of the given tags are invalidated. Pass
 $store->invalidateTags(['user:42', 'products'], $store::MATCHING_ALL);
 ```
 
-On the versioned stores (RedisVersioned, RedisCluster) the matched items are
+On the versioned stores (RedisVersioned, RedisClusterVersioned) the matched items are
 not deleted: they become invisible immediately and physically expire by their
 TTL - which is what makes the call O(1) regardless of the match count.
 
@@ -409,11 +523,11 @@ cache:
       backoff_max_ms: 25              # Max backoff between retries
   persistent:
     connection: redis                  # Which Redis connection to use
-    store: Redisearch                  # Redis, Redisearch, RedisVersioned or RedisCluster
+    store: Redisearch                  # Redis, Redisearch, RedisVersioned or RedisClusterVersioned
     store_options:
       clean_tags: no                   # Redis store: remove ids from tags on invalidation
       rules_retention_s: 2592000       # Versioned stores: rules + maximum item lifetime (s)
-      rules_cache_ms: 1000             # RedisCluster: local rules cache staleness budget (ms)
+      rules_cache_ms: 1000             # RedisClusterVersioned: local rules cache staleness budget (ms)
     compression:
       enabled: yes
       threshold: 2048
@@ -445,7 +559,7 @@ connections:
 cache:
   persistent:
     connection: redis_cluster
-    store: RedisCluster
+    store: RedisClusterVersioned
     queue:
       connection: redis_cluster_queue
 ```

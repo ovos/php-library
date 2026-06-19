@@ -5,27 +5,31 @@ namespace Benchmarks\Cache\Store;
 
 use Ovos\Benchmark;
 use Ovos\Cache\Store\KeyValue;
-use Ovos\Cache\Store\RedisVersioned as Store;
-use Ovos\Test\Cache\Store\TraitRedis;
+use Ovos\Cache\Store\RedisClusterVersioned as Store;
+use Ovos\Test\Cache\Store\TraitRedisCluster;
 use Ovos\Test\Cache\Store\TraitStoreBenchmark;
 
 /**
- * RedisVersioned (rule-based logical invalidation)
+ * RedisClusterVersioned (versioned model across cluster slots)
  *
  * Shares the scenario matrix with the other store benchmarks (see
  * TraitStoreBenchmark), so the rows are directly comparable.
  *
- * Strengths to look for: invalidation is O(1) - invalidateMatchingAll,
- * invalidateMatchingPartial and invalidateRepeated all stay flat regardless
- * of how many items match. Weaknesses: every read evaluates the rules the
- * item has not seen, so readHitsAfterSmallBacklog / readHitsAfterLargeBacklog
- * climb as the rule backlog grows - the cost the O(1) invalidation defers.
+ * Same logical model as RedisVersioned: O(1) invalidation, with the read
+ * cost growing as the rule backlog grows. The difference is on the read
+ * path - the rules are evaluated in PHP behind a short-lived local cache
+ * (rules_cache_ms) rather than server side - and writes pay one extra round
+ * trip to read the watermark. Watch readHitsAfterLargeBacklog and
+ * writeOverwrite against RedisVersioned to see those two effects.
+ *
+ * Skipped unless a "redis_cluster" (and "redis_cluster_queue") connection
+ * is configured and reachable.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class RedisVersioned extends Benchmark
+class RedisClusterVersioned extends Benchmark
 {
-	use TraitRedis;
+	use TraitRedisCluster;
 	use TraitStoreBenchmark;
 	
 	public const int ITEMS = 10000;
@@ -49,15 +53,21 @@ class RedisVersioned extends Benchmark
 	public function __construct()
 	{
 		$this->group = KeyValue::GROUP_BENCHMARKS;
-		$this->store = $this->getStore(Store::class);
+		$this->store = $this->getClusterStore();
+		
+		if($this->store === null)
+		{
+			$this->setDisabled(true, $this->clusterUnavailableReason);
+		}
 	}
 	
 	/**
 	 * clear() on the versioned stores is logical (it appends a rule), so the
 	 * items would linger until their TTL; wipe them physically between methods
+	 * (cache_clear runs once per master node on a cluster)
 	 */
 	protected function resetStore(): void
 	{
-		$this->store->clearPhysical();
+		$this->store?->clearPhysical();
 	}
 }

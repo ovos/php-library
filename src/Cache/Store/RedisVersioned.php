@@ -21,10 +21,10 @@ use function sprintf;
  *
  * Logical (rule based) tag invalidation: invalidateTags() appends one
  * rule to a stream instead of deleting the matched items - O(1)
- * regardless of whether 10 or 700000 items match. A read evaluates the
- * rules the item has not seen yet against its tags (server side in one
- * Lua call); stale items are lazily unlinked and physically expire by
- * their TTL.
+ * regardless of whether 10 or 700000 items match. A read fetches the item
+ * with one HMGET and evaluates the rules it has not seen yet against its
+ * tags in PHP, over a locally cached rule set (rules_cache_ms); stale
+ * items are lazily unlinked and physically expire by their TTL.
  *
  * "rules_retention_s" is the default AND maximum item lifetime of the
  * store: an item must never outlive the rule that made it stale, or it
@@ -68,8 +68,10 @@ class RedisVersioned extends Store
 	protected int $rulesRetentionS = 2592000; // 30 days
 	
 	/**
-	 * How long locally fetched rules may be reused before refetching
-	 * (only the cluster read path uses this - a bounded staleness window)
+	 * How long locally fetched rules may be reused before refetching - the
+	 * read path (and the cluster write watermark) evaluate against this
+	 * cached set, a bounded staleness window. Set to 0 to refetch on every
+	 * read (exact, but it re-scans the backlog each time).
 	 * Unit: milliseconds
 	 */
 	protected int $rulesCacheMs = 1000;
@@ -162,10 +164,16 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Fetches an item: evaluates the invalidation rules server side via
-	 * cache_versioned_validate (the data payload never goes through the
-	 * Lua VM), then reads the data with a plain HGET only on a fresh hit
-	 * - one copy, no Lua; stale items are lazily unlinked
+	 * Fetches an item with a single HMGET (data, tags, mark) and evaluates the
+	 * rules it has not seen yet (newer than its mark) in PHP, against the
+	 * locally cached rule set - see getRules() / isStale() - instead of
+	 * re-scanning the rules stream on the server for every read. One round
+	 * trip; the rules are fetched once per rules_cache_ms; a stale item is
+	 * lazily unlinked.
+	 *
+	 * This trades exact invalidation for a bounded staleness window
+	 * (rules_cache_ms) so a read no longer re-scans the backlog every time -
+	 * set rules_cache_ms to 0 to re-read the rules on every read instead.
 	 */
 	#[Override]
 	protected function fetch(
@@ -179,28 +187,41 @@ class RedisVersioned extends Store
 		
 		try
 		{
-			// evaluate the invalidation rules server side WITHOUT routing
-			// the (potentially large) data payload through the Lua VM; only
-			// the tiny verdict crosses the wire - the data is read with a
-			// plain HGET on a fresh hit (one copy, no Lua)
-			$hit = $this->functions
-				->call('cache_versioned_validate', [
-					$id,
-					$this->getRulesKey(),
-				]);
+			// one HMGET brings data, tags and the watermark; the data is read
+			// outside any Lua VM and decompressed only on a fresh verdict
+			$item = $client->hMGet($id, [
+				static::KEY_DATA,
+				static::KEY_TAGS,
+				static::KEY_MARK,
+			]);
 			
-			if((int)$hit === 1)
+			// a missing "tags" field means the hash does not exist (an untagged
+			// item still stores tags as an empty string); "data" must be present
+			// too, to decompress
+			if(is_array($item) === false
+				|| ($item[static::KEY_TAGS] ?? false) === false
+				|| ($item[static::KEY_DATA] ?? false) === false)
 			{
-				$value = $client->hGet($id, static::KEY_DATA);
-				
-				if($value !== false)
-				{
-					$value = $this->compressor
-						->decompress($value);
-					return $this->serializer
-						->unserialize($value);
-				}
+				return null;
 			}
+			
+			// only the rules newer than the item's mark are evaluated,
+			// against the locally cached rule set
+			if($this->isStale(
+				(string)$item[static::KEY_TAGS],
+				(string)$item[static::KEY_MARK],
+			))
+			{
+				// lazily remove the stale item
+				$client->unlink($id);
+				
+				return null;
+			}
+			
+			$value = $this->compressor
+				->decompress($item[static::KEY_DATA]);
+			return $this->serializer
+				->unserialize($value);
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{
@@ -288,7 +309,21 @@ class RedisVersioned extends Store
 	 */
 	public function clearPhysical(): bool|int
 	{
+		// the rules stream is wiped too - drop the locally cached rules so a
+		// write that follows is not evaluated against rules that no longer exist
+		$this->resetRulesCache();
+		
 		return parent::clear();
+	}
+	
+	/**
+	 * Drops the locally cached rules so the next read refetches them - called
+	 * whenever the rules stream changes under us (a new rule, or a physical wipe)
+	 */
+	protected function resetRulesCache(): void
+	{
+		$this->rules = null;
+		$this->rulesFetchedAtMs = null;
 	}
 	
 	/**
@@ -316,8 +351,7 @@ class RedisVersioned extends Store
 				]);
 			
 			// the locally cached rules are stale now
-			$this->rules = null;
-			$this->rulesFetchedAtMs = null;
+			$this->resetRulesCache();
 			
 			return (int)$result === 1;
 		}
@@ -332,7 +366,11 @@ class RedisVersioned extends Store
 	/**
 	 * Returns the parsed invalidation rules ([ms, sequence, mode, tags[]]),
 	 * locally cached for rulesCacheMs (used by the cluster read path,
-	 * where the rules cannot be evaluated server side)
+	 * where the rules cannot be evaluated server side).
+	 *
+	 * Fails safe: if the rules cannot be (re)loaded it reuses the last-known
+	 * set, or throws when none is cached - the caller then treats the item as
+	 * a miss rather than serving data a rule it could not see might invalidate.
 	 */
 	protected function getRules(): array
 	{
@@ -347,7 +385,15 @@ class RedisVersioned extends Store
 		
 		if(($client = $this->getClient()) === null)
 		{
-			return [];
+			// no client to refresh from: reuse the last-known rules if we
+			// have them, otherwise fail safe (see the catch below) rather
+			// than report "no rules" and let stale items read as fresh
+			if($this->rules !== null)
+			{
+				return $this->rules;
+			}
+			
+			throw new RedisException('Cannot load invalidation rules: no Redis client.');
 		}
 		
 		$rules = [];
@@ -375,9 +421,19 @@ class RedisVersioned extends Store
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{
-			$this->log($exception);
+			// fail safe: never report an item as fresh just because the
+			// rules could not be loaded. Reuse the last-known rules if we
+			// have them (still honouring the invalidations seen so far);
+			// otherwise let the error propagate so the read path treats the
+			// item as a miss and re-resolves, instead of serving stale data.
+			if($this->rules !== null)
+			{
+				$this->log($exception);
+				
+				return $this->rules;
+			}
 			
-			return [];
+			throw $exception;
 		}
 		
 		$this->rules = $rules;

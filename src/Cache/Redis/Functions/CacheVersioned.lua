@@ -15,10 +15,9 @@
 	Cluster compatibility, by function flags:
 	- cluster-safe (no special flag): every key is declared and hashes to
 	  one slot (cache_versioned_set_stamped, cache_versioned_invalidate).
-	- standalone-only ('no-cluster'): cache_versioned_set and
-	  cache_versioned_validate declare two keys of different slots (item +
-	  rules); the cluster store reads the watermark / evaluates the rules
-	  on the PHP side instead.
+	- standalone-only ('no-cluster'): cache_versioned_set declares two keys
+	  of different slots (item + rules); the cluster store reads the
+	  watermark separately and uses cache_versioned_set_stamped instead.
 	
 	@author Marcin Gil <mg@ovos.at>
 ]]
@@ -51,25 +50,6 @@ local function cache_versioned_write(item_key, mark, data, tags, ttl_ms, retenti
 	redis.call('PEXPIRE', item_key, ttl_ms)
 	
 	return 1
-end
-
--- shared rule evaluation: 'any' = tag intersection, 'all' = tag subset
--- (an 'all' rule with no tags matches every item = a logical clear)
-local function cache_versioned_matches(item_tags, mode, tags)
-	local matched = mode == 'all'
-	for tag in string.gmatch(tags, '([^,]+)') do
-		if mode == 'all' then
-			if item_tags[tag] == nil then
-				return false
-			end
-		else
-			if item_tags[tag] ~= nil then
-				return true
-			end
-		end
-	end
-	
-	return matched
 end
 
 -- Store an item, reading the current watermark from the rules stream
@@ -134,84 +114,3 @@ local function cache_versioned_invalidate(keys, args)
 	return 1
 end
 redis.register_function('[prefix]cache_versioned_invalidate', cache_versioned_invalidate)
-
--- Evaluate the invalidation rules for an item WITHOUT returning its data:
--- a large payload must never be round-tripped through the Lua VM (HMGET
--- copies it into a Lua string, the return copies it again into the reply,
--- and it blocks the single thread for the whole copy). The caller reads
--- the data field with a plain HGET only on a fresh hit - one copy, no VM.
--- Returns 1 (fresh hit) or 0 (miss: absent, or lazily unlinked as stale)
-local function cache_versioned_validate(keys, args)
-	local item_key = keys[1]
-	local rules_key = keys[2]
-	
-	-- 'tags' is written for every item (possibly empty), so its absence
-	-- means the hash does not exist - a real miss, detected without
-	-- fetching the data field
-	local item = redis.call('HMGET', item_key, 'tags', 'mark')
-	if item[1] == false then
-		return 0
-	end
-	
-	local mark = item[2]
-	if mark == false then
-		-- an item without a watermark predates every rule
-		mark = '0-0'
-	end
-	
-	-- only the rules the item has not seen can invalidate it
-	-- (exclusive range: strictly newer than the watermark)
-	local rules = redis.call('XRANGE', rules_key, '(' .. mark, '+')
-	
-	if #rules > 0 then
-		-- turn the item's tag csv into a set, so the rule evaluation
-		-- below can test memberships in O(1)
-		local item_tags = {}
-		for tag in string.gmatch(item[1] or '', '([^,]+)') do
-			item_tags[tag] = true
-		end
-		
-		for index = 1, #rules do
-			-- a stream entry is {id, {field, value, field, value, ...}};
-			-- the id needs no further comparison - the XRANGE above only
-			-- returned the entries newer than the item's watermark
-			local fields = rules[index][2]
-			
-			-- extract the rule from the flat field/value list by field
-			-- name, not by position - adding fields later cannot break it
-			local mode = ''
-			local tags = ''
-			for field = 1, #fields, 2 do
-				if fields[field] == 'mode' then
-					mode = fields[field + 1]
-				elseif fields[field] == 'tags' then
-					tags = fields[field + 1]
-				end
-			end
-			
-			-- the first matching rule settles it: the item is stale -
-			-- remove it physically (the lazy delete; items never read
-			-- again are removed by their TTL instead) and report a miss,
-			-- the caller re-resolves and writes a fresh item carrying a
-			-- new watermark, which this rule can no longer invalidate.
-			-- unlike a data-returning read the value is never copied
-			-- through the Lua VM here
-			if cache_versioned_matches(item_tags, mode, tags) then
-				redis.call('UNLINK', item_key)
-				return 0
-			end
-		end
-	end
-	
-	-- fresh: no rule the item has not seen matches its tags;
-	-- the caller now reads the data field with a plain HGET
-	return 1
-end
--- standalone-only: the item and the rules keys hash to different slots,
--- the cluster store fetches both separately and evaluates in PHP
-redis.register_function
-{
-	function_name = '[prefix]cache_versioned_validate',
-	callback = cache_versioned_validate,
-	flags = {'no-cluster'}
-}
