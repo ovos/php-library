@@ -59,6 +59,23 @@ production: &production
       slow_log:
         enabled: yes
         threshold: 2.0
+    # cluster started by a workflow step (see .github/workflows/tests.yml),
+    # the cluster tests/benchmarks skip themselves when it is unreachable
+    redis_cluster:
+      type: redis_cluster
+      seeds:
+        - 127.0.0.1:7000
+      connect_timeout: 1
+      read_timeout: 1
+    # standalone connection to a cluster node - the MemoLock queue (pub/sub)
+    # needs a plain client attached to the same cluster
+    redis_cluster_queue:
+      type: redis
+      host: 127.0.0.1
+      port: 7000
+      database: 0
+      connect_timeout: 1
+      read_timeout: 1
   
   # mysql
   database: &database
@@ -84,9 +101,12 @@ production: &production
         backoff_max_ms: 25
     persistent: &cache-persistent
       connection: redis
-      store: Redis # Redis or Redisearch
+      store: Redis # Redis, Redisearch, RedisVersioned or RedisCluster
       store_options:
-        clean_tags: no
+        clean_tags: no # Redis store: remove ids from tags on invalidation
+        # versioned stores: rules + maximum item lifetime (must be >= the
+        # longest TTL in use; a ttl of 0 becomes this value), 30 days
+        rules_retention_s: 2592000
       compression:
         enabled: yes
         threshold: 2048

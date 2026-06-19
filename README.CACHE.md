@@ -1,4 +1,4 @@
-# Cache Stores (APCu, Redis, Redisearch)
+# Cache Stores (APCu, Redis, Redisearch, RedisVersioned, RedisCluster)
 
 This library provides a two-tier cache system designed to minimize database load
 and speed up response times. **Every store query that returns the same data for
@@ -23,7 +23,7 @@ menus). Caching these results means:
 | Tier | Backend | Shared? | Speed | Survives restart? | Tags? |
 |------|---------|---------|-------|-------------------|-------|
 | **Perishable** | APCu | No (per-worker) | Fastest (~1μs) | No | No |
-| **Persistent** | Redis / Redisearch | Yes (all workers/servers) | Fast (~1ms) | Yes | Yes |
+| **Persistent** | Redis / Redisearch / RedisVersioned / RedisCluster | Yes (all workers/servers) | Fast (~1ms) | Yes | Yes |
 
 **Use perishable (APCu)** for data that is read frequently and changes rarely
 within a single request cycle - like lookup tables, categories, and reference data.
@@ -67,17 +67,42 @@ $store = $cacheService->getStore(persistent: false);        // APCu
 ### Redisearch (`Ovos\Cache\Store\Redisearch`)
 - Distributed cache with tag invalidation powered by RediSearch.
 - Uses a RediSearch TAG index for fast tag-based invalidation.
-- Requires the RediSearch module and `MAXSEARCHRESULTS` set to `-1`.
+- Requires the RediSearch module (bundled in Redis 8) and `MAXSEARCHRESULTS`
+  set to `-1`.
 - Supports tags in `set()` and `invalidateTags()`, but does not expose
   `getTags()` or `getAllTags()`.
 - Best for: projects with many tagged cache entries where invalidation speed matters.
 
-Selecting between Redis and Redisearch is done in config:
+### RedisVersioned (`Ovos\Cache\Store\RedisVersioned`)
+- Distributed cache with **rule based (logical) tag invalidation**:
+  `invalidateTags()` appends one rule to a stream instead of deleting the
+  matched items - **O(1) whether 10 or 700000 items match**. Reads evaluate
+  the rules server side; stale items are lazily unlinked and physically
+  expire by their TTL.
+- `clear()` is logical as well (one rule matching everything);
+  `clearPhysical()` wipes the whole group for maintenance.
+- `rules_retention_s` (default 30 days) is the default **and maximum** item
+  lifetime: a ttl of 0 means "as long as the store allows", a ttl above the
+  retention is capped to it (and logged).
+- Does not expose `getTags()` or `getAllTags()`; no RediSearch module needed.
+- Best for: projects with very large tag invalidations, where deleting the
+  matched items at invalidation time is too expensive.
+
+### RedisCluster (`Ovos\Cache\Store\RedisCluster`)
+- The RedisVersioned store on a **Redis Cluster**: same data model and
+  semantics; reads evaluate the invalidation rules on the PHP side behind a
+  short-lived local cache (`rules_cache_ms`).
+- Requires a `redis_cluster` connection (a `seeds` list) plus a standalone
+  queue connection **pointed at a node of the same cluster** for MemoLock
+  pub/sub (see the configuration reference below).
+- No RediSearch module required on the cluster nodes.
+
+Selecting the store is done in config:
 
 ```yaml
 cache:
   persistent:
-    store: Redisearch   # or Redis
+    store: Redisearch   # Redis, Redisearch, RedisVersioned or RedisCluster
 ```
 
 ## Real-world usage patterns
@@ -282,7 +307,7 @@ $store->invalidateCache(Jobs::CACHE_RELATIONS);    // Deletes cache key "jobs_re
 $store->invalidateCache(Jobs::CACHE_NAMES);        // Deletes cache key "jobs_names"
 ```
 
-### Via tags (Redis/Redisearch only)
+### Via tags (persistent stores only)
 
 Tags let you invalidate groups of related cache entries at once:
 
@@ -297,6 +322,10 @@ By default items matching **any** of the given tags are invalidated. Pass
 ```php
 $store->invalidateTags(['user:42', 'products'], $store::MATCHING_ALL);
 ```
+
+On the versioned stores (RedisVersioned, RedisCluster) the matched items are
+not deleted: they become invisible immediately and physically expire by their
+TTL - which is what makes the call O(1) regardless of the match count.
 
 ### When to invalidate
 
@@ -380,7 +409,11 @@ cache:
       backoff_max_ms: 25              # Max backoff between retries
   persistent:
     connection: redis                  # Which Redis connection to use
-    store: Redisearch                  # Redis or Redisearch
+    store: Redisearch                  # Redis, Redisearch, RedisVersioned or RedisCluster
+    store_options:
+      clean_tags: no                   # Redis store: remove ids from tags on invalidation
+      rules_retention_s: 2592000       # Versioned stores: rules + maximum item lifetime (s)
+      rules_cache_ms: 1000             # RedisCluster: local rules cache staleness budget (ms)
     compression:
       enabled: yes
       threshold: 2048
@@ -391,10 +424,43 @@ cache:
       wait_attempts: 3                # Number of Pub/Sub wait attempts
 ```
 
+A Redis Cluster deployment additionally needs the cluster connection and a
+standalone queue connection pointed at a node of the same cluster:
+
+```yaml
+connections:
+  redis_cluster:
+    type: redis_cluster
+    seeds:
+      - 10.0.0.1:7000                  # host:port of any cluster nodes
+      - 10.0.0.2:7000
+    connect_timeout: 1
+    read_timeout: 1
+  redis_cluster_queue:                 # pub/sub needs a plain client attached
+    type: redis                        # to the SAME cluster - a PUBLISH never
+    host: 10.0.0.1                     # reaches a different Redis instance
+    port: 7000
+    database: 0
+
+cache:
+  persistent:
+    connection: redis_cluster
+    store: RedisCluster
+    queue:
+      connection: redis_cluster_queue
+```
+
 ## Operational notes
 
-- Redis and Redisearch require two Redis connections when queueing is enabled:
-  one for data operations and one for MemoLock Pub/Sub.
+- The persistent stores require **Redis 8+** (Lua functions with flags; the
+  query engine for Redisearch is bundled since Redis 8).
+- All Redis stores require two connections when queueing is enabled:
+  one for data operations and one for MemoLock Pub/Sub. On a cluster, the
+  pub/sub connection must be a standalone connection to a cluster node.
 - For Redisearch, ensure the RediSearch module is loaded and
   `MAXSEARCHRESULTS` is set to `-1` (the store sets this during index creation).
+- Deploying a changed Lua library (`src/Cache/Redis/Functions/*.lua`) requires
+  a forced reload on the servers (`FUNCTION FLUSH` or loading with REPLACE) -
+  the loader skips libraries that already exist by name, and a function moved
+  between libraries strictly requires a flush.
 - Use `php cli.php system cache clear` to flush all cache tiers.

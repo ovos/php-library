@@ -5,6 +5,7 @@ namespace Ovos\Cache\Store;
 
 use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Override;
+use RedisClusterException;
 use RedisException;
 
 use function in_array;
@@ -107,7 +108,9 @@ class Redisearch extends Store
 			
 			return $result > 0;
 		}
-		catch(RedisException $exception)
+		// RedisClusterException does not extend RedisException, catch both
+		// (this method is inherited by the RedisCluster store)
+		catch(RedisException|RedisClusterException $exception)
 		{
 			$this->log($exception);
 		}
