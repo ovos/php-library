@@ -1,7 +1,23 @@
 --[[
 	Redis Cache Functions
+	
+	Cluster compatibility, by function flags:
+	- node-local ('allow-cross-slot-keys'): operates on the keys of
+	  whichever node it runs on; on a cluster run it once per master node
+	  (cache_clear).
+	- standalone-only ('no-cluster'): the legacy tag-hash model reaches
+	  undeclared keys across slots and nodes by design and can never run
+	  on a cluster - the flag makes it fail fast with a clear error.
+	
+	The versioned (rule based) functions live in CacheVersioned.lua.
+	
 	@author Marcin Gil <mg@ovos.at>
 ]]
+
+--[[ ------------------------------------------------------------------
+	Internal helpers (not registered - they are not FCALL entry points
+	and do not follow the (keys, args) signature)
+--]] ------------------------------------------------------------------
 
 -- Splits a set of items into batches, returning a function iterator
 -- Each iteration returns (from, to) indexes for a slice of the collection
@@ -19,7 +35,6 @@ local function cache_batches(n, batch_size)
 		end
 	end
 end
-redis.register_function('[prefix]cache_batches', cache_batches)
 
 -- Splits a string by a given delimiter
 local function cache_split_string(str, delimiter)
@@ -39,7 +54,6 @@ local function cache_split_string(str, delimiter)
 	
 	return result
 end
-redis.register_function('[prefix]cache_split_string', cache_split_string)
 
 -- Scans redis for keys matching a specified prefix and processes them with a callback
 local function cache_scan_keys(prefix, count, callback)
@@ -52,7 +66,6 @@ local function cache_scan_keys(prefix, count, callback)
 		end
 	until cursor == '0'
 end
-redis.register_function('[prefix]cache_scan_keys', cache_scan_keys)
 
 -- Scans a redis hash for fields using HSCAN and processes them with a callback
 local function cache_hscan_keys(hash_key, count, callback)
@@ -65,7 +78,6 @@ local function cache_hscan_keys(hash_key, count, callback)
 		end
 	until cursor == '0'
 end
-redis.register_function('[prefix]cache_hscan_keys', cache_hscan_keys)
 
 -- Scans a redis hash for fields using HSCAN, processes them with a callback, and returns the next cursor.
 local function cache_hscan_keys_batch(hash_key, cursor, count, callback)
@@ -79,7 +91,43 @@ local function cache_hscan_keys_batch(hash_key, cursor, count, callback)
 	
 	return new_cursor
 end
-redis.register_function('[prefix]cache_hscan_keys_batch', cache_hscan_keys_batch)
+
+--[[ ------------------------------------------------------------------
+	Maintenance
+--]] ------------------------------------------------------------------
+
+-- Removes all items matching a prefix
+-- (used to "flush" the database, but only the prefixed items)
+local function cache_clear(keys, args)
+	local prefix = args[1]
+	
+	-- unlink every key one by one: a multi-key UNLINK would be illegal
+	-- on a cluster even under 'allow-cross-slot-keys' - the flag lets
+	-- the script touch keys of many slots, but every single command must
+	-- still stay within one slot (server side calls are cheap, the
+	-- batching was only ever an unpack() argument-count measure)
+	local count = 0
+	cache_scan_keys(prefix, 5000, function(key)
+		redis.call('UNLINK', key)
+		count = count + 1
+	end)
+	
+	return count -- return count of deleted ids
+end
+-- node-local: SCAN only sees the keys of the node it runs on; on a
+-- cluster run it once per master node ('allow-cross-slot-keys' permits
+-- touching that node's keys regardless of their slots)
+redis.register_function
+{
+	function_name = '[prefix]cache_clear',
+	callback = cache_clear,
+	flags = {'allow-cross-slot-keys'}
+}
+
+--[[ ------------------------------------------------------------------
+	Legacy tag-hash model (Store\Redis) - standalone-only: these reach
+	undeclared item and tag-index keys across slots by design
+--]] ------------------------------------------------------------------
 
 -- Returns a list of all tags (suffix extracted from matching keys)
 local function cache_get_tags(keys, args)
@@ -101,7 +149,7 @@ redis.register_function
 {
 	function_name = '[prefix]cache_get_tags',
 	callback = cache_get_tags,
-	flags = {'no-writes'}
+	flags = {'no-writes', 'no-cluster'}
 }
 
 -- Returns a list of all ids in a given tag
@@ -126,7 +174,7 @@ redis.register_function
 {
 	function_name = '[prefix]cache_get_ids_by_tag',
 	callback = cache_get_ids_by_tag,
-	flags = {'no-writes'}
+	flags = {'no-writes', 'no-cluster'}
 }
 
 -- Unlink (remove) items by their ids and remove references from all tags
@@ -138,7 +186,7 @@ local function cache_unlink_clean_tags(keys, args)
 	local field_tags = args[4]
 	
 	for _, id in ipairs(ids) do
-	
+		
 		-- first remove the id all tags where this id is present
 		local item_tags = redis.call('HGET', prefix_ids .. id, field_tags)
 		
@@ -158,7 +206,12 @@ local function cache_unlink_clean_tags(keys, args)
 	
 	return 1
 end
-redis.register_function('[prefix]cache_unlink_clean_tags', cache_unlink_clean_tags)
+redis.register_function
+{
+	function_name = '[prefix]cache_unlink_clean_tags',
+	callback = cache_unlink_clean_tags,
+	flags = {'no-cluster'}
+}
 
 -- Unlink items by a given tag only if they match provided ids
 local function cache_unlink_ids_by_tag(keys, args)
@@ -210,7 +263,12 @@ local function cache_unlink_ids_by_tag(keys, args)
 	
 	return 1
 end
-redis.register_function('[prefix]cache_unlink_ids_by_tag', cache_unlink_ids_by_tag)
+redis.register_function
+{
+	function_name = '[prefix]cache_unlink_ids_by_tag',
+	callback = cache_unlink_ids_by_tag,
+	flags = {'no-cluster'}
+}
 
 -- Unlink all items from a given tag (removes every ID that tag references)
 local function cache_unlink_by_tag(keys, args)
@@ -248,7 +306,12 @@ local function cache_unlink_by_tag(keys, args)
 	
 	return {#rems, cursor_new} -- return count of unlinked IDs and the new cursor
 end
-redis.register_function('[prefix]cache_unlink_by_tag', cache_unlink_by_tag)
+redis.register_function
+{
+	function_name = '[prefix]cache_unlink_by_tag',
+	callback = cache_unlink_by_tag,
+	flags = {'no-cluster'}
+}
 
 -- Unlink all items and all tags (full cleanup)
 local function cache_unlink_all(keys, args)
@@ -282,7 +345,12 @@ local function cache_unlink_all(keys, args)
 	
 	return #ids, #tags
 end
-redis.register_function('[prefix]cache_unlink_all', cache_unlink_all)
+redis.register_function
+{
+	function_name = '[prefix]cache_unlink_all',
+	callback = cache_unlink_all,
+	flags = {'no-cluster'}
+}
 
 -- Removes references from a tag that no longer has valid items
 local function cache_clean_tag(keys, args)
@@ -319,28 +387,9 @@ local function cache_clean_tag(keys, args)
 	
 	return {#rems, cursor_new} -- return count of deleted IDs and the new cursor for the next batch scan
 end
-redis.register_function('[prefix]cache_clean_tag', cache_clean_tag)
-
--- Removes all items matching a prefix
--- (used to "flush" the database, but only the prefixed items)
-local function cache_clear(keys, args)
-	local prefix = args[1]
-	
-	-- unlink every ID
-	local count = 0
-	
-	local ids = {}
-	cache_scan_keys(prefix, 5000, function(key)
-		table.insert(ids, key)
-	end)
-	
-	if #ids > 0 then
-		count = count + #ids
-		for from, to in cache_batches(#ids) do -- security measure, not really needed with 5000 batch size
-			redis.call('UNLINK', unpack(ids, from, to))
-		end
-	end
-	
-	return count -- return count of deleted ids
-end
-redis.register_function('[prefix]cache_clear', cache_clear)
+redis.register_function
+{
+	function_name = '[prefix]cache_clean_tag',
+	callback = cache_clean_tag,
+	flags = {'no-cluster'}
+}

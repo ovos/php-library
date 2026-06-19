@@ -8,9 +8,10 @@ use Ovos\Invoker;
 use Ovos\Cache\MemoLock;
 use Ovos\Cache\Prefixer;
 use Ovos\Cache\Redis\Functions;
-use Ovos\Connection\Redis as Connection;
+use Ovos\Connection\RedisCommon as Connection;
 use Closure;
 use Redis as RedisClient;
+use RedisCluster as RedisClusterClient;
 use RedisException;
 
 use function bin2hex;
@@ -94,11 +95,15 @@ class Redis extends MemoLock
 		return $this;
 	}
 	
-	public function getClient(): ?RedisClient
+	public function getClient(): RedisClient|RedisClusterClient|null
 	{
 		return $this->connection->getClient();
 	}
 	
+	/**
+	 * Pub/sub should use a standalone (non-cluster) connection,
+	 * a classic PUBLISH is broadcast cluster-wide anyway
+	 */
 	public function getQueueClient(): ?RedisClient
 	{
 		return $this->queueConnection->getClient();
@@ -285,11 +290,13 @@ class Redis extends MemoLock
 		$channelName = $this->prefixer
 			->prefix(static::TYPE_CHANNEL, $id);
 		
-		// atomically release the lock and notify any waiters using the Lua script
+		// atomically release the lock and notify any waiters using the Lua script;
+		// the channel is passed as an ARG (not a KEY) so the call stays single-slot
+		// and works on Redis Cluster (see memolock_release_lock_and_publish)
 		$released = (bool)$this->functions
 			->call('memolock_release_lock_and_publish',
-				[$lockKey, $channelName],
-				[$lockValue],
+				[$lockKey],
+				[$lockValue, $channelName],
 		);
 		
 		$this->debug(
