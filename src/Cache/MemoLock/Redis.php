@@ -13,6 +13,7 @@ use Closure;
 use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
 use RedisException;
+use RedisClusterException;
 
 use function bin2hex;
 use function random_bytes;
@@ -141,11 +142,21 @@ class Redis extends MemoLock
 		
 		$this->debug('queue: ' . $id);
 		
-		// try to acquire a distributed lock
-		$lockAcquired = $client->set($lockKey, $lockValue, [
-			'NX',
-			'PX' => $queueLockTtlMs,
-		]);
+		// try to acquire a distributed lock; a Redis failure here must not
+		// break the host application - degrade to resolving the value directly
+		try
+		{
+			$lockAcquired = $client->set($lockKey, $lockValue, [
+				'NX',
+				'PX' => $queueLockTtlMs,
+			]);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->connection->log($exception);
+			
+			return $this->invoker->invoke($resolver);
+		}
 		
 		if($lockAcquired)
 		{
@@ -192,7 +203,7 @@ class Redis extends MemoLock
 				);
 			}
 			// we got no message, redis responded with "RedisException: read error on connection"
-			catch(RedisException $exception)
+			catch(RedisException|RedisClusterException $exception)
 			{
 				$queueClient->unsubscribe([$channelName]);
 				// shorten the wait time on the next attempt
@@ -225,30 +236,39 @@ class Redis extends MemoLock
 				return $result;
 			}
 			
-			// check if the lock still exists
-			if($client->exists($lockKey) === 0)
+			try
 			{
-				// try to acquire a distributed lock
-				$lockAcquired = $client->set($lockKey, $lockValue, [
-					'NX',
-					'PX' => $queueLockTtlMs,
-				]);
-				
-				if($lockAcquired)
+				// check if the lock still exists
+				if($client->exists($lockKey) === 0)
 				{
-					$this->debug('timeout & lock acquired: ' . $id);
+					// try to acquire a distributed lock
+					$lockAcquired = $client->set($lockKey, $lockValue, [
+						'NX',
+						'PX' => $queueLockTtlMs,
+					]);
 					
-					// lock acquired, store it internally for releaseActiveLock()
-					return $this->lockAcquired(
-						$id,
-						$lockValue,
-						$resolver,
-					);
+					if($lockAcquired)
+					{
+						$this->debug('timeout & lock acquired: ' . $id);
+						
+						// lock acquired, store it internally for releaseActiveLock()
+						return $this->lockAcquired(
+							$id,
+							$lockValue,
+							$resolver,
+						);
+					}
+				}
+				else
+				{
+					$this->debug('lock still exists for: ' . $id);
 				}
 			}
-			else
+			catch(RedisException|RedisClusterException $exception)
 			{
-				$this->debug('lock still exists for: ' . $id);
+				$this->connection->log($exception);
+				
+				return $this->invoker->invoke($resolver);
 			}
 			// if the lock still exists, or we failed to acquire it, loop to wait again
 		}
@@ -293,11 +313,22 @@ class Redis extends MemoLock
 		// atomically release the lock and notify any waiters using the Lua script;
 		// the channel is passed as an ARG (not a KEY) so the call stays single-slot
 		// and works on Redis Cluster (see memolock_release_lock_and_publish)
-		$released = (bool)$this->functions
-			->call('memolock_release_lock_and_publish',
-				[$lockKey],
-				[$lockValue, $channelName],
-		);
+		try
+		{
+			$released = (bool)$this->functions
+				->call('memolock_release_lock_and_publish',
+					[$lockKey],
+					[$lockValue, $channelName],
+			);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			// a release failure must not break a request whose write
+			// succeeded; the lock expires on its PX TTL anyway
+			$this->connection->log($exception);
+			
+			return false;
+		}
 		
 		$this->debug(
 			$released
@@ -327,10 +358,19 @@ class Redis extends MemoLock
 		$lockValue = $this->queueLocks[$id];
 		$ttlMs = $ttlMs ?? $this->queueLockTtlMs;
 		
-		return (bool)$this->functions
-			->call('memolock_renew_lock',
-				[$lockKey],
-				[$lockValue, $ttlMs],
-		);
+		try
+		{
+			return (bool)$this->functions
+				->call('memolock_renew_lock',
+					[$lockKey],
+					[$lockValue, $ttlMs],
+			);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->connection->log($exception);
+			
+			return false;
+		}
 	}
 }

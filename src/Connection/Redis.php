@@ -116,7 +116,12 @@ class Redis extends RedisCommon
 	
 	public function disconnect(): bool
 	{
-		return $this->client->close();
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		return $client->close();
 	}
 	
 	#[Override]

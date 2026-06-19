@@ -33,6 +33,11 @@ class Functions
 	
 	protected array $librariesLoaded = [];
 	
+	// cluster libraries are tracked per master node, not just per library: the
+	// topology can gain or replace masters within a process lifetime and each
+	// new master needs its own FUNCTION LOAD ([library][host:port] => true)
+	protected array $clusterLibrariesLoaded = [];
+	
 	protected Connection $connection;
 	
 	protected ?string $functionsPrefix = null;
@@ -115,22 +120,26 @@ class Functions
 	{
 		$libraryName = $this->functionsPrefix($libraryName);
 		
-		if(isset($this->librariesLoaded[$libraryName])
-			&& $this->librariesLoaded[$libraryName] === true
-			&& $replace === false)
-		{
-			return true;
-		}
-		
 		if(($client = $this->getClient()) === null)
 		{
 			return false;
 		}
 		
-		// a cluster requires the library to be loaded on every master node
+		// a cluster requires the library on every master node, and the topology
+		// can change within a process lifetime (failover, resharding, scale-out);
+		// a single per-library flag would skip the new masters, so the cluster
+		// path tracks each master and tops up whoever is missing the library
 		if($client instanceof RedisClusterClient)
 		{
 			return $this->loadLibraryCluster($client, $libraryName, $libraryFile, $replace);
+		}
+		
+		// standalone is a single node - the per-library flag is enough
+		if(isset($this->librariesLoaded[$libraryName])
+			&& $this->librariesLoaded[$libraryName] === true
+			&& $replace === false)
+		{
+			return true;
 		}
 		
 		// if we force a replacement, no need to detect if a library is loaded
@@ -187,13 +196,27 @@ class Functions
 	): bool
 	{
 		$library = null;
+		$loaded = true;
 		
 		foreach($client->_masters() as $master)
 		{
-			// if we force a replacement, no need to detect if a library is loaded
+			$masterKey = $master[0] . ':' . $master[1];
+			
+			// already loaded on this master in this process: skip the network
+			// round trip (a forced replacement always re-uploads)
+			if($replace === false
+				&& isset($this->clusterLibrariesLoaded[$libraryName][$masterKey]))
+			{
+				continue;
+			}
+			
+			// a master we have not loaded yet (first seen, or new to the
+			// topology): only upload when it is actually missing the library
 			if($replace === false
 				&& $this->isLibraryOnNode($client, $master, $libraryName))
 			{
+				$this->clusterLibrariesLoaded[$libraryName][$masterKey] = true;
+				
 				continue;
 			}
 			
@@ -215,13 +238,18 @@ class Functions
 			
 			if($libraryLoaded !== $libraryName)
 			{
-				return false;
+				// this master did not confirm the load; keep going so the rest
+				// still get the library, but report the partial result - callers
+				// (Functions::call) bail rather than FCALL a node still missing it
+				$loaded = false;
+				
+				continue;
 			}
+			
+			$this->clusterLibrariesLoaded[$libraryName][$masterKey] = true;
 		}
 		
-		$this->librariesLoaded[$libraryName] = true;
-		
-		return true;
+		return $loaded;
 	}
 	
 	/**
@@ -326,8 +354,12 @@ class Functions
 			return false;
 		}
 		
-		// ensure that the library of scripts is loaded, if not load it into redis
-		$this->loadLibraries();
+		// ensure the library of scripts is loaded; bail out if a node could not
+		// be (re)loaded rather than issue an FCALL against one that is missing it
+		if($this->loadLibraries() === false)
+		{
+			return false;
+		}
 		
 		if($long)
 		{
@@ -338,6 +370,16 @@ class Functions
 		
 		$functionName = $this->functionsPrefix($function);
 		
+		// phpredis marshals integer arguments through a platform "long"
+		// (32 bits on Windows) on both the cluster rawCommand and the
+		// standalone fcall paths - a value like a 30-day millisecond
+		// retention silently truncates to a negative number; the protocol
+		// is strings anyway, so send strings on either path
+		foreach($args as $index => $arg)
+		{
+			$args[$index] = (string)$arg;
+		}
+		
 		// phpredis RedisCluster has no fcall()/fcall_ro() methods,
 		// route the call by the first key instead (a single-key call
 		// is executed by the node owning the key's hash slot)
@@ -346,15 +388,6 @@ class Functions
 			$call = function(string $function, array $keys, array $args)
 				use ($client, $readOnly): mixed
 			{
-				// rawCommand marshals integer arguments through a platform
-				// "long" (32 bits on Windows) - a value like a 30-day
-				// millisecond retention silently truncates to a negative
-				// number; the protocol is strings anyway, send strings
-				foreach($args as $index => $arg)
-				{
-					$args[$index] = (string)$arg;
-				}
-				
 				return $client->rawCommand(
 					$keys[0] ?? $client->_masters()[0],
 					$readOnly ? 'FCALL_RO' : 'FCALL',

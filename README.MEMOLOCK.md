@@ -34,6 +34,8 @@ Request 4 → cache miss → waits for lock → gets cached value from Request 1
 
 Only one request does the work. Everyone else waits and benefits from the result.
 
+![MemoLock - without vs with: one request rebuilds, the rest wait on Pub/Sub](docs/cache/memolock.svg)
+
 ## How it works
 
 Two backends are supported:

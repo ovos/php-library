@@ -514,7 +514,7 @@ development: &development
 | `cache.prefix` | Cache key prefix (prevents collisions between projects) |
 | `cache.perishable` | APCu (per-worker memory) cache config |
 | `cache.persistent` | Redis (distributed) cache config |
-| `cache.persistent.store` | `Redis`, `Redisearch`, `RedisVersioned` or `RedisCluster` backend |
+| `cache.persistent.store` | `Redis`, `Redisearch`, `RedisVersioned` or `RedisClusterVersioned` backend |
 | `http_auth` | HTTP Basic Auth: `enabled`, `username`, `password`, `realm`, `whitelist` |
 | `smtp` | SMTP mail config: `host`, `port`, `encryption`, `username`, `password` |
 
@@ -1912,10 +1912,18 @@ The framework provides a two-tier cache system. For full details, see the dedica
 **Two tiers:**
 
 - **Perishable (APCu)**: Fast, per-worker memory cache. Lost on restart.
-- **Persistent (Redis/Redisearch/RedisVersioned/RedisCluster)**: Shared
+- **Persistent (Redis/Redisearch/RedisVersioned/RedisClusterVersioned)**: Shared
   distributed cache with tag-based invalidation. The versioned stores
-  invalidate tags in O(1) regardless of the match count, and `RedisCluster`
+  invalidate tags in O(1) regardless of the match count, and `RedisClusterVersioned`
   runs the same model on a Redis Cluster.
+
+How `invalidateTags()` differs across the persistent stores - the tag-hash and
+RediSearch stores delete matched items eagerly (cost grows with matches), while
+the versioned stores append one rule and resolve staleness lazily (constant cost):
+
+![Cache backends - invalidation strategy compared](docs/cache/comparison.svg)
+
+See [README.CACHE.md](README.CACHE.md) for the per-store read/write/invalidate flows.
 
 ### Using Cache in Code
 
@@ -1944,6 +1952,8 @@ $value = $perishable->get('key', resolver: fn() => 'computed', ttl: 60);
 ### MemoLock (Cache Stampede Protection)
 
 When many requests hit an expired cache key simultaneously, MemoLock ensures only one request computes the value while others wait. **MemoLock is enabled by default** - if you use `get()` with a resolver, you're already protected.
+
+![MemoLock - one request rebuilds while the rest wait on Pub/Sub](docs/cache/memolock.svg)
 
 ```php
 $value = $store->get(

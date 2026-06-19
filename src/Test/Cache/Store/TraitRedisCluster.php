@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Test\Cache\Store;
 
-use Ovos\Cache\Store\RedisCluster;
+use Ovos\Cache\Store\RedisClusterVersioned;
 use Ovos\Connections;
 use Ovos\Exception\MissingException\MissingConfigException;
 
@@ -30,7 +30,7 @@ trait TraitRedisCluster
 	 */
 	protected ?string $clusterUnavailableReason = null;
 	
-	protected function getClusterStore(): ?RedisCluster
+	protected function getClusterStore(): ?RedisClusterVersioned
 	{
 		$connections = $this->container
 			->getClass(Connections::class);
@@ -60,7 +60,7 @@ trait TraitRedisCluster
 			return null;
 		}
 		
-		return new RedisCluster(
+		return new RedisClusterVersioned(
 			$connection,
 			$connections->get('redis_cluster_queue', 'queue'),
 			$this->cacheConfig->prefix,

@@ -7,7 +7,7 @@ use Ovos\ArrayObject;
 use Ovos\Benchmark;
 use Ovos\Container\Inject;
 use Ovos\Cache\Store\KeyValue;
-use Ovos\Cache\Store\RedisCluster as Store;
+use Ovos\Cache\Store\RedisClusterVersioned as Store;
 use Ovos\Test\Internal;
 use Ovos\Test\Parallel;
 use Ovos\Test\Cache\Store\TraitRedisCluster;
