@@ -30,8 +30,9 @@ jobs:
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
       
       redis:
-        # Docker Hub image
-        image: redis/redis-stack-server:latest
+        # Redis 8+ bundles the query engine and the other modules,
+        # the image entrypoint loads them (no redis-stack needed)
+        image: redis:latest
         # Set health checks to wait until redis has started
         options: >-
           --health-cmd "redis-cli ping"
@@ -72,6 +73,30 @@ jobs:
         #env:
           #COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{secrets.COMPOSER_AUTH}}"} }'
         run: composer prod:install
+
+      # a real 3-master cluster in one container; services cannot override
+      # the command, so this runs as a step (the redisearch module must be
+      # loaded explicitly - bypassing the image entrypoint skips its
+      # automatic --loadmodule handling)
+      - name: Start Redis Cluster
+        run: |
+          docker run -d --name redis-cluster -p 7000-7002:7000-7002 -p 17000-17002:17000-17002 redis:latest \
+            sh -c 'for port in 7000 7001 7002; do
+                redis-server --port $port --loadmodule /usr/local/lib/redis/modules/redisearch.so \
+                  --cluster-enabled yes --cluster-config-file /tmp/nodes-$port.conf \
+                  --cluster-announce-ip 127.0.0.1 --cluster-announce-port $port --cluster-announce-bus-port 1$port \
+                  --appendonly no --save "" --daemonize yes;
+              done;
+              sleep 2;
+              redis-cli --cluster create 127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 --cluster-replicas 0 --cluster-yes;
+              tail -f /dev/null'
+          for i in $(seq 1 30); do
+            if docker exec redis-cluster redis-cli -p 7000 cluster info 2>/dev/null | grep -q 'cluster_state:ok'; then
+              echo "cluster is up"; exit 0;
+            fi;
+            sleep 1;
+          done
+          echo "cluster failed to start"; docker logs redis-cluster; exit 1
 
       - name: "Run tests"
         run: php cli.php tests run

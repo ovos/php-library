@@ -60,6 +60,20 @@ abstract class Test
 	}
 	
 	/**
+	 * Called by the runner before each measured method: announces the test
+	 * about to run as a transient, in-place status line, so a long run shows
+	 * only the current test instead of a growing list. The controller clears
+	 * the line before printing the results table.
+	 */
+	#[Internal]
+	public function progress(
+		string $method,
+	): void
+	{
+		Terminal::status(static::class . '::' . $method);
+	}
+	
+	/**
 	 * Called by the runner after each test method
 	 */
 	#[Internal]

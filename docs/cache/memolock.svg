@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="520" viewBox="0 0 940 520" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="aBad" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#dc2626"/></marker>
+    <marker id="aOk" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16a34a"/></marker>
+    <marker id="aWait" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker>
+    <style>
+      .title{font-size:18px;font-weight:700;fill:#fff}
+      .subtitle{font-size:12px;fill:#cbd5e1}
+      .panelHead{font-size:14px;font-weight:700;fill:#fff}
+      .req{font-family:Consolas,monospace;font-size:10.5px;fill:#334155;text-anchor:middle}
+      .lbl{font-size:11px;fill:#334155}
+      .lblC{font-size:11px;fill:#334155;text-anchor:middle}
+      .mono{font-family:Consolas,monospace;font-size:10.5px;fill:#1e293b;text-anchor:middle}
+      .cost{font-size:13px;font-weight:700;text-anchor:middle}
+      .costSub{font-size:9.5px;text-anchor:middle;fill:#64748b}
+      .foot{font-size:11px;fill:#475569}
+    </style>
+  </defs>
+
+  <rect width="940" height="520" fill="#ffffff"/>
+  <rect width="940" height="58" fill="#1e293b"/>
+  <text x="24" y="27" class="title">MemoLock &#8212; cache stampede protection</text>
+  <text x="24" y="46" class="subtitle">A hot key expires and N concurrent requests miss at the same moment</text>
+
+  <!-- ============ WITHOUT ============ -->
+  <rect x="16" y="74" width="444" height="376" rx="10" fill="#fff" stroke="#e2e8f0"/>
+  <path d="M16 84 a10 10 0 0 1 10 -10 h424 a10 10 0 0 1 10 10 v26 h-444 z" fill="#be123c"/>
+  <text x="238" y="92" text-anchor="middle" class="panelHead">WITHOUT MemoLock &#8212; thundering herd</text>
+
+  <!-- requests -->
+  <g>
+    <rect x="36" y="132" width="96" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="84" y="149" class="req">request 1</text>
+    <rect x="36" y="166" width="96" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="84" y="183" class="req">request 2</text>
+    <rect x="36" y="200" width="96" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="84" y="217" class="req">request 3</text>
+    <rect x="36" y="234" width="96" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="84" y="251" class="req">request N</text>
+  </g>
+  <text x="84" y="124" text-anchor="middle" class="lblC" fill="#b91c1c" font-weight="700">all miss</text>
+
+  <!-- database -->
+  <g>
+    <ellipse cx="372" cy="150" rx="46" ry="13" fill="#fee2e2" stroke="#dc2626"/>
+    <path d="M326 150 v60 a46 13 0 0 0 92 0 v-60" fill="#fee2e2" stroke="#dc2626"/>
+    <ellipse cx="372" cy="150" rx="46" ry="13" fill="#fee2e2" stroke="#dc2626"/>
+    <text x="372" y="186" text-anchor="middle" class="mono" fill="#b91c1c">Database</text>
+  </g>
+
+  <!-- arrows: every request -> DB -->
+  <line x1="134" y1="145" x2="324" y2="150" stroke="#dc2626" stroke-width="1.6" marker-end="url(#aBad)"/>
+  <line x1="134" y1="179" x2="324" y2="172" stroke="#dc2626" stroke-width="1.6" marker-end="url(#aBad)"/>
+  <line x1="134" y1="213" x2="324" y2="196" stroke="#dc2626" stroke-width="1.6" marker-end="url(#aBad)"/>
+  <line x1="134" y1="247" x2="324" y2="214" stroke="#dc2626" stroke-width="1.6" marker-end="url(#aBad)"/>
+
+  <text x="238" y="296" text-anchor="middle" class="lblC" font-weight="700" fill="#0f172a">Every miss rebuilds the value &#8212;</text>
+  <text x="238" y="312" text-anchor="middle" class="lblC" font-weight="700" fill="#0f172a">N identical queries hit the DB at once.</text>
+  <text x="238" y="334" text-anchor="middle" class="lblC">Response times spike; the database</text>
+  <text x="238" y="348" text-anchor="middle" class="lblC">can fall over under the load.</text>
+
+  <rect x="138" y="396" width="200" height="40" rx="8" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="238" y="416" class="cost" fill="#b91c1c">N database queries</text>
+  <text x="238" y="430" class="costSub">work scales with concurrency</text>
+
+  <!-- ============ WITH ============ -->
+  <rect x="480" y="74" width="444" height="376" rx="10" fill="#fff" stroke="#e2e8f0"/>
+  <path d="M480 84 a10 10 0 0 1 10 -10 h424 a10 10 0 0 1 10 10 v26 h-444 z" fill="#16a34a"/>
+  <text x="702" y="92" text-anchor="middle" class="panelHead">WITH MemoLock &#8212; one rebuild, rest wait</text>
+
+  <!-- requests -->
+  <g>
+    <rect x="500" y="132" width="92" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="546" y="149" class="req">request 1</text>
+    <rect x="500" y="166" width="92" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="546" y="183" class="req">request 2</text>
+    <rect x="500" y="200" width="92" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="546" y="217" class="req">request N</text>
+  </g>
+
+  <!-- lock gate -->
+  <rect x="628" y="150" width="104" height="56" rx="8" fill="#fffbeb" stroke="#b45309"/>
+  <text x="680" y="172" text-anchor="middle" class="mono" fill="#92400e">SET key NX</text>
+  <text x="680" y="190" text-anchor="middle" class="costSub" fill="#92400e">atomic lock</text>
+
+  <line x1="594" y1="149" x2="626" y2="166" stroke="#64748b" stroke-width="1.5" marker-end="url(#aWait)"/>
+  <line x1="594" y1="183" x2="626" y2="178" stroke="#64748b" stroke-width="1.5" marker-end="url(#aWait)"/>
+  <line x1="594" y1="213" x2="626" y2="190" stroke="#64748b" stroke-width="1.5" marker-end="url(#aWait)"/>
+
+  <!-- winner -> DB -> set+publish -->
+  <rect x="772" y="118" width="136" height="48" rx="8" fill="#f0fdf4" stroke="#16a34a"/>
+  <text x="840" y="138" text-anchor="middle" class="lblC" fill="#15803d" font-weight="700">winner (1)</text>
+  <text x="840" y="155" text-anchor="middle" class="costSub" fill="#15803d">DB query &#183; set() + PUBLISH</text>
+  <path d="M732 168 L770 146" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#aOk)"/>
+
+  <!-- losers -> subscribe -> receive -->
+  <rect x="772" y="190" width="136" height="48" rx="8" fill="#eff6ff" stroke="#2563eb"/>
+  <text x="840" y="210" text-anchor="middle" class="lblC" fill="#1e40af" font-weight="700">others wait</text>
+  <text x="840" y="227" text-anchor="middle" class="costSub" fill="#1e40af">SUBSCRIBE, then get value</text>
+  <path d="M732 188 L770 210" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#aWait)"/>
+
+  <!-- publish notifies waiters -->
+  <path d="M840 166 L840 188" fill="none" stroke="#16a34a" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#aOk)"/>
+  <text x="856" y="182" class="costSub" fill="#15803d">PUBLISH</text>
+
+  <text x="702" y="296" text-anchor="middle" class="lblC" font-weight="700" fill="#0f172a">One request wins the lock and rebuilds.</text>
+  <text x="702" y="312" text-anchor="middle" class="lblC" font-weight="700" fill="#0f172a">The rest wait on Pub/Sub, then read the</text>
+  <text x="702" y="328" text-anchor="middle" class="lblC" font-weight="700" fill="#0f172a">freshly cached value &#8212; no DB hit.</text>
+
+  <rect x="602" y="396" width="200" height="40" rx="8" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="702" y="416" class="cost" fill="#15803d">1 database query</text>
+  <text x="702" y="430" class="costSub">independent of concurrency</text>
+
+  <line x1="16" y1="470" x2="924" y2="470" stroke="#e2e8f0"/>
+  <text x="16" y="490" class="foot"><tspan font-weight="700">Redis:</tspan> a distributed SET NX lock + Pub/Sub wake-up (default in the resolver path).  <tspan font-weight="700">APCu:</tspan> a per-worker lock with randomized backoff.</text>
+  <text x="16" y="507" class="foot"><tspan font-weight="700">Redis Cluster:</tspan> the lock routes to the key's node and the release PUBLISH is broadcast cluster-wide; the queue connection must be a standalone client on the same cluster.</text>
+</svg>

@@ -584,6 +584,7 @@ class Redis extends Store
 	/**
 	 * Throws exception on purpose, this method is not meant to be used by normal users
 	 */
+	#[Override]
 	public function collectGarbage(): bool|int
 	{
 		if(($client = $this->getClient()) === null)
