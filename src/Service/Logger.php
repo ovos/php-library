@@ -101,6 +101,21 @@ class Logger extends Service
 		$output = $prepend . $output . $append;
 		$this->output($output);
 		
+		// forward to the error console when its sender is registered
+		if($event[0] instanceof Throwable)
+		{
+			try
+			{
+				$this->container
+					->get(Console\Sender::SYMBOL)
+					->captureException($event[0]);
+			}
+			catch(Throwable)
+			{
+				// sender not registered — file logging stays untouched
+			}
+		}
+		
 		return $this;
 	}
 	

@@ -5,25 +5,25 @@ namespace Benchmarks\Cache\Store;
 
 use Ovos\Benchmark;
 use Ovos\Cache\Store\KeyValue;
-use Ovos\Cache\Store\Redisearch as Store;
+use Ovos\Cache\Store\RedisVersioned as Store;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Ovos\Test\Cache\Store\TraitStoreBenchmark;
 
 /**
- * Redisearch (RediSearch TAG index)
+ * RedisVersioned (rule-based logical invalidation)
  *
  * Shares the scenario matrix with the other store benchmarks (see
  * TraitStoreBenchmark), so the rows are directly comparable.
  *
- * Strengths to look for: flat, cheap reads like plain Redis, plus
- * invalidation that finds its matches through the index instead of scanning
- * a tag hash. Weakness: it still deletes every matched item, so the cost
- * scales with the match size. The RediSearch query engine is bundled in
- * Redis 8, so the benchmark always runs.
+ * Strengths to look for: invalidation is O(1) - invalidateMatchingAll,
+ * invalidateMatchingPartial and invalidateRepeated all stay flat regardless
+ * of how many items match. Weaknesses: every read evaluates the rules the
+ * item has not seen, so readHitsAfterSmallBacklog / readHitsAfterLargeBacklog
+ * climb as the rule backlog grows - the cost the O(1) invalidation defers.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redisearch extends Benchmark
+class RedisVersioned extends Benchmark
 {
 	use TraitRedis;
 	use TraitStoreBenchmark;
@@ -53,16 +53,11 @@ class Redisearch extends Benchmark
 	}
 	
 	/**
-	 * Drop the index on teardown, so it does not keep indexing the items the
-	 * other backends write afterwards (every backend uses the same item keys)
+	 * clear() on the versioned stores is logical (it appends a rule), so the
+	 * items would linger until their TTL; wipe them physically between methods
 	 */
-	protected function tearDownStore(): void
+	protected function resetStore(): void
 	{
-		$type = $this->store->getType();
-		
-		if($this->store->indexExists($type))
-		{
-			$this->store->indexDrop($type);
-		}
+		$this->store->clearPhysical();
 	}
 }

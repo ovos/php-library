@@ -34,6 +34,8 @@ Request 4 → cache miss → waits for lock → gets cached value from Request 1
 
 Only one request does the work. Everyone else waits and benefits from the result.
 
+![MemoLock - without vs with: one request rebuilds, the rest wait on Pub/Sub](docs/cache/memolock.svg)
+
 ## How it works
 
 Two backends are supported:
@@ -46,6 +48,12 @@ Two backends are supported:
 **Redis MemoLock** is ideal for production - it coordinates across all PHP workers
 and servers using Redis Pub/Sub. When the lock holder calls `set()`, it publishes
 a notification and all waiting requests receive the cached value simultaneously.
+
+**Redis Cluster:** MemoLock works on a cluster store too - the lock routes to
+the node owning the lock key and the release notification is broadcast
+cluster-wide. The queue (Pub/Sub) connection must be a standalone `redis`
+connection pointed at a node of **the same cluster** (a classic PUBLISH never
+reaches a different Redis instance); see README.CACHE.md for the configuration.
 
 **APCu MemoLock** is simpler - it uses a local lock with short randomized backoff
 retries. Good for per-worker caches where distributed coordination isn't needed.
