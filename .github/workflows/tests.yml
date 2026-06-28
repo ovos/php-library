@@ -80,6 +80,10 @@ jobs:
       # automatic --loadmodule handling)
       - name: Start Redis Cluster
         run: |
+          # the container only starts the three nodes; forming the cluster is
+          # driven from the host so it can wait for readiness and retry (a fixed
+          # in-container sleep raced the daemons on slow runners and the one-shot
+          # create then failed, leaving the cluster unformed — the old flake)
           docker run -d --name redis-cluster -p 7000-7002:7000-7002 -p 17000-17002:17000-17002 redis:latest \
             sh -c 'for port in 7000 7001 7002; do
                 redis-server --port $port --loadmodule /usr/local/lib/redis/modules/redisearch.so \
@@ -87,16 +91,36 @@ jobs:
                   --cluster-announce-ip 127.0.0.1 --cluster-announce-port $port --cluster-announce-bus-port 1$port \
                   --appendonly no --save "" --daemonize yes;
               done;
-              sleep 2;
-              redis-cli --cluster create 127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 --cluster-replicas 0 --cluster-yes;
               tail -f /dev/null'
-          for i in $(seq 1 30); do
+          # wait for every node to accept connections before forming the cluster
+          for port in 7000 7001 7002; do
+            for i in $(seq 1 60); do
+              if docker exec redis-cluster redis-cli -p $port ping 2>/dev/null | grep -q PONG; then
+                break;
+              fi;
+              if [ "$i" -eq 60 ]; then echo "node $port never came up"; docker logs redis-cluster; exit 1; fi;
+              sleep 1;
+            done;
+          done
+          # form the cluster, retrying to ride out slot-assignment races
+          created="";
+          for i in $(seq 1 15); do
+            if docker exec redis-cluster redis-cli --cluster create \
+                127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 --cluster-replicas 0 --cluster-yes 2>/dev/null; then
+              created=1; break;
+            fi;
+            echo "cluster create attempt $i failed, retrying...";
+            sleep 2;
+          done
+          if [ -z "$created" ]; then echo "cluster create failed"; docker logs redis-cluster; exit 1; fi
+          # wait until the cluster reports a healthy state
+          for i in $(seq 1 60); do
             if docker exec redis-cluster redis-cli -p 7000 cluster info 2>/dev/null | grep -q 'cluster_state:ok'; then
               echo "cluster is up"; exit 0;
             fi;
             sleep 1;
           done
-          echo "cluster failed to start"; docker logs redis-cluster; exit 1
+          echo "cluster failed to reach ok state"; docker logs redis-cluster; exit 1
 
       - name: "Run tests"
         run: php cli.php tests run
