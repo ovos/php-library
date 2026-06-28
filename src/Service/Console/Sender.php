@@ -184,10 +184,21 @@ class Sender extends Service
 		}
 		
 		// disabled: drop anything queued so it cannot pile up in a
-		// long-lived service or bleed into a later request
+		// long-lived service or bleed into a later request — including the
+		// uncaught errors the Events service holds, since flush() is its
+		// terminal consumer and nothing else drains them post-response
 		if($this->isEnabled() === false)
 		{
 			$this->queue = [];
+			
+			try
+			{
+				$this->container->get(Events::SYMBOL)->clear();
+			}
+			catch(Throwable)
+			{
+				// events service unavailable — nothing to drain
+			}
 			
 			return;
 		}
