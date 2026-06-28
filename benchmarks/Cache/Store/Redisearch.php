@@ -18,8 +18,8 @@ use Ovos\Test\Cache\Store\TraitStoreBenchmark;
  * Strengths to look for: flat, cheap reads like plain Redis, plus
  * invalidation that finds its matches through the index instead of scanning
  * a tag hash. Weakness: it still deletes every matched item, so the cost
- * scales with the match size. The RediSearch query engine is bundled in
- * Redis 8, so the benchmark always runs.
+ * scales with the match size. RediSearch only indexes database 0, so the
+ * benchmark is skipped when the cache connection is on another database.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -50,6 +50,14 @@ class Redisearch extends Benchmark
 	{
 		$this->group = KeyValue::GROUP_BENCHMARKS;
 		$this->store = $this->getStore(Store::class);
+		
+		// RediSearch only indexes database 0; skip when the cache connection
+		// is configured for another database (the index cannot live there)
+		if($this->store->getConnection()->getConfig()->database !== 0)
+		{
+			$this->setDisabled(true,
+				'RediSearch requires database 0; cache connection is not on db0.');
+		}
 	}
 	
 	/**
