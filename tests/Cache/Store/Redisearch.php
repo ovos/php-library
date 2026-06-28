@@ -25,7 +25,16 @@ class Redisearch extends Test
 	public function __construct()
 	{
 		$this->store = $this->getStore(Store::class);
-		$this->store->getConnection()->getConfig()->database = 0;
+		
+		// RediSearch only indexes database 0; skip when the cache connection
+		// is configured for another database (the index cannot live there)
+		if($this->store->getConnection()->getConfig()->database !== 0)
+		{
+			$this->setDisabled(true,
+				'RediSearch requires database 0; cache connection is not on db0.');
+			
+			return;
+		}
 	}
 	
 	public function delete(): bool
