@@ -5,10 +5,9 @@ namespace Ovos\Service\Cache;
 
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
-use Ovos\Cache\Store\Redis;
-use Ovos\Cache\Store\Redisearch;
+use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Ovos\Connections;
-use Ovos\Connection\Redis as Connection;
+use Ovos\Connection\RedisCommon as Connection;
 use Ovos\Container;
 use Ovos\Container\Inject;
 use Ovos\Exception\MissingException\MissingConfigException;
@@ -28,7 +27,7 @@ class Persistent
 	protected ?Connection $connection = null;
 	protected ?Connection $queueConnection = null;
 	
-	protected null|Redis|Redisearch $store = null;
+	protected ?Store $store = null;
 	
 	protected ?MemoLock $queue = null;
 	
@@ -91,11 +90,11 @@ class Persistent
 	}
 	
 	public function getStore(
-	): Redis|Redisearch
+	): Store
 	{
 		if($this->store === null)
 		{
-			/** @var Redis|Redisearch $storeClass */
+			/** @var Store $storeClass */
 			$storeClass = 'Ovos\Cache\Store\\'
 				. ($this->config->persistent->store ?? 'Redis');
 			$store = new $storeClass(

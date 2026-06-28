@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="560" viewBox="0 0 940 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="aSet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16a34a"/></marker>
+    <marker id="aGet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker>
+    <marker id="aInv" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ea580c"/></marker>
+    <style>
+      .title{font-size:18px;font-weight:700;fill:#fff}
+      .badge{font-size:12px;fill:#cbd5e1}
+      .panelLabel{font-size:11px;font-weight:700;fill:#64748b;letter-spacing:1.5px}
+      .keyName{font-family:Consolas,monospace;font-size:12px;font-weight:700}
+      .keyField{font-family:Consolas,monospace;font-size:10px;fill:#475569}
+      .laneTab{font-size:12px;font-weight:700;fill:#fff}
+      .stepMain{font-size:11.5px;fill:#0f172a}
+      .stepSub{font-family:Consolas,monospace;font-size:9.5px;fill:#64748b}
+      .stepNum{font-size:12px;font-weight:700;fill:#fff}
+      .note{font-size:11px;fill:#b91c1c}
+      .foot{font-size:11px;fill:#475569}
+    </style>
+  </defs>
+
+  <rect width="940" height="560" fill="#ffffff"/>
+  <rect width="940" height="46" fill="#1e293b"/>
+  <text x="24" y="29" class="title">Redis &#8212; legacy tag-hash model</text>
+  <text x="916" y="29" text-anchor="end" class="badge">&#9679; standalone only &#183; no module</text>
+
+  <!-- KEYS -->
+  <rect x="16" y="62" width="908" height="128" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="32" y="84" class="panelLabel">KEYS IN REDIS</text>
+
+  <rect x="32" y="98" width="300" height="80" rx="8" fill="#fff" stroke="#e2e8f0"/>
+  <rect x="33" y="99" width="5" height="78" fill="#0f766e"/>
+  <text x="50" y="124" class="keyName" fill="#0f766e">items:&#123;key&#125;  (hash)</text>
+  <text x="50" y="146" class="keyField">data &#8594; serialized + compressed value</text>
+  <text x="50" y="164" class="keyField">tags &#8594; "a,b,c"  (csv)</text>
+
+  <rect x="348" y="98" width="300" height="80" rx="8" fill="#fff" stroke="#e2e8f0"/>
+  <rect x="349" y="99" width="5" height="78" fill="#b45309"/>
+  <text x="366" y="124" class="keyName" fill="#b45309">tags:&#123;tag&#125;  (hash)</text>
+  <text x="366" y="146" class="keyField">field = item id  &#8594;  &#8709;</text>
+  <text x="366" y="164" class="keyField">HEXPIRE per field (TTL)</text>
+
+  <rect x="664" y="98" width="244" height="80" rx="8" fill="#fff" stroke="#e2e8f0"/>
+  <text x="680" y="124" class="keyName" fill="#334155">two-way map</text>
+  <text x="680" y="146" class="keyField">item &#8594; its tags (csv)</text>
+  <text x="680" y="164" class="keyField">tag  &#8594; its item ids (hash)</text>
+
+  <!-- SET lane -->
+  <rect x="16" y="206" width="84" height="84" rx="10" fill="#16a34a"/>
+  <text x="58" y="252" text-anchor="middle" class="laneTab">SET</text>
+  <g>
+    <rect x="116" y="206" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
+    <circle cx="277" cy="221" r="11" fill="#16a34a"/><text x="277" y="225" text-anchor="middle" class="stepNum">1</text>
+    <text x="130" y="246" class="stepMain">Serialize + compress</text>
+    <text x="130" y="264" class="stepSub">client side</text>
+
+    <rect x="320" y="206" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
+    <circle cx="481" cy="221" r="11" fill="#16a34a"/><text x="481" y="225" text-anchor="middle" class="stepNum">2</text>
+    <text x="334" y="246" class="stepMain">Write item hash</text>
+    <text x="334" y="264" class="stepSub">HSET data,tags &#183; EXPIRE</text>
+
+    <rect x="524" y="206" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
+    <circle cx="685" cy="221" r="11" fill="#16a34a"/><text x="685" y="225" text-anchor="middle" class="stepNum">3</text>
+    <text x="538" y="246" class="stepMain">Link new tags</text>
+    <text x="538" y="264" class="stepSub">HSET tags:&#123;t&#125; = id</text>
+
+    <rect x="728" y="206" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
+    <circle cx="889" cy="221" r="11" fill="#16a34a"/><text x="889" y="225" text-anchor="middle" class="stepNum">4</text>
+    <text x="742" y="246" class="stepMain">Refresh / drop tags</text>
+    <text x="742" y="264" class="stepSub">HEXPIRE &#183; HDEL  (MULTI)</text>
+
+    <line x1="294" y1="248" x2="318" y2="248" stroke="#16a34a" stroke-width="2" marker-end="url(#aSet)"/>
+    <line x1="498" y1="248" x2="522" y2="248" stroke="#16a34a" stroke-width="2" marker-end="url(#aSet)"/>
+    <line x1="702" y1="248" x2="726" y2="248" stroke="#16a34a" stroke-width="2" marker-end="url(#aSet)"/>
+  </g>
+
+  <!-- GET lane -->
+  <rect x="16" y="306" width="84" height="84" rx="10" fill="#2563eb"/>
+  <text x="58" y="352" text-anchor="middle" class="laneTab">GET</text>
+  <g>
+    <rect x="116" y="306" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+    <circle cx="277" cy="321" r="11" fill="#2563eb"/><text x="277" y="325" text-anchor="middle" class="stepNum">1</text>
+    <text x="130" y="346" class="stepMain">Read item data</text>
+    <text x="130" y="364" class="stepSub">HGET items:&#123;key&#125; data</text>
+
+    <rect x="320" y="306" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+    <circle cx="481" cy="321" r="11" fill="#2563eb"/><text x="481" y="325" text-anchor="middle" class="stepNum">2</text>
+    <text x="334" y="346" class="stepMain">Decompress + unserialize</text>
+    <text x="334" y="364" class="stepSub">client side</text>
+
+    <rect x="524" y="306" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+    <circle cx="685" cy="321" r="11" fill="#2563eb"/><text x="685" y="325" text-anchor="middle" class="stepNum">3</text>
+    <text x="538" y="346" class="stepMain">Miss &#8594; stampede lock</text>
+    <text x="538" y="364" class="stepSub">MemoLock + resolver</text>
+
+    <line x1="294" y1="348" x2="318" y2="348" stroke="#2563eb" stroke-width="2" marker-end="url(#aGet)"/>
+    <line x1="498" y1="348" x2="522" y2="348" stroke="#2563eb" stroke-width="2" marker-end="url(#aGet)"/>
+  </g>
+
+  <!-- INVALIDATE lane -->
+  <rect x="16" y="406" width="84" height="84" rx="10" fill="#ea580c"/>
+  <text x="58" y="448" text-anchor="middle" class="laneTab">INVALI-</text>
+  <text x="58" y="464" text-anchor="middle" class="laneTab">DATE</text>
+  <g>
+    <rect x="116" y="406" width="176" height="84" rx="10" fill="#fff" stroke="#ea580c" stroke-width="1.5"/>
+    <circle cx="277" cy="421" r="11" fill="#ea580c"/><text x="277" y="425" text-anchor="middle" class="stepNum">1</text>
+    <text x="130" y="446" class="stepMain">Scan each tag hash</text>
+    <text x="130" y="464" class="stepSub">HSCAN tags:&#123;t&#125;  (cursor)</text>
+
+    <rect x="320" y="406" width="176" height="84" rx="10" fill="#fff" stroke="#ea580c" stroke-width="1.5"/>
+    <circle cx="481" cy="421" r="11" fill="#ea580c"/><text x="481" y="425" text-anchor="middle" class="stepNum">2</text>
+    <text x="334" y="446" class="stepMain">Delete matched items</text>
+    <text x="334" y="464" class="stepSub">UNLINK items:&#123;id&#125;</text>
+
+    <rect x="524" y="406" width="176" height="84" rx="10" fill="#fff" stroke="#ea580c" stroke-width="1.5"/>
+    <circle cx="685" cy="421" r="11" fill="#ea580c"/><text x="685" y="425" text-anchor="middle" class="stepNum">3</text>
+    <text x="538" y="446" class="stepMain">Drop ids from tag</text>
+    <text x="538" y="464" class="stepSub">HDEL tags:&#123;t&#125;</text>
+
+    <rect x="724" y="412" width="184" height="72" rx="8" fill="#fff5f0" stroke="#fcd9c4"/>
+    <text x="738" y="436" class="note">Cost: O(matched items)</text>
+    <text x="738" y="456" class="stepSub" fill="#9a3412">items deleted eagerly,</text>
+    <text x="738" y="470" class="stepSub" fill="#9a3412">in a Lua FCALL loop</text>
+
+    <line x1="294" y1="448" x2="318" y2="448" stroke="#ea580c" stroke-width="2" marker-end="url(#aInv)"/>
+    <line x1="498" y1="448" x2="522" y2="448" stroke="#ea580c" stroke-width="2" marker-end="url(#aInv)"/>
+    <line x1="702" y1="448" x2="722" y2="448" stroke="#ea580c" stroke-width="2" marker-end="url(#aInv)"/>
+  </g>
+
+  <line x1="16" y1="508" x2="924" y2="508" stroke="#e2e8f0"/>
+  <text x="16" y="528" class="foot"><tspan font-weight="700">Invalidation:</tspan> O(matched items), eager delete  &#183;  <tspan font-weight="700">Tag introspection:</tspan> getTags / getAllTags  &#183;  <tspan font-weight="700">Module:</tspan> none</text>
+  <text x="16" y="546" class="foot"><tspan font-weight="700">Lua:</tspan> cache_unlink_by_tag, cache_clean_tag (garbage collector)  &#183;  <tspan font-weight="700">Cluster:</tspan> no &#8212; tag hashes span slots (no-cluster)</text>
+</svg>

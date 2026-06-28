@@ -80,7 +80,7 @@ class Placeholder
 	public function includeScript(
 		string $script,
 		string $placement = self::PLACEMENT_APPEND,
-		string $template = '<script type="text/javascript" src="%s"></script>'
+		string $template = '<script src="%s"></script>'
 			. PHP_EOL,
 		bool $asset = false,
 	): static

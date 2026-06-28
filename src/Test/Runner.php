@@ -137,6 +137,10 @@ class Runner
 				continue;
 			}
 			
+			// progress - announce the method about to run (a no-op unless the
+			// test opts in; benchmarks print the running method here)
+			$test->progress($result->getMethodName());
+			
 			// prepare - called before each test method
 			if($this->class->hasMethod('prepare'))
 			{
@@ -280,7 +284,7 @@ class Runner
 	{
 		return $this->class->name;
 	}
-
+	
 	public function __toString()
 	{
 		return $this->class->name;

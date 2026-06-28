@@ -6,10 +6,12 @@ namespace Ovos\Cache\Store\KeyValue;
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
 use Ovos\Cache\Redis\Functions;
-use Ovos\Connection\Redis as Connection;
+use Ovos\Connection\RedisCommon as Connection;
 use Override;
 use Closure;
 use Redis as RedisClient;
+use RedisCluster as RedisClusterClient;
+use RedisClusterException;
 use RedisException;
 
 use function is_int;
@@ -126,7 +128,7 @@ abstract class Redis extends Tags
 		return $this->queueConnection;
 	}
 	
-	public function getClient(): ?RedisClient
+	public function getClient(): RedisClient|RedisClusterClient|null
 	{
 		return $this->connection->getClient();
 	}
@@ -191,7 +193,8 @@ abstract class Redis extends Tags
 					->unserialize($value);
 			}
 		}
-		catch(RedisException $exception)
+		// RedisClusterException does not extend RedisException, catch both
+		catch(RedisException|RedisClusterException $exception)
 		{
 			$this->log($exception);
 		}
@@ -314,6 +317,19 @@ abstract class Redis extends Tags
 		}
 		
 		return $count;
+	}
+	
+	/**
+	 * Reclaims whatever a store accumulates that does not expire on its own.
+	 * The default is a no-op: items carry a TTL and there is no side index to
+	 * sweep. The tag-hash store overrides this to prune dangling tag -> id
+	 * references; the versioned stores keep the default (their rules stream
+	 * self-trims and stale items expire by TTL). Defined here so the cache
+	 * maintenance cron can call collectGarbage() on any persistent store.
+	 */
+	public function collectGarbage(): bool|int
+	{
+		return true;
 	}
 	
 	/**
