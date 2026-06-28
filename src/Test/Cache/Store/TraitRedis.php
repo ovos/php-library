@@ -5,8 +5,7 @@ namespace Ovos\Test\Cache\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Redis as RedisMemoLock;
-use Ovos\Cache\Store\Redis;
-use Ovos\Cache\Store\Redisearch;
+use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Cache\Store\KeyValue;
@@ -27,14 +26,14 @@ trait TraitRedis
 	
 	protected function getStore(
 		string $storeClass,
-	): Redis|Redisearch
+	): KeyValueRedis
 	{
 		$persistent = $this->container
 			->getClass(Persistent::class, parameters: [
 				'config' => $this->cacheConfig,
 			]);
 		
-		/** @var Redis|Redisearch $storeClass */
+		/** @var KeyValueRedis $storeClass */
 		return new $storeClass(
 			$persistent->getConnection(),
 			$persistent->getQueueConnection(),

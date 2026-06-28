@@ -76,6 +76,7 @@ class Connections
 		return match($type)
 		{
 			'redis' => Connection\Redis::class,
+			'redis_cluster' => Connection\RedisCluster::class,
 			'mysql' => Connection\Mysql::class,
 			default => throw new InvalidClassException(
 			'Unknown connection type: ' . $type

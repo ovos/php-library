@@ -23,9 +23,12 @@ redis.register_function('[prefix]memolock_renew_lock', memolock_renew_lock)
 
 -- Release a lock and publish a notification
 local function memolock_release_lock_and_publish(keys, args)
+	-- cluster-safe: lock_key is the only KEY, so FCALL routes to a single slot;
+	-- the channel is passed as an ARG (a pub/sub channel is not a keyspace key) and
+	-- classic PUBLISH broadcasts cluster-wide, so waiters on any node are notified
 	local lock_key = keys[1]
-	local channel = keys[2]
 	local lock_value = args[1]
+	local channel = args[2]
 	
 	-- only delete the lock if we still own it (value matches)
 	if redis.call('GET', lock_key) == lock_value then

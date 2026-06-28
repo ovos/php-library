@@ -1,12 +1,11 @@
 <?php
 
-namespace Tests\Cache\Store\MemoLock\Redis;
+namespace Tests\Cache\Store\MemoLock\RedisCluster;
 
 use Ovos\Application;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
-use Ovos\Cache\Store\Redis as Store;
 use Ovos\Test\Cache\Store\MemoLock\QueueClient;
-use Ovos\Test\Cache\Store\TraitRedis;
+use Ovos\Test\Cache\Store\TraitRedisCluster;
 
 use function Ovos\container;
 
@@ -15,7 +14,7 @@ use function dirname;
 use function is_dir;
 
 /**
- * Tool for testing cache queue
+ * Tool for testing cache queue against a Redis Cluster
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -35,11 +34,11 @@ if(is_dir(Application::CONFIGS_DIR) === false)
 
 class Client extends QueueClient
 {
-	use TraitRedis;
+	use TraitRedisCluster;
 	
 	protected function createStore(): ?KeyValueRedis
 	{
-		return $this->getStore(Store::class);
+		return $this->getClusterStore();
 	}
 }
 
