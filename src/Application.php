@@ -22,6 +22,7 @@ use function implode;
 use function set_include_path;
 use function get_include_path;
 use function error_get_last;
+use function function_exists;
 use function register_shutdown_function;
 
 /**
@@ -78,6 +79,13 @@ class Application
 	protected ?Response $response = null;
 	
 	protected ?Router $router = null;
+	
+	/**
+	 * Callbacks to run after the response has been sent (see afterResponse())
+	 *
+	 * @var callable[]
+	 */
+	protected array $afterResponse = [];
 	
 	public function __construct(
 		?string $interface = null, // @see self::INT_*
@@ -620,16 +628,40 @@ class Application
 			->getClass(Services::class);
 	}
 	
+	/**
+	 * Registers a callback to run after the response has been sent to the
+	 * client (post fastcgi_finish_request), for deferred, non-blocking work.
+	 * Callbacks run from handleShutdown() in registration order.
+	 */
+	public function afterResponse(callable $callback): static
+	{
+		$this->afterResponse[] = $callback;
+		
+		return $this;
+	}
+	
 	public function handleShutdown(): void
 	{
 		if($error = error_get_last())
 		{
-			$this->getServices()->events->handleError(
-				$error['type'],
-				$error['message'],
-				$error['file'],
-				$error['line'],
-			);
+			try
+			{
+				$this->getServices()->events->handleError(
+					$error['type'],
+					$error['message'],
+					$error['file'],
+					$error['line'],
+				);
+			}
+			catch(Throwable $throwable)
+			{
+				// handleError() throws the converted ErrorException — during
+				// shutdown that would abort this handler before the response
+				// is sent; collect it like a regular event instead
+				$this->getServices()->events
+					->add($throwable)
+					->log($throwable);
+			}
 		}
 		
 		// get the response to be sent
@@ -697,6 +729,27 @@ class Application
 		{
 			$this->getServices()->events->log($throwable);
 		}
+		
+		// the response is sent — release the client, then run the deferred
+		// post-response callbacks (e.g. the error-console flush), so the
+		// user never waits for them (best effort)
+		if(function_exists('fastcgi_finish_request') && $this->isInterfaceHttp())
+		{
+			fastcgi_finish_request();
+		}
+		
+		foreach($this->afterResponse as $callback)
+		{
+			try
+			{
+				$callback();
+			}
+			catch(Throwable $throwable)
+			{
+				$this->getServices()->events->log($throwable);
+			}
+		}
+		$this->afterResponse = [];
 		
 		if($hasEvents)
 		{

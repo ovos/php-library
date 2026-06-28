@@ -114,6 +114,16 @@ class Events
 		return $this;
 	}
 	
+	/**
+	 * Clears the collected events
+	 */
+	public function clear(): static
+	{
+		$this->events = [];
+		
+		return $this;
+	}
+	
 	public function toArray(): array
 	{
 		return $this->events;
