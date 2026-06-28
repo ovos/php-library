@@ -5,6 +5,8 @@ namespace Ovos\Connection;
 
 use Ovos\ArrayObject;
 use Ovos\Connection;
+use Ovos\Measurement;
+use Ovos\Redis\Profiler\Collector;
 
 use function count;
 use function date;
@@ -137,9 +139,26 @@ abstract class RedisCommon extends Connection
 		{
 			$start = microtime(true);
 		}
-		
+
+		// profiler: time every call so the debug Redis helper can list it
+		if($this->profilers?->enabled ?? false)
+		{
+			if($this->profilers->offsetExists('redis'))
+			{
+				Collector::$limit = (int)$this->profilers->redis->limit;
+			}
+			$measurement = (new Measurement)->start();
+		}
+
 		$result = $callback($function, $keys, $args);
-		
+
+		if(isset($measurement))
+		{
+			$measurement->stop();
+			Collector::getInstance()
+				->setCommand($function, $keys, $args, $measurement);
+		}
+
 		if($this->slowLogEnabled)
 		{
 			$end = microtime(true);
