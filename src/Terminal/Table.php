@@ -5,6 +5,7 @@ namespace Ovos\Terminal;
 
 use function array_fill;
 use function array_map;
+use function array_values;
 use function ceil;
 use function count;
 use function explode;
@@ -126,7 +127,9 @@ class Table
 		array $headers,
 	): static
 	{
-		$this->headers = array_map($this->stringify(...), $headers);
+		// array_values: columns are positional, so drop any keys the caller
+		// passed (associative/sparse rows would otherwise misalign)
+		$this->headers = array_values(array_map($this->stringify(...), $headers));
 		
 		return $this;
 	}
@@ -160,7 +163,7 @@ class Table
 		array $row,
 	): static
 	{
-		$this->rows[] = array_map($this->stringify(...), $row);
+		$this->rows[] = array_values(array_map($this->stringify(...), $row));
 		
 		return $this;
 	}
