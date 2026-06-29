@@ -91,6 +91,27 @@ class Request extends Test
 		return ($options['http']['timeout'] ?? null) === 2.5;
 	}
 	
+	/**
+	 * The connection bound follows the effective http.timeout even after a later
+	 * setContextOptions() overrides it, so connect and read can't diverge.
+	 */
+	public function connectTimeoutTracksHttpTimeout(): bool
+	{
+		$request = new class('http://localhost') extends HttpRequest
+		{
+			public function exposedSocketTimeout(): ?int
+			{
+				return $this->socketTimeout();
+			}
+		};
+		$request->setTimeout(5.0);
+		$first = $request->exposedSocketTimeout();
+		$request->setContextOptions(['http' => ['timeout' => 2]]);
+		$second = $request->exposedSocketTimeout();
+		
+		return $first === 5 && $second === 2;
+	}
+	
 	public function ignoreErrorsSetsContextOption(): bool
 	{
 		$on = (new HttpRequest('http://localhost'))

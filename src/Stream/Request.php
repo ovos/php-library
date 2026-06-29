@@ -49,14 +49,6 @@ class Request
 	protected Measurement $measurement;
 	
 	/**
-	 * Overall timeout in seconds. When set it bounds both the read (via the
-	 * http.timeout context option) and the connection (via a scoped
-	 * default_socket_timeout around the fopen) — the http stream wrapper has
-	 * no separate connect-timeout knob the way curl does.
-	 */
-	protected ?float $timeout = null;
-	
-	/**
 	 * Best-effort mode — see setBestEffort().
 	 */
 	protected bool $bestEffort = false;
@@ -137,8 +129,9 @@ class Request
 		mixed $context,
 	): mixed
 	{
-		$restoreSocketTimeout = $this->timeout !== null
-			? ini_set('default_socket_timeout', (string)(int)ceil($this->timeout))
+		$socketTimeout = $this->socketTimeout();
+		$restoreSocketTimeout = $socketTimeout !== null
+			? ini_set('default_socket_timeout', (string)$socketTimeout)
 			: false;
 		
 		try
@@ -164,6 +157,19 @@ class Request
 				ini_set('default_socket_timeout', $restoreSocketTimeout);
 			}
 		}
+	}
+	
+	/**
+	 * The connection-phase bound in whole seconds, derived from the effective
+	 * http.timeout so the read and connect limits never diverge (the http
+	 * wrapper has no separate connect-timeout knob the way curl does). Null when
+	 * no timeout is configured.
+	 */
+	protected function socketTimeout(): ?int
+	{
+		$timeout = $this->contextOptions['http']['timeout'] ?? null;
+		
+		return is_numeric($timeout) ? (int)ceil((float)$timeout) : null;
 	}
 	
 	/**
@@ -343,13 +349,14 @@ class Request
 	}
 	
 	/**
-	 * Overall timeout in seconds (bounds both connect and read).
+	 * Overall timeout in seconds, stored as http.timeout — the single source of
+	 * truth, so the read and the connection bound (socketTimeout()) never
+	 * diverge even if http.timeout is later changed via setContextOptions().
 	 */
 	public function setTimeout(
 		float $seconds,
 	): static
 	{
-		$this->timeout = $seconds;
 		$this->setContextOptions(['http' => ['timeout' => $seconds]]);
 		
 		return $this;
