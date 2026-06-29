@@ -117,7 +117,7 @@ class Arrays
 				}
 				
 				return $arrays[2];
-				
+			
 			default: // merge the first two and repeat until there are just two left
 				$arrays[1] = (__METHOD__)($arrays[0], $arrays[1]);
 				array_shift($arrays);
@@ -150,7 +150,7 @@ class Arrays
 		
 		return $paired;
 	}
-
+	
 	/**
 	 * Returns a flattened array
 	 *
