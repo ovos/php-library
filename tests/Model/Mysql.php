@@ -23,6 +23,8 @@ class Mysql extends Test
 	
 	protected object $model;
 	
+	protected object $recorder;
+	
 	public function __construct()
 	{
 		$this->store = (new class() extends Store
@@ -44,6 +46,41 @@ class Mysql extends Test
 			}
 		};
 		$this->model::$store = $this->store;
+		
+		// records which lifecycle events fired, to assert the post* hooks
+		$this->recorder = new class() extends Model
+		{
+			/** @var string[] */
+			public array $events = [];
+			
+			public static object $store;
+			
+			public static function getStoreClass(): string
+			{
+				return self::$store::class;
+			}
+			
+			public function postInsert(): void
+			{
+				$this->events[] = 'postInsert';
+			}
+			
+			public function postUpdate(): void
+			{
+				$this->events[] = 'postUpdate';
+			}
+			
+			public function postSave(): void
+			{
+				$this->events[] = 'postSave';
+			}
+			
+			public function postDelete(): void
+			{
+				$this->events[] = 'postDelete';
+			}
+		};
+		$this->recorder::$store = $this->store;
 		
 		$this->store->source()->exec('
 			CREATE TABLE IF NOT EXISTS tests (
@@ -180,6 +217,75 @@ class Mysql extends Test
 		$model->save();
 		
 		return $model->id === 1;
+	}
+	
+	/**
+	 * An insert fires postInsert then postSave (in that order).
+	 */
+	public function postInsertFiresInsertAndSave(): bool
+	{
+		$model = new $this->recorder;
+		$model->save();
+		
+		return $model->events === ['postInsert', 'postSave'];
+	}
+	
+	/**
+	 * A modifying save fires postUpdate then postSave (not postInsert).
+	 */
+	public function postUpdateFiresUpdateAndSave(): bool
+	{
+		$this->store->source()->exec('
+			INSERT INTO tests
+			VALUES
+				(1, "Test 1", null, null, 1);
+		');
+		
+		$query = $this->store->executeFind(where: ['id' => 1]);
+		/** @var Model $model */
+		$model = $query->fetchObject($this->recorder::class);
+		$model->name = 'Test modified';
+		$model->save();
+		
+		return $model->events === ['postUpdate', 'postSave'];
+	}
+	
+	/**
+	 * Saving an unmodified model is a no-op, so no post* event fires.
+	 */
+	public function postSaveSkippedWhenUnmodified(): bool
+	{
+		$this->store->source()->exec('
+			INSERT INTO tests
+			VALUES
+				(1, "Test 1", null, null, 1);
+		');
+		
+		$query = $this->store->executeFind(where: ['id' => 1]);
+		/** @var Model $model */
+		$model = $query->fetchObject($this->recorder::class);
+		$saved = $model->save();
+		
+		return $saved === false && $model->events === [];
+	}
+	
+	/**
+	 * A delete fires postDelete.
+	 */
+	public function postDeleteFiresDelete(): bool
+	{
+		$this->store->source()->exec('
+			INSERT INTO tests
+			VALUES
+				(1, "Test 1", null, null, 1);
+		');
+		
+		$query = $this->store->executeFind(where: ['id' => 1]);
+		/** @var Model $model */
+		$model = $query->fetchObject($this->recorder::class);
+		$model->delete();
+		
+		return $model->events === ['postDelete'];
 	}
 	
 	/**
