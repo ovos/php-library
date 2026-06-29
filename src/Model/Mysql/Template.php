@@ -84,4 +84,28 @@ abstract class Template
 	): void
 	{
 	}
+	
+	public function postInsert(
+		Mysql $model,
+	): void
+	{
+	}
+	
+	public function postUpdate(
+		Mysql $model,
+	): void
+	{
+	}
+	
+	public function postSave(
+		Mysql $model,
+	): void
+	{
+	}
+	
+	public function postDelete(
+		Mysql $model,
+	): void
+	{
+	}
 }

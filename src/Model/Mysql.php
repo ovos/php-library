@@ -900,6 +900,11 @@ abstract class Mysql
 		$this->resetModified();
 		$this->exists(true);
 		
+		if($result)
+		{
+			$this->triggerEvents('postInsert', 'postSave');
+		}
+		
 		return $result;
 	}
 	
@@ -965,6 +970,8 @@ abstract class Mysql
 			
 			// reset getters cache
 			$this->_gettersCache = [];
+			
+			$this->triggerEvents('postUpdate', 'postSave');
 		}
 		
 		return $result;
@@ -1025,8 +1032,14 @@ abstract class Mysql
 			WHERE ' . $this->getPrimaryKeysConditions()
 		);
 		$this->bindPrimaryKeys($query);
+		$result = $query->execute();
 		
-		return $query->execute();
+		if($result)
+		{
+			$this->triggerEvents('postDelete');
+		}
+		
+		return $result;
 	}
 	
 	public static function getTable(): string
@@ -1151,6 +1164,22 @@ abstract class Mysql
 	}
 	
 	public function preDelete(): void
+	{
+	}
+	
+	public function postInsert(): void
+	{
+	}
+	
+	public function postUpdate(): void
+	{
+	}
+	
+	public function postSave(): void
+	{
+	}
+	
+	public function postDelete(): void
 	{
 	}
 }
