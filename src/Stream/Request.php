@@ -5,6 +5,8 @@ namespace Ovos\Stream;
 
 use Ovos\Arrays;
 use Ovos\Measurement;
+use RuntimeException;
+use Throwable;
 
 /**
  * Request
@@ -47,6 +49,19 @@ class Request
 	protected Measurement $measurement;
 	
 	/**
+	 * Overall timeout in seconds. When set it bounds both the read (via the
+	 * http.timeout context option) and the connection (via a scoped
+	 * default_socket_timeout around the fopen) — the http stream wrapper has
+	 * no separate connect-timeout knob the way curl does.
+	 */
+	protected ?float $timeout = null;
+	
+	/**
+	 * Best-effort mode — see setBestEffort().
+	 */
+	protected bool $bestEffort = false;
+	
+	/**
 	 */
 	public function __construct(
 		string $url,
@@ -76,7 +91,29 @@ class Request
 		{
 			$url.= '?' . http_build_query($content);
 		}
-		$stream = fopen($url, 'r', false, $context);
+		
+		$stream = $this->openStream($url, $context);
+		
+		if($stream === false)
+		{
+			// best-effort degrades a transport failure (DNS, refused, TLS,
+			// timeout) to a null response; with it off a failure must surface —
+			// fopen already warns, but should that warning not be promoted to an
+			// exception, raise one so the failure is never silently swallowed
+			if($this->bestEffort === false)
+			{
+				$this->getMeasurement()->stop();
+				
+				throw new RuntimeException('Stream\Request: failed to open ' . $this->url);
+			}
+			
+			$this->response = null;
+			$this->responseMetaData = null;
+			$this->getMeasurement()->stop();
+			
+			return $this;
+		}
+		
 		$this->responseMetaData = stream_get_meta_data($stream);
 		$this->response = stream_get_contents($stream);
 		fclose($stream);
@@ -87,7 +124,52 @@ class Request
 	}
 	
 	/**
-	 * Parse meta data and return status code
+	 * Open the request stream. The connection phase is bounded by a scoped
+	 * default_socket_timeout when a timeout is set (the http wrapper has no
+	 * separate connect-timeout knob); in best-effort mode a transport failure
+	 * is swallowed and returned as false so invoke() can degrade to a null
+	 * response, otherwise the fopen warning/exception surfaces as before.
+	 *
+	 * @return resource|false
+	 */
+	protected function openStream(
+		string $url,
+		mixed $context,
+	): mixed
+	{
+		$restoreSocketTimeout = $this->timeout !== null
+			? ini_set('default_socket_timeout', (string)(int)ceil($this->timeout))
+			: false;
+		
+		try
+		{
+			if($this->bestEffort === false)
+			{
+				return fopen($url, 'r', false, $context);
+			}
+			
+			try
+			{
+				return @fopen($url, 'r', false, $context);
+			}
+			catch(Throwable)
+			{
+				return false;
+			}
+		}
+		finally
+		{
+			if($restoreSocketTimeout !== false)
+			{
+				ini_set('default_socket_timeout', $restoreSocketTimeout);
+			}
+		}
+	}
+	
+	/**
+	 * The final HTTP status code from the response meta data. After following
+	 * redirects wrapper_data carries one status line per hop, so the last one
+	 * wins. Null when there is no response (e.g. a transport failure).
 	 *
 	 * 'wrapper_data' =>
 	 *   [0] =>
@@ -105,6 +187,7 @@ class Request
 			return null;
 		}
 		
+		$code = null;
 		foreach($this->responseMetaData['wrapper_data'] as $header)
 		{
 			if(str_starts_with($header, 'HTTP/') === false)
@@ -113,10 +196,21 @@ class Request
 			}
 			
 			$parts = explode(' ', $header);
-			return (int)$parts[1];
+			$code = (int)$parts[1];
 		}
 		
-		return null;
+		return $code;
+	}
+	
+	/**
+	 * Whether the response carried a 2xx status. A transport failure leaves the
+	 * status null, so this returns false — the best-effort success test.
+	 */
+	public function isOk(): bool
+	{
+		$code = $this->getResponseStatusCode();
+		
+		return $code !== null && $code >= 200 && $code < 300;
 	}
 	
 	/**
@@ -124,6 +218,16 @@ class Request
 	 */
 	public function createContext(
 	): mixed
+	{
+		return stream_context_create($this->buildContextOptions());
+	}
+	
+	/**
+	 * Resolve the final stream context options. Split out from createContext()
+	 * so the request body / header handling stays unit-testable without
+	 * opening a socket.
+	 */
+	public function buildContextOptions(): array
 	{
 		$contextOptions = $this->contextOptions;
 		
@@ -136,14 +240,61 @@ class Request
 					= http_build_query($this->content);
 			}
 			
-			if(isset($contextOptions['http']['content']))
+			if(isset($contextOptions['http']['content'])
+				&& $this->hasHeader($contextOptions, 'Content-Type') === false)
 			{
-				$contextOptions['http']['header'][]
-					= 'Content-Type: application/x-www-form-urlencoded';
+				$headers = self::headerLines($contextOptions['http']['header'] ?? []);
+				$headers[] = 'Content-Type: application/x-www-form-urlencoded';
+				$contextOptions['http']['header'] = $headers;
 			}
 		}
 		
-		return stream_context_create($contextOptions);
+		return $contextOptions;
+	}
+	
+	/**
+	 * Whether a header line is already present (case-insensitive name match),
+	 * so we never append a second, conflicting Content-Type.
+	 */
+	protected function hasHeader(
+		array $contextOptions,
+		string $name,
+	): bool
+	{
+		$needle = strtolower($name) . ':';
+		foreach(self::headerLines($contextOptions['http']['header'] ?? []) as $header)
+		{
+			if(str_starts_with(strtolower($header), $needle))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * Normalize the http.header option to a line list. Streams also accept a
+	 * single CRLF-joined string, so coerce that to an array — otherwise an
+	 * append (addHeader, the urlencoded default) would fatal on a string.
+	 */
+	protected static function headerLines(
+		mixed $header,
+	): array
+	{
+		if(is_array($header))
+		{
+			return $header;
+		}
+		
+		if(is_string($header) === false || $header === '')
+		{
+			return [];
+		}
+		
+		$lines = preg_split('~\r\n|\r|\n~', $header, -1, PREG_SPLIT_NO_EMPTY);
+		
+		return $lines === false ? [] : $lines;
 	}
 	
 	public function setMethod(
@@ -189,6 +340,106 @@ class Request
 	public function getContextOptions(): array
 	{
 		return $this->contextOptions;
+	}
+	
+	/**
+	 * Overall timeout in seconds (bounds both connect and read).
+	 */
+	public function setTimeout(
+		float $seconds,
+	): static
+	{
+		$this->timeout = $seconds;
+		$this->setContextOptions(['http' => ['timeout' => $seconds]]);
+		
+		return $this;
+	}
+	
+	/**
+	 * Keep the response (and its status) on a 4xx/5xx instead of letting fopen
+	 * fail — required when the caller wants to read error statuses (e.g. probes).
+	 */
+	public function setIgnoreErrors(
+		bool $ignoreErrors = true,
+	): static
+	{
+		$this->setContextOptions(['http' => ['ignore_errors' => $ignoreErrors]]);
+		
+		return $this;
+	}
+	
+	/**
+	 * Follow up to $maxRedirects redirect hops. Streams count the initial
+	 * request in max_redirects, so allow one more than the hops we want.
+	 */
+	public function setFollowRedirects(
+		int $maxRedirects,
+	): static
+	{
+		$this->setContextOptions(['http' => [
+			'follow_location' => $maxRedirects > 0 ? 1 : 0,
+			'max_redirects' => $maxRedirects + 1,
+		]]);
+		
+		return $this;
+	}
+	
+	public function setUserAgent(
+		string $userAgent,
+	): static
+	{
+		$this->setContextOptions(['http' => ['user_agent' => $userAgent]]);
+		
+		return $this;
+	}
+	
+	/**
+	 * Append a request header. Unlike passing a header array through
+	 * setContextOptions() — whose deep-merge collides on numeric keys and would
+	 * overwrite an existing header — this always adds to the list.
+	 */
+	public function addHeader(
+		string $header,
+	): static
+	{
+		$headers = self::headerLines($this->contextOptions['http']['header'] ?? []);
+		$headers[] = $header;
+		$this->contextOptions['http']['header'] = $headers;
+		
+		return $this;
+	}
+	
+	/**
+	 * Send $data as a JSON request body (implies POST). Appends the JSON
+	 * Content-Type (keeping any existing headers), so buildContextOptions()
+	 * won't add the urlencoded one.
+	 */
+	public function setJsonContent(
+		mixed $data,
+	): static
+	{
+		$this->setMethod(self::METHOD_POST);
+		$this->setContextOptions(['http' => [
+			'content' => json_encode($data, flags: JSON_THROW_ON_ERROR),
+		]]);
+		$this->addHeader('Content-Type: application/json; charset=UTF-8');
+		
+		return $this;
+	}
+	
+	/**
+	 * Best-effort mode: a transport failure (DNS, connection refused, TLS,
+	 * timeout) degrades to a null response instead of surfacing the fopen
+	 * warning/exception — for probes and fire-and-forget posts that must not
+	 * abort the caller. Off by default, so existing callers still see failures.
+	 */
+	public function setBestEffort(
+		bool $bestEffort = true,
+	): static
+	{
+		$this->bestEffort = $bestEffort;
+		
+		return $this;
 	}
 	
 	public function setContent(
