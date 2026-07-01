@@ -38,6 +38,7 @@ class Client extends BaseRedis
 		string $command,
 		array $keys,
 		Closure $function,
+		array $args = [],
 	): mixed
 	{
 		if($this->getMode() !== BaseRedis::ATOMIC)
@@ -55,13 +56,13 @@ class Client extends BaseRedis
 		catch(RedisException $exception)
 		{
 			$measurement->stop();
-			Collector::getInstance()->setCommand($command, $keys, [], $measurement);
+			Collector::getInstance()->setCommand($command, $keys, $args, $measurement);
 			
 			throw $exception;
 		}
 		
 		$measurement->stop();
-		Collector::getInstance()->setCommand($command, $keys, [], $measurement);
+		Collector::getInstance()->setCommand($command, $keys, $args, $measurement);
 		
 		return $result;
 	}
@@ -383,8 +384,11 @@ class Client extends BaseRedis
 		mixed ...$args,
 	): mixed
 	{
+		// pass $args so the profiler shows the full command (e.g. FT.SEARCH …),
+		// not just "rawCommand FT.SEARCH"; Reporter clips each arg to 80 chars
 		return $this->profile('rawCommand ' . $command, [],
 			fn() => parent::rawCommand($command, ...$args),
+			$args,
 		);
 	}
 	
