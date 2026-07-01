@@ -6,7 +6,6 @@ namespace Ovos;
 use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Exception\RuntimeException;
 use Ovos\Config\Loader as ConfigLoader;
-use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Response\Redirect;
 use Ovos\Service\Memory;
 use Throwable;
@@ -818,19 +817,9 @@ class Application
 	): static
 	{
 		$profilers = $this->getConfig()->system->profilers;
-		
-		if($profilers->enabled
-			&& $this->isInterfaceHttp()
-			&& $profilers->append->http)
-		{
-			$reporter = new Reporter;
-			$report = $reporter->getReport();
-			if(!empty($report))
-			{
-				$response->queries = $report;
-			}
-		}
-		
+
+		// queries are no longer inlined into JSON responses — the profiler
+		// stream (Ovos\Service\Profiler) carries them instead
 		if($this->getRequest()->isHttpDebug())
 		{
 			$response->setOptions(JSON_PRETTY_PRINT);
