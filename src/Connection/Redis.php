@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Connection;
 
 use Override;
+use Ovos\Redis\Profiler\Client as ProfilerClient;
+use Ovos\Redis\Profiler\Collector;
 use Redis as RedisClient;
 use RedisException;
 
@@ -62,7 +64,17 @@ class Redis extends RedisCommon
 			'port' => $port,
 			'connectTimeout' => $this->connectTimeout,
 		];
-		$this->client = new RedisClient($connectionOptions);
+		// dev profiling: the profiling subclass records raw-client commands into
+		// the redis profiler; production uses the plain client (zero overhead)
+		if($this->profilers?->enabled === true)
+		{
+			Collector::$limit = (int)($this->profilers->redis?->limit ?? 0);
+			$this->client = new ProfilerClient($connectionOptions);
+		}
+		else
+		{
+			$this->client = new RedisClient($connectionOptions);
+		}
 		
 		$options = [
 			RedisClient::OPT_READ_TIMEOUT
