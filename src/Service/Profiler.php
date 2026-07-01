@@ -143,6 +143,7 @@ class Profiler extends Service
 			'memory' => memory_get_peak_usage(true),
 			'queries' => (new QueriesReporter)->getReport() ?? [],
 			'redis' => (new RedisReporter)->getReport() ?? [],
+			'streams' => $this->collectStreams(),
 			'console' => $this->container->getClass(Console::class)->getReport(),
 			'benchmark' => $measurements,
 			'errors' => $this->collectErrors(),
@@ -172,6 +173,38 @@ class Profiler extends Service
 		}
 		
 		return $errors;
+	}
+	
+	/**
+	 * ovos/streams HTTP requests made during this request (empty when the
+	 * streams service is not registered)
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	protected function collectStreams(): array
+	{
+		// ovos/streams is optional — only touch it when the project registered it
+		// (constructing it unregistered would fatal on the missing streams config)
+		if($this->container->isRegistered(Streams::SYMBOL) === false)
+		{
+			return [];
+		}
+		
+		$streams = [];
+		
+		foreach($this->container->get(Streams::SYMBOL)->getRequests() as $request)
+		{
+			$measurement = $request->getMeasurement();
+			
+			$streams[] = [
+				'method' => $request->getMethod(),
+				'url' => $request->getUrl(),
+				'time' => $measurement?->getTotalTime(),
+				'memory' => $measurement?->getTotalMemory(),
+			];
+		}
+		
+		return $streams;
 	}
 	
 	protected function getClient(): ?RedisClient
