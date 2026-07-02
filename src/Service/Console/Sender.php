@@ -155,8 +155,13 @@ class Sender extends Service
 			return;
 		}
 		
+		// build the payload BEFORE marking the event as seen: if construction
+		// throws, a pre-marked event would count as already queued for the
+		// rest of the request and never get another chance
+		$payload = Payload::fromThrowable($event, $priority, $extra);
+		
 		$this->seen->offsetSet($event);
-		$this->queue[] = Payload::fromThrowable($event, $priority, $extra);
+		$this->queue[] = $payload;
 	}
 	
 	public function captureMessage(
@@ -226,9 +231,19 @@ class Sender extends Service
 			$events = $this->container->get(Events::SYMBOL);
 			foreach($events as $event)
 			{
-				if($event instanceof Throwable)
+				if($event instanceof Throwable === false)
+				{
+					continue;
+				}
+				
+				try
 				{
 					$this->enqueue($event, null, [], self::QUEUE_MAX * 2);
+				}
+				catch(Throwable)
+				{
+					// one unqueueable event must not abort the whole flush —
+					// the batch built so far (and the queue) still goes out
 				}
 			}
 			
