@@ -14,8 +14,8 @@ use function count;
 use function gc_collect_cycles;
 
 /**
- * Sender — capture-side queue semantics (no HTTP, no shutdown hook: the
- * test double neuters registerFlush() and send()).
+ * Sender — capture-side queue semantics (no HTTP: the test double
+ * neuters send(); flush() is never invoked, so no shutdown coupling).
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -137,11 +137,6 @@ class Sender extends Test
 			): void
 			{
 				$this->enqueue($event, null, [], self::QUEUE_MAX * 2);
-			}
-			
-			protected function registerFlush(): void
-			{
-				// keep test instances off the application shutdown hook
 			}
 			
 			protected function send(

@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Console;
 
-use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
@@ -89,14 +88,6 @@ class Sender extends Service
 	
 	protected static bool $flushing = false;
 	
-	/**
-	 * The Application instance flush() is registered on. The hook is
-	 * re-armed when the instance changes so it always lands on the one
-	 * whose handleShutdown() actually runs, not just the construction-
-	 * time instance.
-	 */
-	protected ?Application $registeredWith = null;
-	
 	public function __construct(
 		#[Inject('config')]
 		#[InjectArrayObject('console')]
@@ -104,11 +95,6 @@ class Sender extends Service
 	)
 	{
 		$this->config = $config;
-		
-		// register the post-response flush eagerly (services boot once per
-		// request): flush() must run even when nothing was captured
-		// explicitly, to drain the Events service's uncaught errors
-		$this->registerFlush();
 	}
 	
 	public function isEnabled(): bool
@@ -124,28 +110,6 @@ class Sender extends Service
 		return (int)($this->config?->log_level ?? 5);
 	}
 	
-	/**
-	 * Registers the post-response flush on the *current* Application,
-	 * re-registering when the instance changes. The construction-time
-	 * instance is not guaranteed to be the one whose handleShutdown()
-	 * fires for a later request, so the capture paths re-arm the hook.
-	 */
-	protected function registerFlush(): void
-	{
-		if($this->isEnabled() === false)
-		{
-			return;
-		}
-		
-		$application = Application::$instance;
-		if($application !== null
-			&& $application !== $this->registeredWith)
-		{
-			$application->afterResponse([$this, 'flush']);
-			$this->registeredWith = $application;
-		}
-	}
-	
 	public function captureException(
 		Throwable $event,
 		array $extra = [],
@@ -156,8 +120,6 @@ class Sender extends Service
 		{
 			return $this;
 		}
-		
-		$this->registerFlush();
 		
 		try
 		{
@@ -208,8 +170,6 @@ class Sender extends Service
 			return $this;
 		}
 		
-		$this->registerFlush();
-		
 		try
 		{
 			if(count($this->queue) >= self::QUEUE_MAX)
@@ -228,8 +188,10 @@ class Sender extends Service
 	}
 	
 	/**
-	 * Builds and posts the batch — called once from handleShutdown()
-	 * after the response went out
+	 * Builds and posts the batch. Application::handleShutdown() invokes this
+	 * explicitly after the response and the post-response callbacks — for
+	 * EVERY request, so uncaught errors that reached only the Events service
+	 * are reported even when nothing was captured through the sender.
 	 */
 	public function flush(): void
 	{
