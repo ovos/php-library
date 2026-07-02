@@ -6,6 +6,7 @@ namespace Ovos;
 use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Exception\RuntimeException;
 use Ovos\Config\Loader as ConfigLoader;
+use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Response\Redirect;
 use Ovos\Service\Memory;
 use Throwable;
@@ -750,6 +751,19 @@ class Application
 		}
 		$this->afterResponse = [];
 		
+		// every post-response consumer (console sender, profiler stream) has
+		// read the collected events by now — drain them here, once, so a
+		// reused worker does not re-report them on its next request; no
+		// single consumer may clear() and starve the ones after it
+		try
+		{
+			$this->getServices()->events->clear();
+		}
+		catch(Throwable)
+		{
+			// events service unavailable — nothing to drain
+		}
+		
 		if($hasEvents)
 		{
 			exit(1); // exit with error status for github actions
@@ -817,9 +831,22 @@ class Application
 	): static
 	{
 		$profilers = $this->getConfig()->system->profilers;
-
-		// queries are no longer inlined into JSON responses — the profiler
-		// stream (Ovos\Service\Profiler) carries them instead
+		
+		// profilers.append.http keeps inlining the query report into JSON
+		// responses — the profiler stream (Ovos\Service\Profiler) is the
+		// richer channel, but it is optional; removing this branch left the
+		// config flag silently dead for projects without the stream
+		if($profilers->enabled
+			&& $this->isInterfaceHttp()
+			&& $profilers->append->http)
+		{
+			$report = (new Reporter)->getReport();
+			if(!empty($report))
+			{
+				$response->queries = $report;
+			}
+		}
+		
 		if($this->getRequest()->isHttpDebug())
 		{
 			$response->setOptions(JSON_PRETTY_PRINT);
