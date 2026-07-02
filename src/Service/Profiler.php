@@ -22,6 +22,9 @@ use function round;
 use function session_id;
 use function uniqid;
 
+use const JSON_INVALID_UTF8_SUBSTITUTE;
+use const JSON_PARTIAL_OUTPUT_ON_ERROR;
+
 /**
  * Profiler
  *
@@ -38,6 +41,11 @@ use function uniqid;
 class Profiler extends Service
 {
 	public const string SYMBOL = 'profiler';
+	
+	/**
+	 * Stream lifetime (seconds) when profilers.stream.ttl is not configured
+	 */
+	public const int TTL_DEFAULT = 3600;
 	
 	#[Inject('config')]
 	#[InjectArrayObject('system', 'profilers')]
@@ -100,7 +108,12 @@ class Profiler extends Service
 				$key,
 				'*',
 				[
-					'body' => (string)json_encode($payload),
+					// substitute/skip invalid bytes: captured queries and
+					// redis args are arbitrary — one bad byte must not turn
+					// the whole entry into an empty body (bare json_encode
+					// returns false)
+					'body' => (string)json_encode($payload,
+						JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR),
 					'method' => (string)$payload['method'],
 					'uri' => (string)$payload['uri'],
 					'req_id' => (string)$payload['req_id'],
@@ -109,7 +122,11 @@ class Profiler extends Service
 				(int)$stream->maxlen,
 				true, // approximate trim (~)
 			);
-			$client->expire($key, (int)$stream->ttl);
+			
+			// missing ttl config must not become EXPIRE key 0 — that would
+			// delete the stream the moment it is written
+			$ttl = (int)($stream->ttl ?? self::TTL_DEFAULT);
+			$client->expire($key, $ttl > 0 ? $ttl : self::TTL_DEFAULT);
 		}
 		catch(Throwable $throwable)
 		{
@@ -122,16 +139,21 @@ class Profiler extends Service
 	 */
 	protected function buildPayload(): array
 	{
-		$benchmark = $this->container->get(Benchmark::SYMBOL);
-		$benchmark->stop(); // finalize the total (xhr never renders the helper)
-		
+		// benchmark is optional like streams — a throwing get() here would
+		// make flush()'s catch silently drop the whole profile
 		$measurements = [];
-		foreach($benchmark->getMeasurements() as $name => $measurement)
+		if($this->container->isRegistered(Benchmark::SYMBOL))
 		{
-			$measurements[$name] = [
-				'time' => $measurement->getTotalTime(),
-				'memory' => $measurement->getTotalMemory(),
-			];
+			$benchmark = $this->container->get(Benchmark::SYMBOL);
+			$benchmark->stop(); // finalize the total (xhr never renders the helper)
+			
+			foreach($benchmark->getMeasurements() as $name => $measurement)
+			{
+				$measurements[$name] = [
+					'time' => $measurement->getTotalTime(),
+					'memory' => $measurement->getTotalMemory(),
+				];
+			}
 		}
 		
 		return [

@@ -68,7 +68,10 @@ class Redis extends RedisCommon
 		// the redis profiler; production uses the plain client (zero overhead)
 		if($this->profilers?->enabled === true)
 		{
-			Collector::$limit = (int)($this->profilers->redis?->limit ?? 0);
+			// a real default is essential: the collector treats 0 as "no
+			// limit", which grows unbounded in long-running profiled workers
+			Collector::$limit = (int)($this->profilers->redis?->limit
+				?? Collector::LIMIT_DEFAULT);
 			$this->client = new ProfilerClient($connectionOptions);
 		}
 		else

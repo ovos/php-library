@@ -81,7 +81,10 @@ class Request
 		if($this->getMethod() === self::METHOD_GET
 			&& $content = $this->getContent())
 		{
-			$url.= '?' . http_build_query($content);
+			// the URL may already carry a query string (health probes often
+			// do) — appending a second '?' would mangle both parameter sets
+			$url.= (str_contains($url, '?') ? '&' : '?')
+				. http_build_query($content);
 		}
 		
 		$stream = $this->openStream($url, $context);
