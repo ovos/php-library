@@ -11,9 +11,11 @@ use Ovos\Container\Inject;
 use Ovos\Service;
 use Ovos\Service\Events;
 use Ovos\Service\Logger;
+use SplObjectStorage;
 use Throwable;
 
 use function array_values;
+use function count;
 use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
@@ -23,7 +25,16 @@ use function mb_substr;
 use function rtrim;
 use function session_id;
 use function session_status;
-use function spl_object_id;
+
+use const CURLOPT_CONNECTTIMEOUT_MS;
+use const CURLOPT_HTTPHEADER;
+use const CURLOPT_POST;
+use const CURLOPT_POSTFIELDS;
+use const CURLOPT_RETURNTRANSFER;
+use const CURLOPT_TIMEOUT_MS;
+use const JSON_INVALID_UTF8_SUBSTITUTE;
+use const JSON_PARTIAL_OUTPUT_ON_ERROR;
+use const PHP_SESSION_ACTIVE;
 
 /**
  * Reports collected errors to a central ovos/console instance.
@@ -51,15 +62,28 @@ class Sender extends Service
 {
 	public const string SYMBOL = 'consoleSender';
 	
+	/**
+	 * Hard cap on queued payloads per flush cycle — an error loop in a
+	 * long-running CLI process must not grow the queue without bound
+	 * (the console ingest caps batches server-side anyway)
+	 */
+	public const int QUEUE_MAX = 100;
+	
 	protected ?ArrayObject $config;
 	
 	/**
-	 * Queued payloads. Throwables are keyed "object:<spl_object_id>" so the
-	 * Events service and the Logger hook never double-report one object, and
-	 * the string key cannot collide with the integer keys that
-	 * captureMessage() appends; messages are appended.
+	 * Queued payloads, append-only.
 	 */
 	protected array $queue = [];
+	
+	/**
+	 * Throwables already queued, so the Events service and the Logger hook
+	 * never double-report one object. An SplObjectStorage (not spl_object_id
+	 * keys): it HOLDS the reference, so a queued throwable cannot be freed
+	 * and have its recycled object id collide with a later, different one —
+	 * id reuse silently overwrote queued events.
+	 */
+	protected ?SplObjectStorage $seen = null;
 	
 	protected static bool $flushing = false;
 	
@@ -135,8 +159,18 @@ class Sender extends Service
 		
 		try
 		{
-			$this->queue['object:' . spl_object_id($event)] =
-				Payload::fromThrowable($event, $priority, $extra);
+			// offsetExists/offsetSet, not contains/attach — the aliases are
+			// deprecated in PHP 8.5 and the promoted deprecation would land
+			// in this catch, silently dropping the capture
+			$this->seen ??= new SplObjectStorage;
+			if($this->seen->offsetExists($event)
+				|| count($this->queue) >= self::QUEUE_MAX)
+			{
+				return $this;
+			}
+			
+			$this->seen->offsetSet($event);
+			$this->queue[] = Payload::fromThrowable($event, $priority, $extra);
 		}
 		catch(Throwable)
 		{
@@ -161,6 +195,11 @@ class Sender extends Service
 		
 		try
 		{
+			if(count($this->queue) >= self::QUEUE_MAX)
+			{
+				return $this;
+			}
+			
 			$this->queue[] = Payload::fromMessage($message, $priority, $extra);
 		}
 		catch(Throwable)
@@ -184,21 +223,13 @@ class Sender extends Service
 		}
 		
 		// disabled: drop anything queued so it cannot pile up in a
-		// long-lived service or bleed into a later request — including the
-		// uncaught errors the Events service holds, since flush() is its
-		// terminal consumer and nothing else drains them post-response
+		// long-lived service or bleed into a later request (the Events
+		// service is drained by handleShutdown() after all post-response
+		// consumers ran — not here, where it would starve the profiler)
 		if($this->isEnabled() === false)
 		{
 			$this->queue = [];
-			
-			try
-			{
-				$this->container->get(Events::SYMBOL)->clear();
-			}
-			catch(Throwable)
-			{
-				// events service unavailable — nothing to drain
-			}
+			$this->seen = null;
 			
 			return;
 		}
@@ -207,19 +238,18 @@ class Sender extends Service
 		
 		try
 		{
-			// merge uncaught errors collected by the Events service, then drain
-			// it: flush() is the terminal post-response consumer, so leaving them
-			// in place would re-report on the next request in a reused worker
+			// merge uncaught errors collected by the Events service — read
+			// only: other post-response consumers (the profiler stream) still
+			// need the events; the Application drains them after the chain.
+			// captureException() self-dedupes via $seen.
 			$events = $this->container->get(Events::SYMBOL);
 			foreach($events as $event)
 			{
-				if($event instanceof Throwable
-					&& isset($this->queue['object:' . spl_object_id($event)]) === false)
+				if($event instanceof Throwable)
 				{
 					$this->captureException($event);
 				}
 			}
-			$events->clear();
 			
 			$logLevel = $this->getLogLevel();
 			$context = null;
@@ -262,6 +292,7 @@ class Sender extends Service
 		finally
 		{
 			$this->queue = [];
+			$this->seen = null;
 			self::$flushing = false;
 		}
 	}
