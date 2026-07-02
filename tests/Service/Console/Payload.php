@@ -56,4 +56,22 @@ class Payload extends Test
 			&& isset($payload['events'][0]['backtrace'])
 			&& $payload['timestamp'] !== '';
 	}
+	
+	public function fromThrowableHonorsPriorityOverride(): bool
+	{
+		$payload = ConsolePayload::fromThrowable(new RuntimeException('boom'), 6);
+		
+		return $payload['priority'] === 6;
+	}
+	
+	public function fromMessageShape(): bool
+	{
+		$payload = ConsolePayload::fromMessage('deploy done', 6, ['tag' => 'v2']);
+		
+		return $payload['v'] === 1
+			&& $payload['priority'] === 6
+			&& $payload['message'] === 'deploy done'
+			&& $payload['events'] === []
+			&& $payload['extra'] === ['tag' => 'v2'];
+	}
 }
