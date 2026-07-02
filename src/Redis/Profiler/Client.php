@@ -133,7 +133,9 @@ class Client extends BaseRedis
 		mixed ...$other_keys,
 	): int|BaseRedis|bool
 	{
-		return $this->profile('exists', array_merge([$key], $other_keys),
+		// normalize the phpredis legacy array-of-keys form like del()/unlink(),
+		// or the reporter later string-casts a nested array
+		return $this->profile('exists', array_merge((array)$key, $other_keys),
 			fn() => parent::exists($key, ...$other_keys),
 		);
 	}
