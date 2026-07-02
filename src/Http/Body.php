@@ -6,8 +6,11 @@ namespace Ovos\Http;
 use JsonException;
 
 use function array_slice;
+use function ctype_digit;
 use function file_get_contents;
 use function is_array;
+use function is_int;
+use function is_string;
 use function json_decode;
 use function strlen;
 
@@ -94,9 +97,23 @@ final class Body
 		$ids = [];
 		foreach(array_slice($raw, 0, $max) as $value)
 		{
-			if((int)$value > 0)
+			// only real ints and digit strings qualify — a blind (int) cast
+			// coerces arrays and true to 1, so a malformed payload would
+			// mutate record id 1, which the request never named
+			if(is_int($value) === false)
 			{
-				$ids[] = (int)$value;
+				if(is_string($value) === false
+					|| ctype_digit($value) === false)
+				{
+					continue;
+				}
+				
+				$value = (int)$value;
+			}
+			
+			if($value > 0)
+			{
+				$ids[] = $value;
 			}
 		}
 		

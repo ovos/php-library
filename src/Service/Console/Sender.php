@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Console;
 
-use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
@@ -11,9 +10,11 @@ use Ovos\Container\Inject;
 use Ovos\Service;
 use Ovos\Service\Events;
 use Ovos\Service\Logger;
+use SplObjectStorage;
 use Throwable;
 
 use function array_values;
+use function count;
 use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
@@ -23,7 +24,16 @@ use function mb_substr;
 use function rtrim;
 use function session_id;
 use function session_status;
-use function spl_object_id;
+
+use const CURLOPT_CONNECTTIMEOUT_MS;
+use const CURLOPT_HTTPHEADER;
+use const CURLOPT_POST;
+use const CURLOPT_POSTFIELDS;
+use const CURLOPT_RETURNTRANSFER;
+use const CURLOPT_TIMEOUT_MS;
+use const JSON_INVALID_UTF8_SUBSTITUTE;
+use const JSON_PARTIAL_OUTPUT_ON_ERROR;
+use const PHP_SESSION_ACTIVE;
 
 /**
  * Reports collected errors to a central ovos/console instance.
@@ -51,25 +61,32 @@ class Sender extends Service
 {
 	public const string SYMBOL = 'consoleSender';
 	
+	/**
+	 * Cap on explicitly captured payloads per flush cycle — an error loop
+	 * in a long-running CLI process must not grow the queue without bound
+	 * (the console ingest caps batches server-side anyway). The flush-time
+	 * Events merge gets its own headroom up to twice this, so uncaught
+	 * errors are never starved by a queue already filled with captures.
+	 */
+	public const int QUEUE_MAX = 100;
+	
 	protected ?ArrayObject $config;
 	
 	/**
-	 * Queued payloads. Throwables are keyed "object:<spl_object_id>" so the
-	 * Events service and the Logger hook never double-report one object, and
-	 * the string key cannot collide with the integer keys that
-	 * captureMessage() appends; messages are appended.
+	 * Queued payloads, append-only.
 	 */
 	protected array $queue = [];
 	
-	protected static bool $flushing = false;
-	
 	/**
-	 * The Application instance flush() is registered on. The hook is
-	 * re-armed when the instance changes so it always lands on the one
-	 * whose handleShutdown() actually runs, not just the construction-
-	 * time instance.
+	 * Throwables already queued, so the Events service and the Logger hook
+	 * never double-report one object. An SplObjectStorage (not spl_object_id
+	 * keys): it HOLDS the reference, so a queued throwable cannot be freed
+	 * and have its recycled object id collide with a later, different one —
+	 * id reuse silently overwrote queued events.
 	 */
-	protected ?Application $registeredWith = null;
+	protected ?SplObjectStorage $seen = null;
+	
+	protected static bool $flushing = false;
 	
 	public function __construct(
 		#[Inject('config')]
@@ -78,11 +95,6 @@ class Sender extends Service
 	)
 	{
 		$this->config = $config;
-		
-		// register the post-response flush eagerly (services boot once per
-		// request): flush() must run even when nothing was captured
-		// explicitly, to drain the Events service's uncaught errors
-		$this->registerFlush();
 	}
 	
 	public function isEnabled(): bool
@@ -98,28 +110,6 @@ class Sender extends Service
 		return (int)($this->config?->log_level ?? 5);
 	}
 	
-	/**
-	 * Registers the post-response flush on the *current* Application,
-	 * re-registering when the instance changes. The construction-time
-	 * instance is not guaranteed to be the one whose handleShutdown()
-	 * fires for a later request, so the capture paths re-arm the hook.
-	 */
-	protected function registerFlush(): void
-	{
-		if($this->isEnabled() === false)
-		{
-			return;
-		}
-		
-		$application = Application::$instance;
-		if($application !== null
-			&& $application !== $this->registeredWith)
-		{
-			$application->afterResponse([$this, 'flush']);
-			$this->registeredWith = $application;
-		}
-	}
-	
 	public function captureException(
 		Throwable $event,
 		array $extra = [],
@@ -131,12 +121,9 @@ class Sender extends Service
 			return $this;
 		}
 		
-		$this->registerFlush();
-		
 		try
 		{
-			$this->queue['object:' . spl_object_id($event)] =
-				Payload::fromThrowable($event, $priority, $extra);
+			$this->enqueue($event, $priority, $extra, self::QUEUE_MAX);
 		}
 		catch(Throwable)
 		{
@@ -144,6 +131,37 @@ class Sender extends Service
 		}
 		
 		return $this;
+	}
+	
+	/**
+	 * Queues one throwable payload, deduping by live object identity.
+	 * offsetExists/offsetSet, not contains/attach — the aliases are
+	 * deprecated in PHP 8.5 and the promoted deprecation would land in the
+	 * capture catch, silently dropping the event. The storage HOLDS the
+	 * reference, so a queued throwable cannot be freed and have its recycled
+	 * object id collide with a later, different one.
+	 */
+	protected function enqueue(
+		Throwable $event,
+		?int $priority,
+		array $extra,
+		int $limit,
+	): void
+	{
+		$this->seen ??= new SplObjectStorage;
+		if($this->seen->offsetExists($event)
+			|| count($this->queue) >= $limit)
+		{
+			return;
+		}
+		
+		// build the payload BEFORE marking the event as seen: if construction
+		// throws, a pre-marked event would count as already queued for the
+		// rest of the request and never get another chance
+		$payload = Payload::fromThrowable($event, $priority, $extra);
+		
+		$this->seen->offsetSet($event);
+		$this->queue[] = $payload;
 	}
 	
 	public function captureMessage(
@@ -157,10 +175,13 @@ class Sender extends Service
 			return $this;
 		}
 		
-		$this->registerFlush();
-		
 		try
 		{
+			if(count($this->queue) >= self::QUEUE_MAX)
+			{
+				return $this;
+			}
+			
 			$this->queue[] = Payload::fromMessage($message, $priority, $extra);
 		}
 		catch(Throwable)
@@ -172,8 +193,10 @@ class Sender extends Service
 	}
 	
 	/**
-	 * Builds and posts the batch — called once from handleShutdown()
-	 * after the response went out
+	 * Builds and posts the batch. Application::handleShutdown() invokes this
+	 * explicitly after the response and the post-response callbacks — for
+	 * EVERY request, so uncaught errors that reached only the Events service
+	 * are reported even when nothing was captured through the sender.
 	 */
 	public function flush(): void
 	{
@@ -184,21 +207,13 @@ class Sender extends Service
 		}
 		
 		// disabled: drop anything queued so it cannot pile up in a
-		// long-lived service or bleed into a later request — including the
-		// uncaught errors the Events service holds, since flush() is its
-		// terminal consumer and nothing else drains them post-response
+		// long-lived service or bleed into a later request (the Events
+		// service is drained by handleShutdown() after all post-response
+		// consumers ran — not here, where it would starve the profiler)
 		if($this->isEnabled() === false)
 		{
 			$this->queue = [];
-			
-			try
-			{
-				$this->container->get(Events::SYMBOL)->clear();
-			}
-			catch(Throwable)
-			{
-				// events service unavailable — nothing to drain
-			}
+			$this->seen = null;
 			
 			return;
 		}
@@ -207,19 +222,30 @@ class Sender extends Service
 		
 		try
 		{
-			// merge uncaught errors collected by the Events service, then drain
-			// it: flush() is the terminal post-response consumer, so leaving them
-			// in place would re-report on the next request in a reused worker
+			// merge uncaught errors collected by the Events service — read
+			// only: other post-response consumers (the profiler stream) still
+			// need the events; the Application drains them after the chain.
+			// The merge gets headroom past QUEUE_MAX so uncaught errors are
+			// not starved by a queue already filled with explicit captures,
+			// while an error loop stays bounded; enqueue() dedupes via $seen.
 			$events = $this->container->get(Events::SYMBOL);
 			foreach($events as $event)
 			{
-				if($event instanceof Throwable
-					&& isset($this->queue['object:' . spl_object_id($event)]) === false)
+				if($event instanceof Throwable === false)
 				{
-					$this->captureException($event);
+					continue;
+				}
+				
+				try
+				{
+					$this->enqueue($event, null, [], self::QUEUE_MAX * 2);
+				}
+				catch(Throwable)
+				{
+					// one unqueueable event must not abort the whole flush —
+					// the batch built so far (and the queue) still goes out
 				}
 			}
-			$events->clear();
 			
 			$logLevel = $this->getLogLevel();
 			$context = null;
@@ -262,6 +288,7 @@ class Sender extends Service
 		finally
 		{
 			$this->queue = [];
+			$this->seen = null;
 			self::$flushing = false;
 		}
 	}

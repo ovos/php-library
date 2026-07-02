@@ -232,6 +232,25 @@ class Request extends Test
 		return false;
 	}
 	
+	/**
+	 * GET content becomes the query string; a URL that already carries one
+	 * gets '&', not a second '?' (which would mangle both parameter sets —
+	 * health probes commonly carry ?token=… URLs).
+	 */
+	public function getContentAppendsQueryString(): bool
+	{
+		$plain = $this->capturingRequest('http://localhost/health');
+		$plain->setBestEffort()->setContent(['probe' => 1]);
+		$plain->invoke();
+		
+		$existing = $this->capturingRequest('http://localhost/health?token=abc');
+		$existing->setBestEffort()->setContent(['probe' => 1]);
+		$existing->invoke();
+		
+		return $plain->openedUrl === 'http://localhost/health?probe=1'
+			&& $existing->openedUrl === 'http://localhost/health?token=abc&probe=1';
+	}
+	
 	protected function headerHas(
 		array $contextOptions,
 		string $needle,
@@ -246,6 +265,31 @@ class Request extends Test
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * A Request that records the final URL instead of opening a socket.
+	 *
+	 * @return HttpRequest&object{openedUrl: ?string}
+	 */
+	protected function capturingRequest(
+		string $url,
+	): HttpRequest
+	{
+		return new class($url) extends HttpRequest
+		{
+			public ?string $openedUrl = null;
+			
+			protected function openStream(
+				string $url,
+				mixed $context,
+			): mixed
+			{
+				$this->openedUrl = $url;
+				
+				return false;
+			}
+		};
 	}
 	
 	/**
