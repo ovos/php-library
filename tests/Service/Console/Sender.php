@@ -7,6 +7,7 @@ use Exception;
 use Ovos\ArrayObject;
 use Ovos\Service\Console\Sender as ConsoleSender;
 use Ovos\Test;
+use Throwable;
 use WeakReference;
 
 use function count;
@@ -75,6 +76,29 @@ class Sender extends Test
 		return $sender->queueCount() === ConsoleSender::QUEUE_MAX;
 	}
 	
+	/**
+	 * Regression: the flush-time Events merge went through the same cap as
+	 * explicit captures, so uncaught throwables were dropped whenever the
+	 * queue was already full — exactly the errors that matter most.
+	 */
+	public function eventsMergeHasHeadroomPastTheCap(): bool
+	{
+		$sender = $this->makeSender();
+		
+		for($i = 0; $i < ConsoleSender::QUEUE_MAX; $i++)
+		{
+			$sender->captureMessage('message ' . $i);
+		}
+		
+		$sender->captureException(new Exception('explicit — capped'));
+		$cappedForCaptures = $sender->queueCount() === ConsoleSender::QUEUE_MAX;
+		
+		$sender->mergeEvent(new Exception('uncaught — must still queue'));
+		
+		return $cappedForCaptures
+			&& $sender->queueCount() === ConsoleSender::QUEUE_MAX + 1;
+	}
+	
 	public function disabledSenderCapturesNothing(): bool
 	{
 		$sender = $this->makeSender(enabled: false);
@@ -103,6 +127,16 @@ class Sender extends Test
 			public function queueCount(): int
 			{
 				return count($this->queue);
+			}
+			
+			/**
+			 * The flush-time Events merge path, byte-for-byte
+			 */
+			public function mergeEvent(
+				Throwable $event,
+			): void
+			{
+				$this->enqueue($event, null, [], self::QUEUE_MAX * 2);
 			}
 			
 			protected function registerFlush(): void

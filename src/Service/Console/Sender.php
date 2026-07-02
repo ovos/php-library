@@ -63,9 +63,11 @@ class Sender extends Service
 	public const string SYMBOL = 'consoleSender';
 	
 	/**
-	 * Hard cap on queued payloads per flush cycle — an error loop in a
-	 * long-running CLI process must not grow the queue without bound
-	 * (the console ingest caps batches server-side anyway)
+	 * Cap on explicitly captured payloads per flush cycle — an error loop
+	 * in a long-running CLI process must not grow the queue without bound
+	 * (the console ingest caps batches server-side anyway). The flush-time
+	 * Events merge gets its own headroom up to twice this, so uncaught
+	 * errors are never starved by a queue already filled with captures.
 	 */
 	public const int QUEUE_MAX = 100;
 	
@@ -159,18 +161,7 @@ class Sender extends Service
 		
 		try
 		{
-			// offsetExists/offsetSet, not contains/attach — the aliases are
-			// deprecated in PHP 8.5 and the promoted deprecation would land
-			// in this catch, silently dropping the capture
-			$this->seen ??= new SplObjectStorage;
-			if($this->seen->offsetExists($event)
-				|| count($this->queue) >= self::QUEUE_MAX)
-			{
-				return $this;
-			}
-			
-			$this->seen->offsetSet($event);
-			$this->queue[] = Payload::fromThrowable($event, $priority, $extra);
+			$this->enqueue($event, $priority, $extra, self::QUEUE_MAX);
 		}
 		catch(Throwable)
 		{
@@ -178,6 +169,32 @@ class Sender extends Service
 		}
 		
 		return $this;
+	}
+	
+	/**
+	 * Queues one throwable payload, deduping by live object identity.
+	 * offsetExists/offsetSet, not contains/attach — the aliases are
+	 * deprecated in PHP 8.5 and the promoted deprecation would land in the
+	 * capture catch, silently dropping the event. The storage HOLDS the
+	 * reference, so a queued throwable cannot be freed and have its recycled
+	 * object id collide with a later, different one.
+	 */
+	protected function enqueue(
+		Throwable $event,
+		?int $priority,
+		array $extra,
+		int $limit,
+	): void
+	{
+		$this->seen ??= new SplObjectStorage;
+		if($this->seen->offsetExists($event)
+			|| count($this->queue) >= $limit)
+		{
+			return;
+		}
+		
+		$this->seen->offsetSet($event);
+		$this->queue[] = Payload::fromThrowable($event, $priority, $extra);
 	}
 	
 	public function captureMessage(
@@ -241,13 +258,15 @@ class Sender extends Service
 			// merge uncaught errors collected by the Events service — read
 			// only: other post-response consumers (the profiler stream) still
 			// need the events; the Application drains them after the chain.
-			// captureException() self-dedupes via $seen.
+			// The merge gets headroom past QUEUE_MAX so uncaught errors are
+			// not starved by a queue already filled with explicit captures,
+			// while an error loop stays bounded; enqueue() dedupes via $seen.
 			$events = $this->container->get(Events::SYMBOL);
 			foreach($events as $event)
 			{
 				if($event instanceof Throwable)
 				{
-					$this->captureException($event);
+					$this->enqueue($event, null, [], self::QUEUE_MAX * 2);
 				}
 			}
 			
