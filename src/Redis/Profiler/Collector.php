@@ -17,6 +17,12 @@ class Collector
 	use Singleton;
 	
 	/**
+	 * Fallback command cap when profilers.redis.limit is not configured;
+	 * 0 stays available as an explicit "no limit" escape hatch
+	 */
+	public const int LIMIT_DEFAULT = 500;
+	
+	/**
 	 * Contains collected data
 	 */
 	protected SplQueue $commands;
