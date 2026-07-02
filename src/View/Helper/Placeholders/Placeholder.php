@@ -87,7 +87,11 @@ class Placeholder
 	{
 		if($asset)
 		{
-			$script = View::asset($script);
+			// stringify immediately: View::asset() returns the shared Asset
+			// helper instance, and storing that object in $this->scripts would
+			// make every later asset-included script strict-compare equal to
+			// it — silently dropped as a "duplicate"
+			$script = (string)View::asset($script);
 		}
 		
 		if(in_array($script, $this->scripts, true))
