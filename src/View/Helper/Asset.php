@@ -71,6 +71,11 @@ class Asset extends Helper
 			
 			$mDate = date('Ymdhis', $mTime);
 			$store->set($cacheId, $mDate);
+			
+			// return the versioned url on the miss too — falling through to
+			// the bare path meant the first render after every cache clear
+			// (i.e. every deploy) served unversioned asset urls
+			return $this->asset . '?' . $mDate;
 		}
 		catch(ErrorException $exception)
 		{
