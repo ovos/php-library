@@ -5,7 +5,9 @@ namespace Ovos;
 
 use function header;
 use function http_response_code;
+use function ob_end_flush;
 use function ob_get_length;
+use function ob_get_level;
 
 /**
  * Response
@@ -83,6 +85,22 @@ class Response
 	public function clearAllHeaders(): static
 	{
 		$this->headers = [];
+		
+		return $this;
+	}
+	
+	/**
+	 * Flush and close every open output buffer so subsequent output reaches
+	 * the client immediately. Streaming responses (server-sent events, large
+	 * downloads) must not sit behind an output buffer that withholds their
+	 * bytes until the script ends.
+	 */
+	public function flushBuffers(): static
+	{
+		while(ob_get_level() > 0)
+		{
+			ob_end_flush();
+		}
 		
 		return $this;
 	}
