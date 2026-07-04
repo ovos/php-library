@@ -25,6 +25,20 @@ final class Body
 {
 	public const int MAX_BYTES = 1048576;
 	
+	/* A shared size scale to pass to raw()/json(), so callers name a tier
+		instead of sprinkling magic byte counts. */
+	/** 4 KiB — a single field or flag */
+	public const int TINY = 4096;
+	
+	/** 16 KiB — a small form or object */
+	public const int SMALL = 16384;
+	
+	/** 64 KiB — a query, note or recipient list */
+	public const int MEDIUM = 65536;
+	
+	/** 256 KiB — a bulk id action or an intake batch */
+	public const int BULK = 262144;
+	
 	/**
 	 * The raw request body, or null when it exceeds $maxBytes.
 	 */
