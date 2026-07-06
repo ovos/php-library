@@ -13,6 +13,7 @@ use Ovos\Test\Internal;
 use Ovos\Test\Parallel;
 use DateTime;
 use Override;
+use stdClass;
 use RedisException;
 use RuntimeException;
 use Throwable;
@@ -331,6 +332,31 @@ class RedisJson extends Test
 		$session->destroy();
 		
 		return $session->exists() === false;
+	}
+	
+	/**
+	 * stdClass is plain json data (Model::export() produces it) - it is
+	 * stored per-path addressable and comes back as an array, exactly
+	 * what Model::restore() takes
+	 */
+	public function stdClassBecomesAddressableJson(): bool
+	{
+		$export = new stdClass;
+		$export->id = 18;
+		$export->username = 'neo';
+		$export->nested = new stdClass;
+		$export->nested->deep = true;
+		
+		$session = $this->session();
+		$session->set(['auth', 'user'], $export);
+		
+		return $session->get(['auth', 'user', 'username']) === 'neo'
+			&& $session->get(['auth', 'user', 'nested']) === ['deep' => true]
+			&& $session->get(['auth', 'user']) === [
+				'id' => 18,
+				'username' => 'neo',
+				'nested' => ['deep' => true],
+			];
 	}
 	
 	public function objectsSurviveAsSerializedLeaves(): bool
