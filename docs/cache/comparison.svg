@@ -1,173 +1,204 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="940" height="486" viewBox="0 0 940 486" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <defs>
-    <marker id="aDel" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#dc2626"/></marker>
-    <style>
-      .title{font-size:18px;font-weight:700;fill:#fff}
-      .subtitle{font-size:12px;fill:#cbd5e1}
-      .colHead{font-size:14px;font-weight:700;fill:#fff}
-      .colSub{font-size:9.5px;fill:#fff;opacity:.85}
-      .struct{font-family:Consolas,monospace;font-size:10.5px;font-weight:700}
-      .small{font-size:10px;fill:#475569}
-      .smallC{font-size:10px;fill:#475569;text-anchor:middle}
-      .item{font-family:Consolas,monospace;font-size:9px;text-anchor:middle}
-      .cost{font-size:13px;font-weight:700;text-anchor:middle}
-      .costSub{font-size:9px;text-anchor:middle;fill:#64748b}
-      .lazy{font-size:8.5px;fill:#64748b;text-anchor:middle;font-style:italic}
-    </style>
-  </defs>
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="aDel" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ff003c"/></marker>
+		<style>
+			.title{font-size:17px;font-weight:700;fill:#fcee0a;letter-spacing:2px}
+			.subtitle{font-size:12px;fill:#8b8ba7;letter-spacing:0.5px}
+			.colHead{font-family:Consolas,'Courier New',monospace;font-size:14px;font-weight:700}
+			.colSub{font-size:8.5px;fill:#8b8ba7;letter-spacing:1.5px}
+			.struct{font-family:Consolas,'Courier New',monospace;font-size:10.5px;font-weight:700}
+			.small{font-size:10px;fill:#8b8ba7}
+			.smallC{font-size:10px;fill:#8b8ba7;text-anchor:middle}
+			.em{font-size:10px;font-weight:700;fill:#e8e8f0;text-anchor:middle}
+			.item{font-family:Consolas,'Courier New',monospace;font-size:9px;text-anchor:middle}
+			.cost{font-family:Consolas,'Courier New',monospace;font-size:14px;font-weight:700;text-anchor:middle;letter-spacing:1px}
+			.costSub{font-size:9px;text-anchor:middle;fill:#8b8ba7}
+			.lazy{font-size:8.5px;fill:#8b8ba7;text-anchor:middle;font-style:italic}
+		</style>
+	</defs>
 
-  <rect width="940" height="486" fill="#ffffff"/>
-  <rect width="940" height="58" fill="#1e293b"/>
-  <text x="24" y="27" class="title">Cache backends &#8212; how invalidating a tag behaves</text>
-  <text x="24" y="46" class="subtitle">What happens when you call invalidateTags(['t']) and N cached items carry tag t</text>
+	<!-- canvas: chamfered plate -->
+	<path d="M14,0 H926 L940,14 V472 L926,486 H14 L0,472 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V472 L926,486 H14 L0,472 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V472 L926,485.5 H14 L0.5,472 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.8"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,446 V472 L926,485.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
 
-  <!-- ============ COLUMN 1: Redis ============ -->
-  <g>
-    <rect x="16" y="72" width="212" height="378" rx="10" fill="#fff" stroke="#e2e8f0"/>
-    <path d="M16 82 a10 10 0 0 1 10 -10 h192 a10 10 0 0 1 10 10 v28 h-212 z" fill="#be123c"/>
-    <text x="122" y="92" text-anchor="middle" class="colHead">Redis</text>
-    <text x="122" y="105" text-anchor="middle" class="colSub">legacy tag-hash</text>
+	<!-- header -->
+	<text x="24" y="28" class="title" filter="url(#glow)">CACHE BACKENDS &#8212; HOW INVALIDATING A TAG BEHAVES</text>
+	<text x="24" y="47" class="subtitle">What happens when you call invalidateTags(['t']) and N cached items carry tag t</text>
+	<rect x="24" y="55" width="160" height="2" fill="#ff003c"/>
+	<rect x="192" y="55" width="10" height="2" fill="#ff003c" opacity="0.55"/>
+	<rect x="210" y="55" width="4" height="2" fill="#ff003c" opacity="0.3"/>
 
-    <rect x="47" y="124" width="150" height="34" rx="6" fill="#fef3c7" stroke="#b45309"/>
-    <text x="122" y="145" text-anchor="middle" class="struct" fill="#b45309">tags:&#123;t&#125; hash</text>
+	<!-- ============ COLUMN 1: Redis ============ -->
+	<g>
+		<path d="M26,72 H228 V440 L218,450 H16 V82 Z" fill="#0d0d17" stroke="#ff003c" stroke-width="1" opacity="0.9"/>
+		<path d="M26,72 H228 V110 H16 V82 Z" fill="#ff003c" opacity="0.13"/>
+		<line x1="16" y1="110" x2="228" y2="110" stroke="#ff003c" stroke-width="1" opacity="0.7"/>
+		<text x="122" y="93" text-anchor="middle" class="colHead" fill="#ff003c">Redis</text>
+		<text x="122" y="105" text-anchor="middle" class="colSub">LEGACY TAG-HASH</text>
 
-    <line x1="122" y1="160" x2="122" y2="184" stroke="#dc2626" stroke-width="2" marker-end="url(#aDel)"/>
-    <text x="200" y="178" text-anchor="end" class="small" fill="#b91c1c">HSCAN</text>
+		<path d="M54,124 H197 V151 L190,158 H47 V131 Z" fill="#fcee0a" fill-opacity="0.06" stroke="#fcee0a" opacity="0.85"/>
+		<text x="122" y="145" text-anchor="middle" class="struct" fill="#fcee0a">tags:&#123;t&#125; hash</text>
 
-    <g>
-      <rect x="40" y="192" width="50" height="30" rx="5" fill="#fef2f2" stroke="#dc2626" stroke-dasharray="3 2"/>
-      <rect x="97" y="192" width="50" height="30" rx="5" fill="#fef2f2" stroke="#dc2626" stroke-dasharray="3 2"/>
-      <rect x="154" y="192" width="50" height="30" rx="5" fill="#fef2f2" stroke="#dc2626" stroke-dasharray="3 2"/>
-      <text x="65" y="211" class="item" fill="#b91c1c">item</text>
-      <text x="122" y="211" class="item" fill="#b91c1c">item</text>
-      <text x="179" y="211" class="item" fill="#b91c1c">item</text>
-      <line x1="48" y1="196" x2="82" y2="218" stroke="#dc2626" stroke-width="1.3"/><line x1="82" y1="196" x2="48" y2="218" stroke="#dc2626" stroke-width="1.3"/>
-      <line x1="105" y1="196" x2="139" y2="218" stroke="#dc2626" stroke-width="1.3"/><line x1="139" y1="196" x2="105" y2="218" stroke="#dc2626" stroke-width="1.3"/>
-      <line x1="162" y1="196" x2="196" y2="218" stroke="#dc2626" stroke-width="1.3"/><line x1="196" y1="196" x2="162" y2="218" stroke="#dc2626" stroke-width="1.3"/>
-    </g>
+		<line x1="122" y1="160" x2="122" y2="184" stroke="#ff003c" stroke-width="2" marker-end="url(#aDel)"/>
+		<text x="200" y="178" text-anchor="end" class="small" font-family="Consolas, 'Courier New', monospace" style="fill:#ff003c">HSCAN</text>
 
-    <text x="122" y="252" class="smallC" font-weight="700" fill="#0f172a">Every matched item is</text>
-    <text x="122" y="268" class="smallC" font-weight="700" fill="#0f172a">deleted now (UNLINK).</text>
-    <text x="122" y="290" class="smallC">Work scales with how</text>
-    <text x="122" y="304" class="smallC">many items match.</text>
-    <text x="122" y="326" class="smallC">getTags / getAllTags</text>
-    <text x="122" y="340" class="smallC">expose the tag map.</text>
+		<g stroke="#ff003c">
+			<rect x="40" y="192" width="50" height="30" fill="#ff003c" fill-opacity="0.06" stroke-dasharray="3 2" opacity="0.9"/>
+			<rect x="97" y="192" width="50" height="30" fill="#ff003c" fill-opacity="0.06" stroke-dasharray="3 2" opacity="0.9"/>
+			<rect x="154" y="192" width="50" height="30" fill="#ff003c" fill-opacity="0.06" stroke-dasharray="3 2" opacity="0.9"/>
+			<line x1="48" y1="196" x2="82" y2="218" stroke-width="1.3"/><line x1="82" y1="196" x2="48" y2="218" stroke-width="1.3"/>
+			<line x1="105" y1="196" x2="139" y2="218" stroke-width="1.3"/><line x1="139" y1="196" x2="105" y2="218" stroke-width="1.3"/>
+			<line x1="162" y1="196" x2="196" y2="218" stroke-width="1.3"/><line x1="196" y1="196" x2="162" y2="218" stroke-width="1.3"/>
+		</g>
+		<g class="item" fill="#ff003c">
+			<text x="65" y="211">item</text>
+			<text x="122" y="211">item</text>
+			<text x="179" y="211">item</text>
+		</g>
 
-    <rect x="40" y="396" width="164" height="40" rx="8" fill="#fef2f2" stroke="#fca5a5"/>
-    <text x="122" y="416" class="cost" fill="#b91c1c">O(N)</text>
-    <text x="122" y="430" class="costSub">eager delete, hash scan</text>
-  </g>
+		<text x="122" y="252" class="em">Every matched item is</text>
+		<text x="122" y="268" class="em">deleted now (UNLINK).</text>
+		<text x="122" y="290" class="smallC">Work scales with how</text>
+		<text x="122" y="304" class="smallC">many items match.</text>
+		<text x="122" y="326" class="smallC">getTags / getAllTags</text>
+		<text x="122" y="340" class="smallC">expose the tag map.</text>
 
-  <!-- ============ COLUMN 2: Redisearch ============ -->
-  <g>
-    <rect x="248" y="72" width="212" height="378" rx="10" fill="#fff" stroke="#e2e8f0"/>
-    <path d="M248 82 a10 10 0 0 1 10 -10 h192 a10 10 0 0 1 10 10 v28 h-212 z" fill="#7c3aed"/>
-    <text x="354" y="92" text-anchor="middle" class="colHead">Redisearch</text>
-    <text x="354" y="105" text-anchor="middle" class="colSub">RediSearch TAG index</text>
+		<path d="M48,396 H204 V428 L196,436 H40 V404 Z" fill="#ff003c" fill-opacity="0.07" stroke="#ff003c" opacity="0.9"/>
+		<text x="122" y="416" class="cost" fill="#ff003c">O(N)</text>
+		<text x="122" y="430" class="costSub">eager delete, hash scan</text>
+	</g>
 
-    <rect x="279" y="124" width="150" height="34" rx="6" fill="#ede9fe" stroke="#7c3aed"/>
-    <text x="354" y="145" text-anchor="middle" class="struct" fill="#6d28d9">FT index (tags)</text>
+	<!-- ============ COLUMN 2: Redisearch ============ -->
+	<g>
+		<path d="M258,72 H460 V440 L450,450 H248 V82 Z" fill="#0d0d17" stroke="#ff003c" stroke-width="1" opacity="0.9"/>
+		<path d="M258,72 H460 V110 H248 V82 Z" fill="#ff003c" opacity="0.13"/>
+		<line x1="248" y1="110" x2="460" y2="110" stroke="#ff003c" stroke-width="1" opacity="0.7"/>
+		<text x="354" y="93" text-anchor="middle" class="colHead" fill="#ff003c">Redisearch</text>
+		<text x="354" y="105" text-anchor="middle" class="colSub">REDISEARCH TAG INDEX</text>
 
-    <line x1="354" y1="160" x2="354" y2="184" stroke="#dc2626" stroke-width="2" marker-end="url(#aDel)"/>
-    <text x="432" y="178" text-anchor="end" class="small" fill="#b91c1c">FT.SEARCH</text>
+		<path d="M286,124 H429 V151 L422,158 H279 V131 Z" fill="#fcee0a" fill-opacity="0.06" stroke="#fcee0a" opacity="0.85"/>
+		<text x="354" y="145" text-anchor="middle" class="struct" fill="#fcee0a">FT index (tags)</text>
 
-    <g>
-      <rect x="272" y="192" width="50" height="30" rx="5" fill="#fef2f2" stroke="#dc2626" stroke-dasharray="3 2"/>
-      <rect x="329" y="192" width="50" height="30" rx="5" fill="#fef2f2" stroke="#dc2626" stroke-dasharray="3 2"/>
-      <rect x="386" y="192" width="50" height="30" rx="5" fill="#fef2f2" stroke="#dc2626" stroke-dasharray="3 2"/>
-      <text x="297" y="211" class="item" fill="#b91c1c">item</text>
-      <text x="354" y="211" class="item" fill="#b91c1c">item</text>
-      <text x="411" y="211" class="item" fill="#b91c1c">item</text>
-      <line x1="280" y1="196" x2="314" y2="218" stroke="#dc2626" stroke-width="1.3"/><line x1="314" y1="196" x2="280" y2="218" stroke="#dc2626" stroke-width="1.3"/>
-      <line x1="337" y1="196" x2="371" y2="218" stroke="#dc2626" stroke-width="1.3"/><line x1="371" y1="196" x2="337" y2="218" stroke="#dc2626" stroke-width="1.3"/>
-      <line x1="394" y1="196" x2="428" y2="218" stroke="#dc2626" stroke-width="1.3"/><line x1="428" y1="196" x2="394" y2="218" stroke="#dc2626" stroke-width="1.3"/>
-    </g>
+		<line x1="354" y1="160" x2="354" y2="184" stroke="#ff003c" stroke-width="2" marker-end="url(#aDel)"/>
+		<text x="432" y="178" text-anchor="end" class="small" font-family="Consolas, 'Courier New', monospace" style="fill:#ff003c">FT.SEARCH</text>
 
-    <text x="354" y="252" class="smallC" font-weight="700" fill="#0f172a">Same eager delete &#8212;</text>
-    <text x="354" y="268" class="smallC" font-weight="700" fill="#0f172a">but matches come from</text>
-    <text x="354" y="282" class="smallC" font-weight="700" fill="#0f172a">the search index.</text>
-    <text x="354" y="304" class="smallC">No tag bookkeeping in</text>
-    <text x="354" y="318" class="smallC">PHP; index self-updates.</text>
-    <text x="354" y="340" class="smallC">Needs RediSearch module.</text>
+		<g stroke="#ff003c">
+			<rect x="272" y="192" width="50" height="30" fill="#ff003c" fill-opacity="0.06" stroke-dasharray="3 2" opacity="0.9"/>
+			<rect x="329" y="192" width="50" height="30" fill="#ff003c" fill-opacity="0.06" stroke-dasharray="3 2" opacity="0.9"/>
+			<rect x="386" y="192" width="50" height="30" fill="#ff003c" fill-opacity="0.06" stroke-dasharray="3 2" opacity="0.9"/>
+			<line x1="280" y1="196" x2="314" y2="218" stroke-width="1.3"/><line x1="314" y1="196" x2="280" y2="218" stroke-width="1.3"/>
+			<line x1="337" y1="196" x2="371" y2="218" stroke-width="1.3"/><line x1="371" y1="196" x2="337" y2="218" stroke-width="1.3"/>
+			<line x1="394" y1="196" x2="428" y2="218" stroke-width="1.3"/><line x1="428" y1="196" x2="394" y2="218" stroke-width="1.3"/>
+		</g>
+		<g class="item" fill="#ff003c">
+			<text x="297" y="211">item</text>
+			<text x="354" y="211">item</text>
+			<text x="411" y="211">item</text>
+		</g>
 
-    <rect x="272" y="396" width="164" height="40" rx="8" fill="#fef2f2" stroke="#fca5a5"/>
-    <text x="354" y="416" class="cost" fill="#b91c1c">O(N)</text>
-    <text x="354" y="430" class="costSub">eager delete, index lookup</text>
-  </g>
+		<text x="354" y="252" class="em">Same eager delete &#8212;</text>
+		<text x="354" y="268" class="em">but matches come from</text>
+		<text x="354" y="282" class="em">the search index.</text>
+		<text x="354" y="304" class="smallC">No tag bookkeeping in</text>
+		<text x="354" y="318" class="smallC">PHP; index self-updates.</text>
+		<text x="354" y="340" class="smallC">Needs RediSearch module.</text>
 
-  <!-- ============ COLUMN 3: RedisVersioned ============ -->
-  <g>
-    <rect x="480" y="72" width="212" height="378" rx="10" fill="#fff" stroke="#e2e8f0"/>
-    <path d="M480 82 a10 10 0 0 1 10 -10 h192 a10 10 0 0 1 10 10 v28 h-212 z" fill="#16a34a"/>
-    <text x="586" y="92" text-anchor="middle" class="colHead">RedisVersioned</text>
-    <text x="586" y="105" text-anchor="middle" class="colSub">rule stream (logical)</text>
+		<path d="M280,396 H436 V428 L428,436 H272 V404 Z" fill="#ff003c" fill-opacity="0.07" stroke="#ff003c" opacity="0.9"/>
+		<text x="354" y="416" class="cost" fill="#ff003c">O(N)</text>
+		<text x="354" y="430" class="costSub">eager delete, index lookup</text>
+	</g>
 
-    <rect x="511" y="124" width="150" height="34" rx="6" fill="#fce7f3" stroke="#be185d"/>
-    <text x="557" y="145" text-anchor="middle" class="struct" fill="#be185d">rules</text>
-    <rect x="628" y="129" width="26" height="24" rx="5" fill="#be185d"/>
-    <text x="641" y="146" text-anchor="middle" class="struct" fill="#fff">+1</text>
+	<!-- ============ COLUMN 3: RedisVersioned ============ -->
+	<g>
+		<path d="M490,72 H692 V440 L682,450 H480 V82 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+		<path d="M490,72 H692 V110 H480 V82 Z" fill="#00f0ff" opacity="0.1"/>
+		<line x1="480" y1="110" x2="692" y2="110" stroke="#00f0ff" stroke-width="1" opacity="0.7"/>
+		<text x="586" y="93" text-anchor="middle" class="colHead" fill="#00f0ff">RedisVersioned</text>
+		<text x="586" y="105" text-anchor="middle" class="colSub">RULE STREAM (LOGICAL)</text>
 
-    <text x="586" y="178" text-anchor="middle" class="small" fill="#15803d" font-weight="700">append ONE rule &#8595;</text>
+		<path d="M518,124 H661 V151 L654,158 H511 V131 Z" fill="#fcee0a" fill-opacity="0.06" stroke="#fcee0a" opacity="0.85"/>
+		<text x="557" y="145" text-anchor="middle" class="struct" fill="#fcee0a">rules</text>
+		<rect x="628" y="129" width="26" height="24" fill="#fcee0a"/>
+		<text x="641" y="146" text-anchor="middle" class="struct" fill="#0a0a12">+1</text>
 
-    <g>
-      <rect x="504" y="192" width="50" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-      <rect x="561" y="192" width="50" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-      <rect x="618" y="192" width="50" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-      <text x="529" y="211" class="item" fill="#475569">item</text>
-      <text x="586" y="211" class="item" fill="#475569">item</text>
-      <text x="643" y="211" class="item" fill="#475569">item</text>
-      <text x="586" y="236" class="lazy">untouched &#8212; still in memory</text>
-    </g>
+		<text x="586" y="178" text-anchor="middle" class="small" style="fill:#00f0ff" font-weight="700">append ONE rule &#8595;</text>
 
-    <text x="586" y="262" class="smallC" font-weight="700" fill="#0f172a">Matched items are NOT</text>
-    <text x="586" y="276" class="smallC" font-weight="700" fill="#0f172a">deleted. The next read</text>
-    <text x="586" y="290" class="smallC" font-weight="700" fill="#0f172a">sees the rule and skips</text>
-    <text x="586" y="304" class="smallC" font-weight="700" fill="#0f172a">them; TTL expires them.</text>
-    <text x="586" y="326" class="smallC">Rules evaluated in PHP</text>
-    <text x="586" y="340" class="smallC">over a cached set.</text>
+		<g>
+			<rect x="504" y="192" width="50" height="30" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+			<rect x="561" y="192" width="50" height="30" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+			<rect x="618" y="192" width="50" height="30" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+			<text x="529" y="211" class="item" fill="#8b8ba7">item</text>
+			<text x="586" y="211" class="item" fill="#8b8ba7">item</text>
+			<text x="643" y="211" class="item" fill="#8b8ba7">item</text>
+			<text x="586" y="236" class="lazy">untouched &#8212; still in memory</text>
+		</g>
 
-    <rect x="504" y="396" width="164" height="40" rx="8" fill="#f0fdf4" stroke="#86efac"/>
-    <text x="586" y="416" class="cost" fill="#15803d">O(1)</text>
-    <text x="586" y="430" class="costSub">10 or 700 000 items: same</text>
-  </g>
+		<text x="586" y="262" class="em">Matched items are NOT</text>
+		<text x="586" y="276" class="em">deleted. The next read</text>
+		<text x="586" y="290" class="em">sees the rule and skips</text>
+		<text x="586" y="304" class="em">them; TTL expires them.</text>
+		<text x="586" y="326" class="smallC">Rules evaluated in PHP</text>
+		<text x="586" y="340" class="smallC">over a cached set.</text>
 
-  <!-- ============ COLUMN 4: RedisClusterVersioned ============ -->
-  <g>
-    <rect x="712" y="72" width="212" height="378" rx="10" fill="#fff" stroke="#e2e8f0"/>
-    <path d="M712 82 a10 10 0 0 1 10 -10 h192 a10 10 0 0 1 10 10 v28 h-212 z" fill="#0891b2"/>
-    <text x="818" y="92" text-anchor="middle" class="colHead">RedisClusterVersioned</text>
-    <text x="818" y="105" text-anchor="middle" class="colSub">versioned, across slots</text>
+		<path d="M512,396 H668 V428 L660,436 H504 V404 Z" fill="#00f0ff" fill-opacity="0.06" stroke="#00f0ff" opacity="0.9"/>
+		<text x="586" y="416" class="cost" fill="#00f0ff">O(1)</text>
+		<text x="586" y="430" class="costSub">10 or 700 000 items: same</text>
+	</g>
 
-    <rect x="743" y="124" width="150" height="34" rx="6" fill="#fce7f3" stroke="#be185d"/>
-    <text x="789" y="145" text-anchor="middle" class="struct" fill="#be185d">rules</text>
-    <rect x="860" y="129" width="26" height="24" rx="5" fill="#be185d"/>
-    <text x="873" y="146" text-anchor="middle" class="struct" fill="#fff">+1</text>
+	<!-- ============ COLUMN 4: RedisClusterVersioned ============ -->
+	<g>
+		<path d="M722,72 H924 V440 L914,450 H712 V82 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+		<path d="M722,72 H924 V110 H712 V82 Z" fill="#00f0ff" opacity="0.1"/>
+		<line x1="712" y1="110" x2="924" y2="110" stroke="#00f0ff" stroke-width="1" opacity="0.7"/>
+		<text x="818" y="93" text-anchor="middle" class="colHead" fill="#00f0ff" font-size="12.5">RedisClusterVersioned</text>
+		<text x="818" y="105" text-anchor="middle" class="colSub">VERSIONED, ACROSS SLOTS</text>
 
-    <text x="818" y="178" text-anchor="middle" class="small" fill="#15803d" font-weight="700">append ONE rule &#8595;</text>
+		<path d="M750,124 H893 V151 L886,158 H743 V131 Z" fill="#fcee0a" fill-opacity="0.06" stroke="#fcee0a" opacity="0.85"/>
+		<text x="789" y="145" text-anchor="middle" class="struct" fill="#fcee0a">rules</text>
+		<rect x="860" y="129" width="26" height="24" fill="#fcee0a"/>
+		<text x="873" y="146" text-anchor="middle" class="struct" fill="#0a0a12">+1</text>
 
-    <g>
-      <rect x="736" y="192" width="50" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-      <rect x="793" y="192" width="50" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-      <rect x="850" y="192" width="50" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-      <text x="761" y="211" class="item" fill="#475569">item</text>
-      <text x="818" y="211" class="item" fill="#475569">item</text>
-      <text x="875" y="211" class="item" fill="#475569">item</text>
-      <text x="818" y="236" class="lazy">untouched &#8212; still in memory</text>
-    </g>
+		<text x="818" y="178" text-anchor="middle" class="small" style="fill:#00f0ff" font-weight="700">append ONE rule &#8595;</text>
 
-    <text x="818" y="262" class="smallC" font-weight="700" fill="#0f172a">Same read model as</text>
-    <text x="818" y="276" class="smallC" font-weight="700" fill="#0f172a">RedisVersioned.</text>
-    <text x="818" y="298" class="smallC">Item and rules live in</text>
-    <text x="818" y="312" class="smallC">different slots, so set()</text>
-    <text x="818" y="326" class="smallC">reads the watermark in</text>
-    <text x="818" y="340" class="smallC">a separate step.</text>
+		<g>
+			<rect x="736" y="192" width="50" height="30" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+			<rect x="793" y="192" width="50" height="30" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+			<rect x="850" y="192" width="50" height="30" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+			<text x="761" y="211" class="item" fill="#8b8ba7">item</text>
+			<text x="818" y="211" class="item" fill="#8b8ba7">item</text>
+			<text x="875" y="211" class="item" fill="#8b8ba7">item</text>
+			<text x="818" y="236" class="lazy">untouched &#8212; still in memory</text>
+		</g>
 
-    <rect x="736" y="396" width="164" height="40" rx="8" fill="#f0fdf4" stroke="#86efac"/>
-    <text x="818" y="416" class="cost" fill="#15803d">O(1)</text>
-    <text x="818" y="430" class="costSub">same, across cluster slots</text>
-  </g>
+		<text x="818" y="262" class="em">Same read model as</text>
+		<text x="818" y="276" class="em">RedisVersioned.</text>
+		<text x="818" y="298" class="smallC">Item and rules live in</text>
+		<text x="818" y="312" class="smallC">different slots, so set()</text>
+		<text x="818" y="326" class="smallC">reads the watermark in</text>
+		<text x="818" y="340" class="smallC">a separate step.</text>
 
-  <line x1="240" y1="120" x2="240" y2="370" stroke="#e2e8f0" stroke-dasharray="2 4"/>
-  <line x1="704" y1="120" x2="704" y2="370" stroke="#cbd5e1" stroke-dasharray="2 4"/>
-  <text x="704" y="466" text-anchor="middle" class="small" fill="#94a3b8">&#8592; delete matched items (cost grows with N)&#160;&#160;&#160;&#160;|&#160;&#160;&#160;&#160;append a rule, resolve lazily (constant cost) &#8594;</text>
+		<path d="M744,396 H900 V428 L892,436 H736 V404 Z" fill="#00f0ff" fill-opacity="0.06" stroke="#00f0ff" opacity="0.9"/>
+		<text x="818" y="416" class="cost" fill="#00f0ff">O(1)</text>
+		<text x="818" y="430" class="costSub">same, across cluster slots</text>
+	</g>
+
+	<line x1="240" y1="120" x2="240" y2="370" stroke="#8b8ba7" stroke-dasharray="2 4" opacity="0.35"/>
+	<line x1="704" y1="120" x2="704" y2="370" stroke="#8b8ba7" stroke-dasharray="2 4" opacity="0.5"/>
+	<text x="704" y="468" text-anchor="middle" class="small"><tspan fill="#ff003c">&#8592; delete matched items (cost grows with N)</tspan><tspan fill="#8b8ba7">&#160;&#160;&#160;&#160;|&#160;&#160;&#160;&#160;</tspan><tspan fill="#00f0ff">append a rule, resolve lazily (constant cost) &#8594;</tspan></text>
 </svg>

@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="460" viewBox="0 0 940 460" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+	</defs>
+
+	<!-- canvas -->
+	<path d="M14,0 H926 L940,14 V446 L926,460 H14 L0,446 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V446 L926,460 H14 L0,446 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V446 L926,459.5 H14 L0.5,446 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.35"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,420 V446 L926,459.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+
+	<!-- header -->
+	<text x="24" y="36" font-size="19" font-weight="700" letter-spacing="5" fill="#fcee0a" filter="url(#glow)">SESSION LIFECYCLE</text>
+	<text x="24" y="56" font-size="11.5" letter-spacing="1.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">a request under handler: json — write-through, no write-back</text>
+
+	<!-- ============ step lane ============ -->
+	<!-- step 1 -->
+	<path d="M28,84 H184 L192,92 V184 L184,192 H28 L20,184 V92 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9" stroke-opacity="0.5"/>
+	<text x="30" y="100" font-size="9" letter-spacing="1" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">01</text>
+	<text x="30" y="120" font-size="11" font-weight="700" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">open(sid)</text>
+	<text x="30" y="140" font-size="9.5" fill="#8b8ba7">cookie parsed —</text>
+	<text x="30" y="154" font-size="9.5" fill="#8b8ba7">no Redis I/O yet;</text>
+	<text x="30" y="168" font-size="9.5" fill="#8b8ba7">the session starts lazily</text>
+
+	<!-- step 2 -->
+	<path d="M212,84 H368 L376,92 V184 L368,192 H212 L204,184 V92 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9" stroke-opacity="0.5"/>
+	<text x="214" y="100" font-size="9" letter-spacing="1" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">02</text>
+	<text x="214" y="120" font-size="11" font-weight="700" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">touch()</text>
+	<text x="214" y="140" font-size="9.5" fill="#8b8ba7">rides the FIRST operation,</text>
+	<text x="214" y="154" font-size="9.5" fill="#8b8ba7">once per request: slides the</text>
+	<text x="214" y="168" font-size="9.5" fill="#8b8ba7">doc TTL + stamps activity</text>
+
+	<!-- step 3 -->
+	<path d="M396,84 H552 L560,92 V184 L552,192 H396 L388,184 V92 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9" stroke-opacity="0.5"/>
+	<text x="398" y="100" font-size="9" letter-spacing="1" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">03</text>
+	<text x="398" y="120" font-size="10.5" font-weight="700" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">get('basket.products')</text>
+	<text x="398" y="140" font-size="9.5" fill="#8b8ba7">1 round trip —</text>
+	<text x="398" y="154" font-size="9.5" fill="#8b8ba7">ONLY that value returns,</text>
+	<text x="398" y="168" font-size="9.5" fill="#8b8ba7">the rest stays in Redis</text>
+
+	<!-- step 4 -->
+	<path d="M580,84 H736 L744,92 V184 L736,192 H580 L572,184 V92 Z" fill="#0d0d17" stroke="#fcee0a" stroke-width="1" opacity="0.9" stroke-opacity="0.6"/>
+	<text x="582" y="100" font-size="9" letter-spacing="1" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">04</text>
+	<text x="582" y="120" font-size="10.5" font-weight="700" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">update('stats.counter')</text>
+	<text x="582" y="140" font-size="9.5" fill="#8b8ba7">lock &#8594; apply closure &#8594;</text>
+	<text x="582" y="154" font-size="9.5" fill="#8b8ba7">the write releases the lock</text>
+	<text x="582" y="168" font-size="9.5" fill="#8b8ba7">+ notifies waiting readers</text>
+
+	<!-- step 5 -->
+	<path d="M764,84 H920 L928,92 V184 L920,192 H764 L756,184 V92 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9" stroke-opacity="0.5"/>
+	<text x="766" y="100" font-size="9" letter-spacing="1" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">05</text>
+	<text x="766" y="120" font-size="10.5" font-weight="700" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">close() / shutdown</text>
+	<text x="766" y="140" font-size="9.5" fill="#8b8ba7">releases any held locks;</text>
+	<text x="766" y="154" font-size="9.5" fill="#8b8ba7">NO write-back — writes</text>
+	<text x="766" y="168" font-size="9.5" fill="#8b8ba7">were write-through</text>
+
+	<!-- chevrons -->
+	<path d="M193,132 L203,138 L193,144" fill="none" stroke="#00f0ff" stroke-width="2"/>
+	<path d="M377,132 L387,138 L377,144" fill="none" stroke="#00f0ff" stroke-width="2"/>
+	<path d="M561,132 L571,138 L561,144" fill="none" stroke="#00f0ff" stroke-width="2"/>
+	<path d="M745,132 L755,138 L745,144" fill="none" stroke="#00f0ff" stroke-width="2"/>
+
+	<!-- guides into the redis lane (broken around the command labels) -->
+	<line x1="290" y1="192" x2="290" y2="266" stroke="#00f0ff" stroke-width="1" stroke-dasharray="3,3" opacity="0.45"/>
+	<line x1="290" y1="296" x2="290" y2="312" stroke="#00f0ff" stroke-width="1" stroke-dasharray="3,3" opacity="0.45"/>
+	<line x1="474" y1="192" x2="474" y2="266" stroke="#00f0ff" stroke-width="1" stroke-dasharray="3,3" opacity="0.45"/>
+	<line x1="658" y1="192" x2="658" y2="266" stroke="#fcee0a" stroke-width="1" stroke-dasharray="3,3" opacity="0.45"/>
+	<line x1="658" y1="296" x2="658" y2="356" stroke="#fcee0a" stroke-width="1" stroke-dasharray="3,3" opacity="0.45"/>
+	<line x1="842" y1="192" x2="842" y2="296" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+
+	<!-- ============ redis lane ============ -->
+	<path d="M30,232 H918 L928,242 V398 L918,408 H30 L20,398 V242 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9" stroke-opacity="0.35"/>
+	<text x="34" y="254" font-size="11" font-weight="700" letter-spacing="4" fill="#00f0ff" opacity="0.85">REDIS</text>
+
+	<!-- doc track -->
+	<text x="34" y="294" font-size="10.5" fill="#e8e8f0" font-family="Consolas, 'Courier New', monospace">&lt;prefix&gt;:&lt;sid&gt;</text>
+	<text x="34" y="306" font-size="8.5" fill="#8b8ba7">RedisJSON document</text>
+	<line x1="268" y1="290" x2="912" y2="290" stroke="#8b8ba7" stroke-width="1" opacity="0.25"/>
+	<circle cx="290" cy="290" r="3.5" fill="#00f0ff"/>
+	<text x="290" y="279" text-anchor="middle" font-size="9" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">PEXPIRE lifetime</text>
+	<circle cx="474" cy="290" r="3.5" fill="#00f0ff"/>
+	<text x="474" y="279" text-anchor="middle" font-size="9" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">JSON.GET $.basket.products</text>
+	<circle cx="658" cy="290" r="3.5" fill="#00f0ff"/>
+	<text x="658" y="279" text-anchor="middle" font-size="9" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">JSON.GET &#8594; JSON.SET $.stats.counter</text>
+
+	<!-- step 5: nothing -->
+	<text x="842" y="312" text-anchor="middle" font-size="9" fill="#8b8ba7">no I/O —</text>
+	<text x="842" y="324" text-anchor="middle" font-size="9" fill="#8b8ba7">already persisted</text>
+
+	<!-- activity track -->
+	<text x="34" y="338" font-size="10.5" fill="#e8e8f0" font-family="Consolas, 'Courier New', monospace">&lt;prefix&gt;:activity</text>
+	<text x="34" y="350" font-size="8.5" fill="#8b8ba7">zset sid &#8594; last seen</text>
+	<line x1="268" y1="334" x2="912" y2="334" stroke="#8b8ba7" stroke-width="1" opacity="0.25"/>
+	<circle cx="290" cy="334" r="3.5" fill="#00f0ff"/>
+	<text x="290" y="323" text-anchor="middle" font-size="9" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">ZADD &lt;now&gt; &lt;sid&gt;</text>
+
+	<!-- lock track -->
+	<text x="34" y="382" font-size="10" fill="#e8e8f0" font-family="Consolas, 'Courier New', monospace">&lt;prefix&gt;:&lt;sid&gt;:stats.counter:lock</text>
+	<line x1="268" y1="378" x2="912" y2="378" stroke="#8b8ba7" stroke-width="1" opacity="0.12" stroke-dasharray="2,4"/>
+	<line x1="600" y1="378" x2="716" y2="378" stroke="#fcee0a" stroke-width="5"/>
+	<text x="658" y="368" text-anchor="middle" font-size="8.5" fill="#fcee0a" opacity="0.85">exists only while held</text>
+	<text x="604" y="392" text-anchor="middle" font-size="8.5" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">SET NX PX 2000</text>
+	<text x="716" y="392" text-anchor="middle" font-size="8.5" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">DEL + PUBLISH</text>
+	<text x="748" y="381" font-size="8.5" fill="#8b8ba7">(gone)</text>
+
+	<!-- footer -->
+	<text x="24" y="436" font-size="10.5" fill="#8b8ba7"><tspan fill="#00f0ff" font-weight="700">WRITE-THROUGH:</tspan> every write hits Redis during the request — shutdown has nothing to flush, it only releases forgotten locks.</text>
+</svg>
