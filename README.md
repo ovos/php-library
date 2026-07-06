@@ -52,6 +52,7 @@ It is designed to work with:
 - [Translations](#translations)
 - [Migrations](#migrations)
 - [Cache](#cache)
+- [Sessions](#sessions)
 - [CLI Commands](#cli-commands)
 - [Forms](#forms)
   - [Creating a Form Component](#creating-a-form-component)
@@ -1969,6 +1970,14 @@ See [README.MEMOLOCK.md](README.MEMOLOCK.md) for advanced usage: manual lock con
 
 ---
 
+## Sessions
+
+The `Session` service supports two storage handlers (`session.handler` config): the native PHP machinery (`php`, default) and a lazy RedisJSON handler (`json`) with per-path reads/writes, per-value MemoLock locking, a user journey timeline, and active-session counting.
+
+- **[README.SESSION.md](README.SESSION.md)** - Lazy RedisJSON session storage: configuration, the path API, locking, journey, migration notes
+
+---
+
 ## CLI Commands
 
 Commands provided by `php-module-system`:
@@ -1995,6 +2004,8 @@ php cli.php benchmarks run                   # Run all benchmarks
 php cli.php system stats free-space          # Show disk space
 php cli.php system collector                 # Run garbage collectors
 php cli.php system sessions clear            # Clear sessions
+php cli.php system sessions gc               # Collect session garbage (json handler
+                                             # activity index; cron-friendly)
 php cli.php system tools encrypt "text"      # Encrypt a string
 php cli.php system tools decrypt "cipher"    # Decrypt a string
 ```

@@ -11,6 +11,7 @@ use Ovos\View\Helper\Messages\Message;
 use Countable;
 
 use function count;
+use function is_array;
 
 /**
  * Messages
@@ -33,6 +34,12 @@ class Messages extends Helper implements Countable
 	 */
 	protected ?array $items = [];
 	
+	/**
+	 * The json session handler has no by-reference storage and no
+	 * request-end write-back: changes are persisted explicitly instead
+	 */
+	protected bool $writeThrough = false;
+	
 	public function __construct()
 	{
 		parent::__construct();
@@ -40,7 +47,16 @@ class Messages extends Helper implements Countable
 		$this->session = $this->container->get(Session::SYMBOL);
 		if($this->session instanceof Session)
 		{
-			$this->items = &$this->session->{self::SESSION_NAMESPACE};
+			if($this->session->getHandler() === Session::HANDLER_JSON)
+			{
+				$this->writeThrough = true;
+				$items = $this->session->get(self::SESSION_NAMESPACE);
+				$this->items = is_array($items) ? $items : [];
+			}
+			else
+			{
+				$this->items = &$this->session->{self::SESSION_NAMESPACE};
+			}
 		}
 	}
 	
@@ -98,6 +114,7 @@ class Messages extends Helper implements Countable
 	{
 		$message = new Message($type, $description, $title);
 		$this->getItems()[] = $message;
+		$this->persist();
 		
 		return $message;
 	}
@@ -199,7 +216,25 @@ class Messages extends Helper implements Countable
 	{
 		$items = $this->getItems(); // copy
 		$this->items = null;
+		$this->persist();
 		
 		return $items;
+	}
+	
+	protected function persist(): void
+	{
+		if($this->writeThrough === false)
+		{
+			return;
+		}
+		
+		if($this->items === null || $this->items === [])
+		{
+			$this->session->remove(self::SESSION_NAMESPACE);
+			
+			return;
+		}
+		
+		$this->session->set(self::SESSION_NAMESPACE, $this->items);
 	}
 }

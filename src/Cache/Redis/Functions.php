@@ -14,6 +14,7 @@ use function ceil;
 use function count;
 use function file_get_contents;
 use function is_array;
+use function is_file;
 use function is_int;
 use function str_replace;
 
@@ -319,16 +320,23 @@ class Functions
 	
 	/**
 	 * Builds a library of scripts from a file, applying the functions prefix
+	 * A bare filename is resolved against this directory's "Functions";
+	 * callers outside the cache (e.g. the json session handler) pass a
+	 * full path to their own library file instead
 	 */
 	protected function buildLibrary(
 		string $libraryName, // already prefixed
 		string $libraryFile,
 	): string
 	{
-		$functions = file_get_contents(__DIR__
-			. DIRECTORY_SEPARATOR . 'Functions'
-			. DIRECTORY_SEPARATOR . $libraryFile,
-		);
+		if(is_file($libraryFile) === false)
+		{
+			$libraryFile = __DIR__
+				. DIRECTORY_SEPARATOR . 'Functions'
+				. DIRECTORY_SEPARATOR . $libraryFile;
+		}
+		
+		$functions = file_get_contents($libraryFile);
 		
 		$functions = str_replace('[prefix]',
 			$this->functionsPrefix
