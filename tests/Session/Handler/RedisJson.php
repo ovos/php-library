@@ -674,6 +674,61 @@ class RedisJson extends Test
 	}
 	
 	/**
+	 * A blind write must not sail past a value lock held by another
+	 * process: the Lua side refuses atomically, the writer waits for
+	 * the release and retries - the write lands AFTER the holder's own
+	 */
+	public function parallelWriterWaitsForTheLockedValue(): bool
+	{
+		$session = $this->session();
+		$session->set(['v'], 'old');
+		
+		$process = proc_open($this->clientCommand('writer', $session), [], $pipes);
+		if(is_resource($process) === false)
+		{
+			return false;
+		}
+		
+		try
+		{
+			// wait until the writer process actually holds the value lock
+			$flagKey = self::PREFIX . ':flag:' . $session->getSessionId();
+			$client = $this->connection->getClient();
+			
+			$locked = false;
+			for($attempt = 0; $attempt < 200; $attempt++)
+			{
+				if((int)$client->exists($flagKey) === 1)
+				{
+					$locked = true;
+					
+					break;
+				}
+				usleep(50000);
+			}
+			if($locked === false)
+			{
+				return false;
+			}
+			
+			$start = microtime(true);
+			$session->set(['v'], 'mine');
+			$elapsed = microtime(true) - $start;
+			
+			// the holder keeps the lock for 700ms and writes "new" on
+			// release: a guarded write waited and won as the LAST writer
+			return $session->get(['v']) === 'mine'
+				&& $elapsed >= 0.2;
+		}
+		finally
+		{
+			proc_close($process);
+			$this->connection->getClient()
+				->del(self::PREFIX . ':flag:' . $session->getSessionId());
+		}
+	}
+	
+	/**
 	 * Parallel increments from multiple processes must never lose an
 	 * update - the increment is a single atomic server-side function
 	 */

@@ -39,6 +39,9 @@ use function mb_check_encoding;
 use function random_int;
 use function serialize;
 use function str_replace;
+use function str_starts_with;
+use function strlen;
+use function substr;
 use function time;
 use function unserialize;
 
@@ -58,7 +61,11 @@ use const JSON_UNESCAPED_UNICODE;
  *
  * Individual values are lockable: getLocked() takes a per-value MemoLock
  * lock, set() releases it and notifies the waiters; a plain get() on a
- * value locked by another request waits for that release.
+ * value locked by another request waits for that release. Writes honor
+ * foreign locks server-side: the Lua functions check the lock keys
+ * atomically with the write and refuse while one is held - the caller
+ * waits for one release and retries (then unconditionally: availability
+ * over strictness, the lock TTL bounds the wait).
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -77,6 +84,12 @@ class RedisJson
 	// Journey entries
 	public const string JOURNEY_REQUEST = 'request';
 	public const string JOURNEY_ACTION = 'action';
+	
+	/**
+	 * The reply marker of a write refused by a foreign value lock,
+	 * followed by the 0-based index into the lock keys passed along
+	 */
+	public const string LOCKED = '__locked__:';
 	
 	// Key types (prefixed like the MemoLock lock/channel keys)
 	public const string TYPE_ACTIVITY = 'activity';
@@ -279,7 +292,7 @@ class RedisJson
 	{
 		$this->ensureOpen();
 		
-		if(($client = $this->getClient()) === null)
+		if($this->getClient() === null)
 		{
 			return null;
 		}
@@ -287,27 +300,11 @@ class RedisJson
 		$this->touch();
 		
 		// one round trip: the hierarchical lock checks ride with the read
-		$lockIds = $this->lockScope($path);
-		$pipeline = $client->pipeline();
-		foreach($lockIds as $lockId)
-		{
-			$pipeline->exists($this->memoLock->getPrefixer()
-				->prefix(MemoLock::TYPE_LOCK, $lockId));
-		}
-		$results = $pipeline
-			->rawCommand('JSON.GET', $this->key(), $this->jsonPath($path))
-			->exec();
-		
-		// locked by another request (own locks are tracked locally):
-		// wait for the release publication, then re-read
-		if(($lockId = $this->foreignLock($lockIds, $results)) !== null)
-		{
-			$this->memoLock->waitForRelease($lockId);
-			
-			return $this->read($path);
-		}
-		
-		return $this->decode($results[count($lockIds)] ?? false);
+		return $this->decode(
+			$this->checked($this->lockScope($path),
+				fn($target): mixed => $target
+					->rawCommand('JSON.GET', $this->key(), self::jsonPath($path)))
+		);
 	}
 	
 	/**
@@ -323,7 +320,7 @@ class RedisJson
 	{
 		$this->ensureOpen();
 		
-		if(($client = $this->getClient()) === null)
+		if($this->getClient() === null)
 		{
 			return $this->node($path);
 		}
@@ -331,29 +328,10 @@ class RedisJson
 		$this->touch();
 		
 		// the hierarchical lock checks ride with the type peek
-		$lockIds = $this->lockScope($path);
-		$pipeline = $client->pipeline();
-		foreach($lockIds as $lockId)
-		{
-			$pipeline->exists($this->memoLock->getPrefixer()
-				->prefix(MemoLock::TYPE_LOCK, $lockId));
-		}
-		$results = $pipeline
-			->rawCommand('JSON.TYPE', $this->key(), $this->jsonPath($path))
-			->exec();
-		
-		if(($lockId = $this->foreignLock($lockIds, $results)) !== null)
-		{
-			$this->memoLock->waitForRelease($lockId);
-			
-			$types = $client->rawCommand('JSON.TYPE',
-				$this->key(), $this->jsonPath($path));
-		}
-		else
-		{
-			$types = $results[count($lockIds)] ?? null;
-		}
-		
+		$types = $this->checked($this->lockScope($path),
+			fn($target): mixed => $target
+				->rawCommand('JSON.TYPE', $this->key(), self::jsonPath($path)));
+				
 		$type = is_array($types) === true
 			? ($types[0] ?? null)
 			: null;
@@ -384,15 +362,9 @@ class RedisJson
 			return [];
 		}
 		
-		if(($client = $this->getClient()) === null)
+		if($this->getClient() === null)
 		{
-			$values = [];
-			foreach($paths as $path)
-			{
-				$values[implode('.', $path)] = null;
-			}
-			
-			return $values;
+			return $this->decodeMany($paths, false);
 		}
 		
 		$this->touch();
@@ -406,27 +378,12 @@ class RedisJson
 				$lockIds[$lockId] = $lockId;
 			}
 		}
-		$lockIds = array_values($lockIds);
 		
-		$pipeline = $client->pipeline();
-		foreach($lockIds as $lockId)
-		{
-			$pipeline->exists($this->memoLock->getPrefixer()
-				->prefix(MemoLock::TYPE_LOCK, $lockId));
-		}
-		$results = $pipeline
-			->rawCommand('JSON.GET', $this->key(),
-				...array_map($this->jsonPath(...), $paths))
-			->exec();
-		
-		if(($lockId = $this->foreignLock($lockIds, $results)) !== null)
-		{
-			$this->memoLock->waitForRelease($lockId);
-			
-			return $this->readMany($paths);
-		}
-		
-		return $this->decodeMany($paths, $results[count($lockIds)] ?? false);
+		return $this->decodeMany($paths,
+			$this->checked(array_values($lockIds),
+				fn($target): mixed => $target->rawCommand('JSON.GET', $this->key(),
+					...array_map(self::jsonPath(...), $paths)))
+		);
 	}
 	
 	/**
@@ -490,7 +447,9 @@ class RedisJson
 	
 	/**
 	 * Writes the value at a nested path (creating missing parents) and
-	 * releases the lock taken by getLocked(), waking any waiting readers
+	 * releases the lock taken by getLocked(), waking any waiting readers;
+	 * a value locked by ANOTHER request is only written after that lock's
+	 * release (checked atomically with the write on the Lua side)
 	 */
 	public function set(
 		array $path,
@@ -500,15 +459,12 @@ class RedisJson
 		$this->ensureOpen();
 		$this->touch();
 		
-		$this->functions->call('session_set',
-			[$this->key()],
-			[
-				$this->lifetime * 1000,
-				time(),
-				$this->encode($value),
-				...$path,
-			],
-		);
+		$this->write('session_set', $path, [
+			$this->lifetime * 1000,
+			time(),
+			$this->encode($value),
+			...$path,
+		]);
 		
 		$this->releaseLock($path);
 	}
@@ -553,7 +509,9 @@ class RedisJson
 	
 	/**
 	 * Atomically increments a numeric value (creating it when missing) -
-	 * parallel-safe counters without any locking
+	 * parallel-safe counters that need no explicit locking; a lock held
+	 * by another request is honored the same way set() honors it, and a
+	 * lock this request holds on the path is released
 	 */
 	public function increment(
 		array $path,
@@ -570,15 +528,14 @@ class RedisJson
 		
 		$this->touch();
 		
-		$result = $this->functions->call('session_increment',
-			[$this->key()],
-			[
-				$this->lifetime * 1000,
-				time(),
-				$by,
-				...$path,
-			],
-		);
+		$result = $this->write('session_increment', $path, [
+			$this->lifetime * 1000,
+			time(),
+			$by,
+			...$path,
+		]);
+		
+		$this->releaseLock($path);
 		
 		if(is_string($result) === false)
 		{
@@ -610,16 +567,13 @@ class RedisJson
 		
 		$this->touch();
 		
-		$length = $this->functions->call('session_append',
-			[$this->key()],
-			[
-				$this->lifetime * 1000,
-				time(),
-				$limit,
-				$this->encode($value),
-				...$path,
-			],
-		);
+		$length = $this->write('session_append', $path, [
+			$this->lifetime * 1000,
+			time(),
+			$limit,
+			$this->encode($value),
+			...$path,
+		]);
 		
 		$this->releaseLock($path);
 		
@@ -853,32 +807,89 @@ class RedisJson
 		
 		return $this->decode(
 			$client->rawCommand('JSON.GET',
-				$this->key(), $this->jsonPath($path))
+				$this->key(), self::jsonPath($path))
 		);
 	}
 	
 	/**
-	 * Reads several paths without the lock checks (used after a wait)
+	 * Runs a read with the hierarchical lock checks riding in the same
+	 * pipeline - one EXISTS per lock id in front of the payload command;
+	 * when a lock held by ANOTHER request is found, waits for its release
+	 * and re-runs the payload alone. Returns the payload's raw reply
 	 */
-	protected function readMany(
-		array $paths,
-	): array
+	protected function checked(
+		array $lockIds,
+		Closure $payload,
+	): mixed
 	{
 		if(($client = $this->getClient()) === null)
 		{
-			$values = [];
-			foreach($paths as $path)
-			{
-				$values[implode('.', $path)] = null;
-			}
-			
-			return $values;
+			return false;
 		}
 		
-		return $this->decodeMany($paths,
-			$client->rawCommand('JSON.GET', $this->key(),
-				...array_map($this->jsonPath(...), $paths))
+		$pipeline = $client->pipeline();
+		foreach($lockIds as $lockId)
+		{
+			$pipeline->exists($this->lockKey($lockId));
+		}
+		$payload($pipeline);
+		$results = $pipeline->exec();
+		
+		if(($lockId = $this->foreignLock($lockIds, $results)) !== null)
+		{
+			$this->memoLock->waitForRelease($lockId);
+			
+			return $payload($client);
+		}
+		
+		return $results[count($lockIds)] ?? false;
+	}
+	
+	/**
+	 * Calls a write function with the path's foreign-lock keys passed as
+	 * extra KEYS - the Lua side refuses to write over a value locked by
+	 * another request (the check and the write are atomic); one release
+	 * is awaited, then the write is retried unconditionally: availability
+	 * over strictness, the lock TTL bounds the wait
+	 */
+	protected function write(
+		string $function,
+		array $path,
+		array $arguments,
+	): mixed
+	{
+		$lockIds = [];
+		$lockKeys = [];
+		foreach($this->lockScope($path) as $lockId)
+		{
+			// own locks never block their holder
+			if(array_key_exists($lockId, $this->lockedPaths) === true)
+			{
+				continue;
+			}
+			$lockIds[] = $lockId;
+			$lockKeys[] = $this->lockKey($lockId);
+		}
+		
+		$result = $this->functions->call($function,
+			[$this->key(), ...$lockKeys],
+			$arguments,
 		);
+		
+		if(is_string($result) === true
+			&& str_starts_with($result, self::LOCKED) === true)
+		{
+			$index = (int)substr($result, strlen(self::LOCKED));
+			$this->memoLock->waitForRelease($lockIds[$index] ?? $lockIds[0]);
+			
+			// the holder had its chance - write unconditionally now
+			$result = $this->functions->call($function,
+				[$this->key()],
+				$arguments,
+			);
+		}
+		
+		return $result;
 	}
 	
 	/**
@@ -940,23 +951,12 @@ class RedisJson
 		array $lockIds,
 	): void
 	{
-		if($lockIds === [] || ($client = $this->getClient()) === null)
+		if($lockIds === [])
 		{
 			return;
 		}
 		
-		$pipeline = $client->pipeline();
-		foreach($lockIds as $lockId)
-		{
-			$pipeline->exists($this->memoLock->getPrefixer()
-				->prefix(MemoLock::TYPE_LOCK, $lockId));
-		}
-		$results = $pipeline->exec();
-		
-		if(($lockId = $this->foreignLock($lockIds, $results)) !== null)
-		{
-			$this->memoLock->waitForRelease($lockId);
-		}
+		$this->checked($lockIds, static fn($target): mixed => null);
 	}
 	
 	/**
@@ -1023,13 +1023,28 @@ class RedisJson
 	/**
 	 * A value lock is scoped to the exact path within this session;
 	 * MemoLock suffixes the id (":lock" / ":channel"), so basing it on the
-	 * prefixed document key keeps all session keys under one prefix
+	 * prefixed document key keeps all session keys under one prefix - the
+	 * root lock id is the document key itself
 	 */
 	protected function lockId(
 		array $path,
 	): string
 	{
-		return $this->key() . ':' . implode('.', $path);
+		return $path === []
+			? $this->key()
+			: $this->key() . ':' . implode('.', $path);
+	}
+	
+	/**
+	 * The redis key of a value lock (the MemoLock prefixer puts the
+	 * ":lock" type suffix last)
+	 */
+	protected function lockKey(
+		string $lockId,
+	): string
+	{
+		return $this->memoLock->getPrefixer()
+			->prefix(MemoLock::TYPE_LOCK, $lockId);
 	}
 	
 	/**

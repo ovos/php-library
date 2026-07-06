@@ -6,6 +6,12 @@
 	All writes slide the session expiration (ttl_ms) and stamp the document
 	creation time into a reserved "__meta" object on first write.
 
+	Write functions accept the value's foreign lock keys after the document
+	key and refuse to write while one is held, returning a "__locked__:<n>"
+	marker instead (n = the 0-based index into the lock keys) - the caller
+	waits for that lock and retries. On a Redis Cluster every key passed to
+	a function must share the document's hash slot (hashtag prefixes).
+
 	@author Marcin Gil <mg@ovos.at>
 ]]
 
@@ -51,9 +57,27 @@ local function session_segments(args, first)
 	return segments
 end
 
+-- The "__locked__:<n>" marker when one of the lock keys (KEYS[first..])
+-- is currently held - a write must not sail past a value lock taken by
+-- another request (the caller filters out its own locks); nil when free
+local function session_locked(keys, first)
+	for i = first, #keys do
+		if redis.call('EXISTS', keys[i]) == 1 then
+			return '__locked__:' .. (i - first)
+		end
+	end
+
+	return nil
+end
+
 -- Sets a JSON-encoded value at a nested path, creating missing parents
--- keys: [document] args: [ttl_ms, now, value, segment...]
+-- keys: [document, lock...] args: [ttl_ms, now, value, segment...]
 local function session_set(keys, args)
+	local locked = session_locked(keys, 2)
+	if locked then
+		return locked
+	end
+
 	local key = keys[1]
 	local ttl_ms = tonumber(args[1])
 	local now = tonumber(args[2])
@@ -78,8 +102,13 @@ redis.register_function('[prefix]session_set', session_set)
 
 -- Atomically increments a numeric value at a nested path, creating it
 -- (and missing parents) when necessary; returns the new value as JSON
--- keys: [document] args: [ttl_ms, now, by, segment...]
+-- keys: [document, lock...] args: [ttl_ms, now, by, segment...]
 local function session_increment(keys, args)
+	local locked = session_locked(keys, 2)
+	if locked then
+		return locked
+	end
+
 	local key = keys[1]
 	local ttl_ms = tonumber(args[1])
 	local now = tonumber(args[2])
@@ -107,8 +136,13 @@ redis.register_function('[prefix]session_increment', session_increment)
 -- Appends a JSON-encoded entry to an array at a nested path (used for the
 -- "__journey" timeline), trimming it to the last "limit" entries (0 = no
 -- limit); returns the array length
--- keys: [document] args: [ttl_ms, now, limit, entry, segment...]
+-- keys: [document, lock...] args: [ttl_ms, now, limit, entry, segment...]
 local function session_append(keys, args)
+	local locked = session_locked(keys, 2)
+	if locked then
+		return locked
+	end
+
 	local key = keys[1]
 	local ttl_ms = tonumber(args[1])
 	local now = tonumber(args[2])
