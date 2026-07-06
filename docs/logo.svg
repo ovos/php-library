@@ -38,7 +38,7 @@
 		<text x="172" y="97" fill="#e8e8f0">LIBRARY</text>
 	</g>
 	<!-- a single, precise detail: the separator cut -->
-	<rect x="163" y="62" width="3" height="38" fill="#ff003c" transform="skewX(-12)"/>
+	<rect x="163" y="62" width="3" height="38" fill="#00f0ff" transform="skewX(-12)"/>
 
 	<!-- baseline rule, stepped like a circuit trace -->
 	<path d="M38,112 H360 l6,6 H560" fill="none" stroke="#3a3a52" stroke-width="1"/>
