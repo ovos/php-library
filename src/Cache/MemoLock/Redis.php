@@ -17,6 +17,7 @@ use RedisClusterException;
 
 use function bin2hex;
 use function random_bytes;
+use function min;
 use function random_int;
 use function array_key_exists;
 
@@ -104,10 +105,19 @@ class Redis extends MemoLock
 	/**
 	 * Pub/sub should use a standalone (non-cluster) connection,
 	 * a classic PUBLISH is broadcast cluster-wide anyway
+	 * Connects on demand - the queue connection is only ever needed
+	 * under contention, so it must not cost anything on other requests
 	 */
 	public function getQueueClient(): ?RedisClient
 	{
-		return $this->queueConnection->getClient();
+		$client = $this->queueConnection->getClient();
+		if($client === null)
+		{
+			$this->queueConnection->connect();
+			$client = $this->queueConnection->getClient();
+		}
+		
+		return $client;
 	}
 	
 	public function lockAndQueue(
@@ -170,7 +180,7 @@ class Redis extends MemoLock
 			);
 		}
 		
-		if(($queueClient = $this->getQueueClient()) === null)
+		if($this->getQueueClient() === null)
 		{
 			return $this->invoker
 				->invoke($resolver);
@@ -180,45 +190,39 @@ class Redis extends MemoLock
 		$waitTimeMs = $waitTimeJitterMs = $queueLockTtlMs;
 		for($attempt = 0; $attempt < $this->queueWaitAttempts; $attempt++)
 		{
-			// set read timeout to the requested queue lock TTL
-			$this->queueConnection->toggleReadTimeout(
-				Connection::TIMEOUT_READ_CUSTOM, 
-				$waitTimeJitterMs / 1000, // milliseconds to seconds
-				false,
-			);
-			
-			$success = false;
+			// a crashed producer never publishes - never wait (much) longer
+			// than its lock can live (mirrors waitForRelease)
+			$remainingMs = 0;
 			try
 			{
-				$this->debug('subscribe: ' . $id);
-				
-				// block and wait for a message on the channel or a timeout (when no message is received)
-				$success = $queueClient->subscribe([$channelName],
-					function($client, $channelName, $message) use ($id)
-					{
-						$this->debug('unsubscribe: ' . $id);
-						
-						$client->unsubscribe([$channelName]);
-					}
-				);
+				$remainingMs = $client->pttl($lockKey);
 			}
-			// we got no message, redis responded with "RedisException: read error on connection"
 			catch(RedisException|RedisClusterException $exception)
 			{
-				$queueClient->unsubscribe([$channelName]);
+				$this->connection->log($exception);
+			}
+			
+			if($remainingMs === -2 || $remainingMs === false)
+			{
+				// the lock is gone: no publication will come - skip the
+				// subscribe and check the value / race for the lock now
+				$success = false;
+			}
+			else
+			{
+				$success = $this->waitForMessage($channelName,
+					$remainingMs > 0
+						? min($waitTimeJitterMs, $remainingMs + 25)
+						: $waitTimeJitterMs,
+				);
+			}
+			if($success === false)
+			{
 				// shorten the wait time on the next attempt
 				$waitTimeMs/= 2;
 				// add jitter to the wait time (0-50%)
 				$waitTimeJitterMs = $waitTimeMs
 					+ random_int(0, (int)($waitTimeMs * 0.5));
-				
-				$this->debug('timeout: ' . $id
-					. PHP_EOL . $exception->getMessage(), timeout: true);
-			}
-			finally
-			{
-				// restore the default read timeout
-				$this->queueConnection->toggleReadTimeout();
 			}
 			
 			// either we got the message or we timed-out
@@ -283,6 +287,140 @@ class Redis extends MemoLock
 			$lockValue,
 			$resolver,
 		);
+	}
+	
+	/**
+	 * Waits for a single publication on a channel or a timeout,
+	 * blocking the queue (pub/sub) connection for up to the given time
+	 */
+	protected function waitForMessage(
+		string $channelName,
+		float|int $waitTimeMs,
+	): bool
+	{
+		if(($queueClient = $this->getQueueClient()) === null)
+		{
+			return false;
+		}
+		
+		// set the read timeout to the requested wait time
+		$this->queueConnection->toggleReadTimeout(
+			Connection::TIMEOUT_READ_CUSTOM,
+			$waitTimeMs / 1000, // milliseconds to seconds
+			false,
+		);
+		
+		try
+		{
+			$this->debug('subscribe: ' . $channelName);
+			
+			// block and wait for a message on the channel or a timeout (when no message is received)
+			$queueClient->subscribe([$channelName],
+				function($client, $channelName, $message)
+				{
+					$this->debug('unsubscribe: ' . $channelName);
+					
+					$client->unsubscribe([$channelName]);
+				}
+			);
+			
+			return true;
+		}
+		// we got no message, redis responded with "RedisException: read error on connection"
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$queueClient->unsubscribe([$channelName]);
+			
+			$this->debug('timeout: ' . $channelName
+				. PHP_EOL . $exception->getMessage(), timeout: true);
+			
+			return false;
+		}
+		finally
+		{
+			// restore the default read timeout
+			$this->queueConnection->toggleReadTimeout();
+		}
+	}
+	
+	/**
+	 * Waits for a lock (typically held by another request) to be released
+	 * WITHOUT acquiring it: subscribes to the lock's channel and returns once
+	 * the holder publishes the release, or the lock expires or vanishes
+	 * Returns true when the lock is gone (or held by this very request),
+	 * false when it still exists after all wait attempts
+	 */
+	public function waitForRelease(
+		string $id,
+		?int $queueLockTtlMs = null,
+	): bool
+	{
+		// a lock held by this very request never blocks it
+		if(array_key_exists($id, $this->queueLocks))
+		{
+			return true;
+		}
+		
+		if(($client = $this->getClient()) === null)
+		{
+			return true;
+		}
+		
+		$lockKey = $this->prefixer
+			->prefix(static::TYPE_LOCK, $id);
+		$channelName = $this->prefixer
+			->prefix(static::TYPE_CHANNEL, $id);
+		$queueLockTtlMs = $queueLockTtlMs ?? $this->queueLockTtlMs;
+		
+		$waitTimeMs = $waitTimeJitterMs = $queueLockTtlMs;
+		for($attempt = 0; $attempt <= $this->queueWaitAttempts; $attempt++)
+		{
+			// a redis failure while checking must not block the host application
+			try
+			{
+				$remainingMs = $client->pttl($lockKey);
+			}
+			catch(RedisException|RedisClusterException $exception)
+			{
+				$this->connection->log($exception);
+				
+				return true;
+			}
+			
+			if($remainingMs === -2 || $remainingMs === false)
+			{
+				// the lock is gone
+				return true;
+			}
+			
+			// the last iteration only re-checks the lock, it does not wait again
+			if($attempt === $this->queueWaitAttempts)
+			{
+				break;
+			}
+			
+			$this->debug('wait for release: ' . $id);
+			
+			// a crashed holder never publishes - never wait (much) longer
+			// than the lock itself can live
+			$waitMs = $remainingMs > 0
+				? min($waitTimeJitterMs, $remainingMs + 25)
+				: $waitTimeJitterMs;
+			
+			$success = $this->waitForMessage($channelName, $waitMs);
+			if($success === false)
+			{
+				// shorten the wait time on the next attempt
+				$waitTimeMs/= 2;
+				// add jitter to the wait time (0-50%)
+				$waitTimeJitterMs = $waitTimeMs
+					+ random_int(0, (int)($waitTimeMs * 0.5));
+			}
+		}
+		
+		$this->debug('wait for release timed out: ' . $id, timeout: true);
+		
+		return false;
 	}
 	
 	/**

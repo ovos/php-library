@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="500" viewBox="0 0 940 500" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+	</defs>
+
+	<!-- canvas -->
+	<path d="M14,0 H926 L940,14 V486 L926,500 H14 L0,486 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V486 L926,500 H14 L0,486 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V486 L926,499.5 H14 L0.5,486 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.5"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,460 V486 L926,499.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+
+	<!-- title -->
+	<text x="34" y="34" font-size="20" font-weight="700" letter-spacing="4" fill="#fcee0a" filter="url(#glow)">ONE SESSION IN REDIS</text>
+	<rect x="34" y="41" width="190" height="2" fill="#ff003c"/>
+	<text x="34" y="57" font-size="11" letter-spacing="1.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">the key layout // session.handler: json</text>
+
+	<!-- connectors -->
+	<g stroke-width="1">
+		<line x1="282" y1="137" x2="310" y2="152" stroke="#fcee0a" opacity="0.6"/>
+		<circle cx="282" cy="137" r="2.5" fill="#fcee0a"/>
+		<line x1="282" y1="257" x2="310" y2="240" stroke="#fcee0a" opacity="0.6" stroke-dasharray="4,4"/>
+		<circle cx="282" cy="257" r="2.5" fill="#fcee0a"/>
+		<line x1="672" y1="140" x2="645" y2="155" stroke="#00f0ff" opacity="0.6"/>
+		<circle cx="672" cy="140" r="2.5" fill="#00f0ff"/>
+		<line x1="672" y1="280" x2="645" y2="260" stroke="#8b8ba7" opacity="0.6" stroke-dasharray="4,4"/>
+		<circle cx="672" cy="280" r="2.5" fill="#8b8ba7"/>
+	</g>
+
+	<!-- ===== central panel: the document ===== -->
+	<path d="M322,78 H633 L645,90 V373 L633,385 H322 L310,373 V90 Z" fill="#11111c" stroke="#00f0ff" stroke-width="1"/>
+	<text x="330" y="105" font-size="13" font-weight="700" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">&lt;prefix&gt;:&lt;sid&gt;</text>
+	<text x="330" y="121" font-size="10" fill="#8b8ba7">RedisJSON document — one per session</text>
+	<path d="M506,88 H630 L636,94 V104 L630,110 H512 L506,104 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.85"/>
+	<text x="571" y="103" text-anchor="middle" font-size="10" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">PEXPIRE — sliding TTL</text>
+	<line x1="326" y1="132" x2="629" y2="132" stroke="#00f0ff" stroke-width="1" opacity="0.3"/>
+
+	<g font-size="11" font-family="Consolas, 'Courier New', monospace">
+		<text x="330" y="152" fill="#8b8ba7">{</text>
+		<text x="346" y="172" fill="#fcee0a">"__meta"<tspan fill="#8b8ba7">:       </tspan><tspan fill="#e8e8f0">{ "created": 1783333632 },</tspan></text>
+		<text x="362" y="188" font-size="10" font-style="italic" fill="#8b8ba7" font-family="Segoe UI, Helvetica, Arial, sans-serif">stamped atomically on first write</text>
+		<text x="346" y="208" fill="#fcee0a">"__journey"<tspan fill="#8b8ba7">:    </tspan><tspan fill="#e8e8f0">[ req, action, req, … ],</tspan></text>
+		<text x="362" y="224" font-size="10" font-style="italic" fill="#8b8ba7" font-family="Segoe UI, Helvetica, Arial, sans-serif">the timeline — trimmed to journey.limit</text>
+		<text x="346" y="244" fill="#00f0ff">"console_auth"<tspan fill="#8b8ba7">: </tspan><tspan fill="#e8e8f0">{ "authenticated": true },</tspan></text>
+		<text x="346" y="264" fill="#00f0ff">"basket"<tspan fill="#8b8ba7">:       </tspan><tspan fill="#e8e8f0">{ "products": [42, 7] }</tspan></text>
+		<text x="362" y="280" font-size="10" font-style="italic" fill="#8b8ba7" font-family="Segoe UI, Helvetica, Arial, sans-serif">application data — any nested path</text>
+		<text x="330" y="300" fill="#8b8ba7">}</text>
+	</g>
+
+	<line x1="326" y1="316" x2="629" y2="316" stroke="#00f0ff" stroke-width="1" opacity="0.3"/>
+	<text x="330" y="336" font-size="10" fill="#8b8ba7">reads and writes address nested paths lazily:</text>
+	<g font-size="10" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">
+		<text x="330" y="352">JSON.GET &lt;prefix&gt;:&lt;sid&gt; $.basket.products</text>
+		<text x="330" y="368">get('basket.products') — 1 round trip</text>
+	</g>
+
+	<!-- ===== satellite: value lock ===== -->
+	<path d="M38,95 H272 L282,105 V172 L272,182 H38 L28,172 V105 Z" fill="#0d0d17" stroke="#fcee0a" stroke-width="1"/>
+	<text x="44" y="116" font-size="11" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">&lt;prefix&gt;:&lt;sid&gt;:&lt;path&gt;:lock</text>
+	<g font-size="10" fill="#8b8ba7">
+		<text x="44" y="136">per-value write lock (MemoLock)</text>
+		<text x="44" y="152">exists only while held</text>
+		<text x="44" y="168">SET … PX lock_ttl_ms — self-collects</text>
+	</g>
+
+	<!-- ===== satellite: release channel ===== -->
+	<path d="M38,215 H272 L282,225 V292 L272,302 H38 L28,292 V225 Z" fill="#0d0d17" stroke="#fcee0a" stroke-width="1" stroke-dasharray="6,4"/>
+	<text x="44" y="236" font-size="11" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">&lt;prefix&gt;:&lt;sid&gt;:&lt;path&gt;:channel</text>
+	<g font-size="10" fill="#8b8ba7">
+		<text x="44" y="256">Pub/Sub release channel — not a key</text>
+		<text x="44" y="272">set() / releaseLock() PUBLISHes here</text>
+		<text x="44" y="288">waiting readers wake — no polling</text>
+	</g>
+
+	<!-- ===== satellite: activity index ===== -->
+	<path d="M682,95 H902 L912,105 V188 L902,198 H682 L672,188 V105 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1"/>
+	<text x="688" y="116" font-size="11" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">&lt;prefix&gt;:activity</text>
+	<g font-size="10" fill="#8b8ba7">
+		<text x="688" y="136">sorted set: sid → last activity</text>
+		<text x="688" y="152">stamped on every touch (TTL slide)</text>
+		<text x="688" y="168">powers countActive() — one ZCOUNT</text>
+		<text x="688" y="184">no TTL — trimmed, never evicted</text>
+	</g>
+
+	<!-- ===== satellite: RediSearch index ===== -->
+	<path d="M682,235 H902 L912,245 V340 L902,350 H682 L672,340 V245 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-width="1"/>
+	<text x="688" y="256" font-size="11" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">RediSearch index <tspan fill="#8b8ba7">(optional)</tspan></text>
+	<g font-size="10" fill="#8b8ba7">
+		<text x="688" y="276">FT index over &lt;prefix&gt;:* documents</text>
+		<text x="688" y="292">per-project schema: tag/text/numeric</text>
+		<text x="688" y="308">locks + activity keys skipped (not JSON)</text>
+		<text x="688" y="326" fill="#ff003c">DATABASE 0 only — ensure() refuses</text>
+		<text x="688" y="340" fill="#ff003c">any other database loudly</text>
+	</g>
+
+	<!-- ===== footer: garbage collection ===== -->
+	<path d="M38,428 H902 L912,438 V466 L902,476 H38 L28,466 V438 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-width="1" opacity="0.8"/>
+	<text x="470" y="446" text-anchor="middle" font-size="11" fill="#e8e8f0">GC = redis TTLs by construction — the document slides its PEXPIRE, locks self-expire (PX)</text>
+	<text x="470" y="464" text-anchor="middle" font-size="11" fill="#8b8ba7">only the activity zset needs the cron trim:  <tspan fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">php cli.php system sessions gc</tspan></text>
+</svg>

@@ -1,138 +1,162 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="940" height="580" viewBox="0 0 940 580" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <defs>
-    <marker id="aSet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16a34a"/></marker>
-    <marker id="aGet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker>
-    <marker id="aInv" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ea580c"/></marker>
-    <style>
-      .title{font-size:18px;font-weight:700;fill:#fff}
-      .badge{font-size:12px;fill:#cbd5e1}
-      .panelLabel{font-size:11px;font-weight:700;fill:#64748b;letter-spacing:1.5px}
-      .keyName{font-family:Consolas,monospace;font-size:12px;font-weight:700}
-      .keyField{font-family:Consolas,monospace;font-size:10px;fill:#475569}
-      .laneTab{font-size:12px;font-weight:700;fill:#fff}
-      .stepMain{font-size:11.5px;fill:#0f172a}
-      .stepSub{font-family:Consolas,monospace;font-size:9.5px;fill:#64748b}
-      .stepNum{font-size:12px;font-weight:700;fill:#fff}
-      .note{font-size:11px;fill:#9a3412}
-      .foot{font-size:11px;fill:#475569}
-    </style>
-  </defs>
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="aSet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#00f0ff"/></marker>
+		<marker id="aGet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#fcee0a"/></marker>
+		<marker id="aInv" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ff003c"/></marker>
+		<style>
+			.title{font-size:13.5px;font-weight:700;letter-spacing:0.5px;fill:#fcee0a}
+			.badge{font-family:Consolas,monospace;font-size:10.5px;letter-spacing:0.5px;fill:#00f0ff}
+			.panelLabel{font-size:11px;font-weight:700;fill:#00f0ff;letter-spacing:2px;opacity:0.9}
+			.keyName{font-family:Consolas,monospace;font-size:12px;font-weight:700}
+			.keyField{font-family:Consolas,monospace;font-size:10px;fill:#8b8ba7}
+			.laneTab{font-size:12px;font-weight:700;letter-spacing:2px}
+			.stepMain{font-size:11.5px;fill:#e8e8f0}
+			.stepSub{font-family:Consolas,monospace;font-size:9.5px;fill:#8b8ba7}
+			.stepNum{font-size:12px;font-weight:700;fill:#0a0a12}
+			.note{font-size:11px;font-weight:700;fill:#ff003c}
+			.foot{font-size:11px;fill:#8b8ba7}
+		</style>
+	</defs>
 
-  <rect width="940" height="580" fill="#ffffff"/>
-  <rect width="940" height="46" fill="#1e293b"/>
-  <text x="24" y="29" class="title">RedisClusterVersioned &#8212; versioned model across cluster slots</text>
-  <text x="916" y="29" text-anchor="end" class="badge">&#9679; Redis Cluster &#183; rules evaluated in PHP</text>
+	<!-- canvas: chamfered plate -->
+	<path d="M14,0 H926 L940,14 V566 L926,580 H14 L0,566 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V566 L926,580 H14 L0,566 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V566 L926,579.5 H14 L0.5,566 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.85"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,540 V566 L926,579.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
 
-  <!-- KEYS -->
-  <rect x="16" y="62" width="908" height="138" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="32" y="84" class="panelLabel">KEYS (ITEM AND RULES LIVE IN DIFFERENT HASH SLOTS &#8212; CANNOT BE TOUCHED IN ONE CALL)</text>
+	<!-- header -->
+	<path d="M14,0 H926 L940,14 V46 H0 V14 Z" fill="#11111c"/>
+	<line x1="0" y1="46" x2="940" y2="46" stroke="#fcee0a" stroke-width="1" opacity="0.35"/>
+	<text x="24" y="29" class="title" filter="url(#glow)">REDISCLUSTERVERSIONED &#8212; VERSIONED MODEL ACROSS CLUSTER SLOTS</text>
+	<rect x="24" y="35" width="150" height="2" fill="#ff003c"/>
+	<rect x="182" y="35" width="10" height="2" fill="#ff003c" opacity="0.55"/>
+	<rect x="200" y="35" width="4" height="2" fill="#ff003c" opacity="0.3"/>
+	<text x="916" y="29" text-anchor="end" class="badge">&#9679; REDIS CLUSTER &#183; RULES EVALUATED IN PHP</text>
 
-  <rect x="32" y="98" width="300" height="90" rx="8" fill="#fff" stroke="#e2e8f0"/>
-  <rect x="33" y="99" width="5" height="88" fill="#0f766e"/>
-  <text x="50" y="124" class="keyName" fill="#0f766e">items:&#123;key&#125;  (hash)</text>
-  <text x="50" y="146" class="keyField">data &#8594; compressed value</text>
-  <text x="50" y="163" class="keyField">tags &#8594; "a,b,c"</text>
-  <text x="50" y="180" class="keyField">mark &#8594; watermark  &#9679; slot A</text>
+	<!-- KEYS -->
+	<path d="M16,62 H912 L924,74 V200 H28 L16,188 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-opacity="0.5"/>
+	<text x="32" y="84" class="panelLabel">KEYS (ITEM AND RULES LIVE IN DIFFERENT HASH SLOTS &#8212; CANNOT BE TOUCHED IN ONE CALL)</text>
 
-  <rect x="348" y="98" width="300" height="90" rx="8" fill="#fff" stroke="#e2e8f0"/>
-  <rect x="349" y="99" width="5" height="88" fill="#be185d"/>
-  <text x="366" y="124" class="keyName" fill="#be185d">rules  (stream)</text>
-  <text x="366" y="146" class="keyField">&lt;ms&gt;-&lt;seq&gt; &#8594; &#123; mode, tags &#125;</text>
-  <text x="366" y="163" class="keyField">single key &#8594; single slot</text>
-  <text x="366" y="180" class="keyField">&#9679; slot B (usually another node)</text>
+	<path d="M32,98 H322 L332,108 V188 H32 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.45"/>
+	<rect x="33" y="99" width="4" height="88" fill="#00f0ff"/>
+	<text x="50" y="124" class="keyName" fill="#00f0ff">items:&#123;key&#125;  (hash)</text>
+	<text x="50" y="146" class="keyField">data &#8594; compressed value</text>
+	<text x="50" y="163" class="keyField">tags &#8594; "a,b,c"</text>
+	<text x="50" y="180" class="keyField">mark &#8594; watermark  &#9679; slot A</text>
 
-  <rect x="664" y="98" width="244" height="90" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-dasharray="5 3"/>
-  <text x="680" y="124" class="keyName" fill="#334155">local rules cache</text>
-  <text x="680" y="146" class="keyField">in the PHP process</text>
-  <text x="680" y="163" class="keyField">refetched every</text>
-  <text x="680" y="180" class="keyField">rules_cache_ms</text>
+	<path d="M348,98 H638 L648,108 V188 H348 Z" fill="#11111c" stroke="#ff003c" stroke-opacity="0.45"/>
+	<rect x="349" y="99" width="4" height="88" fill="#ff003c"/>
+	<text x="366" y="124" class="keyName" fill="#ff003c">rules  (stream)</text>
+	<text x="366" y="146" class="keyField">&lt;ms&gt;-&lt;seq&gt; &#8594; &#123; mode, tags &#125;</text>
+	<text x="366" y="163" class="keyField">single key &#8594; single slot</text>
+	<text x="366" y="180" class="keyField">&#9679; slot B (usually another node)</text>
 
-  <!-- SET lane -->
-  <rect x="16" y="216" width="84" height="84" rx="10" fill="#16a34a"/>
-  <text x="58" y="262" text-anchor="middle" class="laneTab">SET</text>
-  <g>
-    <rect x="116" y="216" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
-    <circle cx="277" cy="231" r="11" fill="#16a34a"/><text x="277" y="235" text-anchor="middle" class="stepNum">1</text>
-    <text x="130" y="256" class="stepMain">Serialize + compress</text>
-    <text x="130" y="274" class="stepSub">client side</text>
+	<path d="M664,98 H898 L908,108 V188 H664 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-opacity="0.6" stroke-dasharray="5 3"/>
+	<text x="680" y="124" class="keyName" fill="#e8e8f0">local rules cache</text>
+	<text x="680" y="146" class="keyField">in the PHP process</text>
+	<text x="680" y="163" class="keyField">refetched every</text>
+	<text x="680" y="180" class="keyField">rules_cache_ms</text>
 
-    <rect x="320" y="216" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
-    <circle cx="481" cy="231" r="11" fill="#16a34a"/><text x="481" y="235" text-anchor="middle" class="stepNum">2</text>
-    <text x="334" y="256" class="stepMain">Read watermark</text>
-    <text x="334" y="274" class="stepSub">from the cached rules</text>
-    <text x="334" y="290" class="stepSub" fill="#15803d">no extra round trip</text>
+	<!-- SET lane -->
+	<path d="M16,216 H90 L100,226 V300 H26 L16,290 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" stroke-opacity="0.85"/>
+	<text x="58" y="262" text-anchor="middle" class="laneTab" fill="#00f0ff">SET</text>
+	<g>
+		<path d="M116,216 H282 L292,226 V300 H126 L116,290 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
+		<circle cx="277" cy="231" r="11" fill="#00f0ff"/><text x="277" y="235" text-anchor="middle" class="stepNum">1</text>
+		<text x="130" y="256" class="stepMain">Serialize + compress</text>
+		<text x="130" y="274" class="stepSub">client side</text>
 
-    <rect x="524" y="216" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
-    <circle cx="685" cy="231" r="11" fill="#16a34a"/><text x="685" y="235" text-anchor="middle" class="stepNum">3</text>
-    <text x="538" y="256" class="stepMain">Stamped single-key set</text>
-    <text x="538" y="274" class="stepSub">FCALL ..._set_stamped</text>
-    <text x="538" y="290" class="stepSub">item key only (slot A)</text>
+		<path d="M320,216 H486 L496,226 V300 H330 L320,290 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
+		<circle cx="481" cy="231" r="11" fill="#00f0ff"/><text x="481" y="235" text-anchor="middle" class="stepNum">2</text>
+		<text x="334" y="256" class="stepMain">Read watermark</text>
+		<text x="334" y="274" class="stepSub">from the cached rules</text>
+		<text x="334" y="290" class="stepSub" fill="#00f0ff">no extra round trip</text>
 
-    <rect x="728" y="216" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
-    <circle cx="889" cy="231" r="11" fill="#16a34a"/><text x="889" y="235" text-anchor="middle" class="stepNum">4</text>
-    <text x="742" y="256" class="stepMain">Write + expire item</text>
-    <text x="742" y="274" class="stepSub">HSET data,tags,mark</text>
-    <text x="742" y="290" class="stepSub">PEXPIRE (&#8804; retention)</text>
+		<path d="M524,216 H690 L700,226 V300 H534 L524,290 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
+		<circle cx="685" cy="231" r="11" fill="#00f0ff"/><text x="685" y="235" text-anchor="middle" class="stepNum">3</text>
+		<text x="538" y="256" class="stepMain">Stamped single-key set</text>
+		<text x="538" y="274" class="stepSub">FCALL ..._set_stamped</text>
+		<text x="538" y="290" class="stepSub">item key only (slot A)</text>
 
-    <line x1="294" y1="258" x2="318" y2="258" stroke="#16a34a" stroke-width="2" marker-end="url(#aSet)"/>
-    <line x1="498" y1="258" x2="522" y2="258" stroke="#16a34a" stroke-width="2" marker-end="url(#aSet)"/>
-    <line x1="702" y1="258" x2="726" y2="258" stroke="#16a34a" stroke-width="2" marker-end="url(#aSet)"/>
-  </g>
+		<path d="M728,216 H894 L904,226 V300 H738 L728,290 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
+		<circle cx="889" cy="231" r="11" fill="#00f0ff"/><text x="889" y="235" text-anchor="middle" class="stepNum">4</text>
+		<text x="742" y="256" class="stepMain">Write + expire item</text>
+		<text x="742" y="274" class="stepSub">HSET data,tags,mark</text>
+		<text x="742" y="290" class="stepSub">PEXPIRE (&#8804; retention)</text>
 
-  <!-- GET lane -->
-  <rect x="16" y="316" width="84" height="84" rx="10" fill="#2563eb"/>
-  <text x="58" y="362" text-anchor="middle" class="laneTab">GET</text>
-  <g>
-    <rect x="116" y="316" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
-    <circle cx="277" cy="331" r="11" fill="#2563eb"/><text x="277" y="335" text-anchor="middle" class="stepNum">1</text>
-    <text x="130" y="356" class="stepMain">Fetch item fields</text>
-    <text x="130" y="374" class="stepSub">HMGET data,tags,mark</text>
+		<line x1="294" y1="258" x2="318" y2="258" stroke="#00f0ff" stroke-width="2" marker-end="url(#aSet)"/>
+		<line x1="498" y1="258" x2="522" y2="258" stroke="#00f0ff" stroke-width="2" marker-end="url(#aSet)"/>
+		<line x1="702" y1="258" x2="726" y2="258" stroke="#00f0ff" stroke-width="2" marker-end="url(#aSet)"/>
+	</g>
 
-    <rect x="320" y="316" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
-    <circle cx="481" cy="331" r="11" fill="#2563eb"/><text x="481" y="335" text-anchor="middle" class="stepNum">2</text>
-    <text x="334" y="356" class="stepMain">Evaluate rules in PHP</text>
-    <text x="334" y="374" class="stepSub">isStale() vs getRules()</text>
-    <text x="334" y="390" class="stepSub">XRANGE cached rules_cache_ms</text>
+	<!-- GET lane -->
+	<path d="M16,316 H90 L100,326 V400 H26 L16,390 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" stroke-opacity="0.85"/>
+	<text x="58" y="362" text-anchor="middle" class="laneTab" fill="#fcee0a">GET</text>
+	<g>
+		<path d="M116,316 H282 L292,326 V400 H126 L116,390 Z" fill="#11111c" stroke="#fcee0a" stroke-opacity="0.75"/>
+		<circle cx="277" cy="331" r="11" fill="#fcee0a"/><text x="277" y="335" text-anchor="middle" class="stepNum">1</text>
+		<text x="130" y="356" class="stepMain">Fetch item fields</text>
+		<text x="130" y="374" class="stepSub">HMGET data,tags,mark</text>
 
-    <rect x="524" y="316" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
-    <circle cx="685" cy="331" r="11" fill="#2563eb"/><text x="685" y="335" text-anchor="middle" class="stepNum">3</text>
-    <text x="538" y="356" class="stepMain">Stale &#8594; UNLINK, miss</text>
-    <text x="538" y="374" class="stepSub">fresh &#8594; decompress +</text>
-    <text x="538" y="390" class="stepSub">unserialize</text>
+		<path d="M320,316 H486 L496,326 V400 H330 L320,390 Z" fill="#11111c" stroke="#fcee0a" stroke-opacity="0.75"/>
+		<circle cx="481" cy="331" r="11" fill="#fcee0a"/><text x="481" y="335" text-anchor="middle" class="stepNum">2</text>
+		<text x="334" y="356" class="stepMain">Evaluate rules in PHP</text>
+		<text x="334" y="374" class="stepSub">isStale() vs getRules()</text>
+		<text x="334" y="390" class="stepSub">XRANGE cached rules_cache_ms</text>
 
-    <line x1="294" y1="358" x2="318" y2="358" stroke="#2563eb" stroke-width="2" marker-end="url(#aGet)"/>
-    <line x1="498" y1="358" x2="522" y2="358" stroke="#2563eb" stroke-width="2" marker-end="url(#aGet)"/>
-  </g>
-  <text x="724" y="345" class="stepSub" fill="#1e40af">Rules cannot be read in the same</text>
-  <text x="724" y="360" class="stepSub" fill="#1e40af">call as the item (cross-slot), so</text>
-  <text x="724" y="375" class="stepSub" fill="#1e40af">the verdict is computed client-side</text>
-  <text x="724" y="390" class="stepSub" fill="#1e40af">over a short-lived local rules cache.</text>
+		<path d="M524,316 H690 L700,326 V400 H534 L524,390 Z" fill="#11111c" stroke="#fcee0a" stroke-opacity="0.75"/>
+		<circle cx="685" cy="331" r="11" fill="#fcee0a"/><text x="685" y="335" text-anchor="middle" class="stepNum">3</text>
+		<text x="538" y="356" class="stepMain">Stale &#8594; UNLINK, miss</text>
+		<text x="538" y="374" class="stepSub">fresh &#8594; decompress +</text>
+		<text x="538" y="390" class="stepSub">unserialize</text>
 
-  <!-- INVALIDATE lane -->
-  <rect x="16" y="416" width="84" height="84" rx="10" fill="#ea580c"/>
-  <text x="58" y="458" text-anchor="middle" class="laneTab">INVALI-</text>
-  <text x="58" y="474" text-anchor="middle" class="laneTab">DATE</text>
-  <g>
-    <rect x="116" y="416" width="176" height="84" rx="10" fill="#fff" stroke="#ea580c" stroke-width="1.5"/>
-    <circle cx="277" cy="431" r="11" fill="#ea580c"/><text x="277" y="435" text-anchor="middle" class="stepNum">1</text>
-    <text x="130" y="456" class="stepMain">Append one rule</text>
-    <text x="130" y="474" class="stepSub">FCALL ..._invalidate</text>
+		<line x1="294" y1="358" x2="318" y2="358" stroke="#fcee0a" stroke-width="2" marker-end="url(#aGet)"/>
+		<line x1="498" y1="358" x2="522" y2="358" stroke="#fcee0a" stroke-width="2" marker-end="url(#aGet)"/>
+	</g>
+	<text x="724" y="345" class="stepSub" fill="#fcee0a">Rules cannot be read in the same</text>
+	<text x="724" y="360" class="stepSub" fill="#fcee0a">call as the item (cross-slot), so</text>
+	<text x="724" y="375" class="stepSub" fill="#fcee0a">the verdict is computed client-side</text>
+	<text x="724" y="390" class="stepSub" fill="#fcee0a">over a short-lived local rules cache.</text>
 
-    <rect x="320" y="416" width="176" height="84" rx="10" fill="#fff" stroke="#ea580c" stroke-width="1.5"/>
-    <circle cx="481" cy="431" r="11" fill="#ea580c"/><text x="481" y="435" text-anchor="middle" class="stepNum">2</text>
-    <text x="334" y="456" class="stepMain">Single-slot, O(1)</text>
-    <text x="334" y="474" class="stepSub">rules key only (slot B)</text>
+	<!-- INVALIDATE lane -->
+	<path d="M16,416 H90 L100,426 V500 H26 L16,490 Z" fill="#ff003c" fill-opacity="0.08" stroke="#ff003c" stroke-opacity="0.85"/>
+	<text x="58" y="458" text-anchor="middle" class="laneTab" fill="#ff003c">INVALI-</text>
+	<text x="58" y="474" text-anchor="middle" class="laneTab" fill="#ff003c">DATE</text>
+	<g>
+		<path d="M116,416 H282 L292,426 V500 H126 L116,490 Z" fill="#11111c" stroke="#ff003c" stroke-opacity="0.75"/>
+		<circle cx="277" cy="431" r="11" fill="#ff003c"/><text x="277" y="435" text-anchor="middle" class="stepNum">1</text>
+		<text x="130" y="456" class="stepMain">Append one rule</text>
+		<text x="130" y="474" class="stepSub">FCALL ..._invalidate</text>
 
-    <rect x="524" y="416" width="384" height="84" rx="8" fill="#fff7ed" stroke="#fed7aa"/>
-    <text x="540" y="442" class="note" font-weight="700">Inherited from RedisVersioned, unchanged</text>
-    <text x="540" y="464" class="stepSub" fill="#9a3412">The rule append already targets a single key, so it is</text>
-    <text x="540" y="480" class="stepSub" fill="#9a3412">cluster-safe as-is. Only set/get had to be split per slot.</text>
+		<path d="M320,416 H486 L496,426 V500 H330 L320,490 Z" fill="#11111c" stroke="#ff003c" stroke-opacity="0.75"/>
+		<circle cx="481" cy="431" r="11" fill="#ff003c"/><text x="481" y="435" text-anchor="middle" class="stepNum">2</text>
+		<text x="334" y="456" class="stepMain">Single-slot, O(1)</text>
+		<text x="334" y="474" class="stepSub">rules key only (slot B)</text>
 
-    <line x1="294" y1="458" x2="318" y2="458" stroke="#ea580c" stroke-width="2" marker-end="url(#aInv)"/>
-    <line x1="498" y1="458" x2="522" y2="458" stroke="#ea580c" stroke-width="2" marker-end="url(#aInv)"/>
-  </g>
+		<path d="M524,416 H898 L908,426 V500 H534 L524,490 Z" fill="#11111c" stroke="#ff003c" stroke-opacity="0.6" stroke-dasharray="5 3"/>
+		<text x="540" y="442" class="note">Inherited from RedisVersioned, unchanged</text>
+		<text x="540" y="464" class="stepSub" fill="#ff6680">The rule append already targets a single key, so it is</text>
+		<text x="540" y="480" class="stepSub" fill="#ff6680">cluster-safe as-is. Only set/get had to be split per slot.</text>
 
-  <line x1="16" y1="518" x2="924" y2="518" stroke="#e2e8f0"/>
-  <text x="16" y="538" class="foot"><tspan font-weight="700">Same logical model as RedisVersioned</tspan> &#8212; both stores eval rules in PHP (cache rules_cache_ms); the watermark comes from that cache too (no extra round trip)</text>
-  <text x="16" y="556" class="foot"><tspan font-weight="700">Lua:</tspan> _set_stamped + _invalidate (single-key, cluster-safe)  &#183;  <tspan font-weight="700">clearPhysical:</tspan> cache_clear once per master  &#183;  <tspan font-weight="700">MemoLock:</tspan> standalone queue conn to a node</text>
+		<line x1="294" y1="458" x2="318" y2="458" stroke="#ff003c" stroke-width="2" marker-end="url(#aInv)"/>
+		<line x1="498" y1="458" x2="522" y2="458" stroke="#ff003c" stroke-width="2" marker-end="url(#aInv)"/>
+	</g>
+
+	<line x1="16" y1="518" x2="924" y2="518" stroke="#8b8ba7" stroke-opacity="0.35"/>
+	<text x="16" y="538" class="foot"><tspan font-weight="700" fill="#e8e8f0">Same logical model as RedisVersioned</tspan> &#8212; both stores eval rules in PHP (cache rules_cache_ms); the watermark comes from that cache too (no extra round trip)</text>
+	<text x="16" y="556" class="foot"><tspan font-weight="700" fill="#e8e8f0">Lua:</tspan> _set_stamped + _invalidate (single-key, cluster-safe)  &#183;  <tspan font-weight="700" fill="#e8e8f0">clearPhysical:</tspan> cache_clear once per master  &#183;  <tspan font-weight="700" fill="#e8e8f0">MemoLock:</tspan> standalone queue conn to a node</text>
 </svg>
