@@ -19,7 +19,6 @@ use function json_encode;
 use function memory_get_peak_usage;
 use function microtime;
 use function round;
-use function session_id;
 use function uniqid;
 
 use const JSON_INVALID_UTF8_SUBSTITUTE;
@@ -88,7 +87,12 @@ class Profiler extends Service
 				return;
 			}
 			
-			$sessionId = session_id();
+			// handler-agnostic: session_id() is EMPTY under the json
+			// handler - the writer would key a stream no reader ever tails
+			$session = $this->app->getServices()->session;
+			$sessionId = $session instanceof Session
+				? (string)$session->getId()
+				: '';
 			if($sessionId === '')
 			{
 				return;
