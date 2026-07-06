@@ -580,6 +580,13 @@ class Session extends Service
 			$sessionId = $this->createSessionId();
 			$this->sendCookie($sessionId);
 		}
+		elseif((int)ini_get('session.cookie_lifetime') > 0)
+		{
+			// a dated cookie is stamped once while the document TTL
+			// slides - re-send it so both lifetimes slide together
+			// (the default 0 = a browser-session cookie needs no slide)
+			$this->sendCookie($sessionId, required: false);
+		}
 		
 		$this->jsonHandler->open($sessionId);
 		$this->store = new Json($this->jsonHandler);
@@ -670,10 +677,18 @@ class Session extends Service
 	
 	protected function sendCookie(
 		string $sessionId,
+		bool $required = true,
 	): void
 	{
 		if(headers_sent() === true)
 		{
+			// a sliding re-send simply skips - only the FIRST cookie of a
+			// fresh session must reach the browser
+			if($required === false)
+			{
+				return;
+			}
+			
 			throw new Exception(
 				'Session cookie could not be sent, headers already sent.');
 		}

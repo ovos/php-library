@@ -189,6 +189,29 @@ class RedisJson extends Test
 			&& $session->has(['we"ird', 'do.t\\ted']) === true;
 	}
 	
+	/**
+	 * INTEGER segments address json array elements; numeric STRINGS
+	 * stay object keys - only the array path form carries real indices
+	 */
+	public function integerSegmentsAddressArrayElements(): bool
+	{
+		$session = $this->session();
+		$session->set(['items'], ['a', 'b', 'c']);
+		
+		$read = $session->get(['items', 1]);
+		$session->set(['items', 1], 'B');
+		$session->increment(['nums', 'list']); // creates nums.list = 1
+		
+		$stringKey = $this->session();
+		$stringKey->set(['map', '0'], 'zero'); // an object key, not an index
+		
+		return $read === 'b'
+			&& $session->get(['items', 1]) === 'B'
+			&& $session->get(['items']) === ['a', 'B', 'c']
+			&& $session->node(['items'])[2] === 'c'
+			&& $stringKey->get(['map']) === ['0' => 'zero'];
+	}
+	
 	public function missingValueIsNull(): bool
 	{
 		$session = $this->session();
