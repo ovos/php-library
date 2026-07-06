@@ -251,6 +251,80 @@ class Index extends Test
 		return $result['total'] === 1;
 	}
 	
+	public function searchIdsReturnsIdsOnly(): bool
+	{
+		$session = $this->session();
+		$session->set(['auth', 'ok'], true);
+		
+		$this->searchUntil($session, '@authenticated:{true}', 1);
+		
+		$result = $session->index()
+			->searchIds('@authenticated:{true}');
+			
+		return $result['total'] === 1
+			&& $result['ids'] === [$session->getSessionId()];
+	}
+	
+	/**
+	 * Editing "index.fields" must not leave searches quietly running
+	 * against the old schema - ensure() compares the live index against
+	 * the config and recreates it on drift
+	 */
+	public function healsAnEditedSchema(): bool
+	{
+		// an index built from the ORIGINAL schema...
+		$session = $this->session();
+		$session->set(['auth', 'ok'], true);
+		$this->searchUntil($session, '*', 1);
+		
+		// ...meets a config that has gained a field
+		$edited = new Handler(
+			$this->connection,
+			new Connection($this->connectionConfig(0)),
+			self::PREFIX,
+			new ArrayObject([
+				'lifetime' => 60,
+				'index' => new ArrayObject([
+					'enabled' => true,
+					'fields' => [
+						'authenticated' => [
+							'path' => 'auth.ok',
+							'type' => 'tag',
+						],
+						'created' => [
+							'path' => '__meta.created',
+							'type' => 'numeric',
+							'sortable' => true,
+						],
+						'name' => [
+							'path' => 'user.name',
+							'type' => 'text',
+						],
+					],
+				]),
+			]),
+		);
+		$edited->open($session->getSessionId());
+		$this->sessions[] = $edited;
+		
+		$edited->set(['user', 'name'], 'neo');
+		
+		// the NEW field is only searchable on the recreated index -
+		// against the stale schema this query errors ("unknown field")
+		$result = ['total' => -1];
+		for($attempt = 0; $attempt < 20; $attempt++)
+		{
+			$result = $edited->index()->search('@name:neo');
+			if($result['total'] === 1)
+			{
+				break;
+			}
+			usleep(50000);
+		}
+		
+		return $result['total'] === 1;
+	}
+	
 	public function refusesOtherDatabases(): bool
 	{
 		$connection = new Connection($this->connectionConfig(1));
