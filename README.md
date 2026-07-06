@@ -1231,6 +1231,74 @@ $user = $store->findByEmail('john@example.com');
 $store = $this->container->getClass(UsersStore::class);
 ```
 
+### JSON API controllers
+
+Extend `Ovos\Controller\Api` for JSON endpoints. It provides the request-body
+reader and the standard `Response\Json` envelopes, so actions carry no
+plumbing (a fresh `Response\Json` is already a success — list/ok responses
+need no helper):
+
+| Helper | HTTP | Meaning |
+|--------|------|---------|
+| `badRequest($msg)` | 400 | malformed request (silent) |
+| `notFound($msg)` | 404 | resource does not exist |
+| `unprocessable($errors)` | 422 | understood but failed validation (`field => message`) |
+| `unavailable($msg)` | 503 | a dependency is down (silent) |
+| `serverError($err)` | 500 | unexpected error (logged) |
+
+#### Typed request body — `$this->input()`
+
+`$this->input()` returns an `Ovos\Http\Input`: a **typed, forgiving** reader
+over the decoded JSON body, so actions stop hand-writing defensive casts. A
+missing or malformed body yields an empty `Input`, and every getter returns
+the typed value or the default — never a warning. Dot-paths reach nested
+values.
+
+```php
+public function index(): Response
+{
+    $response = new Response\Json;
+    $body = $this->input(Body::MEDIUM);   // size tier; empty on missing/malformed
+
+    $result = $this->grid()->query(
+        $body->array('filters'),          // [] unless a real array
+        $body->string('search'),          // '' unless a string
+        $body->string('sort.field', 'ts'),// nested, with a default
+        $body->int('page', 1),            // only clean integers; never (int)"12abc"
+        $body->int('limit', 50),
+    );
+    $response->rows = $result['rows'];
+
+    return $response;
+}
+```
+
+| Getter | Returns |
+|--------|---------|
+| `string($path, $default='')` | a scalar as string, else default |
+| `trimmed($path, $default='')` | trimmed string, default if empty after trim |
+| `int($path, $default=0)` | a real int or clean integer string (never a blind cast) |
+| `float($path, $default=0.0)` | a numeric value |
+| `bool($path, $default=false)` | framework semantics — `true`/`"true"`/`"yes"`/`1` |
+| `array($path, $default=[])` | any array |
+| `list($path, $default=[])` | a sequential list (a map does not qualify) |
+| `ids($max=100)` | capped **positive int** ids from `{id}` or `{ids:[…]}` |
+| `email($path)` | one validated email, or `null` |
+| `emails($path)` | a validated email list, or `null` if **any** entry is invalid |
+| `has($path)` / `get($path,$d)` / `all()` / `isEmpty()` | existence / raw / whole body / emptiness |
+
+For a bulk action:
+
+```php
+$body = $this->input(Body::BULK);
+$affected = $this->repository()->setChecked($body->ids(), $body->bool('checked', true));
+```
+
+The size tiers on `Http\Body` (`TINY` 4K, `SMALL` 16K, `MEDIUM` 64K, `BULK`
+256K) cap the accepted body so callers name a tier instead of a magic byte
+count. `Body::json()` (raw `?array`) and `Body::input()` are also available
+statically for controllers not extending `Api`.
+
 ---
 
 ## Views

@@ -68,6 +68,18 @@ final class Body
 	}
 	
 	/**
+	 * The request body as a typed Input reader - an EMPTY Input when the
+	 * body is missing, too large or malformed, so the tolerant
+	 * "json() ?? []" pattern becomes a single call with typed getters.
+	 */
+	public static function input(
+		int $maxBytes = self::MAX_BYTES,
+	): Input
+	{
+		return new Input(self::json($maxBytes) ?? []);
+	}
+	
+	/**
 	 * Decode a JSON string to an array, or null when empty, malformed or not a
 	 * JSON object/array. Split out from json() so it stays testable without
 	 * php://input.

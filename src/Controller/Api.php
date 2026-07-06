@@ -6,6 +6,7 @@ namespace Ovos\Controller;
 use Ovos\Controller;
 use Ovos\Exception;
 use Ovos\Http\Body;
+use Ovos\Http\Input;
 use Ovos\Response\Json;
 
 /**
@@ -31,6 +32,18 @@ class Api extends Controller
 	): ?array
 	{
 		return Body::json($maxBytes);
+	}
+	
+	/**
+	 * The request body as a typed Input reader (string/int/bool/array/
+	 * ids/email…), empty when the body is missing or malformed - the
+	 * recommended way to read a JSON payload without hand-rolled casts.
+	 */
+	protected function input(
+		int $maxBytes = self::BODY_MAX_BYTES,
+	): Input
+	{
+		return Body::input($maxBytes);
 	}
 	
 	/**
