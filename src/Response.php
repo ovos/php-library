@@ -56,6 +56,11 @@ class Response
 		return $this;
 	}
 	
+	public function getHttpCode(): int
+	{
+		return $this->httpCode;
+	}
+	
 	public function setHeader(
 		string $name,
 		mixed $value,
@@ -87,6 +92,14 @@ class Response
 		$this->headers = [];
 		
 		return $this;
+	}
+	
+	/**
+	 * The raw header map: name => ['value' => …, 'replace' => bool]
+	 */
+	public function getHeaders(): array
+	{
+		return $this->headers;
 	}
 	
 	/**

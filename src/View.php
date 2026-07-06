@@ -3,9 +3,12 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Form\Element;
 use Ovos\View\Helper;
+use Ovos\Service\Cache;
 use Ovos\Service\Events;
+use Closure;
 use Throwable;
 
 use function array_key_exists;
@@ -37,6 +40,8 @@ class View
 	use Translatable;
 	
 	public const string SUFFIX = '.phtml';
+	
+	public const string FRAGMENT_PREFIX = 'fragment:';
 	
 	protected Container $container;
 	
@@ -241,6 +246,42 @@ class View
 		$view = new static;
 		
 		return $view->render($viewScriptFile, $variables);
+	}
+	
+	/**
+	 * Cache a fragment of output. $resolver produces the markup on a miss
+	 * (typically a partial); the persistent store replays it on a hit,
+	 * stampede-safe (MemoLock) and tag-invalidated. When caching is disabled
+	 * the resolver simply runs live.
+	 *
+	 *   <?= $this->cache('sidebar', fn() => $this->partial('parts/sidebar.phtml'),
+	 *       ttl: 600, tags: ['menu']) ?>
+	 *
+	 * @param string[] $tags
+	 */
+	public function cache(
+		string $key,
+		Closure $resolver,
+		int $ttl = 0,
+		array $tags = [],
+	): string
+	{
+		$store = $this->container
+			->get(Cache::SYMBOL)
+			->getPersistent()
+			->getStore();
+			
+		if(($store instanceof Tags) === false)
+		{
+			return (string)$resolver();
+		}
+		
+		return (string)$store->get(
+			self::FRAGMENT_PREFIX . $key,
+			$resolver,
+			$ttl,
+			$tags,
+		);
 	}
 	
 	public function setMultiple(
