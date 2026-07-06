@@ -19,6 +19,7 @@ use Closure;
 use function bin2hex;
 use function explode;
 use function headers_sent;
+use function in_array;
 use function ini_get;
 use function ini_set;
 use function is_array;
@@ -28,6 +29,7 @@ use function random_bytes;
 use function register_shutdown_function;
 use function session_cache_limiter;
 use function session_get_cookie_params;
+use function session_id;
 use function session_name;
 use function session_regenerate_id;
 use function session_set_cookie_params;
@@ -115,7 +117,16 @@ class Session extends Service
 		
 		if($this->sessionConfig->handler !== null)
 		{
-			$this->handler = (string)$this->sessionConfig->handler;
+			$handler = (string)$this->sessionConfig->handler;
+			if(in_array($handler,
+				[self::HANDLER_PHP, self::HANDLER_JSON], true) === false)
+			{
+				// a typo would silently run the native path WITHOUT its
+				// ini block - the worst of both handlers
+				throw new Exception(
+					'Unknown session handler "' . $handler . '".');
+			}
+			$this->handler = $handler;
 		}
 		
 		// the ini block configures the native machinery only
@@ -211,6 +222,14 @@ class Session extends Service
 				return false;
 			}
 			
+			// parity with the native machinery: too late once the headers
+			// are out - and renaming FIRST would strand the document under
+			// an id the browser never learns
+			if(headers_sent() === true)
+			{
+				return false;
+			}
+			
 			$sessionId = $this->createSessionId();
 			$this->jsonHandler->rename($sessionId, $deleteOldSession);
 			$this->sendCookie($sessionId);
@@ -219,6 +238,26 @@ class Session extends Service
 		}
 		
 		return session_regenerate_id($deleteOldSession);
+	}
+	
+	/**
+	 * The active session id: the cookie-bound document id under json,
+	 * the native machinery's id under php - null before the session
+	 * starts and on the CLI, where no session exists
+	 */
+	public function getId(): ?string
+	{
+		if($this->started === false)
+		{
+			return null;
+		}
+		
+		if($this->jsonHandler !== null)
+		{
+			return $this->jsonHandler->getSessionId();
+		}
+		
+		return session_id() ?: null;
 	}
 	
 	public function flush(): bool
@@ -660,6 +699,12 @@ class Session extends Service
 		if(is_array($path) === true)
 		{
 			return $path;
+		}
+		
+		// an empty string addresses the root, like the empty array
+		if($path === '')
+		{
+			return [];
 		}
 		
 		// a dotted string is split - use the array form for keys
