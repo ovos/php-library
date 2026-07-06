@@ -87,11 +87,14 @@ class Profiler extends Service
 				return;
 			}
 			
-			// handler-agnostic: session_id() is EMPTY under the json
-			// handler - the writer would key a stream no reader ever tails
+			// handler-agnostic, and WITHOUT requiring a started session:
+			// the profiler pairs writer and reader by the browser session,
+			// so the id the request presented in its cookie is the key -
+			// many requests never touch the session at all (the reader's
+			// SSE endpoint minted the cookie in the first place)
 			$session = $this->app->getServices()->session;
 			$sessionId = $session instanceof Session
-				? (string)$session->getId()
+				? (string)($session->getId() ?? $session->getCookieId())
 				: '';
 			if($sessionId === '')
 			{

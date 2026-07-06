@@ -260,6 +260,32 @@ class Session extends Service
 	}
 	
 	/**
+	 * The session id the REQUEST presented in its cookie, whether or
+	 * not a session ever started - no I/O, no side effects, no cookie
+	 * minting; null on the CLI and for cookie-less visitors. Made for
+	 * observers (profiler streams, error context) that must correlate
+	 * requests by browser session WITHOUT starting one.
+	 */
+	public function getCookieId(): ?string
+	{
+		if($this->request->isCli())
+		{
+			return null;
+		}
+		
+		if($this->handler === self::HANDLER_JSON)
+		{
+			return $this->readSessionId();
+		}
+		
+		$sessionId = $_COOKIE[$this->cookieName()] ?? null;
+		
+		return is_string($sessionId) === true && $sessionId !== ''
+			? $sessionId
+			: null;
+	}
+	
+	/**
 	 * Destroys the session entirely - the standard logout lifecycle:
 	 * deletes the stored data and continues on a FRESH id, because the
 	 * destroyed one must never be reusable. Under json the document and
