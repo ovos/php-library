@@ -13,6 +13,7 @@ use function array_shift;
 use function array_slice;
 use function count;
 use function is_array;
+use function is_numeric;
 use function session_write_close;
 
 /**
@@ -209,8 +210,10 @@ class Native extends Store
 		int|float $by = 1,
 	): int|float|null
 	{
-		$value = $this->get($path);
-		$value = ($value === null ? 0 : $value) + $by;
+		// json-handler parity: a non-numeric value resets to 0 instead
+		// of throwing a TypeError on the addition
+		$current = $this->get($path);
+		$value = (is_numeric($current) === true ? $current + 0 : 0) + $by;
 		$this->set($path, $value);
 		
 		return $value;
