@@ -83,8 +83,23 @@ session:
 ```
 
 Requirements: the RedisJSON module (bundled with Redis 8) on the session
-Redis; `session_rename` uses a multi-key Lua function, so on a Redis
-Cluster the prefix must carry a `{hash-tag}`.
+Redis; the Lua write functions pass multiple keys (the document and the
+value-lock keys), so on a Redis Cluster the prefix must carry a
+`{hash-tag}`.
+
+Cookie notes: with `session.cookie_lifetime > 0` the cookie is re-sent on
+every request, so its expiry **slides together with the document TTL**
+(the default `0` = a browser-session cookie needs no slide). Two config
+keys are meaningful for the `php` handler only and are ignored under
+`json`: the `ini` block and `cache_limiter` (no `session_start()` runs,
+so no cache headers are emitted - send your own if a route needs them).
+An `autostart` key is read by nothing at all - sessions start lazily on
+first access.
+
+Internally `Ovos\Service\Session` picks ONE store when the session starts
+- `Session\Store\Native` (`$_SESSION` byref, or a plain local array on
+the CLI) or `Session\Store\Json` (the RedisJson handler) - and delegates
+every access; php-only projects never instantiate a single json class.
 
 ## The path API (works with BOTH handlers)
 
@@ -102,6 +117,22 @@ $session->set('basket.products', $products);         // parents auto-created
 $session->has('user.verified');
 $session->remove('console_auth');                    // whole namespace
 $session->increment('stats.views');                  // atomic, no lock needed
+
+// INTEGER segments address json array elements (array path form only -
+// numeric strings and dotted-string paths stay object keys):
+$session->get(['recent.views', 0]);                  // first list entry
+$session->set(['items', 2], $patched);               // existing element
+```
+
+Arrays are never *created* by index - build lists with `append()`, then
+address their elements with integer segments.
+
+Lifecycle, handler-agnostic like the rest of the path API:
+
+```php
+$session->getId();          // the active session id (null on the CLI)
+$session->regenerateId();   // fresh id on login/privilege change
+$session->destroy();        // logout: delete the data, continue on a fresh id
 ```
 
 ### Read-modify-write: update()
@@ -141,6 +172,13 @@ until the writer publishes. Unreleased locks are released at request
 shutdown and expire after `lock_ttl_ms` even if the process dies. Under
 the `php` handler `getLocked()` is a plain read - the native session-wide
 lock already serializes requests.
+
+**Writes honor locks too, atomically.** A blind `set()`/`increment()`/
+`append()` from another request does not sail past a held lock: the Lua
+side checks the lock keys in the same atomic step as the write and
+refuses while one is held; the writer then waits for ONE release and
+retries - unconditionally on the retry (availability over strictness,
+the lock TTL bounds the wait). Your own locks never block you.
 
 **Locks are hierarchical**: a lock on `basket` (or the whole session, the
 `[]` root path) also covers `basket.products` - descendant reads and lock
@@ -198,6 +236,14 @@ trip per magic step - new code should prefer the path API
 (`get()`/`set()`/`update()`/`append()`/`getMany()`), which always costs
 exactly one; `$node->child('key')` forces traversal without the peek
 (e.g. to call `increment()` on an existing counter).
+
+> **The truthiness landmine.** Because a missing value is a Node and PHP
+> objects are always truthy, `if($session->neverSet)` is **true** under
+> `json` but false under `php`. `isset()` and `??` behave identically
+> under both handlers (they route through a real existence check) - so
+> write `if(isset($session->flag))`, `$session->flag ?? false`, or use
+> the path API (`$session->get('flag')` returns real `null`). This is
+> the sharpest migration caveat after write-through.
 
 ## Journey: timeline and navigation path
 
@@ -307,10 +353,17 @@ $index->count('@authenticated:{true}');              // logged-in sessions
 $result = $index->search('@created:[' . (time() - 3600) . ' +inf]',
 	limit: 50, sortBy: 'created', ascending: false); // newest sessions first
 // $result = ['total' => int, 'sessions' => [sid => document array]]
+
+$result = $index->searchIds('@authenticated:{true}', limit: 1000);
+// ['total' => int, 'ids' => [sid, ...]] - NOCONTENT, no document payloads
 ```
 
 The index is created on first use and self-heals when it vanishes
-(deploy, `FLUSHDB`); documents are indexed as they are written. **Hard
+(deploy, `FLUSHDB`) **and when the schema drifts**: `ensure()` compares
+the live index (field paths, types, sortability) against the config, so
+editing `index.fields` recreates the index instead of quietly serving
+searches against the old shape (redis re-indexes the documents in the
+background). Documents are indexed as they are written. **Hard
 constraint**: RediSearch only indexes **database 0** - `ensure()` refuses
 any other database loudly. Locks/activity keys under the same prefix are
 not JSON and are skipped by the index automatically.
@@ -335,5 +388,8 @@ untouched until their call sites are migrated. The semantic differences:
 4. **ArrayObjects come back as arrays** (see encoding above).
 5. **Dots in keys**: the dotted-string path form splits on `.` - use the
    array form (`['ns', 'key.with.dots']`) for such keys.
-6. `Ovos\View\Helper\Messages` (flash messages) is already
+6. **Truthiness**: `if($session->neverSet)` is TRUE under json (missing
+   values are Node objects, and objects are truthy) - use `isset()`,
+   `??` or the path API, which behave identically under both handlers.
+7. `Ovos\View\Helper\Messages` (flash messages) is already
    handler-aware - no changes needed in views.
