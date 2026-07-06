@@ -251,6 +251,44 @@ class Index extends Test
 		return $result['total'] === 1;
 	}
 	
+	/**
+	 * query() builds RediSearch syntax from the CONFIGURED fields -
+	 * filters by alias, the field type decides the syntax
+	 */
+	public function queryBuildsFromTheConfiguredFields(): bool
+	{
+		$session = $this->session();
+		$session->set(['auth', 'ok'], true);
+		$this->searchUntil($session, '*', 1);
+		
+		$index = $session->index();
+		
+		$byTag = $index->search($index->query(['authenticated' => true]));
+		$byRange = $index->search($index->query([
+			'created' => [time() - 100, null],
+		]));
+		$both = $index->search($index->query([
+			'authenticated' => true,
+			'created' => (time() - 100) . '..',
+		]));
+		
+		$unknown = false;
+		try
+		{
+			$index->query(['nope' => 1]);
+		}
+		catch(Exception)
+		{
+			$unknown = true;
+		}
+		
+		return $index->query([]) === '*'
+			&& $byTag['total'] === 1
+			&& $byRange['total'] === 1
+			&& $both['total'] === 1
+			&& $unknown === true;
+	}
+	
 	public function searchIdsReturnsIdsOnly(): bool
 	{
 		$session = $this->session();
