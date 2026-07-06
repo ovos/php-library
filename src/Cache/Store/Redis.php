@@ -63,6 +63,24 @@ class Redis extends Store
 		return $this->cleanTags;
 	}
 	
+	/**
+	 * The base every stored key starts with, as a Lua key-prefix argument:
+	 * the group when one is set, else the bare prefix. set() keys items and
+	 * tags via the Prefixer, which FALLS BACK to the prefix when no group is
+	 * set - string-concatenating getGroup() (null becomes '') does not, which
+	 * made every tag read/invalidate on a group-less store (the way
+	 * applications run it) look for keys under ':tags:…' that set() had
+	 * written under '<prefix>:tags:…', silently matching nothing.
+	 */
+	protected function getKeyBase(): string
+	{
+		$base = $this->getGroup() ?? $this->prefixer->getPrefix();
+		
+		return $base !== null
+			? $base . Prefixer::SEPARATOR_PREFIX
+			: '';
+	}
+	
 	protected function getCurrentTags(
 		RedisClient $client,
 		string $id,
@@ -302,7 +320,7 @@ class Redis extends Store
 			return $this->invalidateTagsMatchingAll($tags);
 		}
 		
-		$group = $this->getGroup() . Prefixer::SEPARATOR_PREFIX;
+		$group = $this->getKeyBase();
 		$typeItems = static::TYPE_ITEMS . Prefixer::SEPARATOR_PREFIX;
 		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
 		
@@ -399,7 +417,7 @@ class Redis extends Store
 			return true;
 		}
 		
-		$group = $this->getGroup() . Prefixer::SEPARATOR_PREFIX;
+		$group = $this->getKeyBase();
 		$typeItems = static::TYPE_ITEMS . Prefixer::SEPARATOR_PREFIX;
 		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
 		
@@ -504,7 +522,7 @@ class Redis extends Store
 		}
 		
 		$ids = [];
-		$group = $this->getGroup() . Prefixer::SEPARATOR_PREFIX;
+		$group = $this->getKeyBase();
 		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
 		
 		try
@@ -550,7 +568,7 @@ class Redis extends Store
 		}
 		
 		$tags = [];
-		$group = $this->getGroup() . Prefixer::SEPARATOR_PREFIX;
+		$group = $this->getKeyBase();
 		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
 		
 		try
@@ -593,7 +611,7 @@ class Redis extends Store
 		}
 		
 		$tags = $this->getAllTags();
-		$group = $this->getGroup() . Prefixer::SEPARATOR_PREFIX;
+		$group = $this->getKeyBase();
 		$typeItems = static::TYPE_ITEMS . Prefixer::SEPARATOR_PREFIX;
 		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
 		$count = 0;
