@@ -121,6 +121,16 @@ class Application
 		$router = $this->getRouter();
 		$router->route($request);
 		
+		// a resolver asked for a canonical redirect (e.g. a drifted SEO
+		// slug) - send the 301 and skip dispatch entirely
+		if(($redirect = $router->getRedirect()) !== null)
+		{
+			$this->setResponse(
+				(new Redirect($redirect))->setHttpCode(301));
+				
+			return;
+		}
+		
 		$this->dispatch($request);
 	}
 	
