@@ -16,11 +16,16 @@ use RedisClusterException;
 
 use function count;
 use function explode;
+use function implode;
 use function in_array;
 use function is_array;
+use function is_bool;
 use function is_int;
+use function is_numeric;
 use function is_string;
 use function json_decode;
+use function preg_replace;
+use function str_contains;
 use function stripos;
 use function strlen;
 use function strtoupper;
@@ -346,6 +351,112 @@ class Index
 			'total' => (int)($reply[0] ?? 0),
 			'ids' => $ids,
 		];
+	}
+	
+	/**
+	 * Builds a RediSearch query from filters on the CONFIGURED fields
+	 * (the per-project "index.fields" aliases) - the field type decides
+	 * the syntax:
+	 *
+	 * - tag: exact match, @alias:{value} (escaped; booleans become
+	 *   the "true"/"false" the json documents store)
+	 * - text: full-text, @alias:(value) - passed as typed (may use *)
+	 * - numeric: @alias:[min max]; accepts a scalar (exact), [min, max]
+	 *   with null as an open end, or a "min..max" string
+	 *
+	 * Filters combine with AND; no filters match everything ('*')
+	 */
+	public function query(
+		array $filters,
+	): string
+	{
+		$fields = $this->fields();
+		$parts = [];
+		
+		foreach($filters as $alias => $value)
+		{
+			$field = $fields[$alias] ?? null;
+			if($field === null)
+			{
+				throw new Exception(
+					'Unknown session index field "' . $alias . '".');
+			}
+			
+			if(is_bool($value) === true)
+			{
+				// json documents store booleans as true/false literals
+				$value = $value === true ? 'true' : 'false';
+			}
+			
+			$parts[] = match($field['type'])
+			{
+				self::TYPE_TAG => '@' . $alias . ':{'
+					. $this->escapeTag((string)$value) . '}',
+				self::TYPE_TEXT => '@' . $alias . ':(' . $value . ')',
+				self::TYPE_NUMERIC => '@' . $alias . ':'
+					. $this->numericRange($value),
+			};
+		}
+		
+		return $parts === []
+			? '*'
+			: implode(' ', $parts);
+	}
+	
+	/**
+	 * A numeric filter as a RediSearch range
+	 */
+	protected function numericRange(
+		mixed $value,
+	): string
+	{
+		if(is_array($value) === true)
+		{
+			$min = $value[0] ?? $value['min'] ?? null;
+			$max = $value[1] ?? $value['max'] ?? null;
+		}
+		elseif(is_string($value) === true
+			&& str_contains($value, '..') === true)
+		{
+			[$min, $max] = explode('..', $value, 2);
+		}
+		else
+		{
+			$min = $max = $value;
+		}
+		
+		return '[' . $this->number($min, '-inf')
+			. ' ' . $this->number($max, '+inf') . ']';
+	}
+	
+	protected function number(
+		mixed $value,
+		string $open,
+	): string
+	{
+		if($value === null || $value === '')
+		{
+			return $open;
+		}
+		
+		if(is_numeric($value) === false)
+		{
+			throw new Exception(
+				'A numeric session index filter requires numbers, "'
+					. $value . '" given.');
+		}
+		
+		return (string)$value;
+	}
+	
+	/**
+	 * Backslash-escapes everything a TAG value cannot carry verbatim
+	 */
+	protected function escapeTag(
+		string $value,
+	): string
+	{
+		return preg_replace('/([^a-zA-Z0-9_])/', '\\\\$1', $value);
 	}
 	
 	/**
