@@ -6,12 +6,16 @@ namespace Ovos;
 use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException\FileNotFoundException;
 use Ovos\Exception\NotFoundException;
+use Ovos\Route\Resolver;
+use Ovos\Route\Resolution;
 use Ovos\Service\Cache;
 use SplFileInfo;
 
 use function array_key_exists;
 use function array_slice;
 use function count;
+use function explode;
+use function implode;
 use function in_array;
 use function is_numeric;
 use function krsort;
@@ -36,6 +40,12 @@ class Router
 	protected Request $request;
 	
 	protected Url $url;
+	
+	/**
+	 * A canonical redirect a resolver asked for; Application sends it as
+	 * a 301 before dispatch
+	 */
+	protected ?Url $redirect = null;
 	
 	protected string $extensionMatchPattern = '~^.+(\.\w+)$~i';
 	
@@ -84,9 +94,108 @@ class Router
 		Request $request,
 	): void
 	{
+		// custom resolvers get first say; the convention routing below is
+		// the terminal DEFAULT when none of them claim the url
+		if($this->resolveCustom($request) === true)
+		{
+			return;
+		}
+		
 		$params = $this->url->getComponents();
 		$this->routeFiles($params);
 		$this->setRequest($request, $params);
+	}
+	
+	/**
+	 * The canonical redirect a resolver requested, if any (Application
+	 * turns it into a 301 before dispatch)
+	 */
+	public function getRedirect(): ?Url
+	{
+		return $this->redirect;
+	}
+	
+	/**
+	 * Runs the configured resolver chain (config "system.routes.resolvers":
+	 * a list of Resolver class names). The first Resolution wins - it is
+	 * applied to the request (or recorded as a redirect); returns whether
+	 * the url was claimed. No resolvers configured = false, so the
+	 * convention router handles everything exactly as before.
+	 */
+	protected function resolveCustom(
+		Request $request,
+	): bool
+	{
+		$resolvers = $this->config
+			->getPath(['system', 'routes', 'resolvers']);
+		if($resolvers === null)
+		{
+			return false;
+		}
+		
+		foreach($resolvers as $resolverClass)
+		{
+			/** @var Resolver $resolver */
+			$resolver = $this->app->getContainer()
+				->getClass((string)$resolverClass);
+			if($resolver instanceof Resolver === false)
+			{
+				continue;
+			}
+			
+			$resolution = $resolver->resolve($this->url, $request);
+			if($resolution === null)
+			{
+				continue;
+			}
+			
+			$this->applyResolution($request, $resolution);
+			
+			return true;
+		}
+		
+		return false;
+	}
+	
+	protected function applyResolution(
+		Request $request,
+		Resolution $resolution,
+	): void
+	{
+		if($resolution->isRedirect() === true)
+		{
+			$this->redirect = $resolution->redirect;
+			
+			return;
+		}
+		
+		$controllerClass = $resolution->controllerClass;
+		$request->setControllerClass($controllerClass);
+		$request->setController($this->controllerPath($controllerClass));
+		$request->setAction($resolution->action);
+		$request->setActionMethod($resolution->action);
+		
+		foreach($resolution->params as $param)
+		{
+			$request->addParam($param);
+		}
+	}
+	
+	/**
+	 * The dispatch controller path ("Blog\Article" -> "blog/article")
+	 * for the request's controller name
+	 */
+	protected function controllerPath(
+		string $controllerClass,
+	): string
+	{
+		$segments = [];
+		foreach(explode('\\', $controllerClass) as $segment)
+		{
+			$segments[] = Strings::snakeCase($segment);
+		}
+		
+		return implode('/', $segments);
 	}
 	
 	/**

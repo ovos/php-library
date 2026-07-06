@@ -56,6 +56,7 @@ Companion modules:
   - [Config Field Reference](#config-field-reference)
 - [Modules](#modules)
 - [Routing](#routing)
+  - [Custom resolvers (SEO URLs)](#custom-resolvers-seo-urls)
 - [Controllers](#controllers)
 - [Models](#models)
 - [Stores](#stores)
@@ -671,6 +672,69 @@ public function list(bool $active, int $page): Response
 
 Parameters are matched by name using camelCase conversion, so a URL parameter
 `company-id` matches a method parameter `$companyId`.
+
+### Custom resolvers (SEO URLs)
+
+The convention router above is the **default**. Before it runs, an ordered
+chain of resolvers gets first say - each either claims the URL or declines so
+the next (ultimately the convention router) can try. Unconfigured, nothing
+changes; add resolver class names to `system.routes.resolvers`:
+
+```yaml
+system:
+  routes:
+    resolvers:
+      - Ovos\Route\SlugResolver
+    slug:
+      models:            # which models carry #[Route\Slug]
+        - Models\Article
+```
+
+A `Resolver` is one method:
+
+```php
+interface Resolver
+{
+    public function resolve(Url $url, Request $request): ?Resolution;
+}
+```
+
+#### Entity-declared SEO routes
+
+Routes DERIVE from the data model the way controllers derive from the
+filesystem: a model declares its own public URL with `#[Route\Slug]`, and
+`SlugResolver` handles URLs of the shape `{prefix}/{slug},{id}{suffix}`:
+
+```php
+#[Route\Slug(
+    prefix: 'news',                        // leading URL segment(s)
+    dispatch: [News::class, 'article'],    // controller + action to run
+    slug: 'url_title',                     // the model column holding the slug
+    id: 'id',                              // the authoritative lookup column
+    suffix: '.html',
+)]
+class Article extends Model\Mysql
+```
+
+For `/news/leistung-ist-das-fundament,101600.html`:
+
+- **the id is authoritative** - the entity is looked up by `id` (indexed), the
+  slug is decorative;
+- **canonical enforcement** - if the URL slug has drifted from the stored one,
+  the resolver returns a **301** to the canonical URL (great for SEO, and it
+  falls out for free since the row was fetched to look up the slug anyway);
+- **route-model binding** - the resolved entity is passed to the action, typed:
+
+  ```php
+  public function article(Article $article): Response
+  ```
+
+  (no dispatcher change needed - the action-param binder casts scalars and
+  passes objects through untouched).
+
+The `,{id}{suffix}` tail is a shape the convention router never emits, so the
+SEO and convention route spaces are provably disjoint - the chain order is
+never ambiguous.
 
 ---
 
