@@ -58,6 +58,7 @@ Companion modules:
 - [Routing](#routing)
 - [Controllers](#controllers)
 - [Models](#models)
+  - [Relations](#relations)
 - [Stores](#stores)
   - [Using the Find Trait](#using-the-find-trait)
   - [Query Builder](#query-builder)
@@ -933,6 +934,51 @@ $user->fromArray(['email' => 'test@example.com']);
 // JSON serialization (respects PROPERTIES_PERSISTABLE if defined)
 json_encode($user);
 ```
+
+### Relations
+
+Declare a model's relations ONCE with attributes - the single source of the
+fk column, reference name, key column, child store and query scope that used
+to live smeared across hand-written `referenceByX()` store methods:
+
+```php
+#[Relation\Many('Competences', JobCompetence::class,
+	by: 'job_id', key: 'competence_id',
+	store: JobsCompetences::class, scope: 'activeCompetences')]
+#[Relation\One('Category', Category::class, on: 'category_id')]
+class Job extends Model\Mysql
+```
+
+- `Many(name, model, by, key, ?store, ?scope, lazy)` - children carry the
+  parent's id in `by` and land on the parent's reference keyed by `key`.
+- `One(name, model, on, ?store, ?scope, key = 'id', lazy)` - the parent's
+  `on` column points at the child's `key`; the child model is assigned.
+- `store` defaults to the child model's own (`Model::getStoreClass()`).
+- Attributes cannot carry closures, so query shaping is a NAMED SCOPE on the
+  child store: `scope: 'activeCompetences'` calls
+  `$store->scopeActiveCompetences($query)`.
+
+**Batched eager loading** - one `IN` query per relation, never N+1; every
+parent ends up with the reference SET (empty array / null when nothing
+matched), so a loaded-empty reference is distinguishable from a never-loaded
+one:
+
+```php
+$jobs = $store->withRelations($jobs);                       // every declared relation
+$jobs = $store->withRelations($jobs, ['Competences']);      // selected
+$jobs = $store->withRelations($jobs, ['Competences'], [     // per-call overrides
+	'Competences' => fn($query) => $query->andWhere('level > 2'),
+]);
+
+$jobs[7]->Competences;      // keyed by competence_id
+$jobs[7]->Category?->name;
+```
+
+**Lazy fallback** - reading a declared, never-loaded relation fetches it for
+that one model and leaves a dev-console note (visible in the profiler panel):
+a lazy load inside a loop is exactly the N+1 the batched path prevents. Mark
+hot-path relations `lazy: false` to keep them from ever auto-fetching -
+unloaded access then returns null, silently.
 
 ---
 

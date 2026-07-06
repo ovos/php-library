@@ -6,6 +6,9 @@ namespace Ovos\Store;
 use Ovos\Exception;
 use Ovos\Connections;
 use Ovos\Model\Mysql as Model;
+use Ovos\Model\Relation\Many as RelationMany;
+use Ovos\Model\Relation\One as RelationOne;
+use Ovos\Model\Relations;
 use Ovos\Store;
 use Ovos\Store\Mysql\Query;
 use Ovos\Store\Mysql\QueryBuilder;
@@ -18,6 +21,7 @@ use function array_column;
 use function array_keys;
 use function array_map;
 use function array_unique;
+use function get_class;
 use function implode;
 use function is_bool;
 use function preg_replace;
@@ -454,6 +458,84 @@ abstract class Mysql extends Store
 		}
 		
 		return $referenced;
+	}
+	
+	/**
+	 * Batch-loads DECLARED relations onto a set of models keyed by id
+	 * (the fetchGrouped shape) - one IN query per relation, generated
+	 * from the model's Relation attributes; the hand-written
+	 * referenceByX() boilerplate, retired.
+	 *
+	 * Every parent ends up with the reference SET (an empty array for
+	 * Many, null for One, when nothing matched) - a loaded-empty
+	 * reference is distinguishable from a never-loaded one, which is
+	 * exactly what the model's lazy fallback keys on.
+	 */
+	public function withRelations(
+		array $items,
+		?array $names = null, // null = every declared relation
+		array $overrides = [], // [name => Closure] applied after the scope
+	): array
+	{
+		if($items === [])
+		{
+			return $items;
+		}
+		
+		$class = get_class(reset($items));
+		
+		foreach($names ?? array_keys(Relations::forClass($class)) as $name)
+		{
+			$relation = Relations::require($class, $name);
+			$store = new ($relation->storeClass());
+			$callback = Relations::callback($store, $relation,
+				$overrides[$name] ?? null);
+				
+			if($relation instanceof RelationMany)
+			{
+				$children = $store->fetchByReference($items,
+					$relation->by, $relation->model, $callback);
+				$this->assignByReference($items, $relation->by,
+					$name, $children, $relation->key);
+					
+				foreach($items as $item)
+				{
+					if($item->hasReference($name) === false)
+					{
+						$item->setReference($name, []);
+					}
+				}
+				
+				continue;
+			}
+			
+			/** @var RelationOne $relation */
+			$ids = [];
+			foreach($items as $item)
+			{
+				if($item->{$relation->on} !== null)
+				{
+					$ids[$item->{$relation->on}] = true;
+				}
+			}
+			
+			$keyed = [];
+			foreach($store->fetchByReference($ids,
+				$relation->key, $relation->model, $callback) as $child)
+			{
+				$keyed[$child->{$relation->key}] = $child;
+			}
+			
+			foreach($items as $item)
+			{
+				// a null fk is a loaded null, never an array offset
+				$foreign = $item->{$relation->on};
+				$item->setReference($name,
+					$foreign !== null ? ($keyed[$foreign] ?? null) : null);
+			}
+		}
+		
+		return $items;
 	}
 	
 	/**
