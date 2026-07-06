@@ -50,6 +50,11 @@ class Profiler extends Service
 	#[InjectArrayObject('system', 'profilers')]
 	protected ?ArrayObject $profilers = null;
 	
+	/**
+	 * The current request opted out of the profiler stream
+	 */
+	protected bool $skipped = false;
+	
 	public function __construct()
 	{
 		if($this->isStreamEnabled() === false)
@@ -67,6 +72,20 @@ class Profiler extends Service
 		});
 	}
 	
+	/**
+	 * Excludes the CURRENT request from the profiler stream - for
+	 * long-lived SSE endpoints, whose lifetime-aggregated profile is
+	 * noise (a 55s worker stream ticking 5 redis commands per second
+	 * lands as one 275-query entry); the profiler's own stream endpoint
+	 * is excluded the same way
+	 */
+	public function skip(): static
+	{
+		$this->skipped = true;
+		
+		return $this;
+	}
+	
 	protected function isStreamEnabled(): bool
 	{
 		return $this->profilers?->enabled === true
@@ -80,8 +99,10 @@ class Profiler extends Service
 	{
 		try
 		{
-			// http only; never stream the profiler's own SSE endpoint
-			if($this->request->isCli()
+			// http only; never stream the profiler's own SSE endpoint or
+			// a request that opted out (long-lived SSE loops)
+			if($this->skipped === true
+				|| $this->request->isCli()
 				|| $this->request->getControllerClass() === 'Profiler')
 			{
 				return;
