@@ -34,7 +34,6 @@ use function session_name;
 use function session_regenerate_id;
 use function session_set_cookie_params;
 use function session_start;
-use function setcookie;
 use function time;
 
 /**
@@ -693,53 +692,41 @@ class Session extends Service
 				'Session cookie could not be sent, headers already sent.');
 		}
 		
-		$options = $this->cookieOptions();
-		
-		setcookie($this->cookieName(), $sessionId, [
-			'expires' => $options['lifetime'] > 0
-				? time() + $options['lifetime']
+		// prefixing and the attribute policy (path, domain, samesite,
+		// secure) are the Cookies service's business - the session only
+		// decides expiry and httponly
+		$lifetime = (int)ini_get('session.cookie_lifetime');
+		$this->cookies()->set($this->cookieBaseName(), $sessionId, [
+			'expires' => $lifetime > 0
+				? time() + $lifetime
 				: 0,
-			'path' => (string)$options['path'],
-			'domain' => (string)$options['domain'],
-			'secure' => $options['secure'],
-			'httponly' => $options['httponly'],
-			'samesite' => (string)$options['samesite'],
+			'httponly' => true,
 		]);
 	}
 	
-	protected function cookieName(): string
+	/**
+	 * The framework's cookie service (registered on demand)
+	 */
+	protected function cookies(): Cookies
 	{
-		$name = (string)($this->sessionConfig->cookie_name
-			?? ini_get('session.name')
-			?: 'PHPSESSID');
-		
-		if($this->cookiesConfig->prefix)
-		{
-			$name = $this->cookiesConfig->prefix . $name;
-		}
-		
-		return $name;
+		return $this->app->getServices()
+			->get(Cookies::SYMBOL, Cookies::class);
 	}
 	
-	protected function cookieOptions(): array
+	/**
+	 * The session cookie name as it travels to the browser (prefixed)
+	 */
+	protected function cookieName(): string
 	{
-		$options = [
-			'lifetime' => (int)ini_get('session.cookie_lifetime'),
-			'path' => SYSTEM_PATH,
-			'domain' => $this->app->getDomain(), // if we pass null here, then the domain will be set to the current domain
-			'secure' => $this->request->isSecure(),
-			'httponly' => true,
-			'samesite' => $this->cookiesConfig->samesite,
-		];
-		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
-		// SameSite=None works only with Secure
-		if($options['secure'] === false
-			&& ($options['samesite'] === 'None' || $options['samesite'] === null))
-		{
-			$options['samesite'] = 'Lax';
-		}
-		
-		return $options;
+		return $this->cookies()
+			->getName($this->cookieBaseName());
+	}
+	
+	protected function cookieBaseName(): string
+	{
+		return (string)($this->sessionConfig->cookie_name
+			?? ini_get('session.name')
+			?: 'PHPSESSID');
 	}
 	
 	protected function path(
@@ -771,8 +758,10 @@ class Session extends Service
 		
 		session_cache_limiter($this->sessionConfig->cache_limiter);
 		
+		// the attribute policy comes from the Cookies service; only the
+		// lifetime is the native machinery's own
 		$cookie = session_get_cookie_params();
-		$options = $this->cookieOptions();
+		$options = $this->cookies()->options(['httponly' => true]);
 		$options['lifetime'] = $cookie['lifetime'];
 		session_set_cookie_params($options);
 		

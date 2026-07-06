@@ -8,7 +8,10 @@ use Ovos\Container\Inject;
 use Ovos\Exception;
 use Ovos\Service;
 
+use function setcookie;
+use function str_starts_with;
 use function strlen;
+use function substr;
 
 /**
  * Cookies
@@ -89,15 +92,14 @@ class Cookies extends Service
 	}
 	
 	/**
-	 * @see http://php.net/setcookie
+	 * The cookie attribute policy: path, domain, samesite and secure are
+	 * decided HERE for every cookie the framework sends - callers only
+	 * add what is theirs to decide (expires, httponly)
 	 */
-	public function set(
-		string $name,
-		string $value,
-		array $options,
-	): bool
+	public function options(
+		array $options = [],
+	): array
 	{
-		$name = $this->getName($name);
 		$options['path'] = SYSTEM_PATH;
 		$options['domain'] = $this->app->getDomain(); // if we pass null here, then the domain will be set to the current domain
 		$options['samesite'] = $this->cookiesConfig->samesite;
@@ -110,7 +112,20 @@ class Cookies extends Service
 			$options['samesite'] = 'Lax';
 		}
 		
-		return setcookie($name, $value, $options);
+		return $options;
+	}
+	
+	/**
+	 * @see http://php.net/setcookie
+	 */
+	public function set(
+		string $name,
+		string $value,
+		array $options,
+	): bool
+	{
+		return setcookie($this->getName($name), $value,
+			$this->options($options));
 	}
 	
 	/**
