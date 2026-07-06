@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use function filter_var;
+use function strtoupper;
 
 /**
  * Response
@@ -16,8 +17,17 @@ class Request
 	public const string METHOD_GET = 'GET';
 	public const string METHOD_POST = 'POST';
 	public const string METHOD_PUT = 'PUT';
+	public const string METHOD_PATCH = 'PATCH'; // RFC 5789 - partial update
 	public const string METHOD_DELETE = 'DELETE';
 	public const string METHOD_HEAD = 'HEAD';
+	public const string METHOD_OPTIONS = 'OPTIONS'; // CORS preflight, capabilities
+	/**
+	 * HTTP QUERY (IETF draft) - a safe, idempotent, cacheable request that
+	 * carries a body; the correct verb for search endpoints that today
+	 * POST a filter payload. Still a draft: fetch() can send it, but caches
+	 * and proxies may not treat it as safe yet.
+	 */
+	public const string METHOD_QUERY = 'QUERY';
 	
 	protected ?Url $url = null;
 	
@@ -238,11 +248,20 @@ class Request
 		return $_SERVER[$name];
 	}
 	
+	/**
+	 * The request method, uppercased; empty string when there is none
+	 * (CLI). Prefer this over getServer('REQUEST_METHOD').
+	 */
+	public function getMethod(): string
+	{
+		return strtoupper((string)$this->getServer('REQUEST_METHOD'));
+	}
+	
 	public function isMethod(
 		string $method,
 	): bool
 	{
-		return $this->getServer('REQUEST_METHOD') === $method;
+		return $this->getMethod() === strtoupper($method);
 	}
 	
 	public function isGet(): bool
@@ -260,6 +279,11 @@ class Request
 		return $this->isMethod(self::METHOD_PUT);
 	}
 	
+	public function isPatch(): bool
+	{
+		return $this->isMethod(self::METHOD_PATCH);
+	}
+	
 	public function isDelete(): bool
 	{
 		return $this->isMethod(self::METHOD_DELETE);
@@ -268,6 +292,19 @@ class Request
 	public function isHead(): bool
 	{
 		return $this->isMethod(self::METHOD_HEAD);
+	}
+	
+	public function isOptions(): bool
+	{
+		return $this->isMethod(self::METHOD_OPTIONS);
+	}
+	
+	/**
+	 * The HTTP QUERY method (IETF draft) - a body-carrying search request
+	 */
+	public function isQuery(): bool
+	{
+		return $this->isMethod(self::METHOD_QUERY);
 	}
 	
 	/**
