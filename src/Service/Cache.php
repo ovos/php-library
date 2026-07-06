@@ -7,9 +7,7 @@ use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Apcu as MemoLockApcu;
 use Ovos\Cache\MemoLock\Redis as MemoLockRedis;
-use Ovos\Cache\Store\Apcu as StoreApcu;
-use Ovos\Cache\Store\Redis as StoreRedis;
-use Ovos\Cache\Store\Redisearch as StoreRedisearch;
+use Ovos\Cache\Store\KeyValue;
 use Ovos\Container;
 use Ovos\Exception\MissingException\MissingConfigException;
 use Ovos\Service;
@@ -88,8 +86,10 @@ class Cache extends Service
 	
 	public function getStore(
 		bool $persistent = true,
-	): StoreApcu|StoreRedis|StoreRedisearch
+	): KeyValue
 	{
+		// the common base of every configurable store - an enumerated
+		// union broke the first project using the RedisVersioned store
 		return $persistent
 			? $this->getPersistent()->getStore()
 			: $this->getPerishable()->getStore();
