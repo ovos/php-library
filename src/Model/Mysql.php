@@ -5,8 +5,13 @@ namespace Ovos\Model;
 
 use Ovos\ArrayObject;
 use Ovos\Connections;
+use Ovos\Console;
 use Ovos\Exception;
 use Ovos\Model;
+use Ovos\Model\Relation;
+use Ovos\Model\Relation\Many as RelationMany;
+use Ovos\Model\Relation\One as RelationOne;
+use Ovos\Model\Relations;
 use Ovos\Store\Mysql as Store;
 use Ovos\Model\Mysql\Template;
 use Countable;
@@ -15,6 +20,7 @@ use JsonSerializable;
 use PDO;
 use PDOStatement;
 use stdClass;
+use Throwable;
 
 use function array_key_exists;
 use function array_keys;
@@ -283,6 +289,58 @@ abstract class Mysql
 		return $this->_references[$property];
 	}
 	
+	/**
+	 * Fetches a declared relation for THIS model only and assigns it -
+	 * the lazy fallback behind unloaded reference reads. Correctness
+	 * net, not the habit: batch sets of models with withRelations()
+	 */
+	public function loadRelation(
+		Relation $relation,
+	): mixed
+	{
+		$store = new ($relation->storeClass());
+		$callback = Relations::callback($store, $relation);
+		
+		if($relation instanceof RelationMany)
+		{
+			$value = [];
+			foreach($store->fetchByReference([$this->id => $this],
+				$relation->by, $relation->model, $callback) as $child)
+			{
+				$value[$child->{$relation->key}] = $child;
+			}
+		}
+		else
+		{
+			/** @var RelationOne $relation */
+			$value = null;
+			if($this->{$relation->on} !== null)
+			{
+				$children = $store->fetchByReference(
+					[$this->{$relation->on} => $this],
+					$relation->key, $relation->model, $callback);
+				$value = $children[0] ?? null;
+			}
+		}
+		
+		$this->setReference($relation->name, $value);
+		
+		// surface it in the dev console (profiler panel) - a lazy load
+		// in a loop is exactly the N+1 the batched path exists to avoid
+		try
+		{
+			$this->container->getClass(Console::class)
+				->setMessage('lazy relation load: ' . static::class
+					. '.' . $relation->name . ' - batch with withRelations()');
+		}
+		catch(Throwable)
+		{
+			// no container/console in this context - the load still counts
+		}
+		
+		return $value;
+	}
+	
 	public function hasReference(
 		string $property,
 	): bool
@@ -503,9 +561,20 @@ abstract class Mysql
 		string $property,
 	): mixed
 	{
-		if($value = $this->getReference($property))
+		// a SET reference answers even when empty - a loaded-empty []
+		// (or a One relation resolved to null) is an answer, not a miss;
+		// the old falsy check made it fall through to the property
+		if($this->hasReference($property) === true)
 		{
-			return $value;
+			return $this->getReference($property);
+		}
+		
+		// a DECLARED, never-loaded relation loads lazily; inside a loop
+		// this is the N+1 that withRelations() prevents - hence the note
+		if(($relation = Relations::get(static::class, $property)) !== null
+			&& $relation->lazy === true)
+		{
+			return $this->loadRelation($relation);
 		}
 		
 		$value = $this->getProperty($property);
