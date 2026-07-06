@@ -190,7 +190,32 @@ class Redis extends MemoLock
 		$waitTimeMs = $waitTimeJitterMs = $queueLockTtlMs;
 		for($attempt = 0; $attempt < $this->queueWaitAttempts; $attempt++)
 		{
-			$success = $this->waitForMessage($channelName, $waitTimeJitterMs);
+			// a crashed producer never publishes - never wait (much) longer
+			// than its lock can live (mirrors waitForRelease)
+			$remainingMs = 0;
+			try
+			{
+				$remainingMs = $client->pttl($lockKey);
+			}
+			catch(RedisException|RedisClusterException $exception)
+			{
+				$this->connection->log($exception);
+			}
+			
+			if($remainingMs === -2 || $remainingMs === false)
+			{
+				// the lock is gone: no publication will come - skip the
+				// subscribe and check the value / race for the lock now
+				$success = false;
+			}
+			else
+			{
+				$success = $this->waitForMessage($channelName,
+					$remainingMs > 0
+						? min($waitTimeJitterMs, $remainingMs + 25)
+						: $waitTimeJitterMs,
+				);
+			}
 			if($success === false)
 			{
 				// shorten the wait time on the next attempt
