@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="520" viewBox="0 0 940 520" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="mCyan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+			<path d="M0,0 L7,3 L0,6 Z" fill="#00f0ff"/>
+		</marker>
+		<marker id="mRed" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+			<path d="M0,0 L7,3 L0,6 Z" fill="#ff003c"/>
+		</marker>
+		<marker id="mYellow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+			<path d="M0,0 L7,3 L0,6 Z" fill="#fcee0a"/>
+		</marker>
+		<g id="lock">
+			<path d="M-4,-1 V-5 A4,4 0 0 1 4,-5 V-1" fill="none" stroke="#fcee0a" stroke-width="1.6"/>
+			<rect x="-6" y="-1" width="12" height="9" fill="#fcee0a"/>
+			<rect x="-1.2" y="1.5" width="2.4" height="4" fill="#0a0a12"/>
+		</g>
+	</defs>
+
+	<!-- canvas -->
+	<path d="M14,0 H926 L940,14 V506 L926,520 H14 L0,506 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V506 L926,520 H14 L0,506 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V506 L926,519.5 H14 L0.5,506 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.35"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,480 V506 L926,519.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+
+	<!-- header -->
+	<text x="24" y="36" font-size="19" font-weight="700" letter-spacing="5" fill="#fcee0a" filter="url(#glow)">SESSION HANDLERS</text>
+	<text x="24" y="56" font-size="11.5" letter-spacing="1.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">handler: php vs handler: json — why parallel requests fight under one, and not the other</text>
+
+	<!-- ============ LEFT: php ============ -->
+	<path d="M26,70 H450 L460,80 V432 L450,442 H26 L16,432 V80 Z" fill="#0d0d17"/>
+	<path d="M26,70 H450 L460,80 V432 L450,442 H26 L16,432 V80 Z" fill="#ff003c" opacity="0.03"/>
+	<path d="M26,70.5 H450 L459.5,80 V432 L450,441.5 H26 L16.5,432 V80 Z" fill="none" stroke="#ff003c" stroke-width="1" opacity="0.55"/>
+	<text x="238" y="98" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="3" fill="#ff003c">HANDLER: PHP</text>
+	<text x="238" y="116" text-anchor="middle" font-size="10.5" letter-spacing="1" fill="#8b8ba7">one serialized blob · one session-wide lock</text>
+	<line x1="32" y1="126" x2="444" y2="126" stroke="#ff003c" stroke-width="1" opacity="0.3"/>
+
+	<!-- request 1 -->
+	<path d="M42,148 H154 L160,154 V182 L154,188 H42 L36,182 V154 Z" fill="#11111c" stroke="#8b8ba7" stroke-width="1" opacity="0.9"/>
+	<text x="98" y="165" text-anchor="middle" font-size="11" font-weight="700" fill="#e8e8f0">REQUEST 1</text>
+	<text x="98" y="179" text-anchor="middle" font-size="9.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">session_start()</text>
+
+	<!-- fat read arrow -->
+	<text x="235" y="143" text-anchor="middle" font-size="9.5" fill="#ff003c">reads the WHOLE blob</text>
+	<path d="M166,161 H280 V151 L306,168 L280,185 V175 H166 Z" fill="#ff003c" opacity="0.8"/>
+
+	<!-- blob -->
+	<path d="M318,138 H436 L444,146 V258 L436,266 H318 L310,258 V146 Z" fill="#11111c" stroke="#ff003c" stroke-width="1" opacity="0.9"/>
+	<text x="377" y="158" text-anchor="middle" font-size="10.5" fill="#e8e8f0" font-family="Consolas, 'Courier New', monospace">$_SESSION blob</text>
+	<rect x="322" y="170" width="110" height="7" fill="#8b8ba7" opacity="0.3"/>
+	<rect x="322" y="184" width="92" height="7" fill="#8b8ba7" opacity="0.3"/>
+	<rect x="322" y="198" width="104" height="7" fill="#8b8ba7" opacity="0.3"/>
+	<rect x="322" y="212" width="84" height="7" fill="#8b8ba7" opacity="0.3"/>
+	<rect x="322" y="226" width="110" height="7" fill="#8b8ba7" opacity="0.3"/>
+	<text x="377" y="252" text-anchor="middle" font-size="9" fill="#8b8ba7">everything, every request</text>
+
+	<!-- session-wide lock -->
+	<rect x="303" y="131" width="148" height="142" fill="none" stroke="#fcee0a" stroke-width="1" stroke-dasharray="5,4" opacity="0.75"/>
+	<use href="#lock" x="377" y="127"/>
+	<text x="377" y="290" text-anchor="middle" font-size="9" letter-spacing="1" fill="#fcee0a">SESSION-WIDE LOCK</text>
+	<text x="377" y="303" text-anchor="middle" font-size="8.5" fill="#8b8ba7">held from session_start to write-back</text>
+
+	<!-- request 1 timeline -->
+	<text x="98" y="216" text-anchor="middle" font-size="9.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">...2s of work...</text>
+	<text x="98" y="231" text-anchor="middle" font-size="9.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">write-back + unlock</text>
+	<text x="98" y="245" text-anchor="middle" font-size="9.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">at request END</text>
+
+	<!-- request 2: blocked -->
+	<text x="98" y="294" text-anchor="middle" font-size="9.5" fill="#8b8ba7">parallel ajax call</text>
+	<path d="M42,300 H154 L160,306 V334 L154,340 H42 L36,334 V306 Z" fill="#11111c" stroke="#ff003c" stroke-width="1"/>
+	<text x="98" y="317" text-anchor="middle" font-size="11" font-weight="700" fill="#e8e8f0">REQUEST 2</text>
+	<text x="98" y="331" text-anchor="middle" font-size="9.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">get('flag')</text>
+	<line x1="166" y1="317" x2="288" y2="272" stroke="#ff003c" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#mRed)"/>
+	<rect x="294" y="252" width="4" height="30" fill="#ff003c"/>
+	<text x="226" y="284" text-anchor="middle" font-size="13" font-weight="700" letter-spacing="2" fill="#ff003c">BLOCKED</text>
+
+	<text x="238" y="366" text-anchor="middle" font-size="10" fill="#e8e8f0">waits for Request 1's write-back + unlock —</text>
+	<text x="238" y="381" text-anchor="middle" font-size="10" fill="#e8e8f0">even though it wants ONE flag</text>
+	<text x="238" y="412" text-anchor="middle" font-size="10.5" fill="#ff003c" opacity="0.9" font-family="Consolas, 'Courier New', monospace">R2 latency &#8776; R1's entire request time</text>
+
+	<!-- ============ RIGHT: json ============ -->
+	<path d="M490,70 H914 L924,80 V432 L914,442 H490 L480,432 V80 Z" fill="#0d0d17"/>
+	<path d="M490,70 H914 L924,80 V432 L914,442 H490 L480,432 V80 Z" fill="#00f0ff" opacity="0.03"/>
+	<path d="M490,70.5 H914 L923.5,80 V432 L914,441.5 H490 L480.5,432 V80 Z" fill="none" stroke="#00f0ff" stroke-width="1" opacity="0.55"/>
+	<text x="702" y="98" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="3" fill="#00f0ff">HANDLER: JSON</text>
+	<text x="702" y="116" text-anchor="middle" font-size="10.5" letter-spacing="1" fill="#8b8ba7">one RedisJSON document · lazy per-path access</text>
+	<line x1="496" y1="126" x2="908" y2="126" stroke="#00f0ff" stroke-width="1" opacity="0.3"/>
+
+	<!-- document -->
+	<path d="M712,140 H896 L904,148 V348 L896,356 H712 L704,348 V148 Z" fill="#11111c" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+	<text x="804" y="158" text-anchor="middle" font-size="10.5" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">&lt;prefix&gt;:&lt;sid&gt;</text>
+	<line x1="712" y1="166" x2="896" y2="166" stroke="#00f0ff" stroke-width="1" opacity="0.3"/>
+
+	<rect x="712" y="174" width="184" height="30" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9" stroke-opacity="0.35"/>
+	<text x="720" y="187" font-size="10.5" fill="#e8e8f0" font-family="Consolas, 'Courier New', monospace">basket</text>
+	<text x="720" y="199" font-size="8.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">{products: [...]}</text>
+
+	<rect x="712" y="212" width="184" height="30" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9" stroke-opacity="0.35"/>
+	<text x="720" y="225" font-size="10.5" fill="#e8e8f0" font-family="Consolas, 'Courier New', monospace">user</text>
+	<text x="720" y="237" font-size="8.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">{locale: 'de', ...}</text>
+
+	<rect x="712" y="250" width="184" height="30" fill="#0d0d17" stroke="#fcee0a" stroke-width="1"/>
+	<text x="720" y="263" font-size="10.5" fill="#e8e8f0" font-family="Consolas, 'Courier New', monospace">stats</text>
+	<text x="720" y="275" font-size="8.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">{counter: 7}</text>
+	<use href="#lock" x="882" y="258"/>
+
+	<rect x="712" y="288" width="184" height="30" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9" stroke-opacity="0.35"/>
+	<text x="720" y="301" font-size="10.5" fill="#e8e8f0" font-family="Consolas, 'Courier New', monospace">__journey</text>
+	<text x="720" y="313" font-size="8.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">[{t, type, ...}, ...]</text>
+
+	<text x="804" y="336" text-anchor="middle" font-size="9" fill="#8b8ba7">nothing loaded up front</text>
+	<text x="804" y="372" text-anchor="middle" font-size="9" letter-spacing="1" fill="#fcee0a">PER-VALUE LOCK — stats only</text>
+
+	<!-- requests -->
+	<path d="M500,170 H630 L636,176 V204 L630,210 H500 L494,204 V176 Z" fill="#11111c" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+	<text x="565" y="187" text-anchor="middle" font-size="11" font-weight="700" fill="#e8e8f0">REQUEST 1</text>
+	<text x="565" y="201" text-anchor="middle" font-size="9" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">get('basket.products')</text>
+
+	<path d="M500,232 H630 L636,238 V266 L630,272 H500 L494,266 V238 Z" fill="#11111c" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+	<text x="565" y="249" text-anchor="middle" font-size="11" font-weight="700" fill="#e8e8f0">REQUEST 2</text>
+	<text x="565" y="263" text-anchor="middle" font-size="9" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">get('user.locale')</text>
+
+	<path d="M500,294 H630 L636,300 V328 L630,334 H500 L494,328 V300 Z" fill="#11111c" stroke="#fcee0a" stroke-width="1" opacity="0.9"/>
+	<text x="565" y="311" text-anchor="middle" font-size="11" font-weight="700" fill="#e8e8f0">REQUEST 3</text>
+	<text x="565" y="325" text-anchor="middle" font-size="9" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">update('stats.counter')</text>
+
+	<!-- thin path arrows -->
+	<line x1="642" y1="190" x2="700" y2="189" stroke="#00f0ff" stroke-width="1.5" marker-end="url(#mCyan)"/>
+	<text x="668" y="182" text-anchor="middle" font-size="9" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">1 RT</text>
+	<line x1="642" y1="252" x2="700" y2="230" stroke="#00f0ff" stroke-width="1.5" marker-end="url(#mCyan)"/>
+	<text x="664" y="235" text-anchor="middle" font-size="9" fill="#00f0ff" font-family="Consolas, 'Courier New', monospace">1 RT</text>
+	<line x1="642" y1="314" x2="700" y2="268" stroke="#fcee0a" stroke-width="1.5" marker-end="url(#mYellow)"/>
+	<text x="656" y="298" text-anchor="middle" font-size="9" fill="#fcee0a" font-family="Consolas, 'Courier New', monospace">lock&#8594;write</text>
+
+	<text x="565" y="356" text-anchor="middle" font-size="10" fill="#e8e8f0">R3 locks ONLY stats —</text>
+	<text x="565" y="371" text-anchor="middle" font-size="10" fill="#e8e8f0">basket and user flow freely</text>
+	<text x="702" y="412" text-anchor="middle" font-size="10.5" fill="#00f0ff" opacity="0.9" font-family="Consolas, 'Courier New', monospace">no session-wide lock — requests run in parallel</text>
+
+	<!-- footer cost strip -->
+	<path d="M26,458 H450 L460,468 V494 L450,504 H26 L16,494 V468 Z" fill="#11111c" stroke="#ff003c" stroke-width="1" opacity="0.9"/>
+	<text x="238" y="478" text-anchor="middle" font-size="12" font-weight="700" fill="#ff003c">PHP: whole blob &#215; every request + global lock</text>
+	<text x="238" y="494" text-anchor="middle" font-size="9.5" fill="#8b8ba7">parallel requests serialize</text>
+
+	<path d="M490,458 H914 L924,468 V494 L914,504 H490 L480,494 V468 Z" fill="#11111c" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+	<text x="702" y="478" text-anchor="middle" font-size="12" font-weight="700" fill="#00f0ff">JSON: only touched values + per-value locks</text>
+	<text x="702" y="494" text-anchor="middle" font-size="9.5" fill="#8b8ba7">parallel-safe</text>
+</svg>

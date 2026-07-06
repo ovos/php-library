@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="150" viewBox="0 0 940 150" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.018"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+	</defs>
+
+	<!-- plate -->
+	<path d="M12,0 H928 L940,12 V138 L928,150 H12 L0,138 V12 Z" fill="#0b0b12"/>
+	<path d="M12,0 H928 L940,12 V138 L928,150 H12 L0,138 V12 Z" fill="url(#scan)"/>
+	<path d="M12,0.5 H928 L939.5,12 V138 L928,149.5 H12 L0.5,138 V12 Z"
+		fill="none" stroke="#26263a" stroke-width="1"/>
+
+	<!-- accent traces on the chamfers -->
+	<path d="M0.5,60 V12 L12,0.5 H72" fill="none" stroke="#fcee0a" stroke-width="1.5"/>
+	<path d="M939.5,90 V138 L928,149.5 H868" fill="none" stroke="#fcee0a" stroke-width="1.5" opacity="0.55"/>
+
+	<!-- eyebrow -->
+	<text x="40" y="44" font-size="11" font-weight="600" letter-spacing="5"
+		fill="#8b8ba7">OVOS</text>
+	<rect x="116" y="35" width="1" height="10" fill="#3a3a52"/>
+	<text x="130" y="44" font-size="11" font-weight="600" letter-spacing="5"
+		fill="#5c5c78">FRAMEWORK CORE</text>
+
+	<!-- wordmark: one yellow accent, the rest quiet -->
+	<g font-size="46" font-weight="700" letter-spacing="1">
+		<text x="38" y="97" fill="#fcee0a" filter="url(#glow)">PHP</text>
+		<text x="172" y="97" fill="#e8e8f0">LIBRARY</text>
+	</g>
+	<!-- a single, precise detail: the separator cut -->
+	<rect x="163" y="62" width="3" height="38" fill="#ff003c" transform="skewX(-12)"/>
+
+	<!-- baseline rule, stepped like a circuit trace -->
+	<path d="M38,112 H360 l6,6 H560" fill="none" stroke="#3a3a52" stroke-width="1"/>
+	<path d="M38,112 H120" fill="none" stroke="#fcee0a" stroke-width="2"/>
+
+	<!-- subline -->
+	<text x="38" y="134" font-size="11.5" letter-spacing="1.5" fill="#6e6e8c"
+		font-family="Consolas, 'Courier New', monospace">sessions / cache / memolock / redis functions / di / http</text>
+
+	<!-- right-side quiet mark -->
+	<text x="902" y="97" font-size="46" font-weight="700" fill="#191926"
+		text-anchor="end" font-family="Consolas, 'Courier New', monospace">//</text>
+</svg>

@@ -13,7 +13,9 @@ use function array_slice;
 use function ceil;
 use function count;
 use function file_get_contents;
+use function hash;
 use function is_array;
+use function is_file;
 use function is_int;
 use function str_replace;
 
@@ -147,15 +149,25 @@ class Functions
 		{
 			$list = $client
 				->function('list', 'libraryname', $libraryName);
-			
+				
 			if($list !== false
 				&& isset($list[0])
 				&& $list[0]['library_name'] === $libraryName
 			)
 			{
-				$this->librariesLoaded[$libraryName] = true;
+				// loaded, but from THIS source? a missing source-hash
+				// marker means the file has changed since - fall through
+				// to a forced replacement instead of trusting the name
+				if($this->libraryHasFunction((array)$list[0],
+					$this->sourceMarker($libraryName,
+						$this->buildSource($libraryFile))) === true)
+				{
+					$this->librariesLoaded[$libraryName] = true;
+					
+					return true;
+				}
 				
-				return true;
+				$replace = true;
 			}
 		}
 		
@@ -196,6 +208,7 @@ class Functions
 	): bool
 	{
 		$library = null;
+		$marker = null;
 		$loaded = true;
 		
 		foreach($client->_masters() as $master)
@@ -212,8 +225,11 @@ class Functions
 			
 			// a master we have not loaded yet (first seen, or new to the
 			// topology): only upload when it is actually missing the library
+			// or holds one built from an outdated source (no hash marker)
 			if($replace === false
-				&& $this->isLibraryOnNode($client, $master, $libraryName))
+				&& $this->isLibraryOnNode($client, $master, $libraryName,
+					$marker ??= $this->sourceMarker($libraryName,
+						$this->buildSource($libraryFile))))
 			{
 				$this->clusterLibrariesLoaded[$libraryName][$masterKey] = true;
 				
@@ -225,11 +241,12 @@ class Functions
 			
 			$client->clearLastError();
 			
-			$libraryLoaded = $replace
-				? $client->rawCommand($master,
-					'FUNCTION', 'LOAD', 'REPLACE', $library)
-				: $client->rawCommand($master,
-					'FUNCTION', 'LOAD', $library);
+			// always REPLACE: the detection above already established the
+			// node is missing the library or holds a stale build (present
+			// by name, no source-hash marker) - a plain LOAD would throw
+			// "Library already exists" on the stale case
+			$libraryLoaded = $client->rawCommand($master,
+				'FUNCTION', 'LOAD', 'REPLACE', $library);
 			
 			if($error = $client->getLastError())
 			{
@@ -270,11 +287,12 @@ class Functions
 		RedisClusterClient $client,
 		array $master,
 		string $libraryName, // already prefixed
+		string $markerName, // the expected source-hash marker function
 	): bool
 	{
 		$list = $client->rawCommand($master,
 			'FUNCTION', 'LIST', 'LIBRARYNAME', $libraryName);
-		
+			
 		if(is_array($list) === false)
 		{
 			return false;
@@ -293,7 +311,9 @@ class Functions
 			{
 				if($library['library_name'] === $libraryName)
 				{
-					return true;
+					// present by name, but only a current build carries
+					// the marker - a stale one must be replaced
+					return $this->libraryHasFunction($library, $markerName);
 				}
 				
 				continue;
@@ -309,7 +329,7 @@ class Functions
 					&& $field === 'library_name'
 					&& ($library[$index + 1] ?? null) === $libraryName)
 				{
-					return true;
+					return $this->libraryHasFunction($library, $markerName);
 				}
 			}
 		}
@@ -318,27 +338,118 @@ class Functions
 	}
 	
 	/**
-	 * Builds a library of scripts from a file, applying the functions prefix
+	 * Builds the prefixed source of a library from a file
+	 * A bare filename is resolved against this directory's "Functions";
+	 * callers outside the cache (e.g. the json session handler) pass a
+	 * full path to their own library file instead
+	 */
+	protected function buildSource(
+		string $libraryFile,
+	): string
+	{
+		if(is_file($libraryFile) === false)
+		{
+			$libraryFile = __DIR__
+				. DIRECTORY_SEPARATOR . 'Functions'
+				. DIRECTORY_SEPARATOR . $libraryFile;
+		}
+		
+		$functions = file_get_contents($libraryFile);
+		
+		return str_replace('[prefix]',
+			$this->functionsPrefix
+				? $this->functionsPrefix . static::SEPARATOR_FUNCTION
+				: '',
+			$functions,
+		);
+	}
+	
+	/**
+	 * Builds a library of scripts from a file, appending a source-hash
+	 * marker function: its presence in FUNCTION LIST reveals whether the
+	 * loaded library was built from this very source, so an edited file
+	 * self-heals through FUNCTION LOAD REPLACE instead of silently
+	 * leaving stale functions behind
 	 */
 	protected function buildLibrary(
 		string $libraryName, // already prefixed
 		string $libraryFile,
 	): string
 	{
-		$functions = file_get_contents(__DIR__
-			. DIRECTORY_SEPARATOR . 'Functions'
-			. DIRECTORY_SEPARATOR . $libraryFile,
-		);
-		
-		$functions = str_replace('[prefix]',
-			$this->functionsPrefix
-				? $this->functionsPrefix . static::SEPARATOR_FUNCTION
-				: '',
-			$functions,
-		);
+		$functions = $this->buildSource($libraryFile);
 		
 		return "#!lua name=" . $libraryName . PHP_EOL . PHP_EOL
-			. $functions;
+			. $functions . PHP_EOL
+			. "redis.register_function('"
+			. $this->sourceMarker($libraryName, $functions)
+			. "', function() return 1 end)" . PHP_EOL;
+	}
+	
+	/**
+	 * The name of a library's source-hash marker function
+	 */
+	public function sourceMarker(
+		string $libraryName, // already prefixed
+		string $source,
+	): string
+	{
+		return $libraryName . '_src_' . hash('crc32b', $source);
+	}
+	
+	/**
+	 * Detects if a listed library entry contains a function by name,
+	 * accepting both the associative and the flat RESP2 reply shapes
+	 * (see isLibraryOnNode for why both exist)
+	 */
+	protected function libraryHasFunction(
+		array $library,
+		string $functionName,
+	): bool
+	{
+		$functions = $library['functions'] ?? null;
+		if($functions === null)
+		{
+			foreach($library as $index => $field)
+			{
+				if(is_int($index) === true
+					&& $field === 'functions')
+				{
+					$functions = $library[$index + 1] ?? null;
+					
+					break;
+				}
+			}
+		}
+		
+		if(is_array($functions) === false)
+		{
+			return false;
+		}
+		
+		foreach($functions as $function)
+		{
+			if(is_array($function) === false)
+			{
+				continue;
+			}
+			
+			if(($function['name'] ?? null) === $functionName)
+			{
+				return true;
+			}
+			
+			foreach($function as $index => $field)
+			{
+				if(is_int($index) === true
+					&& $field === 'name'
+					&& ($function[$index + 1] ?? null) === $functionName)
+				{
+					return true;
+				}
+			}
+		}
+		
+		return false;
 	}
 	
 	public function call(

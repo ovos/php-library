@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="540" viewBox="0 0 940 540" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="aY" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+			<path d="M0,0 L10,5 L0,10 Z" fill="#fcee0a"/>
+		</marker>
+		<marker id="aC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+			<path d="M0,0 L10,5 L0,10 Z" fill="#00f0ff"/>
+		</marker>
+		<marker id="aR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+			<path d="M0,0 L10,5 L0,10 Z" fill="#ff003c"/>
+		</marker>
+		<marker id="aG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+			<path d="M0,0 L10,5 L0,10 Z" fill="#8b8ba7"/>
+		</marker>
+	</defs>
+
+	<!-- canvas -->
+	<path d="M14,0 H926 L940,14 V526 L926,540 H14 L0,526 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V526 L926,540 H14 L0,526 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V526 L926,539.5 H14 L0.5,526 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.5"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,500 V526 L926,539.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+
+	<!-- title -->
+	<text x="34" y="34" font-size="20" font-weight="700" letter-spacing="4" fill="#fcee0a" filter="url(#glow)">PER-VALUE LOCKS</text>
+	<rect x="34" y="41" width="150" height="2" fill="#ff003c"/>
+	<text x="34" y="57" font-size="11" letter-spacing="1.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">update() and the write guard // &lt;prefix&gt;:&lt;sid&gt;:&lt;path&gt;:lock</text>
+
+	<!-- lifeline heads -->
+	<g font-size="12" font-weight="700" letter-spacing="3">
+		<path d="M91,66 H209 L215,72 V84 L209,90 H91 L85,84 V72 Z" fill="#11111c" stroke="#00f0ff" stroke-width="1"/>
+		<text x="150" y="82" text-anchor="middle" fill="#00f0ff">REQUEST A</text>
+		<path d="M416,66 H524 L530,72 V84 L524,90 H416 L410,84 V72 Z" fill="#11111c" stroke="#8b8ba7" stroke-width="1"/>
+		<text x="470" y="82" text-anchor="middle" fill="#e8e8f0">REDIS</text>
+		<path d="M731,66 H849 L855,72 V84 L849,90 H731 L725,84 V72 Z" fill="#11111c" stroke="#00f0ff" stroke-width="1"/>
+		<text x="790" y="82" text-anchor="middle" fill="#00f0ff">REQUEST B</text>
+	</g>
+
+	<!-- scenario panels (behind the lifelines) -->
+	<path d="M36,104 H904 L914,114 V290 L904,300 H36 L26,290 V114 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+	<path d="M36,310 H904 L914,320 V508 L904,518 H36 L26,508 V320 Z" fill="#0d0d17" stroke="#ff003c" stroke-width="1" opacity="0.9"/>
+
+	<!-- lifelines -->
+	<g stroke="#8b8ba7" stroke-width="1" stroke-dasharray="3,4" opacity="0.55">
+		<line x1="150" y1="94" x2="150" y2="514"/>
+		<line x1="470" y1="94" x2="470" y2="514"/>
+		<line x1="790" y1="94" x2="790" y2="514"/>
+	</g>
+
+	<!-- ===== scenario 1: reader waits ===== -->
+	<text x="44" y="126" font-size="12" font-weight="700" letter-spacing="2" fill="#fcee0a">01 // READER WAITS — get() BEHIND A FOREIGN LOCK</text>
+
+	<g font-family="Consolas, 'Courier New', monospace">
+		<!-- A takes the lock -->
+		<line x1="156" y1="158" x2="462" y2="158" stroke="#fcee0a" stroke-width="1.5" marker-end="url(#aY)"/>
+		<text x="310" y="150" text-anchor="middle" font-size="11" fill="#fcee0a">update('basket') → getLocked()</text>
+		<text x="310" y="171" text-anchor="middle" font-size="10" fill="#fcee0a" opacity="0.8">SET &lt;sid&gt;:basket:lock PX lock_ttl_ms</text>
+		<text x="310" y="183" text-anchor="middle" font-size="10" font-style="italic" fill="#8b8ba7" font-family="Segoe UI, Helvetica, Arial, sans-serif">lock TTL bounds any crash</text>
+
+		<!-- B reads, sees the lock -->
+		<line x1="784" y1="196" x2="476" y2="196" stroke="#8b8ba7" stroke-width="1.5" marker-end="url(#aG)"/>
+		<text x="630" y="188" text-anchor="middle" font-size="11" fill="#e8e8f0">get('basket')</text>
+		<text x="630" y="209" text-anchor="middle" font-size="10" font-style="italic" fill="#8b8ba7" font-family="Segoe UI, Helvetica, Arial, sans-serif">sees the foreign lock on the path</text>
+
+		<!-- B subscribes -->
+		<line x1="784" y1="228" x2="476" y2="228" stroke="#fcee0a" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#aY)"/>
+		<text x="630" y="220" text-anchor="middle" font-size="11" fill="#fcee0a">SUBSCRIBE &lt;sid&gt;:basket:channel</text>
+		<text x="630" y="241" text-anchor="middle" font-size="10" font-style="italic" fill="#8b8ba7" font-family="Segoe UI, Helvetica, Arial, sans-serif">waiting — no polling, Pub/Sub wake</text>
+
+		<!-- A writes + releases -->
+		<line x1="156" y1="258" x2="462" y2="258" stroke="#00f0ff" stroke-width="1.5" marker-end="url(#aC)"/>
+		<text x="310" y="250" text-anchor="middle" font-size="11" fill="#00f0ff">closure applies → set('basket', v)</text>
+		<text x="310" y="271" text-anchor="middle" font-size="10" fill="#00f0ff" opacity="0.75">write + DEL lock + PUBLISH — one Lua step</text>
+
+		<!-- B wakes -->
+		<line x1="476" y1="288" x2="784" y2="288" stroke="#00f0ff" stroke-width="1.5" marker-end="url(#aC)"/>
+		<text x="630" y="280" text-anchor="middle" font-size="11" fill="#00f0ff">wake → re-read the fresh value</text>
+	</g>
+
+	<!-- A holds the lock (bar) -->
+	<rect x="146" y="158" width="8" height="100" fill="#fcee0a" opacity="0.9"/>
+	<text transform="rotate(-90 133 208)" x="133" y="208" text-anchor="middle" font-size="9" letter-spacing="1.5" fill="#fcee0a" opacity="0.75">LOCK HELD</text>
+
+	<!-- ===== scenario 2: blind writes cannot bypass ===== -->
+	<text x="44" y="332" font-size="12" font-weight="700" letter-spacing="2" fill="#fcee0a">02 // BLIND WRITES CANNOT BYPASS — THE ATOMIC WRITE GUARD</text>
+
+	<g font-family="Consolas, 'Courier New', monospace">
+		<!-- A takes the lock -->
+		<line x1="156" y1="362" x2="462" y2="362" stroke="#fcee0a" stroke-width="1.5" marker-end="url(#aY)"/>
+		<text x="310" y="354" text-anchor="middle" font-size="11" fill="#fcee0a">getLocked('basket') — lock taken</text>
+
+		<!-- B blind write -->
+		<line x1="784" y1="392" x2="476" y2="392" stroke="#8b8ba7" stroke-width="1.5" marker-end="url(#aG)"/>
+		<text x="630" y="384" text-anchor="middle" font-size="11" fill="#e8e8f0">set('basket', x) — blind write</text>
+
+		<!-- refused -->
+		<line x1="476" y1="416" x2="784" y2="416" stroke="#ff003c" stroke-width="1.5" marker-end="url(#aR)"/>
+		<text x="630" y="408" text-anchor="middle" font-size="11" fill="#ff003c">reply: __locked__ — REFUSED</text>
+		<text x="630" y="429" text-anchor="middle" font-size="10" font-style="italic" fill="#8b8ba7" font-family="Segoe UI, Helvetica, Arial, sans-serif">the Lua function checks the lock keys and writes in ONE atomic step</text>
+
+		<!-- B waits -->
+		<line x1="784" y1="452" x2="476" y2="452" stroke="#fcee0a" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#aY)"/>
+		<text x="630" y="444" text-anchor="middle" font-size="11" fill="#fcee0a">SUBSCRIBE — waits for ONE release</text>
+
+		<!-- A releases -->
+		<line x1="156" y1="474" x2="462" y2="474" stroke="#00f0ff" stroke-width="1.5" marker-end="url(#aC)"/>
+		<text x="310" y="466" text-anchor="middle" font-size="11" fill="#00f0ff">set('basket', v) → write + DEL lock + PUBLISH</text>
+
+		<!-- B retries -->
+		<line x1="784" y1="500" x2="476" y2="500" stroke="#00f0ff" stroke-width="1.5" marker-end="url(#aC)"/>
+		<text x="630" y="492" text-anchor="middle" font-size="11" fill="#00f0ff">retry set('basket', x) — lands LAST</text>
+		<text x="630" y="513" text-anchor="middle" font-size="10" font-style="italic" fill="#8b8ba7" font-family="Segoe UI, Helvetica, Arial, sans-serif">unconditional retry — the lock TTL bounds the wait</text>
+	</g>
+
+	<!-- A holds the lock (bar) -->
+	<rect x="146" y="362" width="8" height="112" fill="#fcee0a" opacity="0.9"/>
+	<text transform="rotate(-90 133 416)" x="133" y="416" text-anchor="middle" font-size="9" letter-spacing="1.5" fill="#fcee0a" opacity="0.75">LOCK HELD</text>
+</svg>
