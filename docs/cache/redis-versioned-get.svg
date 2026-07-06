@@ -1,138 +1,159 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="884" viewBox="0 0 960 884" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <defs>
-    <marker id="aGet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker>
-    <marker id="aOk" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16a34a"/></marker>
-    <marker id="aBad" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#dc2626"/></marker>
-    <style>
-      .title{font-size:18px;font-weight:700;fill:#fff}
-      .badge{font-size:12px;fill:#cbd5e1}
-      .panelLabel{font-size:11px;font-weight:700;fill:#64748b;letter-spacing:1px}
-      .keyName{font-family:Consolas,monospace;font-size:12px;font-weight:700}
-      .keyField{font-family:Consolas,monospace;font-size:11px;fill:#334155}
-      .zoneLabel{font-size:11.5px;font-weight:700;fill:#475569;text-anchor:middle}
-      .ruleId{font-family:Consolas,monospace;font-size:12px;font-weight:700;text-anchor:middle}
-      .ruleBody{font-family:Consolas,monospace;font-size:10.5px;text-anchor:middle}
-      .wm{font-size:11px;font-weight:700;fill:#4f46e5;text-anchor:middle}
-      .note{font-size:10.5px;text-anchor:middle}
-      .boxTitle{font-size:12.5px;font-weight:700}
-      .step{font-family:Consolas,monospace;font-size:11.5px;fill:#0f172a}
-      .stepDim{font-family:Consolas,monospace;font-size:11px;fill:#64748b}
-      .flow{font-family:Consolas,monospace;font-size:11px;fill:#1e40af}
-      .foot{font-size:11px;fill:#475569}
-      .outTitle{font-size:12px;font-weight:700}
-      .outBody{font-size:11px;fill:#334155}
-    </style>
-  </defs>
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="aGet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#fcee0a"/></marker>
+		<marker id="aOk" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#00f0ff"/></marker>
+		<marker id="aBad" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ff003c"/></marker>
+		<style>
+			.title{font-size:13px;font-weight:700;fill:#fcee0a;letter-spacing:1px}
+			.badge{font-family:Consolas,'Courier New',monospace;font-size:11px;fill:#8b8ba7;letter-spacing:1px}
+			.panelLabel{font-size:11px;font-weight:700;fill:#8b8ba7;letter-spacing:2px}
+			.keyName{font-family:Consolas,'Courier New',monospace;font-size:12px;font-weight:700}
+			.keyField{font-family:Consolas,'Courier New',monospace;font-size:11px;fill:#8b8ba7}
+			.zoneLabel{font-size:11.5px;font-weight:700;letter-spacing:1px;text-anchor:middle}
+			.ruleId{font-family:Consolas,'Courier New',monospace;font-size:12px;font-weight:700;text-anchor:middle}
+			.ruleBody{font-family:Consolas,'Courier New',monospace;font-size:10.5px;text-anchor:middle}
+			.wm{font-size:11px;font-weight:700;fill:#00f0ff;text-anchor:middle}
+			.note{font-size:10.5px;text-anchor:middle}
+			.boxTitle{font-size:12.5px;font-weight:700}
+			.step{font-family:Consolas,'Courier New',monospace;font-size:11.5px;fill:#e8e8f0}
+			.stepDim{font-family:Consolas,'Courier New',monospace;font-size:11px;fill:#8b8ba7}
+			.flow{font-family:Consolas,'Courier New',monospace;font-size:11px;fill:#fcee0a}
+			.foot{font-size:11px;fill:#8b8ba7}
+			.outTitle{font-size:12px;font-weight:700;letter-spacing:2px}
+			.outBody{font-size:11px;fill:#e8e8f0}
+		</style>
+	</defs>
 
-  <rect width="960" height="884" fill="#ffffff"/>
-  <rect width="960" height="46" fill="#1e293b"/>
-  <text x="24" y="29" class="title">RedisVersioned &#8212; cache GET (read): tags, versions and the cached rule set</text>
-  <text x="936" y="29" text-anchor="end" class="badge">&#9679; lazy, version-based invalidation</text>
+	<!-- canvas: chamfered plate -->
+	<path d="M14,0 H946 L960,14 V870 L946,884 H14 L0,870 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H946 L960,14 V870 L946,884 H14 L0,870 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H946 L959.5,14 V870 L946,883.5 H14 L0.5,870 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.8"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M960,844 V870 L946,883.5 H920" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
 
-  <!-- ============ THE TWO KEYS ============ -->
-  <rect x="16" y="60" width="928" height="132" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="32" y="82" class="panelLabel">THE TWO KEYS A READ TOUCHES</text>
+	<!-- header strip -->
+	<path d="M14,0 H946 L960,14 V46 H0 V14 Z" fill="#0d0d17"/>
+	<line x1="0" y1="46.5" x2="960" y2="46.5" stroke="#fcee0a" stroke-width="1" opacity="0.5"/>
+	<text x="24" y="30" class="title" filter="url(#glow)">REDISVERSIONED &#8212; CACHE GET (READ): TAGS, VERSIONS AND THE CACHED RULE SET</text>
+	<text x="936" y="30" text-anchor="end" class="badge"><tspan fill="#00f0ff">&#9679;</tspan> lazy, version-based invalidation</text>
 
-  <rect x="32" y="94" width="438" height="86" rx="8" fill="#fff" stroke="#e2e8f0"/>
-  <rect x="33" y="95" width="5" height="84" fill="#0f766e"/>
-  <text x="50" y="116" class="keyName" fill="#0f766e">items:user:42:profile  (hash)</text>
-  <text x="50" y="138" class="keyField">data &#8594; serialized + compressed value</text>
-  <text x="50" y="156" class="keyField">tags &#8594; "user:42,products,cart"</text>
-  <text x="50" y="174" class="keyField">mark &#8594; "5-0"   &#8592; version seen at write</text>
+	<!-- ============ THE TWO KEYS ============ -->
+	<path d="M16,60 H934 L944,70 V182 L934,192 H26 L16,182 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-opacity="0.4"/>
+	<text x="32" y="82" class="panelLabel">THE TWO KEYS A READ TOUCHES</text>
 
-  <rect x="486" y="94" width="458" height="86" rx="8" fill="#fff" stroke="#e2e8f0"/>
-  <rect x="487" y="95" width="5" height="84" fill="#be185d"/>
-  <text x="504" y="116" class="keyName" fill="#be185d">rules  (stream)</text>
-  <text x="504" y="138" class="keyField">each entry = one invalidation rule { mode, tags }</text>
-  <text x="504" y="156" class="keyField">id = "&lt;ms&gt;-&lt;seq&gt;", monotonic &#8594; it acts as a version</text>
-  <text x="504" y="174" class="keyField">a read never deletes here; set() appends, reads only scan</text>
+	<path d="M32,94 H460 L470,104 V170 L460,180 H32 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
+	<rect x="33" y="95" width="4" height="84" fill="#00f0ff"/>
+	<text x="50" y="116" class="keyName" fill="#00f0ff">items:user:42:profile  (hash)</text>
+	<text x="50" y="138" class="keyField">data &#8594; serialized + compressed value</text>
+	<text x="50" y="156" class="keyField">tags &#8594; "user:42,products,cart"</text>
+	<text x="50" y="174" class="keyField">mark &#8594; "5-0"   &#8592; version seen at write</text>
 
-  <!-- ============ VERSION TIMELINE ============ -->
-  <rect x="16" y="206" width="928" height="222" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="32" y="228" class="panelLabel">VERSIONS &#8212; A READ EVALUATES ONLY THE RULES NEWER THAN THE ITEM'S MARK</text>
+	<path d="M486,94 H934 L944,104 V170 L934,180 H486 Z" fill="#11111c" stroke="#ff003c" stroke-opacity="0.75"/>
+	<rect x="487" y="95" width="4" height="84" fill="#ff003c"/>
+	<text x="504" y="116" class="keyName" fill="#ff003c">rules  (stream)</text>
+	<text x="504" y="138" class="keyField">each entry = one invalidation rule { mode, tags }</text>
+	<text x="504" y="156" class="keyField">id = "&lt;ms&gt;-&lt;seq&gt;", monotonic &#8594; it acts as a version</text>
+	<text x="504" y="174" class="keyField">a read never deletes here; set() appends, reads only scan</text>
 
-  <!-- zones -->
-  <rect x="32" y="246" width="446" height="120" rx="6" fill="#eef2f7"/>
-  <rect x="482" y="246" width="446" height="120" rx="6" fill="#fdf2f8"/>
-  <text x="255" y="266" class="zoneLabel">id &#8804; mark &#183; already seen at write &#183; SKIPPED</text>
-  <text x="705" y="266" class="zoneLabel">id &gt; mark &#183; EVALUATED IN PHP</text>
+	<!-- ============ VERSION TIMELINE ============ -->
+	<path d="M16,206 H934 L944,216 V418 L934,428 H26 L16,418 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-opacity="0.4"/>
+	<text x="32" y="228" class="panelLabel">VERSIONS &#8212; A READ EVALUATES ONLY THE RULES NEWER THAN THE ITEM'S MARK</text>
 
-  <!-- axis -->
-  <line x1="48" y1="320" x2="912" y2="320" stroke="#cbd5e1" stroke-width="2"/>
+	<!-- zones -->
+	<path d="M32,246 H468 L478,256 V356 L468,366 H32 Z" fill="#11111c" stroke="#8b8ba7" stroke-opacity="0.35"/>
+	<path d="M482,246 H918 L928,256 V356 L918,366 H482 Z" fill="#170a10" stroke="#ff003c" stroke-opacity="0.45"/>
+	<text x="255" y="266" class="zoneLabel" fill="#8b8ba7">id &#8804; mark &#183; already seen at write &#183; SKIPPED</text>
+	<text x="705" y="266" class="zoneLabel" fill="#ff003c">id &gt; mark &#183; EVALUATED IN PHP</text>
 
-  <!-- rule cards on the timeline -->
-  <!-- skipped -->
-  <g>
-    <rect x="70" y="296" width="170" height="48" rx="6" fill="#fff" stroke="#cbd5e1"/>
-    <circle cx="70" cy="320" r="5" fill="#94a3b8"/>
-    <text x="155" y="315" class="ruleId" fill="#64748b">3-0</text>
-    <text x="155" y="333" class="ruleBody" fill="#64748b">{ any: news }</text>
+	<!-- axis -->
+	<line x1="48" y1="320" x2="912" y2="320" stroke="#8b8ba7" stroke-opacity="0.5" stroke-width="2"/>
 
-    <rect x="262" y="296" width="170" height="48" rx="6" fill="#fff" stroke="#cbd5e1"/>
-    <circle cx="262" cy="320" r="5" fill="#94a3b8"/>
-    <text x="347" y="315" class="ruleId" fill="#64748b">5-0</text>
-    <text x="347" y="333" class="ruleBody" fill="#64748b">{ all: user:42,products }</text>
-  </g>
+	<!-- rule cards on the timeline -->
+	<!-- skipped -->
+	<g>
+		<path d="M70,296 H232 L240,304 V344 H70 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-opacity="0.5"/>
+		<circle cx="70" cy="320" r="5" fill="#8b8ba7"/>
+		<text x="155" y="315" class="ruleId" fill="#8b8ba7">3-0</text>
+		<text x="155" y="333" class="ruleBody" fill="#8b8ba7">{ any: news }</text>
 
-  <!-- watermark -->
-  <line x1="480" y1="250" x2="480" y2="392" stroke="#4f46e5" stroke-width="2" stroke-dasharray="5 4"/>
-  <text x="480" y="406" class="wm">&#8593; item.mark = "5-0" (version)</text>
+		<path d="M262,296 H424 L432,304 V344 H262 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-opacity="0.5"/>
+		<circle cx="262" cy="320" r="5" fill="#8b8ba7"/>
+		<text x="347" y="315" class="ruleId" fill="#8b8ba7">5-0</text>
+		<text x="347" y="333" class="ruleBody" fill="#8b8ba7">{ all: user:42,products }</text>
+	</g>
 
-  <!-- evaluated -->
-  <g>
-    <rect x="528" y="296" width="170" height="48" rx="6" fill="#fff" stroke="#dc2626" stroke-width="1.6"/>
-    <circle cx="528" cy="320" r="5" fill="#dc2626"/>
-    <text x="613" y="315" class="ruleId" fill="#b91c1c">8-0</text>
-    <text x="613" y="333" class="ruleBody" fill="#b91c1c">{ any: products }</text>
-    <text x="613" y="384" class="note" fill="#b91c1c">&#10003; "products" overlaps (any) &#8594; STALE</text>
+	<!-- watermark -->
+	<line x1="480" y1="250" x2="480" y2="392" stroke="#00f0ff" stroke-width="2" stroke-dasharray="5 4"/>
+	<text x="480" y="406" class="wm">&#8593; item.mark = "5-0" (version)</text>
 
-    <rect x="730" y="296" width="170" height="48" rx="6" fill="#fff" stroke="#dc2626" stroke-width="1.6"/>
-    <circle cx="730" cy="320" r="5" fill="#dc2626"/>
-    <text x="815" y="315" class="ruleId" fill="#b91c1c">11-0</text>
-    <text x="815" y="333" class="ruleBody" fill="#b91c1c">{ all: products,cart }</text>
-    <text x="815" y="384" class="note" fill="#b91c1c">&#10003; all tags present (all)</text>
-  </g>
+	<!-- evaluated -->
+	<g>
+		<path d="M528,296 H690 L698,304 V344 H528 Z" fill="#0d0d17" stroke="#ff003c" stroke-opacity="0.85" stroke-width="1.4"/>
+		<circle cx="528" cy="320" r="5" fill="#ff003c"/>
+		<text x="613" y="315" class="ruleId" fill="#ff003c">8-0</text>
+		<text x="613" y="333" class="ruleBody" fill="#ff003c">{ any: products }</text>
+		<text x="613" y="384" class="note" fill="#ff003c">&#10003; "products" overlaps (any) &#8594; STALE</text>
 
-  <!-- ============ READ FLOW ============ -->
-  <!-- step 1: PHP call -->
-  <rect x="288" y="442" width="384" height="40" rx="8" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
-  <text x="480" y="467" text-anchor="middle" class="step">PHP: $store-&gt;get('user:42:profile')</text>
+		<path d="M730,296 H892 L900,304 V344 H730 Z" fill="#0d0d17" stroke="#ff003c" stroke-opacity="0.85" stroke-width="1.4"/>
+		<circle cx="730" cy="320" r="5" fill="#ff003c"/>
+		<text x="815" y="315" class="ruleId" fill="#ff003c">11-0</text>
+		<text x="815" y="333" class="ruleBody" fill="#ff003c">{ all: products,cart }</text>
+		<text x="815" y="384" class="note" fill="#ff003c">&#10003; all tags present (all)</text>
+	</g>
 
-  <line x1="480" y1="482" x2="480" y2="502" stroke="#2563eb" stroke-width="2" marker-end="url(#aGet)"/>
-  <text x="496" y="496" class="flow">HMGET item &#8594; data, tags, mark &#183; the only round-trip on a hit</text>
+	<!-- ============ READ FLOW ============ -->
+	<!-- step 1: PHP call -->
+	<path d="M288,442 H662 L672,452 V482 H288 Z" fill="#11111c" stroke="#fcee0a" stroke-opacity="0.8" stroke-width="1.2"/>
+	<text x="480" y="467" text-anchor="middle" class="step">PHP: $store-&gt;get('user:42:profile')</text>
 
-  <!-- step 2: client-side evaluation -->
-  <rect x="150" y="504" width="660" height="158" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
-  <text x="170" y="526" class="boxTitle" fill="#1e40af">Inside the read &#8212; evaluated client-side over the cached rule set</text>
-  <text x="170" y="552" class="step"><tspan fill="#2563eb" font-weight="700">1.</tspan> HMGET item &#8594; data, tags = "user:42,products,cart", mark = "5-0"   <tspan class="stepDim">(data comes too)</tspan></text>
-  <text x="170" y="576" class="step"><tspan fill="#2563eb" font-weight="700">2.</tspan> getRules(): live rules fetched once per rules_cache_ms (one XRANGE) and cached in PHP</text>
-  <text x="170" y="600" class="step"><tspan fill="#2563eb" font-weight="700">3.</tspan> isStale(): in PHP, evaluate only rules with id &gt; mark &#8594; 8-0, 11-0   <tspan class="stepDim">(skips 3-0, 5-0)</tspan></text>
-  <text x="170" y="624" class="step"><tspan fill="#2563eb" font-weight="700">4.</tspan> match each:  any &#8594; tags overlap   &#183;   all &#8594; rule.tags &#8838; item.tags   &#8594; 8-0 { any: products } &#8594; STALE</text>
-  <text x="170" y="650" class="stepDim">on a hit the data is already in hand (the HMGET above) &#8594; no second round trip</text>
+	<line x1="480" y1="482" x2="480" y2="502" stroke="#fcee0a" stroke-width="2" marker-end="url(#aGet)"/>
+	<text x="496" y="496" class="flow">HMGET item &#8594; data, tags, mark &#183; the only round-trip on a hit</text>
 
-  <line x1="480" y1="662" x2="480" y2="682" stroke="#2563eb" stroke-width="2" marker-end="url(#aGet)"/>
+	<!-- step 2: client-side evaluation -->
+	<path d="M150,504 H798 L810,516 V650 L798,662 H150 Z" fill="#11111c" stroke="#fcee0a" stroke-opacity="0.8" stroke-width="1.2"/>
+	<text x="170" y="526" class="boxTitle" fill="#fcee0a">Inside the read &#8212; evaluated client-side over the cached rule set</text>
+	<text x="170" y="552" class="step"><tspan fill="#fcee0a" font-weight="700">1.</tspan> HMGET item &#8594; data, tags = "user:42,products,cart", mark = "5-0"   <tspan class="stepDim">(data comes too)</tspan></text>
+	<text x="170" y="576" class="step"><tspan fill="#fcee0a" font-weight="700">2.</tspan> getRules(): live rules fetched once per rules_cache_ms (one XRANGE) and cached in PHP</text>
+	<text x="170" y="600" class="step"><tspan fill="#fcee0a" font-weight="700">3.</tspan> isStale(): in PHP, evaluate only rules with id &gt; mark &#8594; 8-0, 11-0   <tspan class="stepDim">(skips 3-0, 5-0)</tspan></text>
+	<text x="170" y="624" class="step"><tspan fill="#fcee0a" font-weight="700">4.</tspan> match each:  any &#8594; tags overlap   &#183;   all &#8594; rule.tags &#8838; item.tags   &#8594; 8-0 { any: products } &#8594; STALE</text>
+	<text x="170" y="650" class="stepDim">on a hit the data is already in hand (the HMGET above) &#8594; no second round trip</text>
 
-  <!-- verdict -->
-  <rect x="376" y="684" width="208" height="38" rx="19" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/>
-  <text x="480" y="708" text-anchor="middle" class="step" fill="#92400e">verdict (in PHP): fresh / stale</text>
+	<line x1="480" y1="662" x2="480" y2="682" stroke="#fcee0a" stroke-width="2" marker-end="url(#aGet)"/>
 
-  <!-- branches -->
-  <path d="M440 722 L210 744" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#aOk)"/>
-  <path d="M520 722 L744 744" fill="none" stroke="#dc2626" stroke-width="2" marker-end="url(#aBad)"/>
-  <text x="300" y="722" class="outTitle" fill="#15803d" text-anchor="middle">fresh</text>
-  <text x="660" y="722" class="outTitle" fill="#b91c1c" text-anchor="middle">stale</text>
+	<!-- verdict -->
+	<path d="M376,684 H574 L584,694 V712 L574,722 H386 L376,712 Z" fill="#0d0d17" stroke="#fcee0a" stroke-opacity="0.9" stroke-width="1.2"/>
+	<text x="480" y="708" text-anchor="middle" class="step" fill="#fcee0a">verdict (in PHP): fresh / stale</text>
 
-  <rect x="40" y="746" width="420" height="74" rx="8" fill="#f0fdf4" stroke="#86efac"/>
-  <text x="56" y="768" class="outTitle" fill="#15803d">FRESH HIT</text>
-  <text x="56" y="788" class="outBody">the data field was already fetched by the HMGET above</text>
-  <text x="56" y="806" class="outBody">&#8594; decompress + unserialize &#8594; return the value</text>
+	<!-- branches -->
+	<path d="M440 722 L210 744" fill="none" stroke="#00f0ff" stroke-width="2" marker-end="url(#aOk)"/>
+	<path d="M520 722 L744 744" fill="none" stroke="#ff003c" stroke-width="2" marker-end="url(#aBad)"/>
+	<text x="300" y="722" class="outTitle" fill="#00f0ff" text-anchor="middle">fresh</text>
+	<text x="660" y="722" class="outTitle" fill="#ff003c" text-anchor="middle">stale</text>
 
-  <rect x="500" y="746" width="420" height="74" rx="8" fill="#fef2f2" stroke="#fca5a5"/>
-  <text x="516" y="768" class="outTitle" fill="#b91c1c">STALE &#8594; MISS</text>
-  <text x="516" y="788" class="outBody">UNLINK the item (lazy delete); MemoLock + resolver</text>
-  <text x="516" y="806" class="outBody">rebuild it &#8211; set() stamps a fresh mark (the latest rule id)</text>
+	<path d="M40,746 H450 L460,756 V810 L450,820 H40 Z" fill="#0d0d17" stroke="#00f0ff" stroke-opacity="0.75"/>
+	<text x="56" y="768" class="outTitle" fill="#00f0ff">FRESH HIT</text>
+	<text x="56" y="788" class="outBody">the data field was already fetched by the HMGET above</text>
+	<text x="56" y="806" class="outBody">&#8594; decompress + unserialize &#8594; return the value</text>
 
-  <line x1="16" y1="836" x2="944" y2="836" stroke="#e2e8f0"/>
-  <text x="16" y="855" class="foot">One round-trip on a hit: the HMGET returns the data, and the rule set is cached for rules_cache_ms (not re-read on every get).</text>
-  <text x="16" y="872" class="foot">A read may therefore act on rules up to rules_cache_ms old &#8212; bounded, self-healing staleness (eventual consistency).</text>
+	<path d="M500,746 H910 L920,756 V810 L910,820 H500 Z" fill="#0d0d17" stroke="#ff003c" stroke-opacity="0.75"/>
+	<text x="516" y="768" class="outTitle" fill="#ff003c">STALE &#8594; MISS</text>
+	<text x="516" y="788" class="outBody">UNLINK the item (lazy delete); MemoLock + resolver</text>
+	<text x="516" y="806" class="outBody">rebuild it &#8211; set() stamps a fresh mark (the latest rule id)</text>
+
+	<line x1="16" y1="836" x2="944" y2="836" stroke="#8b8ba7" stroke-opacity="0.3"/>
+	<text x="16" y="855" class="foot">One round-trip on a hit: the HMGET returns the data, and the rule set is cached for rules_cache_ms (not re-read on every get).</text>
+	<text x="16" y="872" class="foot">A read may therefore act on rules up to rules_cache_ms old &#8212; bounded, self-healing staleness (eventual consistency).</text>
 </svg>

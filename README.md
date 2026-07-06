@@ -1,3 +1,7 @@
+<p align="center">
+	<img src="docs/logo.svg" alt="ovos php-library" width="940">
+</p>
+
 # ovos php library
 
 ### GitHub

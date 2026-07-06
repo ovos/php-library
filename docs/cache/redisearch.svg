@@ -1,130 +1,154 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="940" height="560" viewBox="0 0 940 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <defs>
-    <marker id="aSet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16a34a"/></marker>
-    <marker id="aGet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker>
-    <marker id="aInv" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ea580c"/></marker>
-    <marker id="aIdx" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#7c3aed"/></marker>
-    <style>
-      .title{font-size:18px;font-weight:700;fill:#fff}
-      .badge{font-size:12px;fill:#cbd5e1}
-      .panelLabel{font-size:11px;font-weight:700;fill:#64748b;letter-spacing:1.5px}
-      .keyName{font-family:Consolas,monospace;font-size:12px;font-weight:700}
-      .keyField{font-family:Consolas,monospace;font-size:10px;fill:#475569}
-      .laneTab{font-size:12px;font-weight:700;fill:#fff}
-      .stepMain{font-size:11.5px;fill:#0f172a}
-      .stepSub{font-family:Consolas,monospace;font-size:9.5px;fill:#64748b}
-      .stepNum{font-size:12px;font-weight:700;fill:#fff}
-      .note{font-size:11px;fill:#6d28d9}
-      .foot{font-size:11px;fill:#475569}
-    </style>
-  </defs>
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="aSet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#00f0ff"/></marker>
+		<marker id="aGet" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#fcee0a"/></marker>
+		<marker id="aInv" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ff003c"/></marker>
+		<marker id="aIdx" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#b967ff"/></marker>
+		<style>
+			.title{font-size:15px;font-weight:700;letter-spacing:2px;fill:#fcee0a}
+			.badge{font-family:Consolas,monospace;font-size:11px;letter-spacing:1px;fill:#00f0ff}
+			.panelLabel{font-size:11px;font-weight:700;fill:#00f0ff;letter-spacing:2px;opacity:0.9}
+			.keyName{font-family:Consolas,monospace;font-size:12px;font-weight:700}
+			.keyField{font-family:Consolas,monospace;font-size:10px;fill:#8b8ba7}
+			.laneTab{font-size:12px;font-weight:700;letter-spacing:2px}
+			.stepMain{font-size:11.5px;fill:#e8e8f0}
+			.stepSub{font-family:Consolas,monospace;font-size:9.5px;fill:#8b8ba7}
+			.stepNum{font-size:12px;font-weight:700;fill:#0a0a12}
+			.note{font-size:11px;font-weight:700;fill:#b967ff}
+			.foot{font-size:11px;fill:#8b8ba7}
+		</style>
+	</defs>
 
-  <rect width="940" height="560" fill="#ffffff"/>
-  <rect width="940" height="46" fill="#1e293b"/>
-  <text x="24" y="29" class="title">Redisearch &#8212; RediSearch TAG index</text>
-  <text x="916" y="29" text-anchor="end" class="badge">&#9679; needs RediSearch module (Redis 8)</text>
+	<!-- canvas: chamfered plate -->
+	<path d="M14,0 H926 L940,14 V546 L926,560 H14 L0,546 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V546 L926,560 H14 L0,546 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V546 L926,559.5 H14 L0.5,546 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.85"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,520 V546 L926,559.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
 
-  <!-- KEYS -->
-  <rect x="16" y="62" width="908" height="128" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="32" y="84" class="panelLabel">KEYS IN REDIS</text>
+	<!-- header -->
+	<path d="M14,0 H926 L940,14 V46 H0 V14 Z" fill="#11111c"/>
+	<line x1="0" y1="46" x2="940" y2="46" stroke="#fcee0a" stroke-width="1" opacity="0.35"/>
+	<text x="24" y="29" class="title" filter="url(#glow)">REDISEARCH &#8212; REDISEARCH TAG INDEX</text>
+	<rect x="24" y="35" width="150" height="2" fill="#ff003c"/>
+	<rect x="182" y="35" width="10" height="2" fill="#ff003c" opacity="0.55"/>
+	<rect x="200" y="35" width="4" height="2" fill="#ff003c" opacity="0.3"/>
+	<text x="916" y="29" text-anchor="end" class="badge">&#9679; NEEDS REDISEARCH MODULE (REDIS 8)</text>
 
-  <rect x="32" y="98" width="300" height="80" rx="8" fill="#fff" stroke="#e2e8f0"/>
-  <rect x="33" y="99" width="5" height="78" fill="#0f766e"/>
-  <text x="50" y="124" class="keyName" fill="#0f766e">items:&#123;key&#125;  (hash)</text>
-  <text x="50" y="146" class="keyField">data &#8594; serialized + compressed value</text>
-  <text x="50" y="164" class="keyField">tags &#8594; "a, b, c"  (csv)</text>
+	<!-- KEYS -->
+	<path d="M16,62 H912 L924,74 V190 H28 L16,178 Z" fill="#0d0d17" stroke="#8b8ba7" stroke-opacity="0.5"/>
+	<text x="32" y="84" class="panelLabel">KEYS IN REDIS</text>
 
-  <rect x="348" y="98" width="300" height="80" rx="8" fill="#fff" stroke="#e2e8f0"/>
-  <rect x="349" y="99" width="5" height="78" fill="#7c3aed"/>
-  <text x="366" y="124" class="keyName" fill="#7c3aed">FT index on "items"</text>
-  <text x="366" y="146" class="keyField">SCHEMA tags TAG</text>
-  <text x="366" y="164" class="keyField">auto-maintained by the module</text>
+	<path d="M32,98 H322 L332,108 V178 H32 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.45"/>
+	<rect x="33" y="99" width="4" height="78" fill="#00f0ff"/>
+	<text x="50" y="124" class="keyName" fill="#00f0ff">items:&#123;key&#125;  (hash)</text>
+	<text x="50" y="146" class="keyField">data &#8594; serialized + compressed value</text>
+	<text x="50" y="164" class="keyField">tags &#8594; "a, b, c"  (csv)</text>
 
-  <rect x="664" y="98" width="244" height="80" rx="8" fill="#fff" stroke="#e2e8f0"/>
-  <text x="680" y="124" class="keyName" fill="#334155">secondary index</text>
-  <text x="680" y="146" class="keyField">no tag bookkeeping in PHP</text>
-  <text x="680" y="164" class="keyField">tag &#8594; ids resolved by search</text>
+	<path d="M348,98 H638 L648,108 V178 H348 Z" fill="#11111c" stroke="#b967ff" stroke-opacity="0.45"/>
+	<rect x="349" y="99" width="4" height="78" fill="#b967ff"/>
+	<text x="366" y="124" class="keyName" fill="#b967ff">FT index on "items"</text>
+	<text x="366" y="146" class="keyField">SCHEMA tags TAG</text>
+	<text x="366" y="164" class="keyField">auto-maintained by the module</text>
 
-  <!-- SET lane -->
-  <rect x="16" y="206" width="84" height="84" rx="10" fill="#16a34a"/>
-  <text x="58" y="252" text-anchor="middle" class="laneTab">SET</text>
-  <g>
-    <rect x="116" y="206" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
-    <circle cx="277" cy="221" r="11" fill="#16a34a"/><text x="277" y="225" text-anchor="middle" class="stepNum">1</text>
-    <text x="130" y="246" class="stepMain">Serialize + compress</text>
-    <text x="130" y="264" class="stepSub">client side</text>
+	<path d="M664,98 H898 L908,108 V178 H664 Z" fill="#11111c" stroke="#8b8ba7" stroke-opacity="0.5"/>
+	<text x="680" y="124" class="keyName" fill="#e8e8f0">secondary index</text>
+	<text x="680" y="146" class="keyField">no tag bookkeeping in PHP</text>
+	<text x="680" y="164" class="keyField">tag &#8594; ids resolved by search</text>
 
-    <rect x="320" y="206" width="176" height="84" rx="10" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
-    <circle cx="481" cy="221" r="11" fill="#16a34a"/><text x="481" y="225" text-anchor="middle" class="stepNum">2</text>
-    <text x="334" y="246" class="stepMain">Write item hash</text>
-    <text x="334" y="264" class="stepSub">HSET data,tags &#183; EXPIRE</text>
+	<!-- SET lane -->
+	<path d="M16,206 H90 L100,216 V290 H26 L16,280 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" stroke-opacity="0.85"/>
+	<text x="58" y="252" text-anchor="middle" class="laneTab" fill="#00f0ff">SET</text>
+	<g>
+		<path d="M116,206 H282 L292,216 V290 H126 L116,280 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
+		<circle cx="277" cy="221" r="11" fill="#00f0ff"/><text x="277" y="225" text-anchor="middle" class="stepNum">1</text>
+		<text x="130" y="246" class="stepMain">Serialize + compress</text>
+		<text x="130" y="264" class="stepSub">client side</text>
 
-    <rect x="524" y="206" width="176" height="84" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4 3"/>
-    <circle cx="685" cy="221" r="11" fill="#7c3aed"/><text x="685" y="225" text-anchor="middle" class="stepNum">3</text>
-    <text x="538" y="246" class="stepMain">Index updates itself</text>
-    <text x="538" y="264" class="stepSub">module, no client work</text>
+		<path d="M320,206 H486 L496,216 V290 H330 L320,280 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
+		<circle cx="481" cy="221" r="11" fill="#00f0ff"/><text x="481" y="225" text-anchor="middle" class="stepNum">2</text>
+		<text x="334" y="246" class="stepMain">Write item hash</text>
+		<text x="334" y="264" class="stepSub">HSET data,tags &#183; EXPIRE</text>
 
-    <line x1="294" y1="248" x2="318" y2="248" stroke="#16a34a" stroke-width="2" marker-end="url(#aSet)"/>
-    <line x1="498" y1="248" x2="522" y2="248" stroke="#7c3aed" stroke-width="2" marker-end="url(#aIdx)"/>
-  </g>
+		<path d="M524,206 H690 L700,216 V290 H534 L524,280 Z" fill="#b967ff" fill-opacity="0.06" stroke="#b967ff" stroke-opacity="0.75" stroke-dasharray="4 3"/>
+		<circle cx="685" cy="221" r="11" fill="#b967ff"/><text x="685" y="225" text-anchor="middle" class="stepNum">3</text>
+		<text x="538" y="246" class="stepMain">Index updates itself</text>
+		<text x="538" y="264" class="stepSub">module, no client work</text>
 
-  <!-- GET lane -->
-  <rect x="16" y="306" width="84" height="84" rx="10" fill="#2563eb"/>
-  <text x="58" y="352" text-anchor="middle" class="laneTab">GET</text>
-  <g>
-    <rect x="116" y="306" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
-    <circle cx="277" cy="321" r="11" fill="#2563eb"/><text x="277" y="325" text-anchor="middle" class="stepNum">1</text>
-    <text x="130" y="346" class="stepMain">Read item data</text>
-    <text x="130" y="364" class="stepSub">HGET items:&#123;key&#125; data</text>
+		<line x1="294" y1="248" x2="318" y2="248" stroke="#00f0ff" stroke-width="2" marker-end="url(#aSet)"/>
+		<line x1="498" y1="248" x2="522" y2="248" stroke="#b967ff" stroke-width="2" marker-end="url(#aIdx)"/>
+	</g>
 
-    <rect x="320" y="306" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
-    <circle cx="481" cy="321" r="11" fill="#2563eb"/><text x="481" y="325" text-anchor="middle" class="stepNum">2</text>
-    <text x="334" y="346" class="stepMain">Decompress + unserialize</text>
-    <text x="334" y="364" class="stepSub">client side</text>
+	<!-- GET lane -->
+	<path d="M16,306 H90 L100,316 V390 H26 L16,380 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" stroke-opacity="0.85"/>
+	<text x="58" y="352" text-anchor="middle" class="laneTab" fill="#fcee0a">GET</text>
+	<g>
+		<path d="M116,306 H282 L292,316 V390 H126 L116,380 Z" fill="#11111c" stroke="#fcee0a" stroke-opacity="0.75"/>
+		<circle cx="277" cy="321" r="11" fill="#fcee0a"/><text x="277" y="325" text-anchor="middle" class="stepNum">1</text>
+		<text x="130" y="346" class="stepMain">Read item data</text>
+		<text x="130" y="364" class="stepSub">HGET items:&#123;key&#125; data</text>
 
-    <rect x="524" y="306" width="176" height="84" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
-    <circle cx="685" cy="321" r="11" fill="#2563eb"/><text x="685" y="325" text-anchor="middle" class="stepNum">3</text>
-    <text x="538" y="346" class="stepMain">Miss &#8594; stampede lock</text>
-    <text x="538" y="364" class="stepSub">MemoLock + resolver</text>
+		<path d="M320,306 H486 L496,316 V390 H330 L320,380 Z" fill="#11111c" stroke="#fcee0a" stroke-opacity="0.75"/>
+		<circle cx="481" cy="321" r="11" fill="#fcee0a"/><text x="481" y="325" text-anchor="middle" class="stepNum">2</text>
+		<text x="334" y="346" class="stepMain">Decompress + unserialize</text>
+		<text x="334" y="364" class="stepSub">client side</text>
 
-    <line x1="294" y1="348" x2="318" y2="348" stroke="#2563eb" stroke-width="2" marker-end="url(#aGet)"/>
-    <line x1="498" y1="348" x2="522" y2="348" stroke="#2563eb" stroke-width="2" marker-end="url(#aGet)"/>
-  </g>
-  <text x="724" y="345" class="stepSub" fill="#1e40af">Read path is identical to plain</text>
-  <text x="724" y="360" class="stepSub" fill="#1e40af">Redis &#8212; the index is only used</text>
-  <text x="724" y="375" class="stepSub" fill="#1e40af">for invalidation, never for reads.</text>
+		<path d="M524,306 H690 L700,316 V390 H534 L524,380 Z" fill="#11111c" stroke="#fcee0a" stroke-opacity="0.75"/>
+		<circle cx="685" cy="321" r="11" fill="#fcee0a"/><text x="685" y="325" text-anchor="middle" class="stepNum">3</text>
+		<text x="538" y="346" class="stepMain">Miss &#8594; stampede lock</text>
+		<text x="538" y="364" class="stepSub">MemoLock + resolver</text>
 
-  <!-- INVALIDATE lane -->
-  <rect x="16" y="406" width="84" height="84" rx="10" fill="#ea580c"/>
-  <text x="58" y="448" text-anchor="middle" class="laneTab">INVALI-</text>
-  <text x="58" y="464" text-anchor="middle" class="laneTab">DATE</text>
-  <g>
-    <rect x="116" y="406" width="176" height="84" rx="10" fill="#fff" stroke="#ea580c" stroke-width="1.5"/>
-    <circle cx="277" cy="421" r="11" fill="#ea580c"/><text x="277" y="425" text-anchor="middle" class="stepNum">1</text>
-    <text x="130" y="446" class="stepMain">Build tag query</text>
-    <text x="130" y="464" class="stepSub">any &#123;a|b&#125; / all &#123;a&#125;&#123;b&#125;</text>
+		<line x1="294" y1="348" x2="318" y2="348" stroke="#fcee0a" stroke-width="2" marker-end="url(#aGet)"/>
+		<line x1="498" y1="348" x2="522" y2="348" stroke="#fcee0a" stroke-width="2" marker-end="url(#aGet)"/>
+	</g>
+	<text x="724" y="345" class="stepSub" fill="#fcee0a">Read path is identical to plain</text>
+	<text x="724" y="360" class="stepSub" fill="#fcee0a">Redis &#8212; the index is only used</text>
+	<text x="724" y="375" class="stepSub" fill="#fcee0a">for invalidation, never for reads.</text>
 
-    <rect x="320" y="406" width="176" height="84" rx="10" fill="#fff" stroke="#ea580c" stroke-width="1.5"/>
-    <circle cx="481" cy="421" r="11" fill="#ea580c"/><text x="481" y="425" text-anchor="middle" class="stepNum">2</text>
-    <text x="334" y="446" class="stepMain">Search the index</text>
-    <text x="334" y="464" class="stepSub">FT.SEARCH (batched)</text>
+	<!-- INVALIDATE lane -->
+	<path d="M16,406 H90 L100,416 V490 H26 L16,480 Z" fill="#ff003c" fill-opacity="0.08" stroke="#ff003c" stroke-opacity="0.85"/>
+	<text x="58" y="448" text-anchor="middle" class="laneTab" fill="#ff003c">INVALI-</text>
+	<text x="58" y="464" text-anchor="middle" class="laneTab" fill="#ff003c">DATE</text>
+	<g>
+		<path d="M116,406 H282 L292,416 V490 H126 L116,480 Z" fill="#11111c" stroke="#ff003c" stroke-opacity="0.75"/>
+		<circle cx="277" cy="421" r="11" fill="#ff003c"/><text x="277" y="425" text-anchor="middle" class="stepNum">1</text>
+		<text x="130" y="446" class="stepMain">Build tag query</text>
+		<text x="130" y="464" class="stepSub">any &#123;a|b&#125; / all &#123;a&#125;&#123;b&#125;</text>
 
-    <rect x="524" y="406" width="176" height="84" rx="10" fill="#fff" stroke="#ea580c" stroke-width="1.5"/>
-    <circle cx="685" cy="421" r="11" fill="#ea580c"/><text x="685" y="425" text-anchor="middle" class="stepNum">3</text>
-    <text x="538" y="446" class="stepMain">Delete matched items</text>
-    <text x="538" y="464" class="stepSub">UNLINK each hit</text>
+		<path d="M320,406 H486 L496,416 V490 H330 L320,480 Z" fill="#11111c" stroke="#ff003c" stroke-opacity="0.75"/>
+		<circle cx="481" cy="421" r="11" fill="#ff003c"/><text x="481" y="425" text-anchor="middle" class="stepNum">2</text>
+		<text x="334" y="446" class="stepMain">Search the index</text>
+		<text x="334" y="464" class="stepSub">FT.SEARCH (batched)</text>
 
-    <rect x="724" y="412" width="184" height="72" rx="8" fill="#faf5ff" stroke="#ddd0f5"/>
-    <text x="738" y="436" class="note">Cost: O(matched items)</text>
-    <text x="738" y="456" class="stepSub" fill="#6d28d9">but matches are found via</text>
-    <text x="738" y="470" class="stepSub" fill="#6d28d9">the index, not a hash scan</text>
+		<path d="M524,406 H690 L700,416 V490 H534 L524,480 Z" fill="#11111c" stroke="#ff003c" stroke-opacity="0.75"/>
+		<circle cx="685" cy="421" r="11" fill="#ff003c"/><text x="685" y="425" text-anchor="middle" class="stepNum">3</text>
+		<text x="538" y="446" class="stepMain">Delete matched items</text>
+		<text x="538" y="464" class="stepSub">UNLINK each hit</text>
 
-    <line x1="294" y1="448" x2="318" y2="448" stroke="#ea580c" stroke-width="2" marker-end="url(#aInv)"/>
-    <line x1="498" y1="448" x2="522" y2="448" stroke="#ea580c" stroke-width="2" marker-end="url(#aInv)"/>
-    <line x1="702" y1="448" x2="722" y2="448" stroke="#ea580c" stroke-width="2" marker-end="url(#aInv)"/>
-  </g>
+		<path d="M724,412 H898 L908,422 V484 H734 L724,474 Z" fill="#11111c" stroke="#b967ff" stroke-opacity="0.6" stroke-dasharray="5 3"/>
+		<text x="738" y="436" class="note">Cost: O(matched items)</text>
+		<text x="738" y="456" class="stepSub" fill="#b967ff">but matches are found via</text>
+		<text x="738" y="470" class="stepSub" fill="#b967ff">the index, not a hash scan</text>
 
-  <line x1="16" y1="508" x2="924" y2="508" stroke="#e2e8f0"/>
-  <text x="16" y="528" class="foot"><tspan font-weight="700">Invalidation:</tspan> O(matched items), eager delete &#8212; but match lookup is index-driven  &#183;  <tspan font-weight="700">Tag introspection:</tspan> none</text>
-  <text x="16" y="546" class="foot"><tspan font-weight="700">Lua:</tspan> cache_search_unlink_by_tags  &#183;  <tspan font-weight="700">Requires:</tspan> RediSearch module + MAXSEARCHRESULTS = -1  &#183;  <tspan font-weight="700">Cluster:</tspan> no</text>
+		<line x1="294" y1="448" x2="318" y2="448" stroke="#ff003c" stroke-width="2" marker-end="url(#aInv)"/>
+		<line x1="498" y1="448" x2="522" y2="448" stroke="#ff003c" stroke-width="2" marker-end="url(#aInv)"/>
+		<line x1="702" y1="448" x2="722" y2="448" stroke="#ff003c" stroke-width="2" marker-end="url(#aInv)"/>
+	</g>
+
+	<line x1="16" y1="508" x2="924" y2="508" stroke="#8b8ba7" stroke-opacity="0.35"/>
+	<text x="16" y="528" class="foot"><tspan font-weight="700" fill="#e8e8f0">Invalidation:</tspan> O(matched items), eager delete &#8212; but match lookup is index-driven  &#183;  <tspan font-weight="700" fill="#e8e8f0">Tag introspection:</tspan> none</text>
+	<text x="16" y="546" class="foot"><tspan font-weight="700" fill="#e8e8f0">Lua:</tspan> cache_search_unlink_by_tags  &#183;  <tspan font-weight="700" fill="#e8e8f0">Requires:</tspan> RediSearch module + MAXSEARCHRESULTS = -1  &#183;  <tspan font-weight="700" fill="#e8e8f0">Cluster:</tspan> no</text>
 </svg>
