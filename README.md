@@ -9,13 +9,34 @@ https://github.com/ovos/php-library
 
 ## Overview
 
-This library is a general-purpose MVC framework and toolkit for PHP applications.
-It provides core infrastructure (application lifecycle, DI container, services,
-configuration, logging), along with reusable modules for cache, storage,
-controllers, CLI tooling, testing, and common utilities.
+A batteries-included MVC framework and infrastructure toolkit for modern PHP
+(8.3+), built around one idea: production concerns handled once, in one place,
+instead of re-solved per project. It has powered commercial web applications
+for over a decade and is developed against real production workloads.
 
-It is designed to work with:
-- https://github.com/ovos/php-module-system (system management: cache, migrations, tests, benchmarks)
+Beyond the expected core — routing, controllers, models with a query builder,
+views, plugins, a DI container with attribute-based injection and autowiring,
+YAML configuration, translations, migrations and CLI tooling — the depth is in
+the infrastructure layer:
+
+- **Caching** with tag-based invalidation across interchangeable stores (APCu,
+  Redis, RediSearch-indexed, versioned-key), and **MemoLock** cache-stampede
+  protection: one request rebuilds a hot value while the rest wait on Pub/Sub
+  instead of hammering the database ([README.CACHE.md](README.CACHE.md),
+  [README.MEMOLOCK.md](README.MEMOLOCK.md))
+- **Sessions** with two interchangeable handlers — the classic native
+  machinery, or lazy RedisJSON documents with per-path reads, per-value locks
+  and a searchable RediSearch index over live sessions
+  ([README.SESSION.md](README.SESSION.md))
+- **Redis Functions** infrastructure that ships Lua libraries with the code
+  and self-heals stale deployments via source-hash markers, on standalone
+  Redis and clusters alike
+- **Error reporting** to [ovos/console](https://github.com/ovos/console) and a
+  live per-request **profiler stream** (queries, redis commands, timings)
+  built in
+
+Companion modules:
+- https://github.com/ovos/php-module-system (system management: cache, sessions, migrations, tests, benchmarks)
 - https://github.com/ovos/php-module-admin (administration panel)
 
 ## Requirements
