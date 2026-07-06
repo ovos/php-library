@@ -14,6 +14,7 @@ use Traversable;
 
 use function count;
 use function is_array;
+use function is_int;
 
 /**
  * Node
@@ -52,10 +53,11 @@ class Node implements ArrayAccess, Countable, IteratorAggregate, JsonSerializabl
 	}
 	
 	/**
-	 * A child node, one path segment deeper - no I/O
+	 * A child node, one path segment deeper - no I/O; an INTEGER
+	 * addresses a json array element, a string an object key
 	 */
 	public function child(
-		string $name,
+		int|string $name,
 	): static
 	{
 		return new static($this->handler,
@@ -188,14 +190,15 @@ class Node implements ArrayAccess, Countable, IteratorAggregate, JsonSerializabl
 	}
 	
 	/**
-	 * ArrayAccess read, with the same peek semantics as the magic read
+	 * ArrayAccess read, with the same peek semantics as the magic read;
+	 * an integer offset addresses a json array element
 	 */
 	public function offsetGet(
 		mixed $offset,
 	): mixed
 	{
 		return $this->handler
-			->peek([...$this->path, (string)$offset]);
+			->peek([...$this->path, $this->segment($offset)]);
 	}
 	
 	public function offsetSet(
@@ -203,7 +206,7 @@ class Node implements ArrayAccess, Countable, IteratorAggregate, JsonSerializabl
 		mixed $value,
 	): void
 	{
-		$this->child((string)$offset)
+		$this->child($this->segment($offset))
 			->set($value);
 	}
 	
@@ -211,7 +214,7 @@ class Node implements ArrayAccess, Countable, IteratorAggregate, JsonSerializabl
 		mixed $offset,
 	): bool
 	{
-		return $this->child((string)$offset)
+		return $this->child($this->segment($offset))
 			->exists();
 	}
 	
@@ -219,8 +222,21 @@ class Node implements ArrayAccess, Countable, IteratorAggregate, JsonSerializabl
 		mixed $offset,
 	): void
 	{
-		$this->child((string)$offset)
+		$this->child($this->segment($offset))
 			->remove();
+	}
+	
+	/**
+	 * Integer offsets stay integers (array elements), everything else
+	 * becomes an object key
+	 */
+	protected function segment(
+		mixed $offset,
+	): int|string
+	{
+		return is_int($offset) === true
+			? $offset
+			: (string)$offset;
 	}
 	
 	/**

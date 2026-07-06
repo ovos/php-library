@@ -15,13 +15,20 @@
 	@author Marcin Gil <mg@ovos.at>
 ]]
 
--- Builds a RedisJSON path from raw segments using bracket notation,
--- so any character (dots, spaces, quotes) is allowed in a key
+-- Builds a RedisJSON path from decoded segments: strings use bracket
+-- notation (any character is allowed in a key), numbers address json
+-- array elements - the path travels as ONE cjson argument so the
+-- number/string distinction survives the wire
 local function session_path(segments, first, last)
 	local path = '$'
 	for i = first, last do
-		local segment = segments[i]:gsub('\\', '\\\\'):gsub('"', '\\"')
-		path = path .. '["' .. segment .. '"]'
+		local segment = segments[i]
+		if type(segment) == 'number' then
+			path = path .. '[' .. segment .. ']'
+		else
+			segment = segment:gsub('\\', '\\\\'):gsub('"', '\\"')
+			path = path .. '["' .. segment .. '"]'
+		end
 	end
 
 	return path
@@ -36,25 +43,21 @@ local function session_ensure_root(key, now)
 end
 
 -- Ensures every intermediate segment is an object; anything else in the
--- way is overwritten (PHP-like auto-vivification)
+-- way is overwritten (PHP-like auto-vivification). Numeric steps are
+-- left alone: they address EXISTING array structure - arrays are
+-- created through appends, never vivified by index
 local function session_ensure_parents(key, segments, last)
 	for i = 1, last do
-		local path = session_path(segments, 1, i)
-		local types = redis.call('JSON.TYPE', key, path)
-		if types == false or #types == 0 or types[1] ~= 'object' then
-			redis.call('JSON.SET', key, path, '{}')
+		if type(segments[i]) ~= 'number'
+			and type(segments[i + 1]) ~= 'number'
+		then
+			local path = session_path(segments, 1, i)
+			local types = redis.call('JSON.TYPE', key, path)
+			if types == false or #types == 0 or types[1] ~= 'object' then
+				redis.call('JSON.SET', key, path, '{}')
+			end
 		end
 	end
-end
-
--- Collects the trailing arguments (path segments) into a table
-local function session_segments(args, first)
-	local segments = {}
-	for i = first, #args do
-		segments[#segments + 1] = args[i]
-	end
-
-	return segments
 end
 
 -- The "__locked__:<n>" marker when one of the lock keys (KEYS[first..])
@@ -71,7 +74,7 @@ local function session_locked(keys, first)
 end
 
 -- Sets a JSON-encoded value at a nested path, creating missing parents
--- keys: [document, lock...] args: [ttl_ms, now, value, segment...]
+-- keys: [document, lock...] args: [ttl_ms, now, value, path_json]
 local function session_set(keys, args)
 	local locked = session_locked(keys, 2)
 	if locked then
@@ -82,7 +85,7 @@ local function session_set(keys, args)
 	local ttl_ms = tonumber(args[1])
 	local now = tonumber(args[2])
 	local value = args[3]
-	local segments = session_segments(args, 4)
+	local segments = cjson.decode(args[4])
 
 	if #segments == 0 then
 		-- a root write replaces the whole document
@@ -102,7 +105,7 @@ redis.register_function('[prefix]session_set', session_set)
 
 -- Atomically increments a numeric value at a nested path, creating it
 -- (and missing parents) when necessary; returns the new value as JSON
--- keys: [document, lock...] args: [ttl_ms, now, by, segment...]
+-- keys: [document, lock...] args: [ttl_ms, now, by, path_json]
 local function session_increment(keys, args)
 	local locked = session_locked(keys, 2)
 	if locked then
@@ -113,7 +116,7 @@ local function session_increment(keys, args)
 	local ttl_ms = tonumber(args[1])
 	local now = tonumber(args[2])
 	local by = args[3]
-	local segments = session_segments(args, 4)
+	local segments = cjson.decode(args[4])
 
 	session_ensure_root(key, now)
 	session_ensure_parents(key, segments, #segments - 1)
@@ -136,7 +139,7 @@ redis.register_function('[prefix]session_increment', session_increment)
 -- Appends a JSON-encoded entry to an array at a nested path (used for the
 -- "__journey" timeline), trimming it to the last "limit" entries (0 = no
 -- limit); returns the array length
--- keys: [document, lock...] args: [ttl_ms, now, limit, entry, segment...]
+-- keys: [document, lock...] args: [ttl_ms, now, limit, entry, path_json]
 local function session_append(keys, args)
 	local locked = session_locked(keys, 2)
 	if locked then
@@ -148,7 +151,7 @@ local function session_append(keys, args)
 	local now = tonumber(args[2])
 	local limit = tonumber(args[3])
 	local entry = args[4]
-	local segments = session_segments(args, 5)
+	local segments = cjson.decode(args[5])
 
 	session_ensure_root(key, now)
 	session_ensure_parents(key, segments, #segments - 1)

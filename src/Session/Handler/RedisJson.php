@@ -458,13 +458,23 @@ class RedisJson
 	): void
 	{
 		$this->ensureOpen();
+		
+		// a scalar root would leave a document no path can write into
+		if($path === []
+			&& is_array($value) === false
+			&& $value instanceof BaseArrayObject === false)
+		{
+			throw new Exception(
+				'The session document root must be an array.');
+		}
+		
 		$this->touch();
 		
 		$this->write('session_set', $path, [
 			$this->lifetime * 1000,
 			time(),
 			$this->encode($value),
-			...$path,
+			$this->encodePath($path),
 		]);
 		
 		$this->releaseLock($path);
@@ -533,7 +543,7 @@ class RedisJson
 			$this->lifetime * 1000,
 			time(),
 			$by,
-			...$path,
+			$this->encodePath($path),
 		]);
 		
 		$this->releaseLock($path);
@@ -573,7 +583,7 @@ class RedisJson
 			time(),
 			$limit,
 			$this->encode($value),
-			...$path,
+			$this->encodePath($path),
 		]);
 		
 		$this->releaseLock($path);
@@ -1053,7 +1063,10 @@ class RedisJson
 	}
 	
 	/**
-	 * RedisJSON bracket notation allows any character in a key
+	 * RedisJSON bracket notation allows any character in a key; an
+	 * INTEGER segment addresses a json array element instead - numeric
+	 * STRINGS stay object keys, so only the array path form can carry
+	 * real indices ("a.5.b" splits into strings)
 	 */
 	public static function jsonPath(
 		array $path,
@@ -1062,6 +1075,13 @@ class RedisJson
 		$jsonPath = '$';
 		foreach($path as $segment)
 		{
+			if(is_int($segment) === true)
+			{
+				$jsonPath.= '[' . $segment . ']';
+				
+				continue;
+			}
+			
 			$jsonPath.= '["'
 				. str_replace(['\\', '"'], ['\\\\', '\\"'], (string)$segment)
 				. '"]';
@@ -1075,6 +1095,22 @@ class RedisJson
 	): string
 	{
 		return json_encode($this->normalize($value),
+			JSON_THROW_ON_ERROR
+				| JSON_UNESCAPED_UNICODE
+				| JSON_UNESCAPED_SLASHES,
+		);
+	}
+	
+	/**
+	 * The path as ONE cjson argument for the write functions - a json
+	 * array survives the wire with the number/string distinction intact
+	 * (loose protocol arguments are stringified)
+	 */
+	protected function encodePath(
+		array $path,
+	): string
+	{
+		return json_encode(array_values($path),
 			JSON_THROW_ON_ERROR
 				| JSON_UNESCAPED_UNICODE
 				| JSON_UNESCAPED_SLASHES,
@@ -1195,8 +1231,20 @@ class RedisJson
 		if(count($value) === 1
 			&& is_string($value[self::KEY_SERIALIZED] ?? null) === true)
 		{
-			return unserialize(
-				base64_decode($value[self::KEY_SERIALIZED]));
+			$serialized = base64_decode($value[self::KEY_SERIALIZED], true);
+			$restored = $serialized === false
+				? false
+				: unserialize($serialized);
+				
+			// a corrupt leaf (or a user array that merely looks like one)
+			// hands back the raw array instead of a silent false -
+			// serialize(false) itself round-trips correctly
+			if($restored === false && $serialized !== 'b:0;')
+			{
+				return $value;
+			}
+			
+			return $restored;
 		}
 		
 		return array_map($this->denormalize(...), $value);
