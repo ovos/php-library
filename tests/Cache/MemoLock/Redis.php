@@ -11,6 +11,7 @@ use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Override;
 
+use function microtime;
 use function sprintf;
 
 /**
@@ -99,6 +100,80 @@ class Redis extends Test
 		{
 			$this->memoLock->getClient()
 				->del(self::KEY_ITEM);
+		}
+	}
+	
+	public function waitForReleaseWithoutLock(): bool
+	{
+		return $this->memoLock
+			->waitForRelease(self::KEY_ITEM) === true;
+	}
+	
+	public function waitForReleaseOwnLock(): bool
+	{
+		try
+		{
+			$this->memoLock
+				->lockAndQueue(self::KEY_ITEM,
+					resolver: fn() => 'ok',
+					queue: true,
+				);
+			
+			// a lock held by this very request never blocks it
+			return $this->memoLock
+				->waitForRelease(self::KEY_ITEM) === true;
+		}
+		finally
+		{
+			$this->memoLock->releaseActiveLock(self::KEY_ITEM);
+			$this->memoLock->getClient()->del(self::KEY_ITEM);
+		}
+	}
+	
+	public function waitForReleaseForeignLockExpires(): bool
+	{
+		$lockKey = $this->memoLock
+			->getPrefixer()
+			->prefix(RedisMemoLock::TYPE_LOCK, self::KEY_ITEM);
+		$client = $this->memoLock->getClient();
+		
+		try
+		{
+			// a lock held by another process, gone after 300ms
+			$client->set($lockKey, 'foreign', ['PX' => 300]);
+			
+			$start = microtime(true);
+			$released = $this->memoLock
+				->waitForRelease(self::KEY_ITEM, 300);
+			$elapsed = microtime(true) - $start;
+			
+			return $released === true
+				&& $elapsed >= 0.1;
+		}
+		finally
+		{
+			$client->del($lockKey);
+		}
+	}
+	
+	public function waitForReleaseForeignLockHeld(): bool
+	{
+		$lockKey = $this->memoLock
+			->getPrefixer()
+			->prefix(RedisMemoLock::TYPE_LOCK, self::KEY_ITEM);
+		$client = $this->memoLock->getClient();
+		
+		try
+		{
+			// a lock that outlives every wait attempt
+			$client->set($lockKey, 'foreign', ['PX' => 30000]);
+			
+			return $this->memoLock
+				->waitForRelease(self::KEY_ITEM, 100) === false;
+		}
+		finally
+		{
+			$client->del($lockKey);
 		}
 	}
 	
