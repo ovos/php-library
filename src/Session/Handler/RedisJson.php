@@ -11,6 +11,7 @@ use Ovos\Connection\RedisCommon as Connection;
 use Ovos\Exception;
 use Ovos\Session\Index;
 use Ovos\Session\Node;
+use Ovos\Session\Store;
 use ArrayObject as BaseArrayObject;
 use Closure;
 use JsonSerializable;
@@ -73,7 +74,7 @@ class RedisJson
 {
 	// Reserved document keys
 	public const string KEY_META = '__meta';
-	public const string KEY_JOURNEY = '__journey';
+	public const string KEY_JOURNEY = Store::KEY_JOURNEY;
 	
 	/**
 	 * A leaf object that is not JSON-representable is stored as
@@ -82,8 +83,8 @@ class RedisJson
 	public const string KEY_SERIALIZED = '__php_serialized__';
 	
 	// Journey entries
-	public const string JOURNEY_REQUEST = 'request';
-	public const string JOURNEY_ACTION = 'action';
+	public const string JOURNEY_REQUEST = Store::JOURNEY_REQUEST;
+	public const string JOURNEY_ACTION = Store::JOURNEY_ACTION;
 	
 	/**
 	 * The reply marker of a write refused by a foreign value lock,
@@ -992,7 +993,11 @@ class RedisJson
 		$pipeline->exec();
 	}
 	
-	protected function appendJourney(
+	/**
+	 * Appends a raw entry to the journey timeline, trimmed to the
+	 * configured limit (addAction()/addRequest() build the usual shapes)
+	 */
+	public function appendJourney(
 		array $entry,
 	): void
 	{

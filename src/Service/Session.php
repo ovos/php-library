@@ -11,18 +11,14 @@ use Ovos\Exception;
 use Ovos\Connection\Redis as Connection;
 use Ovos\Session\Handler\RedisJson;
 use Ovos\Session\Index;
-use ArrayObject as BaseArrayObject;
+use Ovos\Session\Store;
+use Ovos\Session\Store\Json;
+use Ovos\Session\Store\Native;
 use Closure;
 
-use function array_key_exists;
-use function array_pop;
-use function array_shift;
-use function array_slice;
 use function bin2hex;
-use function count;
 use function explode;
 use function headers_sent;
-use function implode;
 use function ini_get;
 use function ini_set;
 use function is_array;
@@ -36,7 +32,6 @@ use function session_name;
 use function session_regenerate_id;
 use function session_set_cookie_params;
 use function session_start;
-use function session_write_close;
 use function setcookie;
 use function time;
 
@@ -84,15 +79,20 @@ class Session extends Service
 	protected bool $started = false;
 	protected bool $initialized = false;
 	
-	protected array $session = [];
+	/**
+	 * The storage behind every access, picked when the session starts:
+	 * Native ($_SESSION, or a plain array on the CLI) or Json
+	 */
+	protected ?Store $store = null;
 	
 	protected ?RedisJson $jsonHandler = null;
 	
 	/**
-	 * By-reference slots for the magic accessor returns (json handler):
-	 * scalars materialize, containers and missing values are lazy Nodes
+	 * An unbound handler for the session-less operations (countActive,
+	 * gc, index) - kept apart from $jsonHandler so it never shadows a
+	 * started session
 	 */
-	protected array $peeked = [];
+	protected ?RedisJson $transientJsonHandler = null;
 	
 	public function __construct(
 		#[Inject('config')] ArrayObject $config,
@@ -153,6 +153,9 @@ class Session extends Service
 		{
 			// CLI has no session; the accessors work on a local,
 			// non-persisted array regardless of the handler
+			$this->store = new Native;
+			$this->started = true;
+			
 			return;
 		}
 		
@@ -169,27 +172,28 @@ class Session extends Service
 			throw new Exception('Session could not start.');
 		}
 		
-		$this->session = &$_SESSION;
+		$this->store = new Native($_SESSION);
 		$this->started = true;
 	}
 	
+	/**
+	 * Ends the request's session work: the native store hands the data
+	 * back to the machinery (write-back), the json store releases the
+	 * held value locks (writes were write-through), waking any waiters
+	 */
 	public function close(): void
 	{
-		if($this->request->isCli())
-		{
-			return;
-		}
+		$this->store?->close();
+	}
+	
+	/**
+	 * The active store, starting the session on first access
+	 */
+	protected function store(): Store
+	{
+		$this->start();
 		
-		if($this->handler === self::HANDLER_JSON)
-		{
-			// no write-back exists - writes were write-through; releasing
-			// the held value locks wakes any waiting parallel requests
-			$this->jsonHandler?->close();
-			
-			return;
-		}
-		
-		session_write_close();
+		return $this->store;
 	}
 	
 	/**
@@ -250,15 +254,8 @@ class Session extends Service
 		string|array $path,
 	): mixed
 	{
-		$path = $this->path($path);
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->get($path);
-		}
-		
-		return $this->nativeGet($path);
+		return $this->store()
+			->get($this->path($path));
 	}
 	
 	/**
@@ -273,20 +270,9 @@ class Session extends Service
 		{
 			$paths[$index] = $this->path($mixedPath);
 		}
-		$this->start();
 		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->getMany($paths);
-		}
-		
-		$values = [];
-		foreach($paths as $path)
-		{
-			$values[implode('.', $path)] = $this->nativeGet($path);
-		}
-		
-		return $values;
+		return $this->store()
+			->getMany($paths);
 	}
 	
 	/**
@@ -299,18 +285,8 @@ class Session extends Service
 		Closure $updater,
 	): mixed
 	{
-		$path = $this->path($path);
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->update($path, $updater);
-		}
-		
-		$value = $updater($this->nativeGet($path));
-		$this->nativeSet($path, $value);
-		
-		return $value;
+		return $this->store()
+			->update($this->path($path), $updater);
 	}
 	
 	/**
@@ -324,15 +300,8 @@ class Session extends Service
 		string|array $path,
 	): mixed
 	{
-		$path = $this->path($path);
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->getLocked($path);
-		}
-		
-		return $this->nativeGet($path);
+		return $this->store()
+			->getLocked($this->path($path));
 	}
 	
 	/**
@@ -344,49 +313,24 @@ class Session extends Service
 		mixed $value,
 	): void
 	{
-		$path = $this->path($path);
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			$this->jsonHandler->set($path, $value);
-			
-			return;
-		}
-		
-		$this->nativeSet($path, $value);
+		$this->store()
+			->set($this->path($path), $value);
 	}
 	
 	public function has(
 		string|array $path,
 	): bool
 	{
-		$path = $this->path($path);
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->has($path);
-		}
-		
-		return $this->nativeHas($path);
+		return $this->store()
+			->has($this->path($path));
 	}
 	
 	public function remove(
 		string|array $path,
 	): void
 	{
-		$path = $this->path($path);
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			$this->jsonHandler->remove($path);
-			
-			return;
-		}
-		
-		$this->nativeRemove($path);
+		$this->store()
+			->remove($this->path($path));
 	}
 	
 	/**
@@ -399,19 +343,8 @@ class Session extends Service
 		int|float $by = 1,
 	): int|float|null
 	{
-		$path = $this->path($path);
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->increment($path, $by);
-		}
-		
-		$value = $this->nativeGet($path);
-		$value = ($value === null ? 0 : $value) + $by;
-		$this->nativeSet($path, $value);
-		
-		return $value;
+		return $this->store()
+			->increment($this->path($path), $by);
 	}
 	
 	/**
@@ -426,48 +359,20 @@ class Session extends Service
 		int $limit = 0,
 	): ?int
 	{
-		$path = $this->path($path);
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->append($path, $value, $limit);
-		}
-		
-		$list = $this->nativeGet($path);
-		if($list instanceof BaseArrayObject)
-		{
-			$list = $list->getArrayCopy();
-		}
-		if(is_array($list) === false)
-		{
-			$list = [];
-		}
-		
-		$list[] = $value;
-		if($limit > 0 && count($list) > $limit)
-		{
-			$list = array_slice($list, -$limit);
-		}
-		$this->nativeSet($path, $list);
-		
-		return count($list);
+		return $this->store()
+			->append($this->path($path), $value, $limit);
 	}
 	
 	/**
-	 * Releases a value lock taken by getLocked() without writing
+	 * Releases a value lock taken by getLocked() without writing;
+	 * an unstarted session holds nothing to release
 	 */
 	public function releaseLock(
 		string|array $path,
 	): bool
 	{
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler
-				->releaseLock($this->path($path));
-		}
-		
-		return true;
+		return $this->store === null
+			|| $this->store->releaseLock($this->path($path));
 	}
 	
 	/**
@@ -479,20 +384,8 @@ class Session extends Service
 		array $data = [],
 	): void
 	{
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			$this->jsonHandler->addAction($action, $data);
-			
-			return;
-		}
-		
-		$this->nativeAppendJourney([
-			't' => time(),
-			'type' => RedisJson::JOURNEY_ACTION,
-			'action' => $action,
-		] + ($data !== [] ? ['data' => $data] : []));
+		$this->store()
+			->addAction($action, $data);
 	}
 	
 	/**
@@ -506,21 +399,8 @@ class Session extends Service
 		array $data = [],
 	): void
 	{
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			$this->jsonHandler->addRequest($method, $url, $data);
-			
-			return;
-		}
-		
-		$this->nativeAppendJourney([
-			't' => time(),
-			'type' => RedisJson::JOURNEY_REQUEST,
-			'method' => $method,
-			'url' => $url,
-		] + ($data !== [] ? ['data' => $data] : []));
+		$this->store()
+			->addRequest($method, $url, $data);
 	}
 	
 	/**
@@ -529,20 +409,8 @@ class Session extends Service
 	 */
 	public function getJourney(): array
 	{
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->getJourney();
-		}
-		
-		$journey = $this->nativeGet([RedisJson::KEY_JOURNEY]);
-		if($journey instanceof BaseArrayObject)
-		{
-			return $journey->getArrayCopy();
-		}
-		
-		return is_array($journey) ? $journey : [];
+		return $this->store()
+			->getJourney();
 	}
 	
 	/**
@@ -589,38 +457,18 @@ class Session extends Service
 		string $name,
 	): mixed
 	{
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			// a fresh peek on every access; the slot only carries the
-			// by-reference return
-			$this->peeked[$name] = $this->jsonHandler
-				->peek([$name]);
+		$slot = &$this->store()
+			->slot($name);
 			
-			return $this->peeked[$name];
-		}
-		
-		if($this->__isset($name) === false)
-		{
-			$this->session[$name] = null;
-		}
-		
-		return $this->session[$name];
+		return $slot;
 	}
 	
 	public function __isset(
 		string $name,
 	): bool
 	{
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			return $this->jsonHandler->has([$name]);
-		}
-		
-		return array_key_exists($name, $this->session);
+		return $this->store()
+			->has([$name]);
 	}
 	
 	public function __set(
@@ -628,32 +476,16 @@ class Session extends Service
 		mixed $value,
 	): void
 	{
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			$this->jsonHandler->set([$name], $value);
-			
-			return;
-		}
-		
-		$this->session[$name] = $value;
+		$this->store()
+			->set([$name], $value);
 	}
 	
 	public function __unset(
 		string $name,
 	): void
 	{
-		$this->start();
-		
-		if($this->jsonHandler !== null)
-		{
-			$this->jsonHandler->remove([$name]);
-			
-			return;
-		}
-		
-		unset($this->session[$name]);
+		$this->store()
+			->remove([$name]);
 	}
 	
 	/**
@@ -676,6 +508,7 @@ class Session extends Service
 		}
 		
 		$this->jsonHandler->open($sessionId);
+		$this->store = new Json($this->jsonHandler);
 		$this->started = true;
 		
 		// wake waiting parallel requests even when close() is never called
@@ -727,8 +560,10 @@ class Session extends Service
 	
 	/**
 	 * The started handler when available, otherwise a transient one:
-	 * gc() and countActive() are not bound to a session and must also
-	 * work on the CLI, where no session ever starts
+	 * gc(), countActive() and index() are not bound to a session and
+	 * must not START one either - minting an id and sending a cookie is
+	 * no business of a monitoring call; the transient handler also
+	 * serves the CLI, where no session ever starts
 	 */
 	protected function jsonHandlerInstance(): ?RedisJson
 	{
@@ -737,9 +572,8 @@ class Session extends Service
 			return null;
 		}
 		
-		$this->start();
-		
-		return $this->jsonHandler ?? $this->createJsonHandler();
+		return $this->jsonHandler
+			?? ($this->transientJsonHandler ??= $this->createJsonHandler());
 	}
 	
 	protected function readSessionId(): ?string
@@ -817,177 +651,6 @@ class Session extends Service
 		}
 		
 		return $options;
-	}
-	
-	/**
-	 * The php-handler implementation of the path API: walks the
-	 * $_SESSION-bound array and its ArrayObject namespaces
-	 */
-	protected function nativeGet(
-		array $path,
-	): mixed
-	{
-		$current = $this->session;
-		foreach($path as $segment)
-		{
-			if($current instanceof BaseArrayObject)
-			{
-				if($current->offsetExists($segment) === false)
-				{
-					return null;
-				}
-				$current = $current->offsetGet($segment);
-			}
-			elseif(is_array($current) === true)
-			{
-				if(array_key_exists($segment, $current) === false)
-				{
-					return null;
-				}
-				$current = $current[$segment];
-			}
-			else
-			{
-				return null;
-			}
-		}
-		
-		return $current;
-	}
-	
-	protected function nativeHas(
-		array $path,
-	): bool
-	{
-		if($path === [])
-		{
-			return true;
-		}
-		
-		$last = array_pop($path);
-		$container = $this->nativeGet($path);
-		
-		if($container instanceof BaseArrayObject)
-		{
-			return $container->offsetExists($last);
-		}
-		if(is_array($container) === true)
-		{
-			return array_key_exists($last, $container);
-		}
-		
-		return false;
-	}
-	
-	protected function nativeSet(
-		array $path,
-		mixed $value,
-	): void
-	{
-		if($path === [])
-		{
-			// assigns through the &$_SESSION reference
-			$this->session = is_array($value) === true
-				? $value
-				: (array)$value;
-			
-			return;
-		}
-		
-		$last = array_pop($path);
-		
-		if($path === [])
-		{
-			$this->session[$last] = $value;
-			
-			return;
-		}
-		
-		// missing (or scalar) parents become ArrayObjects, existing plain
-		// arrays are wrapped - the framework's namespace convention
-		$first = array_shift($path);
-		$container = $this->session[$first] ?? null;
-		if($container instanceof BaseArrayObject === false)
-		{
-			$container = new ArrayObject(
-				is_array($container) === true ? $container : []);
-			$this->session[$first] = $container;
-		}
-		
-		foreach($path as $segment)
-		{
-			$next = $container->offsetExists($segment)
-				? $container->offsetGet($segment)
-				: null;
-			if($next instanceof BaseArrayObject === false)
-			{
-				$next = new ArrayObject(
-					is_array($next) === true ? $next : []);
-				$container->offsetSet($segment, $next);
-			}
-			$container = $next;
-		}
-		
-		$container->offsetSet($last, $value);
-	}
-	
-	protected function nativeRemove(
-		array $path,
-	): void
-	{
-		if($path === [])
-		{
-			$this->session = [];
-			
-			return;
-		}
-		
-		$last = array_pop($path);
-		
-		if($path === [])
-		{
-			unset($this->session[$last]);
-			
-			return;
-		}
-		
-		$container = $this->nativeGet($path);
-		
-		if($container instanceof BaseArrayObject)
-		{
-			if($container->offsetExists($last))
-			{
-				$container->offsetUnset($last);
-			}
-			
-			return;
-		}
-		
-		if(is_array($container) === true)
-		{
-			// arrays are copies on the walk - reattach through the parent
-			unset($container[$last]);
-			$this->nativeSet($path, $container);
-		}
-	}
-	
-	protected function nativeAppendJourney(
-		array $entry,
-	): void
-	{
-		$journey = $this->nativeGet([RedisJson::KEY_JOURNEY]);
-		if($journey instanceof BaseArrayObject)
-		{
-			$journey = $journey->getArrayCopy();
-		}
-		if(is_array($journey) === false)
-		{
-			$journey = [];
-		}
-		
-		$journey[] = $entry;
-		
-		$this->session[RedisJson::KEY_JOURNEY] = $journey;
 	}
 	
 	protected function path(
