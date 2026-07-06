@@ -190,6 +190,41 @@ class Redis extends Test
 		}
 	}
 	
+	/**
+	 * Applications run the store with a prefix but NO group
+	 * (Service\Cache\Persistent constructs it that way) - the trait's
+	 * GROUP_TESTS store never exercises that path. set() keys tags via the
+	 * Prefixer (which falls back to the prefix), so the read/invalidate
+	 * paths must build the same base or invalidation silently no-ops.
+	 */
+	public function invalidateTagsWithoutGroup(): bool
+	{
+		$store = $this->getStore(Store::class);
+		$store->setGroup(null);
+		
+		$store->set('nogroup-item', 'test', tags: ['nogroup-tag']);
+		
+		$ids = $store->getIdsMatchingAnyTags(['nogroup-tag']);
+		$store->invalidateTags(['nogroup-tag']);
+		
+		$result = $store->get('nogroup-item', queue: false);
+		
+		try
+		{
+			return in_array('nogroup-item', $ids, true) === true
+				&& $result === null;
+		}
+		finally
+		{
+			// the group-less keys live outside the trait store's namespace -
+			// remove them directly instead of clear() (which would wipe the
+			// application's whole prefix)
+			$store->delete('nogroup-item');
+			$store->getClient()->unlink(
+				$store->prefix('nogroup-tag', $store->getType(Store::TYPE_TAGS)));
+		}
+	}
+	
 	public function invalidateTagsMatchingAll(): bool
 	{
 		$this->store->setCleanTags(false);
