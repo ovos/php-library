@@ -15,6 +15,7 @@ use Ovos\Session\Store;
 use ArrayObject as BaseArrayObject;
 use Closure;
 use JsonSerializable;
+use stdClass;
 use Throwable;
 use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
@@ -27,6 +28,7 @@ use function array_values;
 use function base64_decode;
 use function base64_encode;
 use function count;
+use function get_object_vars;
 use function implode;
 use function in_array;
 use function ini_get;
@@ -1206,6 +1208,15 @@ class RedisJson
 		if($value instanceof JsonSerializable)
 		{
 			return $value;
+		}
+		
+		if($value instanceof stdClass)
+		{
+			// plain json data by nature (Model::export() and json_decode
+			// both produce it) - stored addressable, read back as an
+			// array, which Model::restore() takes as an iterable
+			return array_map($this->normalize(...),
+				get_object_vars($value));
 		}
 		
 		if($value instanceof BaseArrayObject)
