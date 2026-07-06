@@ -260,6 +260,41 @@ class Session extends Service
 		return session_id() ?: null;
 	}
 	
+	/**
+	 * Destroys the session entirely - the standard logout lifecycle:
+	 * deletes the stored data and continues on a FRESH id, because the
+	 * destroyed one must never be reusable. Under json the document and
+	 * its activity entry are dropped and the held locks released; under
+	 * php the native machinery rotates the id itself. The CLI's local
+	 * array simply empties.
+	 */
+	public function destroy(): void
+	{
+		$this->start();
+		
+		if($this->jsonHandler !== null)
+		{
+			$this->jsonHandler->destroy();
+			
+			// without sendable headers the id cannot rotate - the old
+			// cookie then points at a document that no longer exists
+			$sessionId = $this->createSessionId();
+			$this->jsonHandler->open($sessionId);
+			if(headers_sent() === false)
+			{
+				$this->sendCookie($sessionId);
+			}
+			
+			return;
+		}
+		
+		$this->store->remove([]);
+		if($this->request->isCli() === false)
+		{
+			session_regenerate_id(true);
+		}
+	}
+	
 	public function flush(): bool
 	{
 		if($this->config->session->connection === null)

@@ -18,6 +18,7 @@ use function count;
 use function explode;
 use function in_array;
 use function is_array;
+use function is_int;
 use function is_string;
 use function json_decode;
 use function stripos;
@@ -121,11 +122,20 @@ class Index
 					. $database . '".');
 		}
 		
-		if($force === false && $this->exists() === true)
+		if($force === false && ($info = $this->info()) !== null)
 		{
-			$this->ensured = true;
+			// present, but built from the CURRENT config? an edited
+			// "index.fields" must not leave searches quietly running
+			// against the old shape - drop and recreate instead (redis
+			// re-indexes the documents in the background)
+			if($this->matchesSchema($info) === true)
+			{
+				$this->ensured = true;
+				
+				return true;
+			}
 			
-			return true;
+			$this->drop();
 		}
 		
 		// phpredis surfaces module error replies as exceptions or via
@@ -164,9 +174,17 @@ class Index
 	
 	public function exists(): bool
 	{
+		return $this->info() !== null;
+	}
+	
+	/**
+	 * The FT.INFO reply as a flat RESP2 map, null for a missing index
+	 */
+	protected function info(): ?array
+	{
 		if(($client = $this->getClient()) === null)
 		{
-			return false;
+			return null;
 		}
 		
 		try
@@ -176,17 +194,84 @@ class Index
 		}
 		catch(RedisException|RedisClusterException)
 		{
-			return false;
+			return null;
 		}
 		
 		if($client->getLastError())
 		{
 			$client->clearLastError();
 			
+			return null;
+		}
+		
+		return is_array($info) === true ? $info : null;
+	}
+	
+	/**
+	 * Whether the LIVE index was built from the configured schema -
+	 * compares every field's path, type and sortability by alias
+	 */
+	protected function matchesSchema(
+		array $info,
+	): bool
+	{
+		$attributes = $this->plucked($info, 'attributes');
+		if(is_array($attributes) === false)
+		{
 			return false;
 		}
 		
-		return is_array($info) === true;
+		$live = [];
+		foreach($attributes as $attribute)
+		{
+			if(is_array($attribute) === false)
+			{
+				continue;
+			}
+			
+			$live[(string)$this->plucked($attribute, 'attribute')] = [
+				'path' => (string)$this->plucked($attribute, 'identifier'),
+				'type' => strtoupper((string)$this->plucked($attribute, 'type')),
+				// the flag arrives as a bare token in the flat reply
+				'sortable' => in_array('SORTABLE', $attribute, true),
+			];
+		}
+		
+		$fields = $this->fields();
+		if(count($live) !== count($fields))
+		{
+			return false;
+		}
+		
+		foreach($fields as $alias => $field)
+		{
+			if(($live[$alias] ?? null) !== $field)
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * The value following a field name in a flat RESP2 map reply
+	 */
+	protected function plucked(
+		array $reply,
+		string $field,
+	): mixed
+	{
+		foreach($reply as $index => $entry)
+		{
+			if(is_int($index) === true
+				&& $entry === $field)
+			{
+				return $reply[$index + 1] ?? null;
+			}
+		}
+		
+		return null;
 	}
 	
 	public function drop(): bool
@@ -227,6 +312,54 @@ class Index
 		bool $ascending = true,
 	): array
 	{
+		return $this->parse(
+			$this->call('FT.SEARCH',
+				$this->arguments($query, $limit, $offset, $sortBy, $ascending))
+		);
+	}
+	
+	/**
+	 * The matching session ids only (NOCONTENT) - the lean variant for
+	 * result sets whose documents are not needed; returns the total and
+	 * the ids
+	 */
+	public function searchIds(
+		string $query,
+		int $limit = 10,
+		int $offset = 0,
+		?string $sortBy = null, // requires "sortable: yes" on the field
+		bool $ascending = true,
+	): array
+	{
+		$reply = $this->call('FT.SEARCH',
+			$this->arguments($query, $limit, $offset, $sortBy, $ascending,
+				idsOnly: true));
+				
+		$ids = [];
+		$replySize = count($reply);
+		for($entry = 1; $entry < $replySize; $entry++)
+		{
+			$ids[] = $this->sessionId((string)$reply[$entry]);
+		}
+		
+		return [
+			'total' => (int)($reply[0] ?? 0),
+			'ids' => $ids,
+		];
+	}
+	
+	/**
+	 * The FT.SEARCH argument tail shared by the search variants
+	 */
+	protected function arguments(
+		string $query,
+		int $limit,
+		int $offset,
+		?string $sortBy,
+		bool $ascending,
+		bool $idsOnly = false,
+	): array
+	{
 		$arguments = [$query];
 		if($sortBy !== null)
 		{
@@ -234,13 +367,26 @@ class Index
 			$arguments[] = $sortBy;
 			$arguments[] = $ascending === true ? 'ASC' : 'DESC';
 		}
+		if($idsOnly === true)
+		{
+			$arguments[] = 'NOCONTENT';
+		}
 		$arguments[] = 'LIMIT';
 		$arguments[] = $offset;
 		$arguments[] = $limit;
 		
-		return $this->parse(
-			$this->call('FT.SEARCH', $arguments)
-		);
+		return $arguments;
+	}
+	
+	/**
+	 * The session id within a document key - everything after the prefix
+	 */
+	protected function sessionId(
+		string $key,
+	): string
+	{
+		return substr($key,
+			strlen($this->prefix) + strlen(Prefixer::SEPARATOR_PREFIX));
 	}
 	
 	/**
@@ -272,6 +418,40 @@ class Index
 			$arguments[$index] = (string)$argument;
 		}
 		
+		$reply = $this->raw($client, $command, $arguments, $error);
+		
+		if($error !== null)
+		{
+			// the index vanished behind our back - recreate and retry once
+			if($this->isMissingIndexError($error) === false)
+			{
+				throw new Exception($error);
+			}
+			
+			$this->ensure(true);
+			
+			$reply = $this->raw($client, $command, $arguments, $error);
+			if($error !== null)
+			{
+				throw new Exception($error);
+			}
+		}
+		
+		return is_array($reply) === true ? $reply : [];
+	}
+	
+	/**
+	 * One rawCommand round trip with both of phpredis' module-error
+	 * transports unified into $error (this build THROWS on module error
+	 * replies, others only set lastError)
+	 */
+	protected function raw(
+		RedisClient|RedisClusterClient $client,
+		string $command,
+		array $arguments,
+		mixed &$error,
+	): mixed
+	{
 		$error = null;
 		$reply = false;
 		try
@@ -288,35 +468,9 @@ class Index
 		if($error !== null)
 		{
 			$client->clearLastError();
-			
-			// the index vanished behind our back - recreate and retry once
-			if($this->isMissingIndexError($error) === false)
-			{
-				throw new Exception($error);
-			}
-			
-			$this->ensure(true);
-			
-			try
-			{
-				$client->clearLastError();
-				$reply = $client->rawCommand($command, $this->name, ...$arguments);
-				$error = $client->getLastError();
-			}
-			catch(RedisException|RedisClusterException $exception)
-			{
-				$error = $exception->getMessage();
-			}
-			
-			if($error !== null)
-			{
-				$client->clearLastError();
-				
-				throw new Exception($error);
-			}
 		}
 		
-		return is_array($reply) === true ? $reply : [];
+		return $reply;
 	}
 	
 	/**
@@ -345,8 +499,7 @@ class Index
 		$replySize = count($reply);
 		for($entry = 1; $entry + 1 < $replySize; $entry+= 2)
 		{
-			$sessionId = substr((string)$reply[$entry],
-				strlen($this->prefix) + 1);
+			$sessionId = $this->sessionId((string)$reply[$entry]);
 			
 			$document = null;
 			$fields = $reply[$entry + 1];
@@ -375,19 +528,21 @@ class Index
 	}
 	
 	/**
-	 * Builds the FT.CREATE schema from the per-project fields config
+	 * The normalized per-project fields config: alias => path/type/
+	 * sortable - the single shape behind both the FT.CREATE schema and
+	 * the live-index drift comparison
 	 */
-	protected function schema(): array
+	protected function fields(): array
 	{
-		$fields = $this->config->offsetGet('fields');
-		if($fields === null)
+		$config = $this->config->offsetGet('fields');
+		if($config === null)
 		{
 			throw new Exception(
 				'"index.fields" config section is missing.');
 		}
 		
-		$schema = [];
-		foreach($fields as $alias => $field)
+		$fields = [];
+		foreach($config as $alias => $field)
 		{
 			// iteration yields raw values - nested config arrays are only
 			// converted to ArrayObjects by offsetGet()
@@ -414,21 +569,39 @@ class Index
 						. '" for field "' . $alias . '".');
 			}
 			
-			$schema[] = RedisJson::jsonPath((array)$path);
-			$schema[] = 'AS';
-			$schema[] = (string)$alias;
-			$schema[] = $type;
-			
-			if($field->offsetGet('sortable') === true)
-			{
-				$schema[] = 'SORTABLE';
-			}
+			$fields[(string)$alias] = [
+				'path' => RedisJson::jsonPath((array)$path),
+				'type' => $type,
+				'sortable' => $field->offsetGet('sortable') === true,
+			];
 		}
 		
-		if($schema === [])
+		if($fields === [])
 		{
 			throw new Exception(
 				'"index.fields" config section is empty.');
+		}
+		
+		return $fields;
+	}
+	
+	/**
+	 * Builds the FT.CREATE schema from the per-project fields config
+	 */
+	protected function schema(): array
+	{
+		$schema = [];
+		foreach($this->fields() as $alias => $field)
+		{
+			$schema[] = $field['path'];
+			$schema[] = 'AS';
+			$schema[] = $alias;
+			$schema[] = $field['type'];
+			
+			if($field['sortable'] === true)
+			{
+				$schema[] = 'SORTABLE';
+			}
 		}
 		
 		return $schema;
