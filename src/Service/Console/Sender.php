@@ -9,6 +9,7 @@ use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Service;
 use Ovos\Service\Events;
+use Ovos\Service\Session;
 use Ovos\Service\Logger;
 use SplObjectStorage;
 use Throwable;
@@ -22,8 +23,6 @@ use function defined;
 use function json_encode;
 use function mb_substr;
 use function rtrim;
-use function session_id;
-use function session_status;
 
 use const CURLOPT_CONNECTTIMEOUT_MS;
 use const CURLOPT_HTTPHEADER;
@@ -33,7 +32,6 @@ use const CURLOPT_RETURNTRANSFER;
 use const CURLOPT_TIMEOUT_MS;
 use const JSON_INVALID_UTF8_SUBSTITUTE;
 use const JSON_PARTIAL_OUTPUT_ON_ERROR;
-use const PHP_SESSION_ACTIVE;
 
 /**
  * Reports collected errors to a central ovos/console instance.
@@ -320,9 +318,13 @@ class Sender extends Service
 			$context['ip'] = (string)Client::getIp();
 			$context['ua'] = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
 			
-			if(session_status() === PHP_SESSION_ACTIVE)
+			// handler-agnostic: the native session machinery (and its
+			// session_id()) never runs under the json handler
+			$session = $this->app->getServices()->session;
+			if($session instanceof Session
+				&& ($sessionId = $session->getId()) !== null)
 			{
-				$context['sessionId'] = (string)session_id();
+				$context['sessionId'] = $sessionId;
 			}
 			
 			$context['request'] = $this->buildRequest();
