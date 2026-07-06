@@ -2,40 +2,113 @@
 	<img src="docs/logo.svg" alt="ovos php-library" width="940">
 </p>
 
-# ovos php library
-
-### GitHub
-https://github.com/ovos/php-library
-
-## Overview
+# ovos php-library
 
 A batteries-included MVC framework and infrastructure toolkit for modern PHP
-(8.3+), built around one idea: production concerns handled once, in one place,
-instead of re-solved per project. It has powered commercial web applications
-for over a decade and is developed against real production workloads.
+(8.3+), built around one idea: **production concerns handled once, in one
+place, instead of re-solved per project.** It has powered commercial web
+applications for over a decade and is developed against real production
+workloads.
 
-Beyond the expected core — routing, controllers, models with a query builder,
-views, plugins, a DI container with attribute-based injection and autowiring,
-YAML configuration, translations, migrations and CLI tooling — the depth is in
-the infrastructure layer:
+<p align="center">
+	<img src="docs/highlights.svg" alt="Framework highlights: cache, sessions, routing, relations, profiler, container" width="940">
+</p>
 
-- **Caching** with tag-based invalidation across interchangeable stores (APCu,
-  Redis, RediSearch-indexed, versioned-key), and **MemoLock** cache-stampede
-  protection: one request rebuilds a hot value while the rest wait on Pub/Sub
-  instead of hammering the database ([README.CACHE.md](README.CACHE.md),
-  [README.MEMOLOCK.md](README.MEMOLOCK.md))
-- **Sessions** with two interchangeable handlers — the classic native
-  machinery, or lazy RedisJSON documents with per-path reads, per-value locks
-  and a searchable RediSearch index over live sessions
-  ([README.SESSION.md](README.SESSION.md))
-- **Redis Functions** infrastructure that ships Lua libraries with the code
-  and self-heals stale deployments via source-hash markers, on standalone
-  Redis and clusters alike
-- **Error reporting** to [ovos/console](https://github.com/ovos/console) and a
-  live per-request **profiler stream** (queries, redis commands, timings)
-  built in
+**GitHub:** https://github.com/ovos/php-library
 
-Companion modules:
+## What makes it different
+
+Most of this README is the expected core — routing, controllers, models with a
+query builder, views, plugins, a self-wiring DI container, YAML config,
+translations, migrations and CLI tooling. What you *won't* find off the shelf
+is the infrastructure layer, built for production traffic:
+
+### ⚡ A cache that never stampedes
+
+When a hot key expires, **one** request rebuilds the value while every other
+request waits on a Redis Pub/Sub signal — instead of a thundering herd hitting
+the database. That's **MemoLock**, and it is on by default for any `get()` with
+a resolver. Invalidation is tag-based; on the versioned stores a whole tag drops
+in **O(1)**, no matter how many keys carry it.
+
+```php
+$user = $store->get("user:$id", fn() => $this->loadUser($id), ttl: 300, tags: ["user:$id"]);
+$store->invalidateTags(["user:$id"]);   // O(1) on the versioned stores
+```
+
+Two tiers behind one interface: APCu per-worker memory and a shared
+Redis / RediSearch / versioned store. → [Cache](#cache) ·
+[README.CACHE.md](README.CACHE.md) · [README.MEMOLOCK.md](README.MEMOLOCK.md)
+
+### 🧠 Sessions as lazy RedisJSON documents
+
+Keep the classic native handler, or switch to a **lazy RedisJSON** handler that
+reads and writes one path at a time — never the whole blob — with per-value
+locking, a user-journey timeline, and a **searchable RediSearch index over live
+sessions** (answer *"who is online with role = admin?"* with a query).
+→ [Sessions](#sessions) · [README.SESSION.md](README.SESSION.md)
+
+### 🔗 SEO routes that derive from your models
+
+Routes derive from the data model the way controllers derive from the
+filesystem. A model declares its own public URL with `#[Route\Slug]`; the
+resolver handles `{prefix}/{slug},{id}{suffix}`, looks the row up by the
+**authoritative id**, **301-redirects** a drifted slug to its canonical form for
+free, and hands the typed entity straight to the action.
+
+```php
+#[Route\Slug(prefix: 'news', dispatch: [News::class, 'article'], slug: 'url_title', id: 'id', suffix: '.html')]
+class Article extends Model\Mysql {}
+
+public function article(Article $article): Response { /* route-model bound */ }
+```
+
+→ [Custom resolvers (SEO URLs)](#custom-resolvers-seo-urls)
+
+### 🎯 Relations declared as attributes, with zero N+1
+
+Declare a relation once as an attribute — the single source of the fk column,
+key, child store and query scope. `withRelations()` eager-loads with **one `IN`
+query per relation**, never N+1. A declared-but-unloaded relation still
+lazy-loads on access and leaves a **note in the profiler**, so an accidental
+N+1 in a loop is visible, not silent.
+
+```php
+#[Relation\Many('Competences', JobCompetence::class, by: 'job_id', key: 'competence_id')]
+#[Relation\One('Category', Category::class, on: 'category_id')]
+class Job extends Model\Mysql {}
+
+$jobs = $store->withRelations($jobs);   // one IN query per relation
+```
+
+→ [Relations](#relations)
+
+### 📡 A profiler built into the request
+
+Every request carries a live profiler: the SQL it ran, the Redis commands it
+issued and where the time went — streamed as it happens. Uncaught errors report
+to [ovos/console](https://github.com/ovos/console) out of the box, with the same
+per-request timeline attached. → [Configuration](#configuration-environmentsyml)
+
+### 🧩 A container that wires itself
+
+Zero-config autowiring resolves unregistered types on the fly. Inject by type,
+by container key (`#[Inject('auth')]`), or into properties *before* the
+constructor runs; pull a nested config path straight into a parameter with
+`#[ArrayObject]`. Singletons by default, `transient: true` for a fresh instance
+each call, lazy proxies on PHP 8.4+. → [Dependency Injection](#dependency-injection-container)
+
+### 🧱 More, shipped in the box
+
+**Redis Functions** deployed *with* your code and self-healed via source-hash
+markers (standalone and cluster) · **typed request bodies** with
+`$this->input()` (forgiving, dot-path, never a blind cast) · a dependency-free
+**UUIDv4** · a built-in **test & benchmark runner** · **forms** with
+filters/validators/rendering · **gettext translations** with per-vendor
+overrides.
+
+## Companion modules
+
 - https://github.com/ovos/php-module-system (system management: cache, sessions, migrations, tests, benchmarks)
 - https://github.com/ovos/php-module-admin (administration panel)
 
@@ -48,6 +121,7 @@ Companion modules:
 
 ## Table of Contents
 
+- [What makes it different](#what-makes-it-different)
 - [Installation](#installation)
 - [Project Structure](#project-structure)
 - [Bootstrap & Entry Points](#bootstrap--entry-points)
@@ -244,9 +318,11 @@ if(date_default_timezone_get() === '')
 require_once BASE_DIR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
 ```
 
-### Application Lifecycle
+<details>
+<summary><b>Application lifecycle</b> — what the constructor does before <code>run()</code> (rarely needed)</summary>
 
-The `Application` constructor runs these steps in order:
+The `Application` constructor runs these steps in order, then `$app->run()`
+routes the request and dispatches to a controller:
 
 1. **init()** - Register Application, Request, Router, Memory in container
 2. **initEnvironment()** - Load `.env` and `environments.yml`
@@ -258,7 +334,7 @@ The `Application` constructor runs these steps in order:
 8. **initModules()** - Load modules (controllers, views, translations)
 9. **initServices()** - Register and instantiate services
 
-Then `$app->run()` routes the request and dispatches to a controller.
+</details>
 
 ---
 
@@ -271,11 +347,6 @@ The `.env` file stores environment-specific secrets (database credentials, API k
 ```ini
 ENV = development
 
-[SESSION]
-HOST = unix:///var/run/redis/redis.sock
-DATABASE = 2
-SAVE_PATH = "unix:///var/run/redis/redis.sock?database=2&timeout=2&prefix=MYAPP_SESSION:"
-
 [MYSQL]
 HOST = localhost
 DATABASE = my_project
@@ -283,21 +354,36 @@ USERNAME = root
 PASSWORD = root
 
 [REDIS]
-HOST = localhost
+HOST = 127.0.0.1
 PORT = 6379
 DATABASE = 0
+
+[SESSION]
+; a Redis DSN consumed as save_path by the native session handler
+SAVE_PATH = "tcp://127.0.0.1:6379?database=0&timeout=2&prefix=MYAPP_SESSION:"
 
 [CACHE]
 PREFIX = myproject
 
-[USER]
-2FA = no
+[DATABASE_ENCRYPTION]
+; bin2hex(random_bytes(16)) — used only when a model column opts into encryption
+KEY = "change-me-32-hex-chars"
+
+[SMTP]
+HOST = 127.0.0.1
+PORT = 2525
+ENCRYPTION = ""
+USERNAME = ""
+PASSWORD = ""
 ```
 
 **Key points:**
+- The framework does **not** ship a root `.env.example` — the keys are
+  project-specific. Add exactly the sections your `environments.yml` reads via
+  `!ENV`, and nothing more; the block above is a common starting point.
 - `ENV` determines which top-level key in `environments.yml` is used (e.g., `development`, `production`)
-- Sections like `[MYSQL]` create grouped variables accessed as `MYSQL[HOST]`, `MYSQL[DATABASE]`, etc.
-- Copy `.env.example` to `.env` and adjust values for your local setup
+- Sections like `[MYSQL]` create grouped variables read in YAML as `!ENV MYSQL[HOST]`, `!ENV MYSQL[DATABASE]`, etc.
+- Copy your project's `.env.example` to `.env` and adjust values for your local setup
 - Never commit `.env` to version control
 
 ---
@@ -306,7 +392,14 @@ PREFIX = myproject
 
 The main configuration file lives at `application/configs/environments.yml`. It uses YAML format with YAML anchors (`&name`) and aliases (`*name`) for DRY inheritance between environments.
 
-### Minimal Configuration
+### A complete annotated example
+
+Don't be put off by the length — this is the *whole* shape in one place, and a
+`development` environment that simply inherits `production` with `<<:
+*production` and overrides a handful of keys. In practice you copy a project's
+`environments.yml` and change the `vendor`, domains, connections and cache
+store. The [Config Field Reference](#config-field-reference) below lists what
+each key does and what it defaults to.
 
 ```yaml
 production: &production
