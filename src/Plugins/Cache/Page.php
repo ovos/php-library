@@ -19,7 +19,10 @@ use ReflectionMethod;
 use Throwable;
 
 use function Ovos\config;
+use function apcu_fetch;
+use function apcu_store;
 use function array_key_exists;
+use function function_exists;
 use function hash;
 use function http_build_query;
 use function implode;
@@ -27,6 +30,7 @@ use function in_array;
 use function is_array;
 use function ksort;
 use function parse_str;
+use function str_contains;
 use function strcasecmp;
 use function strpos;
 use function substr;
@@ -67,6 +71,17 @@ use function time;
  * serving the page for up to an hour past its freshness instantly, while
  * ONE elected request (SET NX lock) takes the miss path and rebuilds it -
  * no visitor ever waits on a render, and there is no rebuild stampede.
+ *
+ * APCU FRONT TIER - `apcu: 5` additionally keeps the record in per-worker
+ * memory for a few seconds: the hottest shells serve with ZERO network
+ * round trips, and a tag invalidation lags this tier by at most that ttl.
+ * (RESP3 client-side-caching invalidation push was spiked and parked:
+ * phpredis 6.3 exposes no workable push wiring for FPM - the short ttl IS
+ * the coherence bound.)
+ *
+ * CONDITIONAL SERVING - every 200 carries a strong ETag of its final body
+ * (holes filled); a matching If-None-Match collapses the transfer to a
+ * bodyless 304.
  *
  * App-specific vary axes (e.g. an authenticated-user split) are added by
  * subclassing and overriding varyValue().
@@ -133,7 +148,15 @@ class Page extends Plugin
 		
 		$this->key = $this->buildKey();
 		
-		$record = $store->get($this->key);
+		// per-worker front tier first: the hottest shells serve without a
+		// network round trip; a redis hit backfills it
+		$record = $this->fromApcu();
+		if($record === null
+			&& is_array($record = $store->get($this->key)) === true)
+		{
+			$this->toApcu($record);
+		}
+		
 		if(is_array($record) === true
 			&& $this->serve($record) === true)
 		{
@@ -169,12 +192,15 @@ class Page extends Plugin
 				: $this->attribute->ttl;
 				
 			/** @var Html $response */
+			$record = $this->record($response);
+			
 			$this->getStore()?->set(
 				$this->key,
-				$this->record($response),
+				$record,
 				$ttl,
 				$this->attribute->tags,
 			);
+			$this->toApcu($record);
 		}
 		
 		// a revalidation winner releases its lock - the next stale window
@@ -187,6 +213,12 @@ class Page extends Plugin
 			&& $holes->contains((string)$response) === true)
 		{
 			$response->set($holes->fill((string)$response));
+		}
+		
+		// conditional serving on the final (post-fill) body
+		if($response instanceof Html)
+		{
+			$this->conditional($response);
 		}
 	}
 	
@@ -248,6 +280,7 @@ class Page extends Plugin
 		}
 		
 		$this->debugHeader($response, $state);
+		$this->conditional($response);
 		
 		$this->app->setResponse($response);
 		$this->getController()->setDispatched(true);
@@ -294,6 +327,75 @@ class Page extends Plugin
 		}
 		
 		return [...$record, 'body' => $body];
+	}
+	
+	/**
+	 * The per-worker front tier: a record recently seen by THIS worker,
+	 * served without touching redis. Bounded by the attribute's short
+	 * apcu ttl - which is also how long a tag invalidation may lag here.
+	 */
+	protected function fromApcu(): ?array
+	{
+		if($this->attribute->apcu < 1
+			|| function_exists('apcu_fetch') === false)
+		{
+			return null;
+		}
+		
+		$record = apcu_fetch(self::KEY_PREFIX . 'apcu:' . $this->key);
+		
+		return is_array($record) === true ? $record : null;
+	}
+	
+	protected function toApcu(
+		array $record,
+	): void
+	{
+		if($this->attribute->apcu > 0
+			&& function_exists('apcu_store') === true)
+		{
+			apcu_store(
+				self::KEY_PREFIX . 'apcu:' . $this->key,
+				$record,
+				$this->attribute->apcu,
+			);
+		}
+	}
+	
+	/**
+	 * The strong ETag of a response body
+	 */
+	public static function etagFor(
+		string $body,
+	): string
+	{
+		return '"' . hash('xxh128', $body) . '"';
+	}
+	
+	/**
+	 * Conditional serving: every 200 carries an ETag of its FINAL body
+	 * (holes filled - each visitor validates their own bytes), and a
+	 * matching If-None-Match collapses the transfer to a bodyless 304
+	 */
+	protected function conditional(
+		Html $response,
+	): void
+	{
+		if($response->getHttpCode() !== 200)
+		{
+			return;
+		}
+		
+		$etag = self::etagFor((string)$response);
+		$response->setHeader('ETag', $etag, true);
+		
+		$ifNoneMatch = (string)$this->request->getServer('HTTP_IF_NONE_MATCH');
+		if($ifNoneMatch !== ''
+			&& str_contains($ifNoneMatch, $etag) === true)
+		{
+			$response->setHttpCode(304);
+			$response->set('');
+		}
 	}
 	
 	/**
