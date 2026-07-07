@@ -17,6 +17,15 @@ class Callback extends Validator
 	// Errors
 	public const string ERROR_CALLBACK = 'callback';
 	
+	/**
+	 * Overwrite with setMessage() for a task-specific text; without this
+	 * default a failing callback used to FATAL on sprintf(null) instead of
+	 * producing a form error
+	 */
+	protected array $messages = [
+		self::ERROR_CALLBACK => '"%s" is not valid.',
+	];
+	
 	protected Closure $callback;
 	
 	public function __construct(
