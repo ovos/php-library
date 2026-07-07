@@ -590,21 +590,18 @@ class Application
 			->registerCallable(Services::class,
 			function(Container $container)
 			{
-				$servicesClass = $container->get(self::CONTAINER_KEY_CONFIG)
-					->system->services->container;
-				if($servicesClass !== null)
-				{
-					$servicesClass = str_starts_with($servicesClass, '\\')
-						? $servicesClass
-						: 'Ovos\\' . $servicesClass;
+				$servicesConfig = $container->get(self::CONTAINER_KEY_CONFIG)
+					->system->services;
 					
-					/**
-					 * @var Services $servicesClass
-					 */
-					return new $servicesClass($container);
-				}
+				/**
+				 * @var Services $servicesClass
+				 */
+				$servicesClass = self::servicesContainerClass(
+					$servicesConfig->get('container'),
+					$servicesConfig->get('namespace'),
+				);
 				
-				return new Services($container);
+				return new $servicesClass($container);
 			})
 			->get(Services::class);
 		
@@ -627,6 +624,34 @@ class Application
 		}
 		
 		return $this;
+	}
+	
+	/**
+	 * The Services container class to instantiate. An explicit "container"
+	 * (a leading "\" is absolute, else it is taken under Ovos\) wins, for
+	 * back-compat and the rare custom class name; otherwise "namespace:
+	 * Console" yields the conventional Console\Services; otherwise the base
+	 * Services. The bare-name service cascade later derives its root from
+	 * whatever class this returns, so "namespace" alone configures both.
+	 */
+	public static function servicesContainerClass(
+		?string $container,
+		?string $namespace = null,
+	): string
+	{
+		if($container !== null)
+		{
+			return str_starts_with($container, '\\') === true
+				? $container
+				: 'Ovos\\' . $container;
+		}
+		
+		if($namespace !== null && $namespace !== '')
+		{
+			return ltrim($namespace, '\\') . '\Services';
+		}
+		
+		return Services::class;
 	}
 	
 	/**
