@@ -58,4 +58,14 @@ class Page extends Test
 	{
 		return Subject::isCacheableResponse(null) === false;
 	}
+	
+	public function freshnessFollowsFreshUntil(): bool
+	{
+		$now = 1000;
+		
+		return Subject::isFresh([], $now) === true // no window - ttl is the clock
+			&& Subject::isFresh(['freshUntil' => 1000], $now) === true // inclusive
+			&& Subject::isFresh(['freshUntil' => 1001], $now) === true
+			&& Subject::isFresh(['freshUntil' => 999], $now) === false;
+	}
 }

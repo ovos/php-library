@@ -5,6 +5,7 @@ namespace Ovos\Plugins\Cache;
 
 use Ovos\Cache\Holes;
 use Ovos\Cache\Page as PageAttribute;
+use Ovos\Cache\Store\KeyValue\Redis as RedisStore;
 use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Console;
 use Ovos\Controller\Plugin;
@@ -62,6 +63,11 @@ use function time;
  * cannot fill each hole falls back to a miss and notes it in the dev
  * console.
  *
+ * STALE-WHILE-REVALIDATE - `#[Cache\Page(ttl: 300, stale: 3600)]` keeps
+ * serving the page for up to an hour past its freshness instantly, while
+ * ONE elected request (SET NX lock) takes the miss path and rebuilds it -
+ * no visitor ever waits on a render, and there is no rebuild stampede.
+ *
  * App-specific vary axes (e.g. an authenticated-user split) are added by
  * subclassing and overriding varyValue().
  *
@@ -82,6 +88,12 @@ class Page extends Plugin
 	];
 	
 	/**
+	 * Upper bound on one revalidation - a dead winner frees the next
+	 * election after at most this many seconds
+	 */
+	protected const int REVALIDATE_LOCK_TTL = 30;
+	
+	/**
 	 * Per-process "Class::action" => ?Page attribute lookup cache
 	 */
 	protected static array $attributes = [];
@@ -89,6 +101,11 @@ class Page extends Plugin
 	protected ?PageAttribute $attribute = null;
 	
 	protected ?string $key = null;
+	
+	/**
+	 * This request won the revalidation election for a stale record
+	 */
+	protected bool $revalidating = false;
 	
 	#[Override]
 	public function preDispatch(): void
@@ -146,14 +163,23 @@ class Page extends Plugin
 		
 		if(self::isCacheableResponse($response) === true)
 		{
+			// the key survives the stale window on top of the fresh ttl
+			$ttl = $this->attribute->ttl > 0
+				? $this->attribute->ttl + $this->attribute->stale
+				: $this->attribute->ttl;
+				
 			/** @var Html $response */
 			$this->getStore()?->set(
 				$this->key,
 				$this->record($response),
-				$this->attribute->ttl,
+				$ttl,
 				$this->attribute->tags,
 			);
 		}
+		
+		// a revalidation winner releases its lock - the next stale window
+		// can elect a new winner immediately
+		$this->releaseRevalidateLock();
 		
 		// the render emitted sentinels - fill them for THIS visitor too,
 		// cacheable or not (hit and miss produce identical output)
@@ -173,6 +199,21 @@ class Page extends Plugin
 		array $record,
 	): bool
 	{
+		$state = 'HIT';
+		
+		// stale-while-revalidate: past freshUntil the record still serves
+		// instantly - except for ONE winner, who takes the miss path and
+		// rebuilds while everyone else keeps getting the stale shell
+		if(self::isFresh($record) === false)
+		{
+			if($this->tryRevalidateLock() === true)
+			{
+				return false; // this request revalidates
+			}
+			
+			$state = 'STALE';
+		}
+		
 		$holes = (array)($record['holes'] ?? []);
 		
 		if($holes === [])
@@ -206,7 +247,7 @@ class Page extends Plugin
 			$response->setHeader((string)$name, $value, true);
 		}
 		
-		$this->debugHeader($response, 'HIT');
+		$this->debugHeader($response, $state);
 		
 		$this->app->setResponse($response);
 		$this->getController()->setDispatched(true);
@@ -237,6 +278,13 @@ class Page extends Plugin
 			'savedAt' => time(),
 		];
 		
+		// stale-while-revalidate: freshness is tracked INSIDE the record
+		// while the key survives ttl + stale
+		if($this->attribute->stale > 0 && $this->attribute->ttl > 0)
+		{
+			$record['freshUntil'] = time() + $this->attribute->ttl;
+		}
+		
 		$body = (string)$response;
 		$holes = $this->holes();
 		
@@ -246,6 +294,88 @@ class Page extends Plugin
 		}
 		
 		return [...$record, 'body' => $body];
+	}
+	
+	/**
+	 * Fresh unless the record carries a freshUntil in the past (a record
+	 * without one has no stale window - hard TTL is its only clock)
+	 */
+	public static function isFresh(
+		array $record,
+		?int $now = null,
+	): bool
+	{
+		$freshUntil = $record['freshUntil'] ?? null;
+		
+		if($freshUntil === null)
+		{
+			return true;
+		}
+		
+		return ($now ?? time()) <= (int)$freshUntil;
+	}
+	
+	/**
+	 * One winner per stale window: SET NX with a bounded ttl, so a dead
+	 * winner frees the election after REVALIDATE_LOCK_TTL at worst. No
+	 * client (non-Redis store) means no election - the caller treats the
+	 * stale record as a plain miss.
+	 */
+	protected function tryRevalidateLock(): bool
+	{
+		$store = $this->getStore();
+		if(($store instanceof RedisStore) === false
+			|| ($client = $store->getClient()) === null)
+		{
+			return true; // no lock possible - rebuild rather than serve stale forever
+		}
+		
+		try
+		{
+			$this->revalidating = (bool)$client->set(
+				$this->revalidateLockKey($store),
+				'1',
+				['nx', 'ex' => self::REVALIDATE_LOCK_TTL],
+			);
+		}
+		catch(Throwable)
+		{
+			$this->revalidating = false;
+		}
+		
+		return $this->revalidating;
+	}
+	
+	protected function releaseRevalidateLock(): void
+	{
+		if($this->revalidating === false)
+		{
+			return;
+		}
+		
+		$this->revalidating = false;
+		
+		$store = $this->getStore();
+		if($store instanceof RedisStore
+			&& ($client = $store->getClient()) !== null)
+		{
+			try
+			{
+				$client->del($this->revalidateLockKey($store));
+			}
+			catch(Throwable)
+			{
+				// the lock ttl reclaims it
+			}
+		}
+	}
+	
+	protected function revalidateLockKey(
+		RedisStore $store,
+	): string
+	{
+		return $store->getPrefixer()
+			->prefix($this->key . ':revalidate');
 	}
 	
 	protected function holes(): Holes
