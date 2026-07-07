@@ -8,6 +8,8 @@ use Ovos\Exception;
 use Ovos\Http\Body;
 use Ovos\Http\Input;
 use Ovos\Response\Json;
+use Ovos\Service\Events;
+use Throwable;
 
 /**
  * Api
@@ -95,12 +97,23 @@ class Api extends Controller
 	}
 	
 	/**
-	 * 503 — a dependency is unavailable (e.g. the search backend); silent.
+	 * 503 — a dependency is unavailable (e.g. the search backend). The client
+	 * gets the generic $message (never the raw exception, which may leak
+	 * internals); pass the caught $cause to log it server-side (file + console)
+	 * for debugging. Silent when $cause is null.
 	 */
 	protected function unavailable(
 		string $message = 'service unavailable',
+		?Throwable $cause = null,
 	): Json
 	{
+		if($cause !== null && $this->container->isRegistered(Events::SYMBOL))
+		{
+			$this->container
+				->get(Events::SYMBOL)
+				->log($cause);
+		}
+		
 		return (new Json)
 			->failure($message, true)
 			->setHttpCode(503);
