@@ -14,7 +14,10 @@ use Throwable;
 
 use function define;
 use function sprintf;
+use function ltrim;
 use function str_starts_with;
+use function strrpos;
+use function substr;
 use function array_merge;
 use function array_unshift;
 use function is_array;
@@ -614,23 +617,72 @@ class Application
 		
 		foreach($servicesToRegister as $service)
 		{
-			$serviceClass = str_starts_with($service, '\\')
-				? $service
-				: 'Ovos\Service\\' . $service;
-			
-			if(class_exists($serviceClass) === false)
-			{
-				throw new RuntimeException(
-					'Service class does not exist "%s".',
-					$serviceClass,
-				);
-			}
+			$serviceClass = self::resolveServiceClass(
+				$service,
+				$services::class,
+			);
 			
 			$services->register($serviceClass::SYMBOL, $serviceClass)
 				->get($serviceClass::SYMBOL);
 		}
 		
 		return $this;
+	}
+	
+	/**
+	 * A configured service name to its class: a leading "\" is an absolute
+	 * FQCN; a bare name resolves in the PROJECT'S Service\ namespace first
+	 * (derived from the custom services container class - so with
+	 * "container: \Console\Services", "Auth" finds Console\Service\Auth),
+	 * then falls back to the framework's Ovos\Service\ - the same cascade
+	 * plugins use. Projects no longer need "\Console\Service\Auth" spelled
+	 * out.
+	 */
+	public static function resolveServiceClass(
+		string $service,
+		?string $servicesContainer = null,
+	): string
+	{
+		if(str_starts_with($service, '\\') === true)
+		{
+			if(class_exists($service) === false)
+			{
+				throw new RuntimeException(
+					'Service class does not exist "%s".',
+					$service,
+				);
+			}
+			
+			return $service;
+		}
+		
+		// the project namespace comes from its Services container class:
+		// \Console\Services -> Console\Service\<name>
+		$application = null;
+		if($servicesContainer !== null
+			&& $servicesContainer !== Services::class
+			&& ($position = strrpos($servicesContainer, '\\')) !== false)
+		{
+			$application = ltrim(substr($servicesContainer, 0, $position), '\\')
+				. '\Service\\' . $service;
+			if(class_exists($application) === true)
+			{
+				return $application;
+			}
+		}
+		
+		$framework = 'Ovos\Service\\' . $service;
+		if(class_exists($framework) === true)
+		{
+			return $framework;
+		}
+		
+		throw new RuntimeException(
+			$application === null
+				? 'Service class does not exist "%s".'
+				: 'Service class does not exist: tried "' . $application . '" and "%s".',
+			$framework,
+		);
 	}
 	
 	public function getServices(): Services
