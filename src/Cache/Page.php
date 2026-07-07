@@ -22,14 +22,18 @@ use Attribute;
 final readonly class Page
 {
 	/**
-	 * @param int $ttl seconds to keep the cached response; 0 = the store's default
+	 * @param int $ttl seconds the cached response counts as FRESH; 0 = the store's default
 	 * @param string[] $tags invalidation tags carried by the stored page
 	 * @param string[] $vary axes the key varies on (e.g. 'locale', 'auth', 'query')
+	 * @param int $stale extra seconds a stale page may still be served while
+	 *   ONE request revalidates it (stale-while-revalidate) - visitors get the
+	 *   stale shell instantly instead of waiting on a rebuild; requires ttl > 0
 	 */
 	public function __construct(
 		public int $ttl = 0,
 		public array $tags = [],
 		public array $vary = [],
+		public int $stale = 0,
 	)
 	{
 	}
