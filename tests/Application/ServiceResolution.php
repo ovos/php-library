@@ -92,5 +92,34 @@ namespace Tests\Application {
 			
 			return false;
 		}
+		
+		public function containerKeyStillWinsForBackCompat(): bool
+		{
+			// explicit container: absolute is verbatim, bare is under Ovos\
+			return Application::servicesContainerClass('\Console\Services')
+					=== '\Console\Services'
+				&& Application::servicesContainerClass('MyServices')
+					=== 'Ovos\MyServices'
+				// container wins even when a namespace is also present
+				&& Application::servicesContainerClass('\Console\Services', 'Other')
+					=== '\Console\Services';
+		}
+		
+		public function namespaceYieldsTheConventionalServicesClass(): bool
+		{
+			// namespace: Console -> Console\Services; a leading backslash is tolerated
+			return Application::servicesContainerClass(null, 'Console')
+					=== 'Console\Services'
+				&& Application::servicesContainerClass(null, '\Console')
+					=== 'Console\Services';
+		}
+		
+		public function neitherKeyYieldsTheBaseServices(): bool
+		{
+			return Application::servicesContainerClass(null, null)
+					=== \Ovos\Services::class
+				&& Application::servicesContainerClass(null, '')
+					=== \Ovos\Services::class;
+		}
 	}
 }
