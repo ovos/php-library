@@ -48,19 +48,19 @@ locking, a user-journey timeline, and a **searchable RediSearch index over live
 sessions** (answer *"who is online with role = admin?"* with a query).
 → [Sessions](#sessions) · [README.SESSION.md](README.SESSION.md)
 
-### 🔗 SEO routes that derive from your models
+### 🔗 SEO entity URLs on top of convention routing
 
-Routes derive from the data model the way controllers derive from the
-filesystem. A model declares its own public URL with `#[Route\Slug]`; the
-resolver handles `{prefix}/{slug},{id}{suffix}`, looks the row up by the
-**authoritative id**, **301-redirects** a drifted slug to its canonical form for
-free, and hands the typed entity straight to the action.
+Controller and action resolve the normal, locale-aware way. An action opts into
+an SEO **entity tail** with `#[Route\Article]`: a trailing `{slug},{id}{suffix}`
+is looked up by the **authoritative id**, a drifted slug **301-redirects** to its
+canonical form for free, and the typed entity is handed straight to the action.
 
 ```php
-#[Route\Slug(prefix: 'news', dispatch: [News::class, 'article'], slug: 'url_title', id: 'id', suffix: '.html')]
-class Article extends Model\Mysql {}
-
-public function article(Article $article): Response { /* route-model bound */ }
+class News extends Controller
+{
+    #[Route\Article(model: Article::class, slug: 'url_title')]
+    public function article(Article $article): Response { /* entity bound */ }
+}
 ```
 
 → [Custom resolvers (SEO URLs)](#custom-resolvers-seo-urls)
@@ -778,10 +778,7 @@ changes; add resolver class names to `system.routes.resolvers`:
 system:
   routes:
     resolvers:
-      - Ovos\Route\SlugResolver
-    slug:
-      models:            # which models carry #[Route\Slug]
-        - Models\Article
+      - App\Route\MyResolver
 ```
 
 A `Resolver` is one method:
@@ -793,42 +790,41 @@ interface Resolver
 }
 ```
 
-#### Entity-declared SEO routes
+#### `#[Route\Article]` — SEO entity tails
 
-Routes DERIVE from the data model the way controllers derive from the
-filesystem: a model declares its own public URL with `#[Route\Slug]`, and
-`SlugResolver` handles URLs of the shape `{prefix}/{slug},{id}{suffix}`:
+For the common case — a human-readable URL that ends in an entity reference —
+you don't need a full resolver. Controller and action come from the convention
+router (locale-aware); the action just declares which model a trailing
+`{slug},{id}{suffix}` binds to:
 
 ```php
-#[Route\Slug(
-    prefix: 'news',                        // leading URL segment(s)
-    dispatch: [News::class, 'article'],    // controller + action to run
-    slug: 'url_title',                     // the model column holding the slug
-    id: 'id',                              // the authoritative lookup column
-    suffix: '.html',
-)]
-class Article extends Model\Mysql
+class News extends Controller
+{
+    #[Route\Article(
+        model: Article::class,   // model the tail binds to
+        slug: 'url_title',       // the column holding the slug (canonical)
+        id: 'id',                // the authoritative lookup column (default)
+        suffix: '.html',         // trailing literal (default)
+        separator: ',',          // between slug and id (default)
+    )]
+    public function article(Article $article): Response { /* entity bound */ }
+}
 ```
 
-For `/news/leistung-ist-das-fundament,101600.html`:
+For `/news/article/leistung-ist-das-fundament,101600.html` (or
+`/de/news/article/…` — locale is preserved):
 
 - **the id is authoritative** - the entity is looked up by `id` (indexed), the
   slug is decorative;
-- **canonical enforcement** - if the URL slug has drifted from the stored one,
-  the resolver returns a **301** to the canonical URL (great for SEO, and it
-  falls out for free since the row was fetched to look up the slug anyway);
-- **route-model binding** - the resolved entity is passed to the action, typed:
+- **canonical enforcement** - a drifted slug **301s** to the canonical URL (only
+  the tail segment is rewritten, so locale/controller/action are preserved), and
+  it's free since the row was fetched anyway;
+- **route-model binding** - the loaded entity replaces the raw tail param and is
+  passed to the action, typed. A tail whose id resolves to no row is a **404**.
 
-  ```php
-  public function article(Article $article): Response
-  ```
-
-  (no dispatcher change needed - the action-param binder casts scalars and
-  passes objects through untouched).
-
-The `,{id}{suffix}` tail is a shape the convention router never emits, so the
-SEO and convention route spaces are provably disjoint - the chain order is
-never ambiguous.
+The `,{id}{suffix}` tail is a shape the convention router never emits, so it
+never collides with a normal route. This augments convention rather than
+replacing it — for URLs that don't map to a model at all, write a `Resolver`.
 
 ---
 
