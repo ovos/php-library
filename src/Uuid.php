@@ -27,7 +27,7 @@ class Uuid
 	 */
 	public const string PATTERN =
 		'/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
-		
+	
 	/**
 	 * A random (version 4) uuid, e.g. "0aea92ed-8c57-4144-85d0-1582257f4d67"
 	 */

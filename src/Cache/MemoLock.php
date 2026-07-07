@@ -29,7 +29,7 @@ abstract class MemoLock
 {
 	protected Invoker $invoker;
 	protected Prefixer $prefixer;
-
+	
 	// queue
 	protected bool $queueEnabled = true;
 	

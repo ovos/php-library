@@ -73,10 +73,10 @@ class Environment
 		{
 			return $this->flat[$value];
 		}
-
+		
 		return $default;
 	}
-
+	
 	/**
 	 * Parsing callback for the !ENV_LIST tag: resolves the env value like
 	 * !ENV, then splits it on LIST_SEPARATOR into a trimmed, non-empty list.
@@ -95,15 +95,15 @@ class Environment
 		{
 			return [];
 		}
-
+		
 		$items = array_map('trim', explode(self::LIST_SEPARATOR, (string)$resolved));
-
+		
 		return array_values(array_filter(
 			$items,
 			static fn(string $item): bool => $item !== '',
 		));
 	}
-
+	
 	public function getYamlTags(): array
 	{
 		return
