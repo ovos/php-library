@@ -4,9 +4,12 @@ declare(strict_types=1);
 namespace Ovos\Model;
 
 use Ovos\ArrayObject;
+use Ovos\Cache\Invalidates;
+use Ovos\Cache\Store\KeyValue\Tags as TagsStore;
 use Ovos\Connections;
 use Ovos\Console;
 use Ovos\Exception;
+use Ovos\Service\Cache as CacheService;
 use Ovos\Model;
 use Ovos\Model\Relation;
 use Ovos\Model\Relation\Many as RelationMany;
@@ -1246,9 +1249,51 @@ abstract class Mysql
 	
 	public function postSave(): void
 	{
+		$this->invalidateCacheTags();
 	}
 	
 	public function postDelete(): void
 	{
+		$this->invalidateCacheTags();
+	}
+	
+	/**
+	 * #[Cache\Invalidates('article:{id}', 'articles')] on the class purges
+	 * those tags from the persistent cache after every successful save or
+	 * delete - pages and fragments carrying them go stale the moment the
+	 * content changes. Free for unannotated models (one cached lookup).
+	 *
+	 * Models overriding postSave()/postDelete() must call parent:: to keep
+	 * the purge.
+	 */
+	protected function invalidateCacheTags(): void
+	{
+		if(Invalidates::forClass(static::class) === [])
+		{
+			return;
+		}
+		
+		$tags = Invalidates::expand($this);
+		if($tags === [])
+		{
+			return;
+		}
+		
+		try
+		{
+			$store = $this->container
+				->get(CacheService::SYMBOL)
+				->getPersistent()
+				->getStore();
+				
+			if($store instanceof TagsStore)
+			{
+				$store->invalidateTags($tags);
+			}
+		}
+		catch(Throwable)
+		{
+			// no cache in this context - the save itself succeeded
+		}
 	}
 }
