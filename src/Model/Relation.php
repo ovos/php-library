@@ -29,7 +29,7 @@ abstract class Relation
 	)
 	{
 	}
-
+	
 	/**
 	 * The store loading this relation - explicitly declared, or the
 	 * child model's own store (Model::getStoreClass())

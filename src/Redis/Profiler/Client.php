@@ -67,8 +67,7 @@ class Client extends BaseRedis
 		return $result;
 	}
 	
-	// ----- strings / keys -----
-	
+	// strings / keys
 	public function get(
 		string $key,
 	): mixed
@@ -160,8 +159,7 @@ class Client extends BaseRedis
 		);
 	}
 	
-	// ----- hashes -----
-	
+	/* Hashes */
 	public function hGet(
 		string $key,
 		string $member,
@@ -243,8 +241,7 @@ class Client extends BaseRedis
 		);
 	}
 	
-	// ----- streams -----
-	
+	// streams
 	public function xAdd(
 		string $key,
 		string $id,
@@ -379,8 +376,7 @@ class Client extends BaseRedis
 		);
 	}
 	
-	// ----- misc -----
-	
+	// misc
 	public function rawCommand(
 		string $command,
 		mixed ...$args,
@@ -436,8 +432,7 @@ class Client extends BaseRedis
 		);
 	}
 	
-	// ----- transactions (delegated, not profiled — see profile()) -----
-	
+	// transactions (delegated, not profiled — see profile())
 	public function multi(
 		int $value = BaseRedis::MULTI,
 	): bool|BaseRedis
