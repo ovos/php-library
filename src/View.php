@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Cache\Holes;
 use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Form\Element;
 use Ovos\View\Helper;
@@ -276,12 +277,55 @@ class View
 			return (string)$resolver();
 		}
 		
-		return (string)$store->get(
+		$html = (string)$store->get(
 			self::FRAGMENT_PREFIX . $key,
 			$resolver,
 			$ttl,
 			$tags,
 		);
+		
+		// a fragment captured during a capturing page render carries hole
+		// sentinels; when it later lands on a NON-captured page, fill them
+		// live (on a capturing page the page capture handles them)
+		$holes = $this->container->getClass(Holes::class);
+		
+		return $holes->isCapturing() === true
+			? $html
+			: $holes->fill($html);
+	}
+	
+	/**
+	 * A late-bound fragment ("hole") in a cacheable page. On a capturing
+	 * render this emits a sentinel the page cache stores; the provider
+	 * fills it on EVERY serve - so a shared cached shell carries
+	 * per-request bits (a CSRF token, a greeting) without splitting the
+	 * cache per user. On a non-captured page the provider simply runs.
+	 *
+	 *   Hello <?= $this->hole('user', fn() => $this->escape($name)) ?>
+	 *
+	 * On a cache hit these templates never run, so a hole used on a
+	 * cached page must ALSO be registered by always-running code
+	 * (Holes::provide() from a plugin); the inline closure covers the
+	 * capturing miss and documents the hole in place.
+	 */
+	public function hole(
+		string $name,
+		?Closure $provider = null,
+	): string
+	{
+		$holes = $this->container->getClass(Holes::class);
+		
+		if($provider !== null)
+		{
+			$holes->provide($name, $provider);
+		}
+		
+		if($holes->isCapturing() === true)
+		{
+			return $holes->placeholder($name);
+		}
+		
+		return $holes->resolve($name);
 	}
 	
 	public function setMultiple(
