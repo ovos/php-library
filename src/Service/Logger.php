@@ -98,7 +98,7 @@ class Logger extends Service
 		// append
 		$append = $this->getAppend();
 		
-		$output = $prepend . $output . $append;
+		$output = $prepend . $output . $append . PHP_EOL;
 		$this->output($output);
 		
 		// forward to the error console when its sender is registered
