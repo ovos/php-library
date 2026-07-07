@@ -390,22 +390,56 @@ class Controller
 		
 		foreach($plugins as $plugin)
 		{
-			$pluginClass = str_starts_with($plugin, '\\')
-				? $plugin
-				: 'Plugins\\' . $plugin;
-			
-			if(class_exists($pluginClass) === false)
-			{
-				throw new RuntimeException('Plugin class does not exist "%s".', $pluginClass);
-			}
-			
 			/** @var Plugin $instance */
 			$instance = $this->container
-				->injectClass($pluginClass);
+				->injectClass(self::resolvePluginClass($plugin));
 			$this->addPlugin($instance);
 		}
 		
 		return $this;
+	}
+	
+	/**
+	 * A configured plugin name to its class: a leading "\" is an absolute
+	 * FQCN; a bare name resolves in the application's Plugins\ namespace
+	 * first (so an app can override), then falls back to the framework's
+	 * Ovos\Plugins\ - the same cascade view helpers use. So the config can
+	 * say "Security\Csrf" instead of "\Ovos\Plugins\Security\Csrf".
+	 */
+	public static function resolvePluginClass(
+		string $plugin,
+	): string
+	{
+		if(str_starts_with($plugin, '\\') === true)
+		{
+			if(class_exists($plugin) === false)
+			{
+				throw new RuntimeException(
+					'Plugin class does not exist "%s".',
+					$plugin,
+				);
+			}
+			
+			return $plugin;
+		}
+		
+		$application = 'Plugins\\' . $plugin;
+		if(class_exists($application) === true)
+		{
+			return $application;
+		}
+		
+		$framework = 'Ovos\Plugins\\' . $plugin;
+		if(class_exists($framework) === true)
+		{
+			return $framework;
+		}
+		
+		throw new RuntimeException(
+			'Plugin class does not exist: tried "%s" and "%s".',
+			$application,
+			$framework,
+		);
 	}
 	
 	public function registerPlugins(): void
