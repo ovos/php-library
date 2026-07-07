@@ -48,12 +48,17 @@ locking, a user-journey timeline, and a **searchable RediSearch index over live
 sessions** (answer *"who is online with role = admin?"* with a query).
 → [Sessions](#sessions) · [README.SESSION.md](README.SESSION.md)
 
-### 🔗 SEO entity URLs on top of convention routing
+### 🔗 Routing derived from the filesystem — no route table
 
-Controller and action resolve the normal, locale-aware way. An action opts into
-an SEO **entity tail** with `#[Route\Article]`: a trailing `{slug},{id}{suffix}`
-is looked up by the **authoritative id**, a drifted slug **301-redirects** to its
-canonical form for free, and the typed entity is handed straight to the action.
+Controllers **are** the routes. `/api/v1/ingest` walks the `Api\V1\Ingest`
+namespace; the next segment is the action; the rest become its arguments —
+**typed** (`yes`→`true`, `42`→`int`) and **matched by name** (`company-id` →
+`$companyId`). It's locale-aware and needs zero configuration — nothing to
+register, nothing to keep in sync with the code.
+
+SEO entity URLs layer on top of that: an action opts into a trailing
+`{slug},{id}{suffix}` with `#[Route\Article]` — looked up by the **authoritative
+id**, a drifted slug **301s** to canonical for free, the typed entity injected.
 
 ```php
 class News extends Controller
