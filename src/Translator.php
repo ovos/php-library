@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Translator\Translation;
+use Closure;
+use IntlException;
 use MessageFormatter;
 
 /**
@@ -34,6 +36,17 @@ class Translator
 	
 	protected static array $translationsPaths = [];
 	
+	/**
+	 * Overrides provider: fn(Locale $locale): array
+	 * Maps raw gettext keys (context chr(4) and plural msgid chr(0) encodings,
+	 * as in the .mo files) to msgstr strings (plural forms chr(0)-joined).
+	 * Overrides have the highest priority - they are checked after the
+	 * translations loop. Unlike that loop, an override equal to the msgid is
+	 * applied, so the source text can be forced over a .mo translation.
+	 * Inert when null.
+	 */
+	protected static ?Closure $overridesProvider = null;
+	
 	public function __construct(
 		Locale $locale,
 	)
@@ -58,6 +71,28 @@ class Translator
 		}
 		
 		return self::$currentLocale;
+	}
+	
+	public static function setOverridesProvider(
+		?Closure $provider,
+	): void
+	{
+		self::$overridesProvider = $provider;
+	}
+	
+	public static function getOverridesProvider(): ?Closure
+	{
+		return self::$overridesProvider;
+	}
+	
+	protected function getOverrides(): array
+	{
+		if(self::$overridesProvider === null)
+		{
+			return [];
+		}
+		
+		return (self::$overridesProvider)($this->locale);
 	}
 	
 	public function refreshTranslations(): static
@@ -104,6 +139,12 @@ class Translator
 			}
 		}
 		
+		$overrides = $this->getOverrides();
+		if(($overrides[$phrase] ?? '') !== '')
+		{
+			$translation = $overrides[$phrase];
+		}
+		
 		return $this->getTranslation($translation, ...$params);
 	}
 	
@@ -135,6 +176,14 @@ class Translator
 			}
 		}
 		
+		$overrides = $this->getOverrides();
+		$key = $phraseSingular . chr(0) . $phrasePlural;
+		if(($overrides[$key] ?? '') !== '')
+		{
+			$list = explode(chr(0), $overrides[$key]);
+			$translation = $list[$this->getPlural($n)] ?? $list[0];
+		}
+		
 		return $this->getTranslation($translation, ...$params);
 	}
 	
@@ -148,8 +197,19 @@ class Translator
 			return $translation;
 		}
 		
-		$formatter = new MessageFormatter($this->locale->getLanguage(), $translation);
-		return $formatter->format($params);
+		try
+		{
+			$formatter = new MessageFormatter($this->locale->getLanguage(), $translation);
+			$result = $formatter->format($params);
+		}
+		catch(IntlException)
+		{
+			return $translation; // invalid pattern: degrade to the unformatted phrase
+		}
+		
+		return $result === false
+			? $translation
+			: $result;
 	}
 	
 	public static function addTranslationsPath(
