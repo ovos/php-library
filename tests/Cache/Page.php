@@ -7,6 +7,7 @@ use Ovos\Plugins\Cache\Page as Subject;
 use Ovos\Request;
 use Ovos\Test;
 
+use function str_ends_with;
 use function str_starts_with;
 
 /**
@@ -67,5 +68,15 @@ class Page extends Test
 			&& Subject::isFresh(['freshUntil' => 1000], $now) === true // inclusive
 			&& Subject::isFresh(['freshUntil' => 1001], $now) === true
 			&& Subject::isFresh(['freshUntil' => 999], $now) === false;
+	}
+	
+	public function etagIsStrongDeterministicAndBodySensitive(): bool
+	{
+		$a = Subject::etagFor('<html>page</html>');
+		
+		return $a === Subject::etagFor('<html>page</html>')
+			&& $a !== Subject::etagFor('<html>other</html>')
+			&& str_starts_with($a, '"') === true
+			&& str_ends_with($a, '"') === true;
 	}
 }
