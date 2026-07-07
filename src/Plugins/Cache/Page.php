@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace Ovos\Plugins\Cache;
 
+use Ovos\Cache\Holes;
 use Ovos\Cache\Page as PageAttribute;
 use Ovos\Cache\Store\KeyValue\Tags;
+use Ovos\Console;
 use Ovos\Controller\Plugin;
 use Ovos\Request;
 use Ovos\Response;
@@ -13,12 +15,15 @@ use Ovos\Service\Cache;
 use Override;
 use ReflectionException;
 use ReflectionMethod;
+use Throwable;
 
 use function Ovos\config;
 use function array_key_exists;
 use function hash;
 use function http_build_query;
+use function implode;
 use function in_array;
+use function is_array;
 use function ksort;
 use function parse_str;
 use function strcasecmp;
@@ -30,18 +35,32 @@ use function time;
  * Page cache
  *
  * Serves and captures the full HTML response of any action marked with
- * #[Cache\Page]. Register as a default HTTP plugin, early in the chain:
+ * #[Cache\Page]. Register as a default HTTP plugin AFTER the layout
+ * plugin - postDispatch runs in registration order, and the capture must
+ * see the FINAL page (layout applied), not the bare action output:
  *
  *   system:
  *     plugins:
  *       default:
  *         http:
- *           - \Ovos\Plugins\Cache\Page
+ *           - Locales
  *           - Layout\Page
+ *           - \Ovos\Plugins\Cache\Page
  *
- * On a hit it replays the stored body and stops dispatch; on a miss it lets the
- * action run and stores the rendered body (with its tags) afterwards. Only
- * GET/HEAD are cached, only 200 responses, and never one that sets a cookie.
+ * On a hit it replays the stored body and stops dispatch (no plugin
+ * postDispatch runs - the stored page is already final); on a miss it lets
+ * the action run and stores the rendered body (with its tags) afterwards.
+ * Only GET/HEAD are cached, only 200 responses, and never one that sets a
+ * cookie.
+ *
+ * HOLES - late-bound per-request bits inside the shared shell: a template
+ * emits `$this->hole('csrf', fn() => …)` and the body is stored PRE-SPLIT
+ * at the sentinels (segments + hole names); serving interleaves stored
+ * segments with freshly resolved values, no parsing per hit. On a hit the
+ * templates never ran, so every hole must be resolvable from an
+ * always-running registration (Holes::provide() in a plugin) - a hit that
+ * cannot fill each hole falls back to a miss and notes it in the dev
+ * console.
  *
  * App-specific vary axes (e.g. an authenticated-user split) are added by
  * subclassing and overriding varyValue().
@@ -98,12 +117,15 @@ class Page extends Plugin
 		$this->key = $this->buildKey();
 		
 		$record = $store->get($this->key);
-		if(is_array($record) === false)
+		if(is_array($record) === true
+			&& $this->serve($record) === true)
 		{
-			return; // miss - let the action run; postDispatch captures it
+			return;
 		}
 		
-		$this->serve($record);
+		// miss (or a record we cannot serve) - let the action run with
+		// hole capturing on; postDispatch splits and stores the result
+		$this->holes()->capturing(true);
 	}
 	
 	#[Override]
@@ -116,31 +138,67 @@ class Page extends Plugin
 			return;
 		}
 		
+		$holes = $this->holes();
+		$holes->capturing(false);
+		
 		$response = $this->app->getResponse();
 		$this->debugHeader($response, 'MISS');
 		
-		if(self::isCacheableResponse($response) === false)
+		if(self::isCacheableResponse($response) === true)
 		{
-			return;
+			/** @var Html $response */
+			$this->getStore()?->set(
+				$this->key,
+				$this->record($response),
+				$this->attribute->ttl,
+				$this->attribute->tags,
+			);
 		}
 		
-		/** @var Html $response */
-		$this->getStore()?->set(
-			$this->key,
-			$this->record($response),
-			$this->attribute->ttl,
-			$this->attribute->tags,
-		);
+		// the render emitted sentinels - fill them for THIS visitor too,
+		// cacheable or not (hit and miss produce identical output)
+		if($response instanceof Html
+			&& $holes->contains((string)$response) === true)
+		{
+			$response->set($holes->fill((string)$response));
+		}
 	}
 	
 	/**
-	 * Replay a stored record as the response and skip the action
+	 * Replay a stored record as the response and skip the action; false
+	 * when the record cannot be served (a hole with no provider) - the
+	 * caller then falls through to the miss path
 	 */
 	protected function serve(
 		array $record,
-	): void
+	): bool
 	{
-		$response = new Html((string)($record['body'] ?? ''));
+		$holes = (array)($record['holes'] ?? []);
+		
+		if($holes === [])
+		{
+			$body = (string)($record['body'] ?? '');
+		}
+		else
+		{
+			// a hit must not ship a page with unfillable holes - the
+			// templates never ran, so only always-registered providers count
+			if($this->holes()->canResolveAll($holes) === false)
+			{
+				$this->note('page cache: hit not served - unprovided hole(s) ['
+					. implode(', ', $holes) . '] on ' . $this->key
+					. ' - register them via Holes::provide() in a plugin');
+					
+				return false;
+			}
+			
+			$body = $this->holes()->assemble(
+				(array)($record['segments'] ?? []),
+				$holes,
+			);
+		}
+		
+		$response = new Html($body);
 		$response->setHttpCode((int)($record['code'] ?? 200));
 		
 		foreach((array)($record['headers'] ?? []) as $name => $value)
@@ -152,10 +210,16 @@ class Page extends Plugin
 		
 		$this->app->setResponse($response);
 		$this->getController()->setDispatched(true);
+		
+		return true;
 	}
 	
 	/**
-	 * @return array{body: string, code: int, headers: array, savedAt: int}
+	 * The storable record: a plain body, or - when the render emitted hole
+	 * sentinels - the body pre-split into segments + hole names, so a hit
+	 * assembles without ever parsing
+	 *
+	 * @return array{code: int, headers: array, savedAt: int, ...}
 	 */
 	protected function record(
 		Html $response,
@@ -167,12 +231,44 @@ class Page extends Plugin
 			$headers[$name] = $header['value'] ?? null;
 		}
 		
-		return [
-			'body' => (string)$response,
+		$record = [
 			'code' => $response->getHttpCode(),
 			'headers' => $headers,
 			'savedAt' => time(),
 		];
+		
+		$body = (string)$response;
+		$holes = $this->holes();
+		
+		if($holes->contains($body) === true)
+		{
+			return [...$record, ...$holes->split($body)];
+		}
+		
+		return [...$record, 'body' => $body];
+	}
+	
+	protected function holes(): Holes
+	{
+		return $this->container->getClass(Holes::class);
+	}
+	
+	/**
+	 * A dev-console note (visible in the profiler panel)
+	 */
+	protected function note(
+		string $message,
+	): void
+	{
+		try
+		{
+			$this->container->getClass(Console::class)
+				->setMessage($message);
+		}
+		catch(Throwable)
+		{
+			// no console in this context - the behaviour still stands
+		}
 	}
 	
 	protected function buildKey(): string
