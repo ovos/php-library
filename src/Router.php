@@ -6,9 +6,12 @@ namespace Ovos;
 use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException\FileNotFoundException;
 use Ovos\Exception\NotFoundException;
+use Ovos\Route\Article;
+use Ovos\Route\ArticleBinder;
 use Ovos\Route\Resolver;
 use Ovos\Route\Resolution;
 use Ovos\Service\Cache;
+use ReflectionMethod;
 use SplFileInfo;
 
 use function array_key_exists;
@@ -346,9 +349,57 @@ class Router
 			$action = array_shift($params);
 			$request->setAction($action);
 			$request->setActionMethod($method);
+
+			// SEO entity tail: if the action declares #[Route\Article] and the
+			// last remaining param is the "{slug},{id}{suffix}" shape, swap it
+			// for the loaded entity (or record a canonical 301)
+			$params = $this->bindArticle($controllerClassNs, $method, $params);
 		}
-		
+
 		// return the remaining parameters
+		return $params;
+	}
+
+	/**
+	 * Binds a #[Route\Article] tail on the resolved action: replaces the raw
+	 * "{slug},{id}{suffix}" last param with the loaded entity, or records the
+	 * canonical redirect when the slug drifted. Params are returned untouched
+	 * when the action declares no article or the last param is not a tail.
+	 */
+	protected function bindArticle(
+		string $controllerClassNs,
+		string $method,
+		array $params,
+	): array
+	{
+		if($params === [])
+		{
+			return $params;
+		}
+
+		$attributes = (new ReflectionMethod($controllerClassNs, $method))
+			->getAttributes(Article::class);
+		if($attributes === [])
+		{
+			return $params;
+		}
+
+		$last = count($params) - 1;
+		$bound = (new ArticleBinder)->bind(
+			$this->url,
+			(string)$params[$last],
+			$attributes[0]->newInstance(),
+		);
+
+		if($bound instanceof Url)
+		{
+			$this->redirect = $bound;
+		}
+		else if($bound !== null)
+		{
+			$params[$last] = $bound;
+		}
+
 		return $params;
 	}
 	

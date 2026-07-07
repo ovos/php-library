@@ -66,8 +66,8 @@
 		font-family="Consolas, 'Courier New', monospace">03</text>
 	<text x="662" y="136" font-size="21" font-weight="700" letter-spacing="2"
 		fill="#fcee0a" filter="url(#glow)" font-family="Consolas, 'Courier New', monospace">ROUTING</text>
-	<text x="662" y="168" font-size="12.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">SEO slugs derived from</text>
-	<text x="662" y="188" font-size="12.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">models &#183; 301 canonical</text>
+	<text x="662" y="168" font-size="12.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">SEO entity tails on</text>
+	<text x="662" y="188" font-size="12.5" fill="#8b8ba7" font-family="Consolas, 'Courier New', monospace">convention routes &#183; 301</text>
 
 	<!-- ============ ROW 2 ============ -->
 
