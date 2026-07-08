@@ -22,10 +22,7 @@ use Throwable;
 use function bin2hex;
 use function count;
 use function is_int;
-use function is_resource;
 use function microtime;
-use function proc_close;
-use function proc_open;
 use function random_bytes;
 use function sprintf;
 use function time;
@@ -698,8 +695,8 @@ class RedisJson extends Test
 		$session = $this->session();
 		$session->set(['v'], 'old');
 		
-		$process = proc_open($this->clientCommand('writer', $session), [], $pipes);
-		if(is_resource($process) === false)
+		$process = Parallel::spawn($this->clientCommand('writer', $session));
+		if($process === null)
 		{
 			return false;
 		}
@@ -737,7 +734,7 @@ class RedisJson extends Test
 		}
 		finally
 		{
-			proc_close($process);
+			Parallel::close($process);
 			$this->connection->getClient()
 				->del(self::PREFIX . ':flag:' . $session->getSessionId());
 		}
@@ -753,8 +750,8 @@ class RedisJson extends Test
 		$session = $this->session();
 		$session->set(['v'], 'old');
 		
-		$process = proc_open($this->clientCommand('writer', $session), [], $pipes);
-		if(is_resource($process) === false)
+		$process = Parallel::spawn($this->clientCommand('writer', $session));
+		if($process === null)
 		{
 			return false;
 		}
@@ -792,7 +789,7 @@ class RedisJson extends Test
 		}
 		finally
 		{
-			proc_close($process);
+			Parallel::close($process);
 			$this->connection->getClient()
 				->del(self::PREFIX . ':flag:' . $session->getSessionId());
 		}
