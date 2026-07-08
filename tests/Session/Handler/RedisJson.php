@@ -11,6 +11,7 @@ use Ovos\Session\Node;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Parallel;
+use Ovos\Url;
 use DateTime;
 use Override;
 use stdClass;
@@ -370,6 +371,26 @@ class RedisJson extends Test
 		
 		return $read instanceof DateTime
 			&& $read == $date;
+	}
+	
+	/**
+	 * A plain user-space class (here Ovos\Url, exactly what bo2go stores as
+	 * the post-login return_url) is not JsonSerializable/stdClass/ArrayObject,
+	 * so it round-trips through the serialized leaf and comes back as a real
+	 * instance - unlike DateTime it has no __serialize magic, so this covers
+	 * the generic "every property is serialized" path
+	 */
+	public function userSpaceObjectsSurviveAsSerializedLeaves(): bool
+	{
+		$url = new Url('account', 'orders');
+		
+		$session = $this->session();
+		$session->set(['auth', 'return_url'], $url);
+		
+		$read = $session->get(['auth', 'return_url']);
+		
+		return $read instanceof Url
+			&& $read == $url;
 	}
 	
 	public function arrayObjectsBecomeAddressableJson(): bool
