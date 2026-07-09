@@ -334,7 +334,7 @@ class RedisJson
 		$types = $this->checked($this->lockScope($path),
 			fn($target): mixed => $target
 				->rawCommand('JSON.TYPE', $this->key(), self::jsonPath($path)));
-				
+		
 		$type = is_array($types) === true
 			? ($types[0] ?? null)
 			: null;
@@ -1205,11 +1205,6 @@ class RedisJson
 			return $value;
 		}
 		
-		if($value instanceof JsonSerializable)
-		{
-			return $value;
-		}
-		
 		if($value instanceof stdClass)
 		{
 			// plain json data by nature (Model::export() and json_decode
@@ -1219,10 +1214,19 @@ class RedisJson
 				get_object_vars($value));
 		}
 		
+		// checked BEFORE JsonSerializable: Ovos\ArrayObject implements it,
+		// but the store needs the deep normalize() walk (binary strings and
+		// foreign objects become leaves) and the array copy (a list stays a
+		// json array), which the JsonSerializable passthrough would skip
 		if($value instanceof BaseArrayObject)
 		{
 			return array_map($this->normalize(...),
 				$value->getArrayCopy());
+		}
+		
+		if($value instanceof JsonSerializable)
+		{
+			return $value;
 		}
 		
 		return [
@@ -1246,7 +1250,7 @@ class RedisJson
 			$restored = $serialized === false
 				? false
 				: unserialize($serialized);
-				
+			
 			// a corrupt leaf (or a user array that merely looks like one)
 			// hands back the raw array instead of a silent false -
 			// serialize(false) itself round-trips correctly
