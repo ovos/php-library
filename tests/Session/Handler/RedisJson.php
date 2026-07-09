@@ -403,6 +403,27 @@ class RedisJson extends Test
 			&& $session->get(['ns']) === ['a' => 1, 'b' => ['c' => 2]];
 	}
 	
+	/**
+	 * An ArrayObject is deep-normalized even though it is now
+	 * JsonSerializable: a nested opaque object still round-trips as a
+	 * serialized leaf and a nested binary string survives - the reason the
+	 * ArrayObject branch is checked before the JsonSerializable passthrough
+	 */
+	public function arrayObjectIsDeepNormalized(): bool
+	{
+		$session = $this->session();
+		$session->set(['ns'], new ArrayObject([
+			'when' => new DateTime('2026-07-06 12:00:00'),
+			'token' => "\x00\x01\xff\xfe",
+		]));
+		
+		$when = $session->get(['ns', 'when']);
+		
+		return $when instanceof DateTime
+			&& $when == new DateTime('2026-07-06 12:00:00')
+			&& $session->get(['ns', 'token']) === "\x00\x01\xff\xfe";
+	}
+	
 	public function lockedValueIsHeldAndReleasedBySet(): bool
 	{
 		$session = $this->session();

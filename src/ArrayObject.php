@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos;
 
 use ArrayObject as BaseArrayObject;
+use JsonSerializable;
 
 use function array_shift;
 use function array_merge;
@@ -15,7 +16,7 @@ use function is_string;
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class ArrayObject extends BaseArrayObject
+class ArrayObject extends BaseArrayObject implements JsonSerializable
 {
 	public function __construct(
 		array $array = [],
@@ -49,6 +50,16 @@ class ArrayObject extends BaseArrayObject
 		
 		return $this->offsetGet($key)
 			->getArrayCopy();
+	}
+	
+	/**
+	 * The array copy is the value's JSON form: a list stays a JSON array
+	 * (a bare ArrayObject encodes as an object, "0"/"1"/... keyed), and
+	 * nested ArrayObjects serialize the same way in turn
+	 */
+	public function jsonSerialize(): array
+	{
+		return $this->getArrayCopy();
 	}
 	
 	public function offsetGet(
