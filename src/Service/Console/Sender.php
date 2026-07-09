@@ -14,6 +14,7 @@ use Ovos\Service\Logger;
 use SplObjectStorage;
 use Throwable;
 
+use function array_replace;
 use function array_values;
 use function count;
 use function curl_exec;
@@ -108,10 +109,23 @@ class Sender extends Service
 		return (int)($this->config?->log_level ?? 5);
 	}
 	
-	public function captureException(
-		Throwable $event,
-		array $extra = [],
-		?int $priority = null,
+	/**
+	 * Start building an arbitrary event bound to this sender. A thrown
+	 * exception is optional — set a message, extras and context overrides, then
+	 * call Event::capture(). Reachable through the container from anywhere:
+	 * container()->get(Sender::SYMBOL)->event() (or services()->consoleSender).
+	 */
+	public function event(): Event
+	{
+		return new Event($this);
+	}
+	
+	/**
+	 * Queue an arbitrary event. The single HTTP flush still happens once per
+	 * request from Application::handleShutdown().
+	 */
+	public function capture(
+		Event $event,
 	): static
 	{
 		if($this->isEnabled() === false)
@@ -121,7 +135,7 @@ class Sender extends Service
 		
 		try
 		{
-			$this->enqueue($event, $priority, $extra, self::QUEUE_MAX);
+			$this->enqueue($event, self::QUEUE_MAX);
 		}
 		catch(Throwable)
 		{
@@ -131,35 +145,18 @@ class Sender extends Service
 		return $this;
 	}
 	
-	/**
-	 * Queues one throwable payload, deduping by live object identity.
-	 * offsetExists/offsetSet, not contains/attach — the aliases are
-	 * deprecated in PHP 8.5 and the promoted deprecation would land in the
-	 * capture catch, silently dropping the event. The storage HOLDS the
-	 * reference, so a queued throwable cannot be freed and have its recycled
-	 * object id collide with a later, different one.
-	 */
-	protected function enqueue(
+	public function captureException(
 		Throwable $event,
-		?int $priority,
-		array $extra,
-		int $limit,
-	): void
+		array $extra = [],
+		?int $priority = null,
+	): static
 	{
-		$this->seen ??= new SplObjectStorage;
-		if($this->seen->offsetExists($event)
-			|| count($this->queue) >= $limit)
-		{
-			return;
-		}
-		
-		// build the payload BEFORE marking the event as seen: if construction
-		// throws, a pre-marked event would count as already queued for the
-		// rest of the request and never get another chance
-		$payload = Payload::fromThrowable($event, $priority, $extra);
-		
-		$this->seen->offsetSet($event);
-		$this->queue[] = $payload;
+		return $this->capture(
+			$this->event()
+				->exception($event)
+				->extras($extra)
+				->priority($priority),
+		);
 	}
 	
 	public function captureMessage(
@@ -168,26 +165,52 @@ class Sender extends Service
 		array $extra = [],
 	): static
 	{
-		if($this->isEnabled() === false)
+		return $this->capture(
+			$this->event()
+				->message($message)
+				->priority($priority)
+				->extras($extra),
+		);
+	}
+	
+	/**
+	 * Queues one event, deduping throwables by live object identity.
+	 * offsetExists/offsetSet, not contains/attach — the aliases are
+	 * deprecated in PHP 8.5 and the promoted deprecation would land in the
+	 * capture catch, silently dropping the event. The storage HOLDS the
+	 * reference, so a queued throwable cannot be freed and have its recycled
+	 * object id collide with a later, different one. An event without a
+	 * throwable cannot be deduped by identity — it is queued up to the limit.
+	 */
+	protected function enqueue(
+		Event $event,
+		int $limit,
+	): void
+	{
+		$this->seen ??= new SplObjectStorage;
+		$throwable = $event->getThrowable();
+		
+		if($throwable !== null && $this->seen->offsetExists($throwable))
 		{
-			return $this;
+			return;
 		}
 		
-		try
+		if(count($this->queue) >= $limit)
 		{
-			if(count($this->queue) >= self::QUEUE_MAX)
-			{
-				return $this;
-			}
-			
-			$this->queue[] = Payload::fromMessage($message, $priority, $extra);
-		}
-		catch(Throwable)
-		{
-			// never break the host application
+			return;
 		}
 		
-		return $this;
+		// build the payload BEFORE marking the event as seen: if construction
+		// throws, a pre-marked event would count as already queued for the
+		// rest of the request and never get another chance
+		$payload = $event->toPayload();
+		
+		if($throwable !== null)
+		{
+			$this->seen->offsetSet($throwable);
+		}
+		
+		$this->queue[] = $payload;
 	}
 	
 	/**
@@ -236,7 +259,7 @@ class Sender extends Service
 				
 				try
 				{
-					$this->enqueue($event, null, [], self::QUEUE_MAX * 2);
+					$this->enqueue($this->event()->exception($event), self::QUEUE_MAX * 2);
 				}
 				catch(Throwable)
 				{
@@ -259,7 +282,9 @@ class Sender extends Service
 				$context ??= $this->buildContext();
 				
 				$payload['type'] = $context['type'];
-				$payload['context'] = $context['context']
+				// per-event context overrides win over the auto-built base
+				$payload['context'] = array_replace($context['context'],
+						$payload['context'] ?? [])
 					+ ['extra' => $payload['extra']];
 				unset($payload['extra']);
 				
