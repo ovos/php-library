@@ -136,7 +136,7 @@ class Sender extends Test
 				Throwable $event,
 			): void
 			{
-				$this->enqueue($event, null, [], self::QUEUE_MAX * 2);
+				$this->enqueue($this->event()->exception($event), self::QUEUE_MAX * 2);
 			}
 			
 			protected function send(

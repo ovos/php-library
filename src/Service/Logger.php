@@ -4,18 +4,17 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\Client;
-use Ovos\Exception;
+use Ovos\Logger\Normalizer;
 use Ovos\Logger\Traits\TraitFile;
+use Ovos\Logger\Writer;
 use Ovos\Service;
 use Throwable;
 
-use function count;
 use function date;
 use function get_class;
 use function implode;
 use function is_array;
 use function is_numeric;
-use function is_string;
 use function json_encode;
 use function mb_strlen;
 use function method_exists;
@@ -27,7 +26,7 @@ use function sprintf;
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Logger extends Service
+class Logger extends Service implements Writer
 {
 	use TraitFile;
 	
@@ -57,41 +56,41 @@ class Logger extends Service
 	}
 	
 	/**
-	 * Logs events (messages/errors/exceptions)
+	 * Logs an event (message/error/exception) to the file. Direct callers get
+	 * file-only logging; forwarding to the error console lives in the Events
+	 * fan-out (Events::log delivers to this writer and the console Writer).
 	 */
 	public function log(
 		...$event,
 	): static
 	{
-		$count = count($event);
-		if($count === 0)
+		$normalized = Normalizer::normalize($event);
+		if($normalized === null)
 		{
 			return $this;
 		}
 		
-		$extras = [];
-		// $message, sprintf arguments
-		if(is_string($event[0])) // support string messages
-		{
-			$message = $event[0];
-			if($count > 1)
-			{
-				$message = sprintf(...$event);
-			}
-			$event[0] = new Exception($message);
-		}
-		// $event, array $extras
-		else if($count > 1)
-		{
-			$extras = $event[1];
-		}
+		[$throwable, $extra] = $normalized;
+		$this->write($throwable, $extra);
 		
-		$output = $this->getEvent($event[0]);
+		return $this;
+	}
+	
+	/**
+	 * Writer: append the formatted event — with the request/CLI context and
+	 * redacted request variables — to today's log file.
+	 */
+	public function write(
+		Throwable $event,
+		array $extra,
+	): void
+	{
+		$output = $this->getEvent($event);
 		
 		// extras
-		foreach($extras as $extra => $value)
+		foreach($extra as $key => $value)
 		{
-			$output.= $extra . ': ' . $value . PHP_EOL;
+			$output.= $key . ': ' . $value . PHP_EOL;
 		}
 		// prepend
 		$prepend = $this->getPrepend();
@@ -100,23 +99,6 @@ class Logger extends Service
 		
 		$output = $prepend . $output . $append . PHP_EOL;
 		$this->output($output);
-		
-		// forward to the error console when its sender is registered
-		if($event[0] instanceof Throwable)
-		{
-			try
-			{
-				$this->container
-					->get(Console\Sender::SYMBOL)
-					->captureException($event[0], $extras);
-			}
-			catch(Throwable)
-			{
-				// sender not registered — file logging stays untouched
-			}
-		}
-		
-		return $this;
 	}
 	
 	public function getPrepend(): string

@@ -2,6 +2,8 @@
 
 namespace Ovos\Service;
 
+use Ovos\Logger\Normalizer;
+use Ovos\Logger\Writer;
 use Ovos\Service;
 use Countable;
 use Iterator;
@@ -32,6 +34,12 @@ class Events
 	 * List of events that occurred during runtime (such as errors or exceptions)
 	 */
 	protected array $events = [];
+	
+	/**
+	 * Log writers, built lazily from what is registered (the file Logger and,
+	 * when the sender is registered, the console Writer). Null until first use.
+	 */
+	protected ?array $writers = null;
 	
 	public function __construct()
 	{
@@ -88,15 +96,85 @@ class Events
 	}
 	
 	/**
-	 * Logs events (messages/errors/exceptions)
+	 * Logs an event (message/error/exception) by fanning it out to every
+	 * registered writer — the file Logger and, when the error console sender is
+	 * registered, the console Writer. Each writer is isolated so one failure
+	 * neither blocks the others nor re-enters the log path (which would recurse).
 	 */
 	public function log(
 		...$event,
 	): static
 	{
-		$this->container
-			->get(Logger::SYMBOL)
-			->log(...$event);
+		$normalized = Normalizer::normalize($event);
+		if($normalized === null)
+		{
+			return $this;
+		}
+		
+		[$throwable, $extra] = $normalized;
+		
+		foreach($this->getWriters() as $writer)
+		{
+			try
+			{
+				$writer->write($throwable, $extra);
+			}
+			catch(Throwable)
+			{
+				// one writer's failure must not block the others — and must
+				// never be logged from here (that would recurse)
+			}
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * The registered log writers, built lazily: the file Logger, plus the
+	 * console Writer when the sender is registered (the isRegistered gate keeps
+	 * the console optional per environment).
+	 *
+	 * @return Writer[]
+	 */
+	protected function getWriters(): array
+	{
+		if($this->writers !== null)
+		{
+			return $this->writers;
+		}
+		
+		$this->writers = [];
+		
+		// file writer — the Logger service
+		if($this->container->isRegistered(Logger::SYMBOL))
+		{
+			$this->writers[] = $this->container->get(Logger::SYMBOL);
+		}
+		
+		// console writer — only when the error console sender is registered
+		if($this->container->isRegistered(Console\Sender::SYMBOL))
+		{
+			$this->writers[] = new Console\Writer(
+				$this->container->get(Console\Sender::SYMBOL),
+			);
+		}
+		
+		return $this->writers;
+	}
+	
+	/**
+	 * Register an extra log writer beyond the file/console defaults.
+	 */
+	public function addWriter(
+		Writer $writer,
+	): static
+	{
+		if($this->writers === null)
+		{
+			$this->getWriters();
+		}
+		
+		$this->writers[] = $writer;
 		
 		return $this;
 	}
