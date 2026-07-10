@@ -60,7 +60,7 @@ final class ArticleBinder
 			throw new NotFoundException(
 				'No %s for id %s', $modelClass, (string)$id);
 		}
-
+		
 		// canonical: the URL slug must equal the stored one, else 301
 		if($article->canonical === true)
 		{
@@ -71,10 +71,10 @@ final class ArticleBinder
 				return $this->canonicalUrl($url, $article, $stored, $id);
 			}
 		}
-
+		
 		return $model;
 	}
-
+	
 	/**
 	 * The numeric id from "{slug},{id}{suffix}", or null when the segment is
 	 * not that shape (wrong suffix, no separator, non-numeric id)
@@ -89,24 +89,24 @@ final class ArticleBinder
 		{
 			return null;
 		}
-
+		
 		$body = $article->suffix === ''
 			? $segment
 			: substr($segment, 0, -strlen($article->suffix));
-
+		
 		$position = strrpos($body, $article->separator);
 		if($position === false)
 		{
 			return null;
 		}
-
+		
 		$id = substr($body, $position + strlen($article->separator));
-
+		
 		return ctype_digit($id) === true && $id !== ''
 			? (int)$id
 			: null;
 	}
-
+	
 	protected function extractSlug(
 		string $segment,
 		Article $article,
@@ -115,14 +115,14 @@ final class ArticleBinder
 		$body = $article->suffix === ''
 			? $segment
 			: substr($segment, 0, -strlen($article->suffix));
-
+		
 		$position = strrpos($body, $article->separator);
-
+		
 		return $position === false
 			? $body
 			: substr($body, 0, $position);
 	}
-
+	
 	/**
 	 * The canonical URL for a redirect: same path, the STORED slug in the tail.
 	 * Only the last component is rewritten, so locale / controller / action are
@@ -138,10 +138,10 @@ final class ArticleBinder
 		$components = $url->getComponents();
 		$components[count($components) - 1]
 			= $storedSlug . $article->separator . $id . $article->suffix;
-
+		
 		$canonical = $url->getClone();
 		$canonical->setComponents($components);
-
+		
 		return $canonical;
 	}
 }
