@@ -145,7 +145,7 @@ final class Event
 		{
 			$payload = Payload::fromMessage(
 				$this->message,
-				$this->priority ?? 5,
+				$this->priority ?? Priority::NOTICE,
 				$this->extra,
 			);
 		}

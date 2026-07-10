@@ -5,6 +5,7 @@ namespace Tests\Service\Console;
 
 use ErrorException;
 use LogicException;
+use Ovos\Exception as OvosException;
 use Ovos\Service\Console\Payload as ConsolePayload;
 use Ovos\Test;
 use RuntimeException;
@@ -29,6 +30,14 @@ class Payload extends Test
 			&& ConsolePayload::priorityFor(new ErrorException('x', 0, E_DEPRECATED)) === 6;
 	}
 	
+	public function declaredPriorityOverridesMapping(): bool
+	{
+		// an Ovos exception may carry its own priority (e.g. a router 404 as
+		// info); a null priority defers to the default type-based mapping
+		return ConsolePayload::priorityFor((new OvosException('x'))->withPriority(6)) === 6
+			&& ConsolePayload::priorityFor(new OvosException('x')) === 3;
+	}
+
 	public function eventsChainOutermostFirst(): bool
 	{
 		$inner = new LogicException('inner cause');

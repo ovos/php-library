@@ -11,6 +11,7 @@ use Ovos\Route\ArticleBinder;
 use Ovos\Route\Resolver;
 use Ovos\Route\Resolution;
 use Ovos\Service\Cache;
+use Ovos\Service\Console\Priority;
 use ReflectionMethod;
 use SplFileInfo;
 
@@ -234,7 +235,10 @@ class Router
 		
 		$this->url->setComponents([]);
 		
-		throw new FileNotFoundException('File not found.');
+		// static-file 404 — reported as info: mostly crawlers hitting stale
+		// links, nothing actionable (see Console\Payload::priorityFor)
+		throw (new FileNotFoundException('File not found: %s', implode('/', $params)))
+			->withPriority(Priority::INFO);
 	}
 	
 	protected function setRequest(
@@ -376,21 +380,21 @@ class Router
 		{
 			return $params;
 		}
-
+		
 		$attributes = (new ReflectionMethod($controllerClassNs, $method))
 			->getAttributes(Article::class);
 		if($attributes === [])
 		{
 			return $params;
 		}
-
+		
 		$last = count($params) - 1;
 		$bound = (new ArticleBinder)->bind(
 			$this->url,
 			(string)$params[$last],
 			$attributes[0]->newInstance(),
 		);
-
+		
 		if($bound instanceof Url)
 		{
 			$this->redirect = $bound;
@@ -399,7 +403,7 @@ class Router
 		{
 			$params[$last] = $bound;
 		}
-
+		
 		return $params;
 	}
 	
