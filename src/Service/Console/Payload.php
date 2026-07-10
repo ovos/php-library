@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Console;
 
+use Ovos\Exception\HasPriority;
 use ErrorException;
 use Throwable;
 
@@ -40,21 +41,28 @@ final class Payload
 		Throwable $event,
 	): int
 	{
+		// a throwable may declare its own priority (e.g. a router 404 as info)
+		if($event instanceof HasPriority
+			&& ($priority = $event->getPriority()) !== null)
+		{
+			return $priority;
+		}
+		
 		if($event instanceof ErrorException)
 		{
 			return match($event->getSeverity())
 			{
 				E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR,
-				E_USER_ERROR, E_RECOVERABLE_ERROR => 2, // critical
+				E_USER_ERROR, E_RECOVERABLE_ERROR => Priority::CRITICAL,
 				E_WARNING, E_CORE_WARNING, E_COMPILE_WARNING,
-				E_USER_WARNING => 4, // warning
-				E_NOTICE, E_USER_NOTICE => 5, // notice
-				E_DEPRECATED, E_USER_DEPRECATED => 6, // info
-				default => 3, // error
+				E_USER_WARNING => Priority::WARNING,
+				E_NOTICE, E_USER_NOTICE => Priority::NOTICE,
+				E_DEPRECATED, E_USER_DEPRECATED => Priority::INFO,
+				default => Priority::ERROR,
 			};
 		}
-		
-		return 3; // any other uncaught throwable = error
+
+		return Priority::ERROR; // any other uncaught throwable
 	}
 	
 	/**
@@ -106,7 +114,7 @@ final class Payload
 	
 	public static function fromMessage(
 		string $message,
-		int $priority = 5,
+		int $priority = Priority::NOTICE,
 		array $extra = [],
 	): array
 	{

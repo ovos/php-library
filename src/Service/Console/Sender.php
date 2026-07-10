@@ -106,7 +106,7 @@ class Sender extends Service
 	
 	public function getLogLevel(): int
 	{
-		return (int)($this->config?->log_level ?? 5);
+		return (int)($this->config?->log_level ?? Priority::NOTICE);
 	}
 	
 	/**
@@ -161,7 +161,7 @@ class Sender extends Service
 	
 	public function captureMessage(
 		string $message,
-		int $priority = 5,
+		int $priority = Priority::NOTICE,
 		array $extra = [],
 	): static
 	{
