@@ -151,7 +151,7 @@ class Logger extends Service implements Writer
 				) . PHP_EOL;
 		}
 		
-		return $append . PHP_EOL;
+		return $append;
 	}
 	
 	public function remove(
@@ -205,7 +205,7 @@ class Logger extends Service implements Writer
 				}
 				$output.= $event->getFile() . ':' . $event->getLine() . PHP_EOL;
 				$output.= $className . ': ' . $event->getMessage()
-					. PHP_EOL . $event->getTraceAsString();
+					. PHP_EOL . $event->getTraceAsString() . PHP_EOL;
 				
 				$previous = true;
 			}
