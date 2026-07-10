@@ -13,6 +13,7 @@ use function Ovos\services;
 
 use function json_encode;
 use function property_exists;
+use function is_array;
 use function is_string;
 use	function count;
 
@@ -212,8 +213,12 @@ class Json extends Response
 	 */
 	public function hasErrors(): bool
 	{
+		// `errors` is only the validation channel when it is actually an array
+		// (set via error()/errors()). App code that overwrites it with a scalar
+		// must not make count() throw here — that would abort __toString() after
+		// the headers are already sent, blanking the whole response body.
 		return (
-			(isset($this->response->errors) && count($this->response->errors))
+			(isset($this->response->errors) && is_array($this->response->errors) && count($this->response->errors))
 			|| (isset($this->response->error) && !empty($this->response->error))
 		);
 	}
