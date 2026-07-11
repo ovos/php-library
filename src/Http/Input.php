@@ -14,6 +14,7 @@ use function is_float;
 use function is_int;
 use function is_numeric;
 use function is_string;
+use function json_decode;
 use function preg_match;
 use function trim;
 
@@ -40,6 +41,22 @@ final class Input
 		protected readonly array $data = [],
 	)
 	{
+	}
+	
+	/**
+	 * An Input reader over a raw JSON string — the response-side
+	 * counterpart of Body::input() (which reads the request body).
+	 * Malformed JSON or a non-array payload yields an empty reader,
+	 * matching the tolerant contract above.
+	 */
+	public static function fromJson(
+		?string $json,
+		int $depth = 64,
+	): self
+	{
+		$decoded = json_decode((string)$json, true, $depth);
+		
+		return new self(is_array($decoded) ? $decoded : []);
 	}
 	
 	public function isEmpty(): bool
