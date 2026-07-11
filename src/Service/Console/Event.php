@@ -133,6 +133,7 @@ final class Event
 				$this->throwable,
 				$this->priority,
 				$this->extra,
+				$this->sender?->capturesSource() ?? true,
 			);
 			
 			// an explicit message overrides the exception message

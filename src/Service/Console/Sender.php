@@ -110,6 +110,17 @@ class Sender extends Service
 	}
 	
 	/**
+	 * Whether to attach a few source lines around each throw location
+	 * (console.source_context, default on). Off means the source files
+	 * are never even read — for projects that must not ship code lines
+	 * off-box.
+	 */
+	public function capturesSource(): bool
+	{
+		return ($this->config?->source_context ?? true) !== false;
+	}
+	
+	/**
 	 * Start building an arbitrary event bound to this sender. A thrown
 	 * exception is optional — set a message, extras and context overrides, then
 	 * call Event::capture(). Reachable through the container from anywhere:
