@@ -61,15 +61,19 @@ final class Payload
 				default => Priority::ERROR,
 			};
 		}
-
+		
 		return Priority::ERROR; // any other uncaught throwable
 	}
 	
 	/**
-	 * Exception chain as v1 events, outermost first
+	 * Exception chain as v1 events, outermost first. With $withSource a
+	 * few source lines around each throw location ride along under the
+	 * "code" key (SourceContext returns null for unreadable/generated
+	 * files, so the key is simply omitted then).
 	 */
 	public static function events(
 		Throwable $event,
+		bool $withSource = true,
 	): array
 	{
 		$events = [];
@@ -77,7 +81,7 @@ final class Payload
 		
 		do
 		{
-			$events[] = [
+			$entry = [
 				'message' => $event->getMessage(),
 				'className' => get_class($event),
 				'file' => $event->getFile(),
@@ -86,6 +90,16 @@ final class Payload
 				'previous' => $previous,
 			];
 			
+			if($withSource)
+			{
+				$code = SourceContext::read($event->getFile(), $event->getLine());
+				if($code !== null)
+				{
+					$entry['code'] = $code;
+				}
+			}
+			
+			$events[] = $entry;
 			$previous = true;
 		}
 		while(($event = $event->getPrevious()) !== null);
@@ -100,6 +114,7 @@ final class Payload
 		Throwable $event,
 		?int $priority = null,
 		array $extra = [],
+		bool $withSource = true,
 	): array
 	{
 		return [
@@ -107,7 +122,7 @@ final class Payload
 			'priority' => $priority ?? self::priorityFor($event),
 			'timestamp' => date('c'),
 			'message' => $event->getMessage(),
-			'events' => self::events($event),
+			'events' => self::events($event, $withSource),
 			'extra' => $extra,
 		];
 	}
