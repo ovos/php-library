@@ -6,7 +6,6 @@ namespace Ovos;
 use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Exception\RuntimeException;
 use Ovos\Config\Loader as ConfigLoader;
-use Ovos\Pdo\Profiler\Reporter;
 use Ovos\Response\Redirect;
 use Ovos\Service\Console\Sender;
 use Ovos\Service\Memory;
@@ -939,21 +938,6 @@ class Application
 	{
 		$profilers = $this->getConfig()->system->profilers;
 		
-		// profilers.append.http keeps inlining the query report into JSON
-		// responses — the profiler stream (Ovos\Service\Profiler) is the
-		// richer channel, but it is optional; removing this branch left the
-		// config flag silently dead for projects without the stream
-		if($profilers->enabled
-			&& $this->isInterfaceHttp()
-			&& $profilers->append->http)
-		{
-			$report = (new Reporter)->getReport();
-			if(!empty($report))
-			{
-				$response->queries = $report;
-			}
-		}
-		
 		if($this->getRequest()->isHttpDebug())
 		{
 			$response->setOptions(JSON_PRETTY_PRINT);
@@ -986,8 +970,7 @@ class Application
 		$profilers = $this->getConfig()->system->profilers;
 		if($profilers->enabled)
 		{
-			if(($this->isInterfaceHttp() && $profilers->append->http)
-				|| ($this->isInterfaceCli() && $profilers->append->cli))
+			if($this->isInterfaceCli() && $profilers->append->cli)
 			{
 				foreach($profilers->helpers as $helper)
 				{
