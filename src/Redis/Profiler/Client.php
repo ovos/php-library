@@ -8,7 +8,10 @@ use Ovos\Measurement;
 use Redis as BaseRedis;
 use RedisException;
 
+use function array_filter;
+use function array_keys;
 use function array_merge;
+use function array_values;
 
 /**
  * Client
@@ -22,6 +25,10 @@ use function array_merge;
  * bypasses the Connection wrapper's slow-log profiling — these overrides are
  * what make those calls visible in the profiler. fcall/fcall_ro are deliberately
  * NOT overridden: the cache already profiles them via RedisCommon::slowLog().
+ *
+ * Each override forwards its non-key arguments as $args so the report shows the
+ * full command (e.g. "xRange key - + COUNT 10", not just "xRange key"); the
+ * Reporter clips each arg to 80 chars, so even large values stay bounded.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -85,6 +92,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('set', [$key],
 			fn() => parent::set($key, $value, $options),
+			$options === null ? [$value] : [$value, $options],
 		);
 	}
 	
@@ -104,6 +112,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('incr', [$key],
 			fn() => parent::incr($key, $by),
+			$by === 1 ? [] : [$by],
 		);
 	}
 	
@@ -115,6 +124,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('expire', [$key],
 			fn() => parent::expire($key, $timeout, $mode),
+			$mode === null ? [$timeout] : [$timeout, $mode],
 		);
 	}
 	
@@ -167,6 +177,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('hGet', [$key],
 			fn() => parent::hGet($key, $member),
+			[$member],
 		);
 	}
 	
@@ -177,6 +188,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('hSet', [$key],
 			fn() => parent::hSet($key, ...$fields_and_vals),
+			$fields_and_vals,
 		);
 	}
 	
@@ -188,6 +200,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('hSetNx', [$key],
 			fn() => parent::hSetNx($key, $field, $value),
+			[$field, $value],
 		);
 	}
 	
@@ -196,8 +209,11 @@ class Client extends BaseRedis
 		array $fieldvals,
 	): BaseRedis|bool
 	{
+		// show the field names written (values can be large — the fields identify
+		// the write well enough, and keep the line readable)
 		return $this->profile('hMSet', [$key],
 			fn() => parent::hMSet($key, $fieldvals),
+			array_keys($fieldvals),
 		);
 	}
 	
@@ -208,6 +224,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('hMGet', [$key],
 			fn() => parent::hMget($key, $fields),
+			$fields,
 		);
 	}
 	
@@ -228,6 +245,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('hIncrBy', [$key],
 			fn() => parent::hIncrBy($key, $field, $value),
+			[$field, $value],
 		);
 	}
 	
@@ -238,6 +256,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('hExists', [$key],
 			fn() => parent::hExists($key, $field),
+			[$field],
 		);
 	}
 	
@@ -251,8 +270,10 @@ class Client extends BaseRedis
 		bool $nomkstream = false,
 	): BaseRedis|string|false
 	{
+		// id + the field names of the entry (values themselves can be large)
 		return $this->profile('xAdd', [$key],
 			fn() => parent::xAdd($key, $id, $values, $maxlen, $approx, $nomkstream),
+			array_merge([$id], array_keys($values)),
 		);
 	}
 	
@@ -262,8 +283,10 @@ class Client extends BaseRedis
 		int $block = -1,
 	): BaseRedis|array|bool
 	{
+		// keys are the stream names; the args are the from-ids they map to
 		return $this->profile('xRead', array_keys($streams),
 			fn() => parent::xRead($streams, $count, $block),
+			array_values($streams),
 		);
 	}
 	
@@ -277,6 +300,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('xReadGroup', array_keys($streams),
 			fn() => parent::xReadGroup($group, $consumer, $streams, $count, $block),
+			array_merge([$group, $consumer], array_values($streams)),
 		);
 	}
 	
@@ -289,6 +313,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('xRevRange', [$key],
 			fn() => parent::xRevRange($key, $end, $start, $count),
+			$count < 0 ? [$end, $start] : [$end, $start, 'COUNT', $count],
 		);
 	}
 	
@@ -301,6 +326,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('xRange', [$key],
 			fn() => parent::xRange($key, $start, $end, $count),
+			$count < 0 ? [$start, $end] : [$start, $end, 'COUNT', $count],
 		);
 	}
 	
@@ -321,6 +347,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('xAck', [$key],
 			fn() => parent::xAck($key, $group, $ids),
+			array_merge([$group], $ids),
 		);
 	}
 	
@@ -335,6 +362,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('xClaim', [$key],
 			fn() => parent::xClaim($key, $group, $consumer, $min_idle, $ids, $options),
+			array_merge([$group, $consumer, $min_idle], $ids),
 		);
 	}
 	
@@ -345,6 +373,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('xDel', [$key],
 			fn() => parent::xDel($key, $ids),
+			$ids,
 		);
 	}
 	
@@ -359,6 +388,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('xGroup ' . $operation, $key === null ? [] : [$key],
 			fn() => parent::xGroup($operation, $key, $group, $id_or_consumer, $mkstream, $entries_read),
+			array_values(array_filter([$group, $id_or_consumer], fn($v) => $v !== null)),
 		);
 	}
 	
@@ -373,6 +403,10 @@ class Client extends BaseRedis
 	{
 		return $this->profile('xPending', [$key],
 			fn() => parent::xPending($key, $group, $start, $end, $count, $consumer),
+			array_values(array_filter(
+				[$group, $start, $end, $count < 0 ? null : $count, $consumer],
+				fn($v) => $v !== null,
+			)),
 		);
 	}
 	
@@ -396,6 +430,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('ping', [],
 			fn() => parent::ping($message),
+			$message === null ? [] : [$message],
 		);
 	}
 	
@@ -405,6 +440,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('info', [],
 			fn() => parent::info(...$sections),
+			$sections,
 		);
 	}
 	
@@ -418,6 +454,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('fcall ' . $fn, $keys,
 			fn() => parent::fcall($fn, $keys, $args),
+			$args,
 		);
 	}
 	
@@ -429,6 +466,7 @@ class Client extends BaseRedis
 	{
 		return $this->profile('fcall_ro ' . $fn, $keys,
 			fn() => parent::fcall_ro($fn, $keys, $args),
+			$args,
 		);
 	}
 	
