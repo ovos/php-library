@@ -7,6 +7,7 @@ use Ovos\ArrayObject;
 use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
+use Ovos\Http\Trace;
 use Ovos\Service;
 use Ovos\Service\Events;
 use Ovos\Service\Session;
@@ -336,6 +337,9 @@ class Sender extends Service
 		
 		$context = [
 			'dir' => defined('BASE_DIR') ? rtrim(BASE_DIR, '/\\') : '',
+			// correlates every error of this request/run in the console —
+			// across services when an inbound traceparent is propagated
+			'traceId' => Trace::id(),
 		];
 		
 		if($isCli)
