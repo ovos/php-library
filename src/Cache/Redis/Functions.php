@@ -17,6 +17,7 @@ use function hash;
 use function is_array;
 use function is_file;
 use function is_int;
+use function str_contains;
 use function str_replace;
 
 use const PHP_EOL;
@@ -452,6 +453,18 @@ class Functions
 		return false;
 	}
 	
+	/**
+	 * Detects the "ERR Function not found" reply, which means the target node is
+	 * missing the function - the trigger for a reload-and-retry in call()
+	 */
+	protected function isFunctionMissing(
+		?string $error,
+	): bool
+	{
+		return $error !== null
+			&& str_contains($error, 'Function not found');
+	}
+	
 	public function call(
 		string $function,
 		array $keys = [],
@@ -517,6 +530,10 @@ class Functions
 			];
 		}
 		
+		// clear any stale error so getLastError() after the call reflects only this
+		// FCALL - the reload-and-retry below keys off it
+		$client->clearLastError();
+		
 		$result = $this->connection
 			->slowLog(
 				$call,
@@ -524,6 +541,26 @@ class Functions
 				$keys,
 				$args,
 			);
+		
+		// self-heal: a function/library can vanish from a node mid-process (a server
+		// FUNCTION FLUSH, a restart without function persistence, a failover or a new
+		// master, or an FCALL_RO served by a lagging replica); the in-process
+		// "loaded" flag then masks the gap and the call fails with "Function not
+		// found". Force a full reload (replace bypasses the stale flag) and retry
+		// once so the miss never surfaces; a failed reload throws RedisException
+		if($this->isFunctionMissing($client->getLastError())
+			&& $this->loadLibraries(true))
+		{
+			$client->clearLastError();
+			
+			$result = $this->connection
+				->slowLog(
+					$call,
+					$functionName,
+					$keys,
+					$args,
+				);
+		}
 		
 		if($long)
 		{
