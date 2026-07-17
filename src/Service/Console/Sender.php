@@ -276,60 +276,7 @@ class Sender extends Service
 		
 		try
 		{
-			// merge uncaught errors collected by the Events service — read
-			// only: other post-response consumers (the profiler stream) still
-			// need the events; the Application drains them after the chain.
-			// The merge gets headroom past QUEUE_MAX so uncaught errors are
-			// not starved by a queue already filled with explicit captures,
-			// while an error loop stays bounded; enqueue() dedupes via $seen.
-			$events = $this->container->get(Events::SYMBOL);
-			foreach($events as $event)
-			{
-				if($event instanceof Throwable === false)
-				{
-					continue;
-				}
-				
-				try
-				{
-					$this->enqueue($this->event()->exception($event), self::QUEUE_MAX * 2);
-				}
-				catch(Throwable)
-				{
-					// one unqueueable event must not abort the whole flush —
-					// the batch built so far (and the queue) still goes out
-				}
-			}
-			
-			$logLevel = $this->getLogLevel();
-			$context = null;
-			
-			$errors = [];
-			foreach($this->queue as $payload)
-			{
-				if($payload['priority'] > $logLevel)
-				{
-					continue;
-				}
-				
-				$context ??= $this->buildContext();
-				
-				$payload['type'] = $context['type'];
-				// per-event context overrides win over the auto-built base
-				$payload['context'] = array_replace($context['context'],
-						$payload['context'] ?? [])
-					+ ['extra' => $payload['extra']];
-				unset($payload['extra']);
-				
-				// optional deploy label (git sha, svn revision, any string)
-				$release = (string)($this->config?->release ?? '');
-				if($release !== '')
-				{
-					$payload['release'] = mb_substr($release, 0, 64);
-				}
-				
-				$errors[] = $payload;
-			}
+			$errors = $this->buildBatch();
 			
 			if($errors !== [])
 			{
@@ -348,6 +295,75 @@ class Sender extends Service
 			$this->seen = null;
 			self::$flushing = false;
 		}
+	}
+	
+	/**
+	 * Merges the Events service's uncaught throwables into the queue, then
+	 * filters by log level and decorates each surviving payload with the
+	 * request/CLI context and the deploy label — the finished v1 batch.
+	 *
+	 * @return array[]
+	 */
+	protected function buildBatch(): array
+	{
+		// merge uncaught errors collected by the Events service — read
+		// only: other post-response consumers (the profiler stream) still
+		// need the events; the Application drains them after the chain.
+		// The merge gets headroom past QUEUE_MAX so uncaught errors are
+		// not starved by a queue already filled with explicit captures,
+		// while an error loop stays bounded; enqueue() dedupes via $seen.
+		$events = $this->container->get(Events::SYMBOL);
+		foreach($events as $event)
+		{
+			if($event instanceof Throwable === false)
+			{
+				continue;
+			}
+			
+			try
+			{
+				$this->enqueue($this->event()->exception($event), self::QUEUE_MAX * 2);
+			}
+			catch(Throwable)
+			{
+				// one unqueueable event must not abort the whole flush —
+				// the batch built so far (and the queue) still goes out
+			}
+		}
+		
+		$logLevel = $this->getLogLevel();
+		$context = null;
+		
+		// optional deploy label (git sha, svn revision, any string) —
+		// constant across the batch, read once
+		$release = mb_substr((string)($this->config?->release ?? ''), 0, 64);
+		
+		$errors = [];
+		foreach($this->queue as $payload)
+		{
+			if($payload['priority'] > $logLevel)
+			{
+				continue;
+			}
+			
+			$context ??= $this->buildContext();
+			
+			$payload['type'] = $context['type'];
+			// per-event context overrides win over the auto-built base
+			$payload['context'] = array_replace($context['context'],
+					$payload['context'] ?? [])
+				+ ['extra' => $payload['extra']];
+			unset($payload['extra']);
+			
+			if($release !== '')
+			{
+				$payload['release'] = $release;
+			}
+			
+			$errors[] = $payload;
+		}
+		
+		return $errors;
 	}
 	
 	/**

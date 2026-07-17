@@ -29,6 +29,11 @@ use function strtotime;
  * sections), no source-code windows (the events[].code blocks cannot
  * travel), and request variables survive only as unindexed extra.
  *
+ * Sibling implementations kept shape-compatible with this one: the CMS
+ * projects' CMS\Log\Writer\Otel (byte-identical between westbahn and
+ * leadersnet) and the browser client's otlp mode — all three converge
+ * on the console's OTLP intake with the same attribute vocabulary.
+ *
  * @author Marcin Gil <mg@ovos.at>
  */
 final class Otlp
@@ -39,25 +44,25 @@ final class Otlp
 	 * collapse into critical and 5 into info on the round trip
 	 */
 	protected const array SEVERITY = [
-		0 => 21,
-		1 => 21,
-		2 => 21,
-		3 => 17,
-		4 => 13,
-		5 => 9,
-		6 => 9,
-		7 => 5,
+		Priority::EMERGENCY => 21,
+		Priority::ALERT => 21,
+		Priority::CRITICAL => 21,
+		Priority::ERROR => 17,
+		Priority::WARNING => 13,
+		Priority::NOTICE => 9,
+		Priority::INFO => 9,
+		Priority::DEBUG => 5,
 	];
 	
 	protected const array SEVERITY_TEXT = [
-		0 => 'EMERGENCY',
-		1 => 'ALERT',
-		2 => 'CRITICAL',
-		3 => 'ERROR',
-		4 => 'WARNING',
-		5 => 'NOTICE',
-		6 => 'INFO',
-		7 => 'DEBUG',
+		Priority::EMERGENCY => 'EMERGENCY',
+		Priority::ALERT => 'ALERT',
+		Priority::CRITICAL => 'CRITICAL',
+		Priority::ERROR => 'ERROR',
+		Priority::WARNING => 'WARNING',
+		Priority::NOTICE => 'NOTICE',
+		Priority::INFO => 'INFO',
+		Priority::DEBUG => 'DEBUG',
 	];
 	
 	/**
