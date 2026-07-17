@@ -3,15 +3,15 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Console;
 
+use function count;
 use function file;
 use function filesize;
 use function is_file;
 use function is_readable;
-use function count;
 use function max;
-use function min;
 use function mb_strlen;
 use function mb_substr;
+use function min;
 use function preg_match;
 use function rtrim;
 
