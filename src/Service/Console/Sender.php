@@ -52,6 +52,13 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *     log_level: 5                      # send priority <= this (0-7)
  *     timeout_ms: 1000
  *     release: !ENV CONSOLE[RELEASE]    # optional deploy label (git sha, svn rev, …)
+ *     otlp_url: ''                      # OPTIONAL: an OpenTelemetry Collector's OTLP/HTTP
+ *                                       # logs endpoint VERBATIM (http://collector:4318/v1/logs).
+ *                                       # Set -> the batch goes there as OTLP/JSON instead of the
+ *                                       # direct ingest; the collector holds the console key in
+ *                                       # its own exporter, so url/key become optional here. Never
+ *                                       # combine with url+key when the collector exports back to
+ *                                       # the console — errors would double-report.
  *
  * plus "- Console\Sender" in system.services.http and .cli lists.
  *
@@ -99,10 +106,24 @@ class Sender extends Service
 	
 	public function isEnabled(): bool
 	{
-		return $this->config !== null
-			&& $this->config->enabled === true
-			&& (string)$this->config->url !== ''
-			&& (string)$this->config->key !== '';
+		if($this->config === null || $this->config->enabled !== true)
+		{
+			return false;
+		}
+		
+		// either transport suffices: the direct ingest (url + key) or an
+		// OTLP collector endpoint (which holds the console key itself)
+		return ((string)$this->config->url !== '' && (string)$this->config->key !== '')
+			|| $this->getOtlpUrl() !== '';
+	}
+	
+	/**
+	 * The collector's OTLP/HTTP logs endpoint — set, the batch is exported
+	 * there as OTLP/JSON (Otlp::request) instead of the direct ingest
+	 */
+	public function getOtlpUrl(): string
+	{
+		return (string)($this->config?->otlp_url ?? '');
 	}
 	
 	public function getLogLevel(): int
@@ -312,7 +333,8 @@ class Sender extends Service
 			
 			if($errors !== [])
 			{
-				$this->send((string)json_encode($errors,
+				$this->send((string)json_encode(
+					$this->getOtlpUrl() !== '' ? Otlp::request($errors) : $errors,
 					JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR));
 			}
 		}
@@ -409,16 +431,24 @@ class Sender extends Service
 		string $json,
 	): void
 	{
-		$handle = curl_init(
-			rtrim((string)$this->config->url, '/') . '/api/v1/ingest');
+		$otlp = $this->getOtlpUrl();
+		
+		// OTLP mode posts to the collector endpoint verbatim, without the
+		// console key — the collector authenticates via its own exporters
+		$handle = curl_init($otlp !== ''
+			? $otlp
+			: rtrim((string)$this->config->url, '/') . '/api/v1/ingest');
+		
+		$headers = ['Content-Type: application/json'];
+		if($otlp === '')
+		{
+			$headers[] = 'X-Console-Key: ' . (string)$this->config->key;
+		}
 		
 		curl_setopt_array($handle, [
 			CURLOPT_POST => true,
 			CURLOPT_POSTFIELDS => $json,
-			CURLOPT_HTTPHEADER => [
-				'Content-Type: application/json',
-				'X-Console-Key: ' . (string)$this->config->key,
-			],
+			CURLOPT_HTTPHEADER => $headers,
 			CURLOPT_RETURNTRANSFER => true,
 			CURLOPT_CONNECTTIMEOUT_MS => 300,
 			CURLOPT_TIMEOUT_MS => (int)($this->config->timeout_ms ?? 1000),
