@@ -29,6 +29,12 @@ class Collector
 	
 	public static int $limit = 0;
 	
+	/**
+	 * Pauses collection while the profiler stream writes its own redis
+	 * commands — they must not show up in the reports they feed
+	 */
+	public static bool $paused = false;
+	
 	public function __construct()
 	{
 		$this->commands = new SplQueue;
@@ -44,6 +50,11 @@ class Collector
 		Measurement $measurement,
 	): static
 	{
+		if(self::$paused === true)
+		{
+			return $this;
+		}
+		
 		$this->commands->push([
 			'command' => $command,
 			'keys' => $keys,

@@ -17,6 +17,27 @@ class Terminal
 {
 	public const string SAPI_CLI = 'cli';
 	
+	/**
+	 * Listeners receiving every output() message raw — before markup
+	 * handling, <color> tags intact — e.g. the profiler streaming CLI
+	 * output live. status() lines are transient by design and are not
+	 * announced. A listener contains its own failures; output() does
+	 * not guard.
+	 *
+	 * @var callable[]
+	 */
+	protected static array $listeners = [];
+	
+	/**
+	 * Registers an output listener
+	 */
+	public static function listen(
+		callable $listener,
+	): void
+	{
+		self::$listeners[] = $listener;
+	}
+	
 	public static function readLine(): ?string
 	{
 		$line = stream_get_line(STDIN, 1024, PHP_EOL);
@@ -37,6 +58,11 @@ class Terminal
 		bool $markup = false,
 	): void
 	{
+		foreach(self::$listeners as $listener)
+		{
+			$listener($message, $markup);
+		}
+		
 		$message = self::getMessage($message, $markup);
 		
 		if(PHP_SAPI === self::SAPI_CLI)

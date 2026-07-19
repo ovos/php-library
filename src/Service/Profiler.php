@@ -9,15 +9,21 @@ use Ovos\Console;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Pdo\Profiler\Reporter as QueriesReporter;
+use Ovos\Redis\Profiler\Collector as RedisCollector;
 use Ovos\Redis\Profiler\Reporter as RedisReporter;
 use Ovos\Service;
+use Ovos\Terminal;
 use Redis as RedisClient;
 use Throwable;
 
 use function get_class;
+use function getenv;
+use function getmypid;
+use function implode;
 use function json_encode;
 use function memory_get_peak_usage;
 use function microtime;
+use function preg_match;
 use function round;
 use function strlen;
 use function substr;
@@ -34,6 +40,10 @@ use const PHP_EOL;
  * benchmark and errors) onto a redis stream keyed by session, so the profiler
  * panel and the /profiler/ surface can tail it live — including on XHR/JSON
  * requests, where the panel itself never renders.
+ *
+ * CLI runs (cron or manual) stream onto a shared 'cli' stream instead: a
+ * start entry at boot, one live entry per Terminal::output() message (raw,
+ * <color> tags intact) and a finish entry with duration/memory/errors.
  *
  * Dev-only and self-disabling: registers nothing unless both
  * profilers.enabled and profilers.stream.enabled are set.
@@ -55,6 +65,18 @@ class Profiler extends Service
 	 */
 	public const int TRACE_MAX_LENGTH = 8192;
 	
+	/**
+	 * Suffix of the shared CLI stream key (key_prefix + 'cli') — CLI runs
+	 * have no session, and every watcher sees all of them
+	 */
+	public const string CLI_KEY = 'cli';
+	
+	/**
+	 * CLI stream cap when profilers.stream.cli_maxlen is not configured —
+	 * message-grained entries need more room than per-request profiles
+	 */
+	public const int CLI_MAXLEN_DEFAULT = 1000;
+	
 	#[Inject('config')]
 	#[InjectArrayObject('system', 'profilers')]
 	protected ?ArrayObject $profilers = null;
@@ -64,6 +86,18 @@ class Profiler extends Service
 	 */
 	protected bool $skipped = false;
 	
+	/**
+	 * Correlates this CLI run's start/message/finish entries
+	 */
+	protected string $runId = '';
+	
+	protected float $startedAt = 0.0;
+	
+	/**
+	 * The CLI stream write path failed — stop retrying for this run
+	 */
+	protected bool $cliBroken = false;
+	
 	public function __construct()
 	{
 		if($this->isStreamEnabled() === false)
@@ -71,6 +105,11 @@ class Profiler extends Service
 			$this->enabled = false;
 			
 			return;
+		}
+		
+		if($this->request->isCli())
+		{
+			$this->startCliRun();
 		}
 		
 		// flush after the response has been sent to the client (post
@@ -108,10 +147,18 @@ class Profiler extends Service
 	{
 		try
 		{
-			// http only; never stream the profiler's own SSE endpoint or
-			// a request that opted out (long-lived SSE loops)
+			// CLI runs close on the shared CLI stream instead; skip()
+			// slims their finish entry rather than dropping the run
+			if($this->request->isCli())
+			{
+				$this->finishCliRun();
+				
+				return;
+			}
+			
+			// never stream the profiler's own SSE endpoint or a request
+			// that opted out (long-lived SSE loops)
 			if($this->skipped === true
-				|| $this->request->isCli()
 				|| $this->request->getControllerClass() === 'Profiler')
 			{
 				return;
@@ -285,6 +332,148 @@ class Profiler extends Service
 		}
 		
 		return $streams;
+	}
+	
+	/**
+	 * Opens the run on the shared CLI stream: a start entry now, one live
+	 * entry per Terminal::output() message, the finish entry from flush()
+	 */
+	protected function startCliRun(): void
+	{
+		$this->runId = uniqid('', true);
+		$this->startedAt = microtime(true);
+		
+		$this->writeCli([
+			'kind' => 'start',
+			'run_id' => $this->runId,
+			'ts' => (int)round(microtime(true) * 1000),
+			'command' => implode(' ', (array)($_SERVER['argv'] ?? [])),
+			'pid' => (int)getmypid(),
+			'source' => $this->getCliSource(),
+		]);
+		
+		Terminal::listen(function(
+			string $message,
+			bool $markup,
+		): void
+		{
+			$this->writeCli([
+				'kind' => 'message',
+				'run_id' => $this->runId,
+				'ts' => (int)round(microtime(true) * 1000),
+				'message' => $message,
+				'markup' => $markup,
+			]);
+		});
+	}
+	
+	/**
+	 * Origin badge for the run — crontab exports PROFILER_SOURCE=cron (one
+	 * line at the top covers every job); absent or odd-looking values read
+	 * as a manual run
+	 */
+	protected function getCliSource(): string
+	{
+		$source = (string)($_SERVER['PROFILER_SOURCE'] ?? getenv('PROFILER_SOURCE'));
+		
+		if(preg_match('/^[a-z0-9_-]{1,16}$/', $source) !== 1)
+		{
+			return 'manual';
+		}
+		
+		return $source;
+	}
+	
+	/**
+	 * Closes the run: duration, peak memory and collected errors always;
+	 * the query/redis/console reports only when the run did not opt out
+	 * via skip() (a long-lived worker's lifetime aggregate is noise)
+	 */
+	protected function finishCliRun(): void
+	{
+		if($this->runId === '')
+		{
+			return;
+		}
+		
+		$payload = [
+			'kind' => 'finish',
+			'run_id' => $this->runId,
+			'ts' => (int)round(microtime(true) * 1000),
+			'duration' => round(microtime(true) - $this->startedAt, 3),
+			'memory' => memory_get_peak_usage(true),
+			'errors' => $this->collectErrors(),
+		];
+		
+		if($this->skipped === false)
+		{
+			$payload['queries'] = (new QueriesReporter)->getReport() ?? [];
+			$payload['redis'] = (new RedisReporter)->getReport() ?? [];
+			$payload['console'] = $this->container->getClass(Console::class)->getReport();
+		}
+		
+		$this->writeCli($payload);
+	}
+	
+	/**
+	 * Appends one entry to the shared CLI stream. Self-disabling on the
+	 * first failure — a dev profiler must never slow or break the run by
+	 * retrying a dead connection on every message.
+	 *
+	 * @param array<string, mixed> $payload
+	 */
+	protected function writeCli(
+		array $payload,
+	): void
+	{
+		if($this->cliBroken === true)
+		{
+			return;
+		}
+		
+		try
+		{
+			$client = $this->getClient();
+			if($client === null)
+			{
+				$this->cliBroken = true;
+				
+				return;
+			}
+			
+			$stream = $this->profilers->stream;
+			$key = (string)$stream->key_prefix . self::CLI_KEY;
+			
+			// our own XADD/EXPIRE must not land in the redis report the
+			// finish entry carries
+			RedisCollector::$paused = true;
+			
+			$client->xAdd(
+				$key,
+				'*',
+				[
+					'body' => (string)json_encode($payload,
+						JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR),
+					'kind' => (string)$payload['kind'],
+					'run_id' => (string)$payload['run_id'],
+					'ts' => (string)$payload['ts'],
+				],
+				(int)($stream->cli_maxlen ?? self::CLI_MAXLEN_DEFAULT),
+				true, // approximate trim (~)
+			);
+			
+			$ttl = (int)($stream->ttl ?? self::TTL_DEFAULT);
+			$client->expire($key, $ttl > 0 ? $ttl : self::TTL_DEFAULT);
+		}
+		catch(Throwable $throwable)
+		{
+			// a dev profiler must never break the run
+			$this->cliBroken = true;
+		}
+		finally
+		{
+			RedisCollector::$paused = false;
+		}
 	}
 	
 	protected function getClient(): ?RedisClient
