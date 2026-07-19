@@ -5,7 +5,9 @@ namespace Ovos;
 
 use Ovos\Controller\Plugin;
 use Ovos\Exception\RuntimeException;
+use Ovos\Service\Events;
 use ReflectionMethod;
+use Throwable;
 
 use function array_column;
 use function array_key_exists;
@@ -492,7 +494,44 @@ class Controller
 		array $arguments,
 	): mixed
 	{
+		if($this->hasPlugin($symbol) === false)
+		{
+			// almost always a typo'd method name ($this->output() vs log());
+			// stays null-returning — probing an optional plugin through its
+			// magic accessor is a documented pattern — but no longer silent:
+			// the null otherwise vanishes into business logic undebuggably.
+			// Per-request optional probes belong on getPlugin() directly.
+			$this->logUnknownSymbol($symbol);
+			
+			return null;
+		}
+		
 		return $this->getPlugin($symbol, $arguments);
+	}
+	
+	/**
+	 * Best-effort — a missing Events service must not turn a typo into a
+	 * fatal, and the log call itself must never recurse or throw
+	 */
+	protected function logUnknownSymbol(
+		string $symbol,
+	): void
+	{
+		try
+		{
+			if($this->container->isRegistered(Events::SYMBOL))
+			{
+				$this->container
+					->get(Events::SYMBOL)
+					->log('Unknown method/plugin "%s" called on %s (returned null — typo?)',
+						$symbol,
+						static::class);
+			}
+		}
+		catch(Throwable)
+		{
+			// stay quiet rather than break the caller
+		}
 	}
 	
 	public function removePlugin(
