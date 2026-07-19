@@ -56,6 +56,10 @@ class CachedAdapter
 			&& $item->mtime === $mTime)
 		{
 			$this->setTranslations($item->translations->getArrayCopy());
+			
+			// the missing return here once made this cache write-only: every
+			// request re-parsed the .mo and re-set the entry it had just read
+			return;
 		}
 		
 		$parser = new MoParser($filename);
