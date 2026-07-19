@@ -19,10 +19,13 @@ use function json_encode;
 use function memory_get_peak_usage;
 use function microtime;
 use function round;
+use function strlen;
+use function substr;
 use function uniqid;
 
 use const JSON_INVALID_UTF8_SUBSTITUTE;
 use const JSON_PARTIAL_OUTPUT_ON_ERROR;
+use const PHP_EOL;
 
 /**
  * Profiler
@@ -45,6 +48,12 @@ class Profiler extends Service
 	 * Stream lifetime (seconds) when profilers.stream.ttl is not configured
 	 */
 	public const int TTL_DEFAULT = 3600;
+	
+	/**
+	 * Cap for a single exception's rendered trace — one deep trace must not
+	 * dominate the stream entry
+	 */
+	public const int TRACE_MAX_LENGTH = 8192;
 	
 	#[Inject('config')]
 	#[InjectArrayObject('system', 'profilers')]
@@ -219,10 +228,31 @@ class Profiler extends Service
 				'message' => $event->getMessage(),
 				'file' => $event->getFile(),
 				'line' => $event->getLine(),
+				'trace' => $this->buildTrace($event),
 			];
 		}
 		
 		return $errors;
+	}
+	
+	/**
+	 * The exception's trace as rendered by PHP (argument values are already
+	 * elided there — no request payloads or credentials leak into the stream),
+	 * capped at TRACE_MAX_LENGTH
+	 */
+	protected function buildTrace(
+		Throwable $event,
+	): string
+	{
+		$trace = $event->getTraceAsString();
+		
+		if(strlen($trace) > self::TRACE_MAX_LENGTH)
+		{
+			$trace = substr($trace, 0, self::TRACE_MAX_LENGTH)
+				. PHP_EOL . '… [trace truncated]';
+		}
+		
+		return $trace;
 	}
 	
 	/**
