@@ -17,6 +17,7 @@ use function in_array;
 use function memory_get_usage;
 use function round;
 use function sprintf;
+use function str_contains;
 
 /**
  * Cli
@@ -138,6 +139,14 @@ class Cli extends Controller
 		if(count($message))
 		{
 			$message = sprintf(...$message);
+			
+			// a multiline block (a Terminal\Table, a trace) starts on its own
+			// line: glued to the prefix, its first row would sit ~30 columns
+			// right of the block's remaining rows
+			if(str_contains($message, "\n"))
+			{
+				$message = PHP_EOL . $message;
+			}
 		}
 		
 		Terminal::output('<darkgray>[' . $this->getPid() . '] '
