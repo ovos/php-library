@@ -10,16 +10,25 @@ use Ovos\Logger\Writer;
 use Ovos\Service;
 use Throwable;
 
+use function array_merge;
 use function date;
 use function get_class;
 use function implode;
 use function is_array;
-use function is_numeric;
+use function is_string;
 use function json_encode;
-use function mb_strlen;
+use function ltrim;
+use function mb_substr;
 use function method_exists;
 use function preg_match;
+use function preg_replace;
+use function preg_replace_callback;
+use function rawurldecode;
+use function rawurlencode;
 use function sprintf;
+use function strpos;
+use function strtr;
+use function substr;
 
 /**
  * Logger
@@ -32,13 +41,42 @@ class Logger extends Service implements Writer
 	
 	public const string SYMBOL = 'logger';
 	
+	/**
+	 * An e-mail address inside a string value. The first local-part character
+	 * is kept and the domain is left intact (j***@example.com) — enough to
+	 * tell providers/customers apart while dropping the identifying part.
+	 */
+	protected const string EMAIL_PATTERN = '~([a-z0-9._%+\-])[a-z0-9._%+\-]*@([a-z0-9.\-]+\.[a-z]{2,})~i';
+	
 	protected string $dir = 'events';
 	
 	protected string $file = 'events';
 	
+	/**
+	 * Field names whose value is dropped entirely ([removed]). Matches the
+	 * console's documented canonical set (docs/SENDER.md). Case-insensitive;
+	 * extend per project with addRemove().
+	 */
 	protected array $remove = [
-		'~^password.*~',
-		'~Authorization~',
+		'~pass(word|wd)?~i',
+		'~pwd~i',
+		'~token~i',
+		'~secret~i',
+		'~authorization~i',
+		'~cookie~i',
+		'~api[_-]?key~i',
+	];
+	
+	/**
+	 * Field names whose value is masked to all-but-the-first character
+	 * (e.g. "marcin" -> "m***"). Anchored so identifier fields like userId
+	 * or userAgent are left intact; extend per project with addUsernames()
+	 * (a custom login field like "nick"). E-mails are handled separately,
+	 * by value.
+	 */
+	protected array $usernames = [
+		'~^user([_-]?(name|login))?$~i',
+		'~^login$~i',
 	];
 	
 	public function addRemove(
@@ -53,6 +91,20 @@ class Logger extends Service implements Writer
 	public function getRemove(): array
 	{
 		return $this->remove;
+	}
+	
+	public function addUsernames(
+		array $usernames,
+	): static
+	{
+		$this->usernames = array_merge($this->usernames, $usernames);
+		
+		return $this;
+	}
+	
+	public function getUsernames(): array
+	{
+		return $this->usernames;
 	}
 	
 	/**
@@ -132,7 +184,7 @@ class Logger extends Service implements Writer
 		if(!empty($_GET))
 		{
 			$append.= 'GET: ' . PHP_EOL
-				. json_encode($_GET, 
+				. json_encode($this->remove($_GET),
 					JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT,
 				) . PHP_EOL;
 		}
@@ -154,12 +206,26 @@ class Logger extends Service implements Writer
 		return $append;
 	}
 	
+	/**
+	 * Scrubs request-style data: secret fields are dropped, username fields
+	 * and e-mail addresses (in any field) are anonymized. The console scrubs
+	 * again server-side as a backstop.
+	 */
 	public function remove(
 		array $data,
 	): array
 	{
 		foreach($data as $key => $value)
 		{
+			// secret fields are dropped wholesale — before recursing, so a
+			// secret key whose value is an array cannot leak through its children
+			if(is_string($key) && $this->matchesAny($this->remove, $key))
+			{
+				$data[$key] = '[removed]';
+				
+				continue;
+			}
+			
 			if(is_array($value))
 			{
 				$data[$key] = $this->remove($value);
@@ -167,23 +233,179 @@ class Logger extends Service implements Writer
 				continue;
 			}
 			
-			if(is_numeric($key))
+			if(is_string($value) === false)
 			{
 				continue;
 			}
 			
-			foreach($this->remove as $pattern)
+			// an e-mail in ANY field (a login that is an e-mail, a "to"
+			// address, …) — masked with the domain kept
+			$masked = $this->maskEmails($value);
+			if($masked !== $value)
 			{
-				if(preg_match($pattern, $key, $matches))
-				{
-					$data[$key] = '[removed][length:' . mb_strlen($value) . ']';
-					
-					break;
-				}
+				$data[$key] = $masked;
+				
+				continue;
+			}
+			
+			if(is_string($key) && $this->matchesAny($this->usernames, $key))
+			{
+				$data[$key] = $this->maskName($value);
 			}
 		}
 		
 		return $data;
+	}
+	
+	/**
+	 * Scrubs a URL the way remove() scrubs request arrays: secret-named
+	 * query parameters are dropped, e-mail values (in any parameter) are
+	 * masked with the domain kept and username-named parameters are
+	 * anonymized. The same data already leaves through request.get — this
+	 * closes the uri/referer copy of it. Untouched parameters stay
+	 * byte-for-byte identical; values are only re-encoded when changed.
+	 */
+	public function removeFromUrl(
+		string $url,
+	): string
+	{
+		$position = strpos($url, '?');
+		if($position !== false)
+		{
+			$query = (string)preg_replace_callback(
+				'~(^|&)([^&=]+)=([^&]*)~',
+				function(array $match): string
+				{
+					if($this->matchesAny($this->remove, rawurldecode($match[2])))
+					{
+						return $match[1] . $match[2] . '=[removed]';
+					}
+					
+					$value = rawurldecode($match[3]);
+					$masked = $this->maskEmails($value);
+					if($masked === $value
+						&& $this->matchesAny($this->usernames, rawurldecode($match[2])))
+					{
+						$masked = $this->maskName($value);
+					}
+					
+					if($masked === $value)
+					{
+						return $match[0];
+					}
+					
+					// keep the mask readable — @ and * are legal in a query
+					return $match[1] . $match[2] . '='
+						. strtr(rawurlencode($masked), ['%40' => '@', '%2A' => '*']);
+				},
+				substr($url, $position + 1),
+			);
+			
+			$url = substr($url, 0, $position + 1) . $query;
+		}
+		
+		// a plain e-mail in the path (unsubscribe links and the like)
+		return $this->maskEmails($url);
+	}
+	
+	/**
+	 * Scrubs CLI argv the way remove() scrubs request arrays. Both argument
+	 * styles are covered: --password=x / password=x get the value dropped,
+	 * and a bare secret-named token drops the FOLLOWING argument (the
+	 * framework CLI passes "name value" pairs). E-mails in any argument are
+	 * masked with the domain kept.
+	 */
+	public function removeFromArgs(
+		array $args,
+	): array
+	{
+		$removeNext = false;
+		
+		foreach($args as $key => $arg)
+		{
+			if(is_string($arg) === false)
+			{
+				continue;
+			}
+			
+			if($removeNext)
+			{
+				$args[$key] = '[removed]';
+				$removeNext = false;
+				
+				continue;
+			}
+			
+			if(preg_match('~^(--?)?([^=]+)=(.*)$~s', $arg, $match) === 1)
+			{
+				$args[$key] = $this->matchesAny($this->remove, $match[2])
+					? $match[1] . $match[2] . '=[removed]'
+					: $this->maskEmails($arg);
+				
+				continue;
+			}
+			
+			if($this->matchesAny($this->remove, ltrim($arg, '-')))
+			{
+				// the name stays, the value that follows is dropped
+				$removeNext = true;
+				
+				continue;
+			}
+			
+			$args[$key] = $this->maskEmails($arg);
+		}
+		
+		return $args;
+	}
+	
+	/**
+	 * Whether $key matches any of the given key patterns
+	 *
+	 * @param string[] $patterns
+	 */
+	protected function matchesAny(
+		array $patterns,
+		string $key,
+	): bool
+	{
+		foreach($patterns as $pattern)
+		{
+			if(preg_match($pattern, $key) === 1)
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * Masks every e-mail address in a string, keeping the domain
+	 * (john.doe@example.com -> j***@example.com). Returns the value unchanged
+	 * when it holds no e-mail.
+	 */
+	protected function maskEmails(
+		string $value,
+	): string
+	{
+		return (string)preg_replace(self::EMAIL_PATTERN, '${1}***@${2}', $value);
+	}
+	
+	/**
+	 * Keeps the first character and masks the rest (marcin -> m***); an empty
+	 * string stays empty. The fixed suffix does not leak the original length.
+	 */
+	protected function maskName(
+		string $value,
+	): string
+	{
+		if($value === '')
+		{
+			return $value;
+		}
+		
+		return mb_substr($value, 0, 1) . '***';
 	}
 	
 	public function getEvent(
