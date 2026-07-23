@@ -333,6 +333,8 @@ class Sender extends Service
 		
 		$logLevel = $this->getLogLevel();
 		$context = null;
+		// the shared scrub patterns live in the Logger service
+		$logger = $this->getLogger();
 		
 		// optional deploy label (git sha, svn revision, any string) —
 		// constant across the batch, read once
@@ -346,13 +348,15 @@ class Sender extends Service
 				continue;
 			}
 			
-			$context ??= $this->buildContext();
+			$context ??= $this->buildContext($logger);
 			
 			$payload['type'] = $context['type'];
-			// per-event context overrides win over the auto-built base
+			// per-event context overrides win over the auto-built base;
+			// extras are scrubbed like request variables (secrets, e-mails,
+			// usernames) — the WP sender and the JS clients do the same
 			$payload['context'] = array_replace($context['context'],
 					$payload['context'] ?? [])
-				+ ['extra' => $payload['extra']];
+				+ ['extra' => $logger->remove($payload['extra'])];
 			unset($payload['extra']);
 			
 			if($release !== '')
@@ -369,7 +373,9 @@ class Sender extends Service
 	/**
 	 * @return array{type: string, context: array}
 	 */
-	protected function buildContext(): array
+	protected function buildContext(
+		Logger $logger,
+	): array
 	{
 		$isCli = $this->app->isInterfaceCli();
 		
@@ -384,15 +390,17 @@ class Sender extends Service
 		{
 			$context['host'] = (string)($this->app->getConfig()->system->domain ?? '');
 			$context['args'] = isset($_SERVER['argv'])
-				? array_values((array)$_SERVER['argv'])
+				? $logger->removeFromArgs(array_values((array)$_SERVER['argv']))
 				: [];
 		}
 		else
 		{
 			$context['host'] = (string)($_SERVER['HTTP_HOST'] ?? '');
-			$context['uri'] = (string)($_SERVER['REQUEST_URI'] ?? '');
+			// secrets and e-mails travel in query strings too — scrub the
+			// url copies the same way request.get is scrubbed
+			$context['uri'] = $logger->removeFromUrl((string)($_SERVER['REQUEST_URI'] ?? ''));
 			$context['method'] = (string)($_SERVER['REQUEST_METHOD'] ?? '');
-			$context['referer'] = (string)($_SERVER['HTTP_REFERER'] ?? '');
+			$context['referer'] = $logger->removeFromUrl((string)($_SERVER['HTTP_REFERER'] ?? ''));
 			$context['ip'] = (string)Client::getIp();
 			$context['ua'] = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
 			
@@ -405,7 +413,7 @@ class Sender extends Service
 				$context['sessionId'] = $sessionId;
 			}
 			
-			$context['request'] = $this->buildRequest();
+			$context['request'] = $this->buildRequest($logger);
 		}
 		
 		return [
@@ -415,17 +423,34 @@ class Sender extends Service
 	}
 	
 	/**
+	 * The Logger service carries the shared scrub patterns; a bare instance
+	 * (the scrub methods never touch its injected services) still scrubs
+	 * fine when the container cannot deliver the service
+	 */
+	protected function getLogger(): Logger
+	{
+		try
+		{
+			return $this->container->get(Logger::SYMBOL);
+		}
+		catch(Throwable)
+		{
+			return new Logger;
+		}
+	}
+	
+	/**
 	 * Request variables, redacted with the Logger patterns
 	 * (the console scrubs again server-side as a backstop)
 	 */
-	protected function buildRequest(): array
+	protected function buildRequest(
+		Logger $logger,
+	): array
 	{
 		$request = [];
 		
 		try
 		{
-			$logger = $this->container->get(Logger::SYMBOL);
-			
 			if(!empty($_GET))
 			{
 				$request['get'] = $logger->remove($_GET);
@@ -437,7 +462,7 @@ class Sender extends Service
 		}
 		catch(Throwable)
 		{
-			// logger unavailable — send without request variables
+			// scrubbing failed — send without request variables
 		}
 		
 		return $request;
