@@ -7,6 +7,7 @@ use Ovos\ArrayObject;
 use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
+use Ovos\Exception\NotFoundException;
 use Ovos\Http\Trace;
 use Ovos\Service;
 use Ovos\Service\Events;
@@ -25,6 +26,8 @@ use function defined;
 use function json_encode;
 use function mb_substr;
 use function rtrim;
+use function strpos;
+use function substr;
 
 use const CURLOPT_CONNECTTIMEOUT_MS;
 use const CURLOPT_HTTPHEADER;
@@ -207,6 +210,81 @@ class Sender extends Service
 	}
 	
 	/**
+	 * Reports a not-found access event as a type=404 report (priority 6, INFO).
+	 * The console groups these apart from application errors, never turns them
+	 * into issues, and its per-project report_404 switch decides acceptance.
+	 * No-op unless console.report_404 is enabled here. The path defaults to the
+	 * current request URI; secrets and e-mails are scrubbed through the shared
+	 * Logger patterns and the query string is dropped so distinct probes stay
+	 * distinct while one hammered path folds together.
+	 */
+	public function capture404(
+		string $path = '',
+		array $extra = [],
+	): static
+	{
+		if($this->reports404() === false || $this->isEnabled() === false)
+		{
+			return $this;
+		}
+		
+		try
+		{
+			if(count($this->queue) < self::QUEUE_MAX)
+			{
+				$this->queue[] = $this->payload404($path, $extra);
+			}
+		}
+		catch(Throwable)
+		{
+			// never break the host application
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * Whether not-found access events are reported as type=404 (opt-in per app)
+	 */
+	protected function reports404(): bool
+	{
+		return $this->config?->report_404 === true;
+	}
+	
+	/**
+	 * A type=404 payload: INFO priority, the request path as message — scrubbed
+	 * through the shared Logger patterns and stripped of its query string so 404
+	 * fingerprints stay stable (distinct paths distinct, one path's repeats fold)
+	 */
+	protected function payload404(
+		string $path = '',
+		array $extra = [],
+	): array
+	{
+		if($path === '')
+		{
+			$path = (string)($_SERVER['REQUEST_URI'] ?? '');
+		}
+		
+		$path = $this->getLogger()->removeFromUrl($path);
+		
+		$mark = strpos($path, '?');
+		if($mark !== false)
+		{
+			$path = substr($path, 0, $mark);
+		}
+		
+		$payload = Payload::fromMessage(
+			'404 Not Found: ' . mb_substr($path, 0, 512),
+			Priority::INFO,
+			$extra,
+		);
+		$payload['type'] = '404';
+		
+		return $payload;
+	}
+	
+	/**
 	 * Queues one event, deduping throwables by live object identity.
 	 * offsetExists/offsetSet, not contains/attach — the aliases are
 	 * deprecated in PHP 8.5 and the promoted deprecation would land in the
@@ -233,10 +311,17 @@ class Sender extends Service
 			return;
 		}
 		
+		// a routing miss (unknown controller/action) is an access event, not an
+		// application error — report it as a type=404 when the app opts in; covers
+		// the Events-service merge (where framework 404s arrive) and an explicit
+		// NotFoundException capture alike.
+		//
 		// build the payload BEFORE marking the event as seen: if construction
 		// throws, a pre-marked event would count as already queued for the
 		// rest of the request and never get another chance
-		$payload = $event->toPayload();
+		$payload = $throwable instanceof NotFoundException && $this->reports404()
+			? $this->payload404()
+			: $event->toPayload();
 		
 		if($throwable !== null)
 		{
@@ -343,14 +428,19 @@ class Sender extends Service
 		$errors = [];
 		foreach($this->queue as $payload)
 		{
-			if($payload['priority'] > $logLevel)
+			// a 404 access event rides the INFO band but is a KIND, not a
+			// severity — the log_level gate (a severity filter) must not drop it
+			if(($payload['type'] ?? '') !== '404'
+				&& $payload['priority'] > $logLevel)
 			{
 				continue;
 			}
 			
 			$context ??= $this->buildContext($logger);
 			
-			$payload['type'] = $context['type'];
+			// respect a type the payload already carries (404); otherwise
+			// take the request-derived type (http/cli)
+			$payload['type'] ??= $context['type'];
 			// per-event context overrides win over the auto-built base;
 			// extras are scrubbed like request variables (secrets, e-mails,
 			// usernames) — the WP sender and the JS clients do the same
