@@ -793,7 +793,11 @@ class Application
 				|| $this->getRequest()->isHttpDebug())
 			{
 				/** @var Response\Html $response */
-				$output = (string)$response->send();
+				// capture any already-rendered output WITHOUT sending headers —
+				// send() would emit http_response_code() with the default 500 and
+				// latch headersSent, so the events controller's 404/403 could no
+				// longer take effect (the code below relies on it overwriting it)
+				$output = (string)$response;
 				
 				$errorController = new \Controllers\System\Events;
 				try
