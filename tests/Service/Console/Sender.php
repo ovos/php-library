@@ -5,6 +5,8 @@ namespace Tests\Service\Console;
 
 use Exception;
 use Ovos\ArrayObject;
+use Ovos\Exception\NotFoundException;
+use Ovos\Service\Console\Priority;
 use Ovos\Service\Console\Sender as ConsoleSender;
 use Ovos\Test;
 use Throwable;
@@ -109,17 +111,78 @@ class Sender extends Test
 		return $sender->queueCount() === 0;
 	}
 	
+	public function capture404QueuesAnInfoTypedPayload(): bool
+	{
+		$sender = $this->makeSender(report404: true);
+		
+		$sender->capture404('/wp-login.php');
+		$payload = $sender->lastPayload();
+		
+		return $sender->queueCount() === 1
+			&& ($payload['type'] ?? null) === '404'
+			&& ($payload['priority'] ?? null) === Priority::INFO
+			&& ($payload['message'] ?? '') === '404 Not Found: /wp-login.php';
+	}
+	
+	public function capture404DropsTheQueryString(): bool
+	{
+		$sender = $this->makeSender(report404: true);
+		
+		// the query is dropped so distinct probes stay distinct and any secret
+		// in it never reaches the message
+		$sender->capture404('/search?password=secret&q=1');
+		
+		return ($sender->lastPayload()['message'] ?? '') === '404 Not Found: /search';
+	}
+	
+	public function capture404IsNoopUnlessEnabled(): bool
+	{
+		$sender = $this->makeSender(report404: false);
+		
+		$sender->capture404('/wp-login.php');
+		
+		return $sender->queueCount() === 0;
+	}
+	
+	public function notFoundExceptionBecomesA404WhenEnabled(): bool
+	{
+		$_SERVER['REQUEST_URI'] = '/xmlrpc.php?rsd';
+		$sender = $this->makeSender(report404: true);
+		
+		// the flush-time Events merge is where framework 404s arrive
+		$sender->mergeEvent(new NotFoundException('No route'));
+		$payload = $sender->lastPayload();
+		
+		return ($payload['type'] ?? null) === '404'
+			&& ($payload['priority'] ?? null) === Priority::INFO
+			&& ($payload['message'] ?? '') === '404 Not Found: /xmlrpc.php';
+	}
+	
+	public function notFoundExceptionStaysAnErrorWhenDisabled(): bool
+	{
+		$sender = $this->makeSender(report404: false);
+		
+		$sender->mergeEvent(new NotFoundException('No route'));
+		$payload = $sender->lastPayload();
+		
+		// a normal exception payload: no 404 type override, error priority
+		return ($payload['type'] ?? null) === null
+			&& ($payload['priority'] ?? null) === Priority::ERROR;
+	}
+	
 	/**
 	 * @return ConsoleSender&object{queueCount: callable(): int}
 	 */
 	protected function makeSender(
 		bool $enabled = true,
+		bool $report404 = false,
 	): ConsoleSender
 	{
 		$config = new ArrayObject([
 			'enabled' => $enabled,
 			'url' => 'https://console.invalid',
 			'key' => 'test-key',
+			'report_404' => $report404,
 		]);
 		
 		return new class($config) extends ConsoleSender
@@ -127,6 +190,16 @@ class Sender extends Test
 			public function queueCount(): int
 			{
 				return count($this->queue);
+			}
+			
+			/**
+			 * @return array<string, mixed> the most recently queued payload
+			 */
+			public function lastPayload(): array
+			{
+				return $this->queue === []
+					? []
+					: $this->queue[count($this->queue) - 1];
 			}
 			
 			/**
