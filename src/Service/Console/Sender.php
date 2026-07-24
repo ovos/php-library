@@ -214,9 +214,8 @@ class Sender extends Service
 	 * The console groups these apart from application errors, never turns them
 	 * into issues, and its per-project report_404 switch decides acceptance.
 	 * No-op unless console.report_404 is enabled here. The path defaults to the
-	 * current request URI; secrets and e-mails are scrubbed through the shared
-	 * Logger patterns and the query string is dropped so distinct probes stay
-	 * distinct while one hammered path folds together.
+	 * current request URI and the query string is dropped so distinct probes
+	 * stay distinct while one hammered path folds together.
 	 */
 	public function capture404(
 		string $path = '',
@@ -252,30 +251,47 @@ class Sender extends Service
 	}
 	
 	/**
-	 * A type=404 payload: INFO priority, the request path as message — scrubbed
-	 * through the shared Logger patterns and stripped of its query string so 404
-	 * fingerprints stay stable (distinct paths distinct, one path's repeats fold)
+	 * A type=404 payload (INFO priority). With a throwable its own message is
+	 * preserved — the router's subtype detail ("File not found: …", a controller
+	 * miss) — instead of being flattened; without one the request path becomes
+	 * the message. The query is dropped either way so 404 fingerprints stay
+	 * stable (distinct paths distinct, one path's repeats fold). The message is
+	 * attacker-influenced text: display surfaces must escape it (the SPA does so
+	 * via Lit; server-rendered views via View::escape).
 	 */
 	protected function payload404(
 		string $path = '',
 		array $extra = [],
+		?Throwable $throwable = null,
 	): array
 	{
-		if($path === '')
+		if($throwable !== null)
 		{
-			$path = (string)($_SERVER['REQUEST_URI'] ?? '');
+			// preserve the exact message the router threw ("File not found: …",
+			// a controller miss, and so on) instead of flattening every 404 to
+			// the same text — that subtype detail is the point of reporting them
+			$message = $throwable->getMessage();
 		}
-		
-		$path = $this->getLogger()->removeFromUrl($path);
-		
-		$mark = strpos($path, '?');
-		if($mark !== false)
+		else
 		{
-			$path = substr($path, 0, $mark);
+			if($path === '')
+			{
+				$path = (string)($_SERVER['REQUEST_URI'] ?? '');
+			}
+			
+			// drop the query so distinct probes stay distinct while one hammered
+			// path folds together
+			$mark = strpos($path, '?');
+			if($mark !== false)
+			{
+				$path = substr($path, 0, $mark);
+			}
+			
+			$message = '404 Not Found: ' . $path;
 		}
-		
+
 		$payload = Payload::fromMessage(
-			'404 Not Found: ' . mb_substr($path, 0, 512),
+			mb_substr($message, 0, 512),
 			Priority::INFO,
 			$extra,
 		);
@@ -320,7 +336,7 @@ class Sender extends Service
 		// throws, a pre-marked event would count as already queued for the
 		// rest of the request and never get another chance
 		$payload = $throwable instanceof NotFoundException && $this->reports404()
-			? $this->payload404()
+			? $this->payload404('', [], $throwable)
 			: $event->toPayload();
 		
 		if($throwable !== null)

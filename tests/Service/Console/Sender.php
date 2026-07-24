@@ -146,16 +146,17 @@ class Sender extends Test
 	
 	public function notFoundExceptionBecomesA404WhenEnabled(): bool
 	{
-		$_SERVER['REQUEST_URI'] = '/xmlrpc.php?rsd';
 		$sender = $this->makeSender(report404: true);
 		
-		// the flush-time Events merge is where framework 404s arrive
-		$sender->mergeEvent(new NotFoundException('No route'));
+		// the flush-time Events merge is where framework 404s arrive; the
+		// router's own message is preserved ("File not found: …", a controller
+		// miss — the subtype detail worth keeping), not flattened to a fixed text
+		$sender->mergeEvent(new NotFoundException('File not found: themes/x/favicon.png'));
 		$payload = $sender->lastPayload();
 		
 		return ($payload['type'] ?? null) === '404'
 			&& ($payload['priority'] ?? null) === Priority::INFO
-			&& ($payload['message'] ?? '') === '404 Not Found: /xmlrpc.php';
+			&& ($payload['message'] ?? '') === 'File not found: themes/x/favicon.png';
 	}
 	
 	public function notFoundExceptionStaysAnErrorWhenDisabled(): bool
