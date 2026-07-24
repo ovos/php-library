@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Controller;
 
 use Ovos\Controller;
-use Ovos\Exception;
+use Ovos\Exception\ForbiddenException;
 use Ovos\Response;
 use Ovos\Terminal;
 use Override;
@@ -48,27 +48,24 @@ class Cli extends Controller
 		array $actionParams,
 	): void
 	{
+		// decide HTTP access BEFORE running plugins: for a forbidden
+		// CLI-over-HTTP request a plugin (e.g. Auth) must not get to install a
+		// login redirect as the response first. A leftover Redirect response
+		// short-circuits the error page in Application::handleShutdown() (which
+		// only re-renders Html/Cli responses through System\Events), so the
+		// client would receive the redirect URL as the body under a 500 instead
+		// of a clean 403.
+		if($this->getRequest()->isCli() === false
+			&& $this->isAllowedHttpAccess() === false
+			&& in_array($this->getRequest()->getAction(),
+				$this->httpActions,
+				true,
+			) === false)
+		{
+			throw new ForbiddenException('Forbidden.');
+		}
+		
 		$this->preDispatchPlugins();
-		
-		if($this->getRequest()->isCli() === true)
-		{
-			return;
-		}
-		
-		if($this->isAllowedHttpAccess())
-		{
-			return;
-		}
-		
-		if(in_array($this->getRequest()->getAction(),
-			$this->httpActions,
-			true,
-		) === true)
-		{
-			return;
-		}
-		
-		throw new Exception('Forbidden.');
 	}
 	
 	public function getPid(): int
