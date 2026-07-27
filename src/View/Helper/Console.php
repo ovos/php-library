@@ -38,6 +38,7 @@ class Console extends Helper
 		
 		$view = new View('helpers/console.phtml');
 		$view->messages = $messages;
+		$view->markup = $this->usesMarkup();
 		
 		return $view->__toString();
 	}

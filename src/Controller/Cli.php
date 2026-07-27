@@ -127,6 +127,18 @@ class Cli extends Controller
 	}
 	
 	/**
+	 * Whether this controller's output may carry <color> markup: the response
+	 * answers, which defers to Terminal::supportsColor(). Hand it to
+	 * Terminal\Table::hasMarkup() when building a table, so a run redirected
+	 * into a cron log stays free of escape sequences.
+	 */
+	public function usesColor(): bool
+	{
+		return ($response = $this->app->getResponse()) instanceof Response\Cli
+			&& $response->getColoredOutput();
+	}
+	
+	/**
 	 * Log messages
 	 */
 	public function log(
@@ -149,9 +161,7 @@ class Cli extends Controller
 		Terminal::output('<darkgray>[' . $this->getPid() . '] '
 			. '<purple>' . date('Y-m-d H:i:s') . ': '
 			. '<reset>' . $message . '<reset>' . PHP_EOL,
-			markup: ($response = $this->app->getResponse())
-				&& $response instanceof Response\Cli
-				&& $response->getColoredOutput()
+			markup: $this->usesColor(),
 		);
 		
 		return $this;

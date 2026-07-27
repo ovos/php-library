@@ -64,6 +64,7 @@ class Streams extends Helper
 		
 		$view = new View('helpers/streams.phtml');
 		$view->requests = $requests;
+		$view->markup = $this->usesMarkup();
 		
 		return $view->__toString();
 	}

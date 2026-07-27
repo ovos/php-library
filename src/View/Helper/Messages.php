@@ -198,6 +198,7 @@ class Messages extends Helper implements Countable
 		
 		$view = new View('helpers/messages.phtml');
 		$view->messages = $this->toArray();
+		$view->markup = $this->usesMarkup();
 		
 		return $view->render();
 	}
