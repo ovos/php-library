@@ -43,6 +43,14 @@ class Reporter
 	}
 	
 	/**
+	 * How many queries ran, including those the display limit dropped
+	 */
+	public function getTotal(): int
+	{
+		return Collector::getInstance()->getTotal();
+	}
+	
+	/**
 	 * Builds a nice and readable array report
 	 *
 	 * @return ?ArrayObject[]

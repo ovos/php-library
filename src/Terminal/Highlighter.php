@@ -254,6 +254,26 @@ class Highlighter
 	}
 	
 	/**
+	 * A profiler table's header: the count, and what the count leaves out.
+	 *
+	 * "Queries (12)" when the display limit never bit — mentioning a cap that
+	 * dropped nothing is noise. "Queries (last 20 of 137)" when it did, which is
+	 * the case worth spelling out: the table is a tail, and the reader would
+	 * otherwise take 20 for the whole request.
+	 */
+	public static function heading(
+		string $label,
+		int $shown,
+		int $total,
+	): string
+	{
+		return self::header($total > $shown
+			? $label . ' (last ' . $shown . ' of ' . $total . ')'
+			: $label . ' (' . $shown . ')',
+		);
+	}
+	
+	/**
 	 * Colorizes a count, but only once it counts: a colored "0" in a column of
 	 * errors or failures reads as a signal where there is none
 	 */

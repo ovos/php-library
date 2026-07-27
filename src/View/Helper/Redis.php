@@ -45,6 +45,7 @@ class Redis extends Helper
 		
 		$view = new View('helpers/redis.phtml');
 		$view->commands = $report;
+		$view->total = $this->getReporter()->getTotal();
 		$view->markup = $this->usesMarkup();
 		
 		return $view->__toString();

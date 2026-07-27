@@ -241,6 +241,9 @@ class Profiler extends Service
 			}
 		}
 		
+		$queries = new QueriesReporter;
+		$redis = new RedisReporter;
+		
 		return [
 			'req_id' => uniqid('', true),
 			'ts' => (int)round(microtime(true) * 1000),
@@ -248,8 +251,12 @@ class Profiler extends Service
 			'uri' => $_SERVER['REQUEST_URI'] ?? '',
 			'ajax' => $this->request->isXmlHttpRequest(),
 			'memory' => memory_get_peak_usage(true),
-			'queries' => $this->highlightQueries((new QueriesReporter)->getReport() ?? []),
-			'redis' => $this->highlightRedis((new RedisReporter)->getReport() ?? []),
+			'queries' => $this->highlightQueries($queries->getReport() ?? []),
+			// what the display limit dropped: the page says "last 20 of 137"
+			// rather than presenting a tail as the whole request
+			'queries_total' => $queries->getTotal(),
+			'redis' => $this->highlightRedis($redis->getReport() ?? []),
+			'redis_total' => $redis->getTotal(),
 			'streams' => $this->collectStreams(),
 			'console' => $this->container->getClass(Console::class)->getReport(),
 			'benchmark' => $measurements,
@@ -457,8 +464,12 @@ class Profiler extends Service
 		
 		if($this->skipped === false)
 		{
-			$payload['queries'] = $this->highlightQueries((new QueriesReporter)->getReport() ?? []);
-			$payload['redis'] = $this->highlightRedis((new RedisReporter)->getReport() ?? []);
+			$queries = new QueriesReporter;
+			$redis = new RedisReporter;
+			$payload['queries'] = $this->highlightQueries($queries->getReport() ?? []);
+			$payload['queries_total'] = $queries->getTotal();
+			$payload['redis'] = $this->highlightRedis($redis->getReport() ?? []);
+			$payload['redis_total'] = $redis->getTotal();
 			$payload['console'] = $this->container->getClass(Console::class)->getReport();
 		}
 		

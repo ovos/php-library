@@ -128,6 +128,22 @@ class Highlighter extends Test
 			&& Subject::className('Migration') === '<cyan>Migration<reset>';
 	}
 	
+	public function headingOnlyMentionsACapThatBit(): bool
+	{
+		// nothing dropped: naming a limit that took nothing is noise
+		return Formatter::stripMarkup(Subject::heading('Queries', 12, 12))
+				=== 'Queries (12)'
+			&& Formatter::stripMarkup(Subject::heading('Redis', 0, 0)) === 'Redis (0)'
+			// dropped: the table is a tail, and 20 would otherwise read as the
+			// whole request
+			&& Formatter::stripMarkup(Subject::heading('Queries', 20, 137))
+				=== 'Queries (last 20 of 137)'
+			// a total below the shown count cannot happen, but must not produce
+			// "last 20 of 3" if it ever did
+			&& Formatter::stripMarkup(Subject::heading('Queries', 20, 3))
+				=== 'Queries (20)';
+	}
+	
 	public function tallyStaysQuietAtZero(): bool
 	{
 		// a colored "0" in an errors column reads as a signal where there is
