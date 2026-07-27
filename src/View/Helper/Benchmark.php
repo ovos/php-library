@@ -51,6 +51,7 @@ class Benchmark extends Helper
 		
 		$view = new View('helpers/benchmark.phtml');
 		$view->measurements = $benchmark->getMeasurements();
+		$view->markup = $this->usesMarkup();
 		
 		return $view->__toString();
 	}

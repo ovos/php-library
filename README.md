@@ -2307,6 +2307,42 @@ php cli.php system tools encrypt "text"      # Encrypt a string
 php cli.php system tools decrypt "cipher"    # Decrypt a string
 ```
 
+### Colored Output
+
+`Terminal` writes ANSI color when — and only when — something is there to render
+it. `Terminal::supportsColor()` decides once per process:
+
+| Condition | Result |
+|---|---|
+| `NO_COLOR` set to any non-empty value | off ([no-color.org](https://no-color.org)) |
+| `CLI_COLOR=1` / `=0` (`true`/`yes`/`on`, `false`/`no`/`off`) | forced on / off |
+| `STDOUT` is a terminal | on (Windows: VT processing is switched on first) |
+| running inside a composer script (`COMPOSER_BINARY` set) with a usable `TERM` | on |
+| anything else — cron, `>> log.txt`, systemd, CI | off |
+
+The composer rule exists because composer relays script output through its own IO
+layer: `STDOUT` is a pipe, so `stream_isatty()` says "no terminal" for the exact
+case — `composer prod:update` — where the colored profiler tables are wanted.
+Composer passes escape sequences through untouched (and does **not** propagate
+its own `--no-ansi` to scripts), so the decision belongs to the shell that
+launched composer, with `TERM` standing in for it. Cron carries no `TERM`, which
+keeps escapes out of a redirected log.
+
+Nothing needs to opt in. `Terminal::output($message, markup: true)` declares that
+a string carries `<color>` markup; whether it resolves to ANSI or gets stripped
+is the environment's call, so a caller cannot force escapes into a log file.
+`Response\Cli::setColoredOutput(true|false)` pins the answer for one response,
+`null` hands it back to detection, and `Terminal::setSupportsColor()` pins it
+process-wide (used by the tests).
+
+`Terminal\Table` renders markup when told to (`hasMarkup()`), measuring column
+widths on the *visible* text so colored cells still line up.
+`Terminal\Highlighter` supplies the profiler tables' colors — SQL keywords and
+literals, redis commands and keys, and time/memory thresholded per table, since
+"slow" for one query is not "slow" for a whole request. It sanitizes its input
+first: a bound value cannot smuggle markup or an escape sequence into the
+terminal.
+
 ---
 
 ## Forms

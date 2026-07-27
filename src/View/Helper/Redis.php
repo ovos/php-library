@@ -21,31 +21,32 @@ class Redis extends Helper
 		{
 			$reporter = new Reporter;
 		}
-
+		
 		return $reporter;
 	}
-
+	
 	public function getCount(): int
 	{
 		return $this->getReporter()->getCount();
 	}
-
+	
 	public function __toString(): string
 	{
 		if($this->app->getConfig()->system->profilers->enabled === false)
 		{
 			return '';
 		}
-
+		
 		$report = $this->getReporter()->getReport();
 		if(empty($report))
 		{
 			return '';
 		}
-
+		
 		$view = new View('helpers/redis.phtml');
 		$view->commands = $report;
-
+		$view->markup = $this->usesMarkup();
+		
 		return $view->__toString();
 	}
 }

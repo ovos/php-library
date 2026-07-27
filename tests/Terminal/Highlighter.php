@@ -1,0 +1,214 @@
+<?php
+declare(strict_types=1);
+
+namespace Tests\Terminal;
+
+use Ovos\Terminal\Formatter;
+use Ovos\Terminal\Highlighter as Subject;
+use Ovos\Terminal\Table;
+use Ovos\Test;
+
+use function array_unique;
+use function count;
+use function explode;
+use function mb_strwidth;
+use function preg_replace;
+use function rtrim;
+use function str_contains;
+use function str_repeat;
+use function strlen;
+use function substr_count;
+use function wordwrap;
+
+/**
+ * Highlighter - the <color> markup added to the CLI profiler tables
+ *
+ * @author Marcin Gil <mg@ovos.at>
+ */
+class Highlighter extends Test
+{
+	public function sqlColorsKeywordsWithoutRewritingTheQuery(): bool
+	{
+		$highlighted = Subject::sql('SELECT id FROM users WHERE name = \'bob\'');
+		
+		// the visible text must survive untouched — a profiler shows the query
+		// as it was sent
+		return Formatter::stripMarkup($highlighted) === 'SELECT id FROM users WHERE name = \'bob\''
+			&& str_contains($highlighted, '<cyan>SELECT<reset>')
+			&& str_contains($highlighted, '<cyan>FROM<reset>')
+			&& str_contains($highlighted, '<brown>\'bob\'<reset>');
+	}
+	
+	public function sqlKeepsLowercaseKeywordsAsWritten(): bool
+	{
+		$highlighted = Subject::sql('select 1');
+		
+		return str_contains($highlighted, '<cyan>select<reset>')
+			&& str_contains($highlighted, 'SELECT') === false;
+	}
+	
+	public function sqlDoesNotColorKeywordsInsideABoundValue(): bool
+	{
+		// a bound value carrying SQL words must render as one literal, not as a
+		// half-colored fake query
+		$highlighted = Subject::sql('UPDATE t SET note = \'select from where\'');
+		
+		return str_contains($highlighted, '<brown>\'select from where\'<reset>')
+			&& substr_count($highlighted, '<cyan>') === 2; // UPDATE, SET
+	}
+	
+	public function sqlColorsNullDistinctlyFromLiterals(): bool
+	{
+		$highlighted = Subject::sql('INSERT INTO t VALUES (NULL, \'x\')');
+		
+		return str_contains($highlighted, '<darkpurple>NULL<reset>')
+			&& Formatter::stripMarkup($highlighted) === 'INSERT INTO t VALUES (NULL, \'x\')';
+	}
+	
+	public function sqlDoesNotMatchKeywordsInsideIdentifiers(): bool
+	{
+		$highlighted = Subject::sql('SELECT is_active, ending FROM t');
+		
+		// is_active / ending contain IS and END but are single words
+		return str_contains($highlighted, '<cyan>is<reset>_active') === false
+			&& str_contains($highlighted, '<cyan>end<reset>ing') === false;
+	}
+	
+	public function sanitizeStripsInjectedMarkupAndEscapes(): bool
+	{
+		$highlighted = Subject::sql("SELECT '\33[31m<green>evil'");
+		$visible = Formatter::stripMarkup($highlighted);
+		
+		// no raw escape, and no attacker-supplied color left to resolve
+		return str_contains($highlighted, "\33[") === false
+			&& $visible === "SELECT 'evil'";
+	}
+	
+	public function redisColorsTheVerbAndTheKeys(): bool
+	{
+		$highlighted = Subject::redis('hGet console:projects 12');
+		
+		return str_contains($highlighted, '<cyan>HGET<reset>')
+			&& str_contains($highlighted, '<green>console:projects<reset>')
+			&& str_contains($highlighted, '<gray>12<reset>');
+	}
+	
+	public function redisColorsAKeyWhereverItSits(): bool
+	{
+		// FCALL reports the function name before the key, so position cannot
+		// decide which token is a key — the shape has to
+		$highlighted = Subject::redis('FCALL console_cache_clear console:*');
+		
+		return str_contains($highlighted, '<cyan>FCALL<reset>')
+			&& str_contains($highlighted, '<gray>console_cache_clear<reset>')
+			&& str_contains($highlighted, '<green>console:*<reset>');
+	}
+	
+	public function timeAndMemoryEscalateWithTheirThresholds(): bool
+	{
+		return str_contains(Subject::time('0.00001200'), '<gray>')
+			&& str_contains(Subject::time('0.01500000'), '<yellow>')
+			&& str_contains(Subject::time('0.42000000'), '<red>')
+			&& str_contains(Subject::memory('512 B'), '<gray>')
+			&& str_contains(Subject::memory('220.5 KB'), '<yellow>')
+			&& str_contains(Subject::memory('3.1 MB'), '<red>')
+			&& Subject::time(null) === ''
+			&& Subject::memory(null) === '';
+	}
+	
+	public function classNameDimsTheNamespaceAndKeepsTheLeafBright(): bool
+	{
+		$migration = Subject::className('Migrations\Projects\ProjectGithub');
+		$test = Subject::className('Tests\Terminal\ColorSupport::cronStaysPlain');
+		
+		return $migration === '<gray>Migrations\Projects\<reset><cyan>ProjectGithub<reset>'
+			&& $test === '<gray>Tests\Terminal\<reset><cyan>ColorSupport<reset>'
+				. '<gray>::<reset><white>cronStaysPlain<reset>'
+			// a bare class has no namespace to dim
+			&& Subject::className('Migration') === '<cyan>Migration<reset>';
+	}
+	
+	public function tallyStaysQuietAtZero(): bool
+	{
+		// a colored "0" in an errors column reads as a signal where there is
+		// none, so only a real count takes the color
+		return Subject::tally('0') === '<gray>0<reset>'
+			&& Subject::tally('7') === '<yellow>7<reset>'
+			&& Subject::tally('12', 'red') === '<red>12<reset>'
+			&& Subject::tally('') === '';
+	}
+	
+	public function colorLeavesEmptyCellsEmpty(): bool
+	{
+		// an unset column (a NULL rolled_back_at) must not carry markup, or the
+		// cell renders as a colored run of padding
+		return Subject::color('', 'gray') === ''
+			&& Subject::color(null, 'gray') === ''
+			&& Subject::color('2026-07-23 18:20:36', 'darkgreen')
+				=== '<darkgreen>2026-07-23 18:20:36<reset>';
+	}
+	
+	public function colorNeverSpansALineBreak(): bool
+	{
+		$highlighted = Subject::sql("SELECT 'a\nb' FROM t");
+		
+		foreach(explode("\n", $highlighted) as $line)
+		{
+			// every line closes what it opens, so Table's padding and border
+			// stay uncolored
+			if(substr_count($line, '<reset>') === 0)
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	public function wrappedKeywordsStillMatchAcrossTheBreak(): bool
+	{
+		$highlighted = Subject::sql("SELECT * FROM t GROUP\nBY id");
+		
+		return str_contains($highlighted, '<cyan>GROUP');
+	}
+	
+	public function coloredCellsStillAlignInATable(): bool
+	{
+		$sql = 'SELECT id FROM users';
+		$plain = (new Table)
+			->setHeaders(['Q', 'Time'])
+			->addRow([$sql, '0.00001000'])
+			->getTable();
+		$colored = (new Table)
+			->hasMarkup()
+			->setHeaders([Subject::header('Q'), Subject::header('Time')])
+			->addRow([Subject::sql($sql), Subject::time('0.00001000')])
+			->getTable();
+		
+		// same geometry: the markup must not widen a single column
+		$plainRule = explode("\n", $plain)[0];
+		$coloredRule = explode("\n", $colored)[0];
+		
+		return $plainRule === $coloredRule
+			&& strlen($colored) > strlen($plain);
+	}
+	
+	public function longQueriesStayWithinTheirColumn(): bool
+	{
+		// a table built the way the profiler view builds it
+		$sql = 'SELECT ' . str_repeat('very_long_column_name, ', 20) . 'id FROM users';
+		$table = (new Table)
+			->hasMarkup()
+			->addRow([Subject::sql(wordwrap($sql, 60, "\n")), Subject::time('0.00100000')])
+			->getTable();
+		
+		$widths = [];
+		foreach(explode("\n", rtrim($table, "\n")) as $line)
+		{
+			$widths[] = mb_strwidth((string)preg_replace('/\e\[[0-9;]*m/', '', $line));
+		}
+		
+		// every rendered line of the box is the same width
+		return count(array_unique($widths)) === 1;
+	}
+}
