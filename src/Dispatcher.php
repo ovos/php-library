@@ -52,8 +52,12 @@ class Dispatcher
 		}
 		$controller->setParams($request->getParams());
 		
-		$action = $request->getActionMethod();
-		if(method_exists($controller, $action) === false)
+		// re-checked here, not only in the router: a request whose action was
+		// set by anything other than route parsing (a forward, a default)
+		// reaches this point too, and the rule is the same one
+		$action = Controller::resolveActionMethod($controller::class,
+			$request->getActionMethod());
+		if($action === null)
 		{
 			throw new NotFoundException(
 				'No method matching action name on controller "%s".', $controllerClass);

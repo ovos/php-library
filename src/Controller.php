@@ -288,6 +288,52 @@ class Controller
 	/**
 	 * Name of the class without \Controllers\ namespace
 	 */
+	/**
+	 * The canonical method name for a URL action, or null when the segment
+	 * must not dispatch.
+	 *
+	 * Two rules, both learned the hard way:
+	 *
+	 * 1. PUBLIC ONLY. method_exists() answers true for protected methods, and
+	 *    the call is made from inside this class — an ancestor of every
+	 *    controller — so PHP happily invokes them. Every protected helper on
+	 *    every controller was therefore a URL-addressable endpoint, and a
+	 *    codebase that avoids `private` (house style) has nothing but those.
+	 *
+	 * 2. NOT DECLARED HERE. dispatch() is public, so /<controller>/dispatch/
+	 *    <action> re-entered the dispatcher and ran <action> while the request
+	 *    still reported "dispatch" as its action — the string authorization
+	 *    plugins look up. Every list-based admin or demo guard was bypassable
+	 *    that way. Nothing on this base class is an action; the whole public
+	 *    surface here is plumbing.
+	 *
+	 * The returned name is the DECLARED spelling. PHP dispatches methods
+	 * case-insensitively while guard maps compare strings, so /errors/deletE
+	 * used to reach delete() past a map that lists "delete" — canonicalising
+	 * here means the rest of the stack only ever sees one spelling.
+	 */
+	public static function resolveActionMethod(
+		string $controllerClass,
+		string $method,
+	): ?string
+	{
+		if($method === '' || method_exists($controllerClass, $method) === false)
+		{
+			return null;
+		}
+		
+		$reflection = new ReflectionMethod($controllerClass, $method);
+		
+		if($reflection->isPublic() === false
+			|| $reflection->isStatic()
+			|| $reflection->getDeclaringClass()->getName() === self::class)
+		{
+			return null;
+		}
+		
+		return $reflection->getName();
+	}
+	
 	public function getName(): string
 	{
 		return substr(static::class,
