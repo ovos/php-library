@@ -13,6 +13,7 @@ use Ovos\Redis\Profiler\Collector as RedisCollector;
 use Ovos\Redis\Profiler\Reporter as RedisReporter;
 use Ovos\Service;
 use Ovos\Terminal;
+use Ovos\Terminal\Highlighter;
 use Redis as RedisClient;
 use Throwable;
 
@@ -247,13 +248,62 @@ class Profiler extends Service
 			'uri' => $_SERVER['REQUEST_URI'] ?? '',
 			'ajax' => $this->request->isXmlHttpRequest(),
 			'memory' => memory_get_peak_usage(true),
-			'queries' => (new QueriesReporter)->getReport() ?? [],
-			'redis' => (new RedisReporter)->getReport() ?? [],
+			'queries' => $this->highlightQueries((new QueriesReporter)->getReport() ?? []),
+			'redis' => $this->highlightRedis((new RedisReporter)->getReport() ?? []),
 			'streams' => $this->collectStreams(),
 			'console' => $this->container->getClass(Console::class)->getReport(),
 			'benchmark' => $measurements,
 			'errors' => $this->collectErrors(),
 		];
+	}
+	
+	/**
+	 * The payload's query rows carry <color> markup, which the profiler page
+	 * renders through the same appendColorized() as the CLI pane. The stream is
+	 * that page's private artifact — TTL'd, capped, no other consumer — so
+	 * highlighting here keeps one set of rules for terminal and browser instead
+	 * of a second copy of the keyword list and the thresholds in JS.
+	 *
+	 * @param ArrayObject[] $report
+	 * @return array<int, array<string, mixed>>
+	 */
+	protected function highlightQueries(
+		array $report,
+	): array
+	{
+		$rows = [];
+		foreach($report as $query)
+		{
+			$rows[] = [
+				'sql' => Highlighter::sql((string)$query->sql),
+				'parameters' => $query->parameters,
+				'time' => Highlighter::time((string)$query->time),
+				'memory' => Highlighter::memory((string)$query->memory),
+			];
+		}
+		
+		return $rows;
+	}
+	
+	/**
+	 * @param ArrayObject[] $report
+	 * @return array<int, array<string, mixed>>
+	 */
+	protected function highlightRedis(
+		array $report,
+	): array
+	{
+		$rows = [];
+		foreach($report as $command)
+		{
+			$rows[] = [
+				'call' => Highlighter::redis((string)$command->call),
+				'time' => Highlighter::time((string)$command->time),
+				'memory' => Highlighter::memory((string)$command->memory),
+			];
+		}
+		
+		return $rows;
 	}
 	
 	/**
@@ -407,8 +457,8 @@ class Profiler extends Service
 		
 		if($this->skipped === false)
 		{
-			$payload['queries'] = (new QueriesReporter)->getReport() ?? [];
-			$payload['redis'] = (new RedisReporter)->getReport() ?? [];
+			$payload['queries'] = $this->highlightQueries((new QueriesReporter)->getReport() ?? []);
+			$payload['redis'] = $this->highlightRedis((new RedisReporter)->getReport() ?? []);
 			$payload['console'] = $this->container->getClass(Console::class)->getReport();
 		}
 		
