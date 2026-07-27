@@ -4,9 +4,16 @@ declare(strict_types=1);
 namespace Ovos\Terminal;
 
 use function array_key_exists;
+use function array_keys;
+use function htmlspecialchars;
+use function implode;
+use function preg_split;
 use function str_pad;
 use function str_replace;
 
+use const ENT_QUOTES;
+use const ENT_SUBSTITUTE;
+use const PREG_SPLIT_DELIM_CAPTURE;
 use const STR_PAD_BOTH;
 use const PHP_EOL;
 
@@ -114,6 +121,70 @@ class Formatter
 		}
 		
 		return $message;
+	}
+	
+	/**
+	 * Resolves markup to HTML instead of ANSI: coloured runs become
+	 * <span class="term-cyan">, which is the same class the profiler page's
+	 * CLI pane renders, so one set of <color> tags serves terminal and browser.
+	 *
+	 * The content between tags is user data — a bound query value reaches this
+	 * — so every segment is escaped individually. Never escape the whole string
+	 * first: that would mangle the values the highlighter matched on. And note
+	 * that Highlighter::sanitize() strips markup and raw ANSI, which is not the
+	 * same job as escaping HTML.
+	 */
+	public static function handleMarkupHtml(
+		string $message,
+	): string
+	{
+		$pattern = '/<(' . implode('|', array_keys(self::$colors)) . ')>/';
+		$parts = preg_split($pattern,
+			$message,
+			flags: PREG_SPLIT_DELIM_CAPTURE,
+		);
+		
+		if($parts === false)
+		{
+			return self::escape($message);
+		}
+		
+		$html = '';
+		$color = self::COLOR_RESET;
+		
+		foreach($parts as $index => $part)
+		{
+			// odd offsets are the captured tag names, even ones the text between
+			if($index % 2 === 1)
+			{
+				$color = $part;
+				
+				continue;
+			}
+			
+			if($part === '')
+			{
+				continue;
+			}
+			
+			$html .= $color === self::COLOR_RESET
+				? self::escape($part)
+				: '<span class="term-' . self::escape($color) . '">'
+					. self::escape($part)
+					. '</span>';
+		}
+		
+		return $html;
+	}
+	
+	protected static function escape(
+		string $content,
+	): string
+	{
+		return htmlspecialchars($content,
+			ENT_QUOTES | ENT_SUBSTITUTE,
+			'UTF-8',
+		);
 	}
 	
 	public static function getHeader(
