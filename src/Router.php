@@ -345,7 +345,10 @@ class Router
 				'Class %s does not exist', $controllerClassNs);
 			}
 			
-			if(method_exists($controllerClassNs, $method) === false)
+			// public, declared below Ovos\Controller, canonically spelled —
+			// see Controller::resolveActionMethod()
+			$method = Controller::resolveActionMethod($controllerClassNs, $method);
+			if($method === null)
 			{
 				return $params;
 			}
