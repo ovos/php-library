@@ -45,6 +45,7 @@ class Queries extends Helper
 		
 		$view = new View('helpers/queries.phtml');
 		$view->queries = $report;
+		$view->total = $this->getReporter()->getTotal();
 		$view->markup = $this->usesMarkup();
 		
 		return $view->__toString();

@@ -35,6 +35,14 @@ class Collector
 	 */
 	public static bool $paused = false;
 	
+	/**
+	 * Commands seen, including the ones the limit has already shifted out — the
+	 * queue alone cannot say whether it is the whole story or the tail of it.
+	 * Paused commands (the profiler's own writes) never count: they are not
+	 * part of the request being profiled.
+	 */
+	protected int $total = 0;
+	
 	public function __construct()
 	{
 		$this->commands = new SplQueue;
@@ -61,6 +69,7 @@ class Collector
 			'args' => $args,
 			'measurement' => $measurement,
 		]);
+		$this->total++;
 		
 		// delete the oldest element from the queue if we reached the limit
 		if(self::$limit && $this->commands->count() > self::$limit)
@@ -77,5 +86,13 @@ class Collector
 	public function getCommands(): SplQueue
 	{
 		return $this->commands;
+	}
+	
+	/**
+	 * How many commands ran, retained or not
+	 */
+	public function getTotal(): int
+	{
+		return $this->total;
 	}
 }
