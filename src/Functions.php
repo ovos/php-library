@@ -45,7 +45,9 @@ class Functions
 		Terminal::output($isCli
 			? $line
 			: nl2br($line),
-			true,
+			// supportsColor() is false for every non-CLI SAPI, which is what keeps
+			// <color> tokens out of the HTML branch
+			Terminal::supportsColor(),
 		);
 	}
 }

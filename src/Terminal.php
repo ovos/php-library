@@ -262,29 +262,28 @@ class Terminal
 	}
 	
 	/**
-	 * Resolves <color> markers for printing — NOT a pure formatter.
+	 * Resolves <color> markers when asked to, strips them when not. Nothing
+	 * else: same arguments, same result.
 	 *
-	 * $markup only declares that the string carries markup; whether it becomes
-	 * ANSI or is stripped is still the environment's call, so a caller passing
-	 * true cannot force escapes into a redirected log. That safety net is why
-	 * the argument exists at all, and several callers pass a literal true.
+	 * It used to AND $markup with supportsColor(), so that a caller passing true
+	 * could not force escapes into a redirected log. That guarded nothing in the
+	 * end — every path that reaches a cron log passes usesColor() or
+	 * supportsColor() itself — while making a formatter's output depend on
+	 * ambient state, which surprises anyone building a coloured string for
+	 * somewhere other than this terminal: a file to read with `less -R`, output
+	 * captured for a log viewer, a golden test.
 	 *
-	 * Building a coloured string for somewhere else — a file to be read with
-	 * `less -R`, a golden test — wants Formatter::handleMarkup(), which resolves
-	 * unconditionally.
+	 * So the decision belongs to the caller, and callers make it from the
+	 * environment: $this->usesColor() in a Controller\Cli, supportsColor()
+	 * anywhere else.
 	 */
 	public static function getMessage(
 		string $message,
 		bool $markup = false,
 	): string
 	{
-		// $markup declares that the string carries <color> tokens — whether
-		// they resolve to ANSI or get stripped is the environment's call, so a
-		// caller passing true cannot force escapes into a redirected log
-		$message = $markup && self::supportsColor()
+		return $markup
 			? Formatter::handleMarkup($message)
 			: Formatter::stripMarkup($message);
-		
-		return $message;
 	}
 }
