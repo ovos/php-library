@@ -59,7 +59,7 @@ class Logger extends Service implements Writer
 	protected string $file = 'events';
 	
 	/**
-	 * Field names whose value is dropped entirely ([removed]). Matches the
+	 * Field names whose value is dropped entirely ([redacted]). Matches the
 	 * console's documented canonical set (docs/SENDER.md). Case-insensitive;
 	 * extend per project with addRemove().
 	 */
@@ -81,7 +81,7 @@ class Logger extends Service implements Writer
 	 *
 	 * Loose on purpose: the DECISION is looksSecret(). A length-only rule (any
 	 * 24+ character segment) is also what a readable slug looks like, and it
-	 * turned /de/pre-und-onboarding/ into /de/[removed]/ wherever it shipped.
+	 * turned /de/pre-und-onboarding/ into /de/[redacted]/ wherever it shipped.
 	 */
 	protected const string PATH_CANDIDATE = '~(/)([A-Za-z0-9_.-]{20,})(?=[/?#]|$)~';
 	
@@ -275,7 +275,7 @@ class Logger extends Service implements Writer
 			// secret key whose value is an array cannot leak through its children
 			if(is_string($key) && $this->matchesAny($this->remove, $key))
 			{
-				$data[$key] = '[removed]';
+				$data[$key] = '[redacted]';
 				
 				continue;
 			}
@@ -341,7 +341,7 @@ class Logger extends Service implements Writer
 					if($this->matchesAny($this->remove, $name)
 						|| in_array(strtolower(trim($name)), $this->queryNames, true))
 					{
-						return $match[1] . $match[2] . '=[removed]';
+						return $match[1] . $match[2] . '=[redacted]';
 					}
 					
 					$value = rawurldecode($match[3]);
@@ -372,7 +372,7 @@ class Logger extends Service implements Writer
 	}
 	
 	/**
-	 * Token-shaped PATH segments -> [removed], leaving readable slugs alone.
+	 * Token-shaped PATH segments -> [redacted], leaving readable slugs alone.
 	 */
 	public function removeFromPath(
 		string $path,
@@ -381,7 +381,7 @@ class Logger extends Service implements Writer
 		return (string)preg_replace_callback(
 			self::PATH_CANDIDATE,
 			fn(array $match): string => $this->looksSecret($match[2])
-				? $match[1] . '[removed]'
+				? $match[1] . '[redacted]'
 				: $match[0],
 			$path,
 		);
@@ -450,7 +450,7 @@ class Logger extends Service implements Writer
 			
 			if($removeNext)
 			{
-				$args[$key] = '[removed]';
+				$args[$key] = '[redacted]';
 				$removeNext = false;
 				
 				continue;
@@ -459,7 +459,7 @@ class Logger extends Service implements Writer
 			if(preg_match('~^(--?)?([^=]+)=(.*)$~s', $arg, $match) === 1)
 			{
 				$args[$key] = $this->matchesAny($this->remove, $match[2])
-					? $match[1] . $match[2] . '=[removed]'
+					? $match[1] . $match[2] . '=[redacted]'
 					: $this->maskEmails($arg);
 				
 				continue;

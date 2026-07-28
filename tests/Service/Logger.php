@@ -30,7 +30,7 @@ class Logger extends Test
 		
 		foreach($out as $value)
 		{
-			if($value !== '[removed]')
+			if($value !== '[redacted]')
 			{
 				return false;
 			}
@@ -48,10 +48,10 @@ class Logger extends Test
 			'Authorization' => 'x',
 		]);
 		
-		return $out['PASSWORD'] === '[removed]'
-			&& $out['passwd'] === '[removed]'
-			&& $out['user_password'] === '[removed]'
-			&& $out['Authorization'] === '[removed]';
+		return $out['PASSWORD'] === '[redacted]'
+			&& $out['passwd'] === '[redacted]'
+			&& $out['user_password'] === '[redacted]'
+			&& $out['Authorization'] === '[redacted]';
 	}
 	
 	public function anonymizesUsernameFieldsKeepingFirstCharacter(): bool
@@ -123,7 +123,7 @@ class Logger extends Test
 	{
 		$out = (new Subject)->remove(['password' => 'admin@corp.com']);
 		
-		return $out['password'] === '[removed]';
+		return $out['password'] === '[redacted]';
 	}
 	
 	public function recursesIntoNestedArraysIncludingListValues(): bool
@@ -137,7 +137,7 @@ class Logger extends Test
 			],
 		]);
 		
-		return $out['nested']['password'] === '[removed]'
+		return $out['nested']['password'] === '[redacted]'
 			&& $out['nested']['email'] === 'd***@nest.io'
 			&& $out['nested']['username'] === 'd***'
 			&& $out['nested']['list'][0] === 'a***@b.co' // e-mail reaches numeric keys
@@ -154,8 +154,8 @@ class Logger extends Test
 			'password'     => 'x', // defaults still apply
 		]);
 		
-		return $out['custom_field'] === '[removed]'
-			&& $out['password'] === '[removed]';
+		return $out['custom_field'] === '[redacted]'
+			&& $out['password'] === '[redacted]';
 	}
 	
 	public function addUsernamesExtendsThePatterns(): bool
@@ -187,17 +187,17 @@ class Logger extends Test
 		$logger = new Subject;
 		
 		return $logger->removeFromUrl('/reset/eyJhbGciOiJIUzI1NiJ9.payloadpayload.sigsig/')
-				=== '/reset/[removed]/'
+				=== '/reset/[redacted]/'
 			&& $logger->removeFromUrl('/invite/3f2504e0-4f89-11d3-9a0c-0305e82c3301')
-				=== '/invite/[removed]'
-			&& $logger->removeFromUrl('/x/a1b2c3d4e5f6a7b8c9d0e1f2') === '/x/[removed]'
-			&& $logger->removeFromUrl('/x/Xk7Qm2Rt9Zp4Lw8Nv3Bc6Hj1Fd5Gy0As') === '/x/[removed]';
+				=== '/invite/[redacted]'
+			&& $logger->removeFromUrl('/x/a1b2c3d4e5f6a7b8c9d0e1f2') === '/x/[redacted]'
+			&& $logger->removeFromUrl('/x/Xk7Qm2Rt9Zp4Lw8Nv3Bc6Hj1Fd5Gy0As') === '/x/[redacted]';
 	}
 	
 	/**
 	 * The other half, and the reason the rule is not length-only: a readable
 	 * slug is not a secret, and a version that redacted every 24+ character
-	 * segment turned German page paths into /de/[removed]/ wherever it shipped.
+	 * segment turned German page paths into /de/[redacted]/ wherever it shipped.
 	 */
 	public function leavesReadableSlugsIntact(): bool
 	{
@@ -227,8 +227,8 @@ class Logger extends Test
 		$logger = new Subject;
 		
 		return $logger->removeFromUrl('/wp-login.php?action=rp&key=Qw3rTy8ZxC1vB2nM4kL6&login=x')
-				=== '/wp-login.php?action=rp&key=[removed]&login=x***'
-			&& $logger->removeFromUrl('/dl?sig=abc123&file=r.pdf') === '/dl?sig=[removed]&file=r.pdf'
+				=== '/wp-login.php?action=rp&key=[redacted]&login=x***'
+			&& $logger->removeFromUrl('/dl?sig=abc123&file=r.pdf') === '/dl?sig=[redacted]&file=r.pdf'
 			&& ($logger->remove(['key' => 'cache-v3'])['key'] ?? null) === 'cache-v3';
 	}
 	
@@ -239,8 +239,8 @@ class Logger extends Test
 			'confirm_pwd' => 'hunter2',
 		]);
 		
-		return $out['pwd'] === '[removed]'
-			&& $out['confirm_pwd'] === '[removed]';
+		return $out['pwd'] === '[redacted]'
+			&& $out['confirm_pwd'] === '[redacted]';
 	}
 	
 	/**
@@ -254,8 +254,8 @@ class Logger extends Test
 			'token'    => ['x' => 'y'],
 		]);
 		
-		return $out['password'] === '[removed]'
-			&& $out['token'] === '[removed]';
+		return $out['password'] === '[redacted]'
+			&& $out['token'] === '[redacted]';
 	}
 	
 	/**
@@ -268,7 +268,7 @@ class Logger extends Test
 		$logger = new Subject;
 		
 		return $logger->removeFromUrl('/checkout?step=2&token=abc123&email=john%40x.com')
-				=== '/checkout?step=2&token=[removed]&email=j***@x.com'
+				=== '/checkout?step=2&token=[redacted]&email=j***@x.com'
 			&& $logger->removeFromUrl('/account?login=marcin&page=3')
 				=== '/account?login=m***&page=3'
 			&& $logger->removeFromUrl('/unsubscribe/john@x.com?a=1')
@@ -295,9 +295,9 @@ class Logger extends Test
 		return $out === [
 			'cli.php',
 			'import',
-			'--api-key=[removed]',
+			'--api-key=[redacted]',
 			'password',
-			'[removed]',
+			'[redacted]',
 			'notify',
 			'b***@x.co',
 		];
