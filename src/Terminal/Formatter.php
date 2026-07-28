@@ -7,6 +7,7 @@ use function array_key_exists;
 use function array_keys;
 use function htmlspecialchars;
 use function implode;
+use function preg_replace;
 use function preg_split;
 use function str_pad;
 use function str_replace;
@@ -93,19 +94,51 @@ class Formatter
 		return $message;
 	}
 	
+	/**
+	 * Removes every <color> token.
+	 *
+	 * Repeats to a fixed point: removing a token can join what surrounded it
+	 * into a new one — '<cy<cyan>an>' leaves a live '<cyan>' behind after a
+	 * single pass — and sanitize() rests on the guarantee that none survives.
+	 */
 	public static function stripMarkup(
 		string $message,
 	): string
 	{
-		foreach(self::$colors as $color => $replace)
+		$pattern = '/<(?:' . implode('|', array_keys(self::$colors)) . ')>/';
+		
+		do
 		{
-			$message = str_replace("<$color>",
-				'',
-				$message,
-			);
+			$previous = $message;
+			$message = (string)preg_replace($pattern, '', $message);
 		}
+		while($message !== $previous);
 		
 		return $message;
+	}
+	
+	/**
+	 * Removes the control bytes data has no business carrying: every C0 control
+	 * and DEL, keeping only the tab and newline a table cell legitimately holds.
+	 *
+	 * Colour is the only terminal feature this library speaks, and it always
+	 * arrives as <color> markup — never as bytes inside a value. So instead of
+	 * enumerating escape-sequence families (CSI, OSC, DCS, APC, charset
+	 * switches, …) and having to stay complete as terminals grow features, this
+	 * removes the one byte every one of them needs: ESC. Whatever followed it
+	 * stays as visible, inert text, which in a debugging tool is more honest
+	 * than deleting the value.
+	 *
+	 * One pass is enough, and that is the point of working a byte at a time:
+	 * removing a control byte cannot assemble another, whereas removing whole
+	 * SEQUENCES could — "\e" . "\e[0m" . "c" collapses into "\ec", a full
+	 * terminal reset, the moment the middle one goes.
+	 */
+	public static function stripControls(
+		string $message,
+	): string
+	{
+		return (string)preg_replace('/[\x00-\x08\x0b-\x1f\x7f]/', '', $message);
 	}
 	
 	public static function stripTerminalMarkup(
@@ -167,7 +200,7 @@ class Formatter
 				continue;
 			}
 			
-			$html .= $color === self::COLOR_RESET
+			$html.= $color === self::COLOR_RESET
 				? self::escape($part)
 				: '<span class="term-' . self::escape($color) . '">'
 					. self::escape($part)

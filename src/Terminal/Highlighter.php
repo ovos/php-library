@@ -14,6 +14,7 @@ use function preg_replace;
 use function preg_replace_callback;
 use function rtrim;
 use function str_contains;
+use function strlen;
 use function strrpos;
 use function strtolower;
 use function strtoupper;
@@ -56,10 +57,10 @@ class Highlighter
 		'INTO', 'VALUES', 'SET', 'FROM', 'WHERE', 'HAVING',
 		'GROUP BY', 'ORDER BY', 'PARTITION BY', 'LIMIT', 'OFFSET',
 		'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'CROSS JOIN', 'STRAIGHT_JOIN',
-		'JOIN', 'ON', 'USING', 'UNION ALL', 'UNION',
+		'JOIN', 'ON DUPLICATE KEY', 'ON', 'USING', 'UNION ALL', 'UNION',
 		'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'IS',
 		'AS', 'DISTINCT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
-		'ASC', 'DESC', 'ON DUPLICATE KEY', 'IGNORE',
+		'ASC', 'DESC', 'IGNORE',
 		'START TRANSACTION', 'BEGIN', 'COMMIT', 'ROLLBACK',
 		'SHOW', 'DESCRIBE', 'EXPLAIN', 'ANALYZE', 'OPTIMIZE',
 		'TABLE', 'INDEX', 'DATABASE', 'PRIMARY KEY', 'FOREIGN KEY',
@@ -309,22 +310,42 @@ class Highlighter
 			return '';
 		}
 		
-		return self::balanceLines(
-			'<' . $color . '>' . self::sanitize($value) . '<reset>',
-		);
+		$value = self::sanitize($value);
+		
+		// trailing whitespace stays OUTSIDE the coloured run: inside it, the
+		// closing token lands on a line of its own, which Table::cellLines()
+		// can no longer rtrim — so an exception message ending in a newline
+		// grew its row a second, empty line
+		$trailing = '';
+		if(preg_match('/\s+$/', $value, $match) === 1)
+		{
+			$trailing = $match[0];
+			$value = substr($value, 0, -strlen($trailing));
+		}
+		
+		if($value === '')
+		{
+			return $trailing;
+		}
+		
+		return self::balanceLines('<' . $color . '>' . $value . '<reset>')
+			. $trailing;
 	}
 	
 	/**
-	 * Strips anything that would colorize by itself: raw ANSI sequences, and
-	 * markup tokens already present in the content
+	 * Strips anything in the content that would act on the terminal by itself:
+	 * every escape sequence, and markup tokens the data already carries.
+	 *
+	 * Both halves delegate to Formatter, which repeats each to a fixed point —
+	 * removing one sequence can leave a new one assembled from its neighbours.
+	 * A value that literally contains "<gray>" therefore renders without it;
+	 * that is deliberate, since keeping it would let data forge a colour.
 	 */
 	public static function sanitize(
 		string $content,
 	): string
 	{
-		return Formatter::stripMarkup(
-			(string)preg_replace('/\e\[[0-9;]*[a-zA-Z]/', '', $content),
-		);
+		return Formatter::stripMarkup(Formatter::stripControls($content));
 	}
 	
 	/**
@@ -353,6 +374,17 @@ class Highlighter
 			// normalise CRLF away — Terminal\Table does the same before it
 			// splits a cell into display lines
 			$line = rtrim($line, "\r");
+			
+			if($line === '')
+			{
+				// nothing to colour. Carrying one here would leave a
+				// <color><reset> pair that Table::cellLines() can no longer
+				// rtrim, so a value ending in a newline grew a phantom row
+				$balanced[] = '';
+				
+				continue;
+			}
+			
 			$carried = $open;
 			
 			if(preg_match_all($pattern, $line, $matches) > 0)

@@ -2331,17 +2331,32 @@ keeps escapes out of a redirected log.
 Nothing needs to opt in. `Terminal::output($message, markup: true)` declares that
 a string carries `<color>` markup; whether it resolves to ANSI or gets stripped
 is the environment's call, so a caller cannot force escapes into a log file.
-`Response\Cli::setColoredOutput(true|false)` pins the answer for one response,
-`null` hands it back to detection, and `Terminal::setSupportsColor()` pins it
-process-wide (used by the tests).
+`Response\Cli::disableColoredOutput()` silences color for one response — output
+meant to be read by a program — and `CLI_COLOR=1` or
+`Terminal::setSupportsColor()` is how you force it ON, process-wide. There is
+deliberately no per-response force: it could only ever reach part of the output,
+since a `Table` renders what it is handed while every log line goes through
+`getMessage()`.
+
+> **Upgrading:** `setColoredOutput(bool)` was removed rather than quietly
+> repurposed — its `true` branch had become a no-op once detection landed. Replace
+> `setColoredOutput(false)` with `disableColoredOutput()`, and drop
+> `setColoredOutput(true)` entirely: the environment already decides. A CLI action
+> that carried a `bool $coloredOutput` parameter for this no longer needs one.
 
 `Terminal\Table` renders markup when told to (`hasMarkup()`), measuring column
-widths on the *visible* text so colored cells still line up.
+widths on the *visible* text so colored cells still line up. **Hand it markup,
+not ANSI**: it strips control bytes out of cell content, so a pre-resolved
+`"\033[1;32m…"` renders as literal text where `<green>…<reset>` renders as color.
+
 `Terminal\Highlighter` supplies the profiler tables' colors — SQL keywords and
 literals, redis commands and keys, and time/memory thresholded per table, since
 "slow" for one query is not "slow" for a whole request. It sanitizes its input
-first: a bound value cannot smuggle markup or an escape sequence into the
-terminal.
+first, via `Formatter::stripControls()`: color is the only terminal feature this
+library speaks, and it always arrives as `<color>` markup, so a value carrying
+control bytes loses them — the ESC goes and what followed stays as inert, visible
+text. That is what stops a bound value from painting a fake red `ERROR` into a
+table, renaming your terminal window, or writing your clipboard via OSC 52.
 
 ---
 
