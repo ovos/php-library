@@ -87,7 +87,11 @@ class Table
 	 */
 	protected array $alignments = [];
 	
-	protected bool $markup = false;
+	/**
+	 * true resolves <color> markup to ANSI, false strips it, and null leaves it
+	 * in place for whoever prints the table to decide — see display()
+	 */
+	protected ?bool $markup = false;
 	
 	protected string $style = self::STYLE_UNICODE;
 	
@@ -96,12 +100,21 @@ class Table
 	 */
 	protected int $padding = 1;
 	
+	/**
+	 * null suits a table printed through Terminal::output() — anything a
+	 * Controller\Cli logs — because that funnel resolves or strips the markup per
+	 * environment, and the profiler's listener sees it raw beforehand.
+	 *
+	 * A table appended to a Response body must NOT use null: nothing downstream
+	 * resolves it, so the tokens would print literally. Hand those
+	 * Response\Cli::getColoredOutput(). See display().
+	 */
 	public function hasMarkup(
-		bool $markup = true,
+		?bool $markup = true,
 	): static
 	{
 		$this->markup = $markup;
-		
+
 		return $this;
 	}
 	
@@ -390,12 +403,23 @@ class Table
 	): string
 	{
 		$content = Formatter::stripControls($content);
-		
+
+		// null: hand the markup on untouched. A table that resolves its own
+		// colour has decided for every consumer of that string, and the two
+		// consumers want different things — a cron log must stay plain, while the
+		// profiler's browser pane (which sees the message raw, before
+		// Terminal::output() formats it) should still show the table in colour.
+		// Leaving the tokens in place lets each decide for itself.
+		if($this->markup === null)
+		{
+			return $content;
+		}
+
 		if($this->markup)
 		{
 			return Formatter::handleMarkup($content);
 		}
-		
+
 		return Formatter::stripMarkup($content);
 	}
 	
