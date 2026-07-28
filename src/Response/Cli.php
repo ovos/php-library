@@ -17,12 +17,12 @@ class Cli extends Html
 	 * run piped into a cron log stays free of escape sequences while an
 	 * interactive run and `composer prod:update` both get color.
 	 *
-	 * false silences color for this response (e.g. output meant to be parsed);
-	 * null and true both leave the environment in charge. Forcing color on
-	 * belongs to CLI_COLOR / Terminal::setSupportsColor(), so that one switch
-	 * governs every output path.
+	 * There is deliberately no per-response way to force color ON. It could only
+	 * ever reach part of the output — a Table renders what it is handed, while
+	 * every log line goes through Terminal::getMessage() — so the switch belongs
+	 * where it governs all of them at once: CLI_COLOR, or setSupportsColor().
 	 */
-	protected ?bool $coloredOutput = null;
+	protected bool $coloredOutputDisabled = false;
 	
 	public function __construct(
 		?string $response = null,
@@ -34,20 +34,23 @@ class Cli extends Html
 	}
 	
 	/**
-	 * false silences color for this response; null or true defer to detection
+	 * Silences color for this response, whatever the environment allows — for
+	 * output meant to be read by a program rather than a person.
+	 *
+	 * Replaces setColoredOutput(): that took a bool whose true branch had
+	 * quietly become a no-op, and a setter that ignores half its argument is
+	 * worse than one that no longer exists.
 	 */
-	public function setColoredOutput(
-		?bool $coloredOutput,
-	): static
+	public function disableColoredOutput(): static
 	{
-		$this->coloredOutput = $coloredOutput;
+		$this->coloredOutputDisabled = true;
 		
 		return $this;
 	}
 	
 	public function getColoredOutput(): bool
 	{
-		return ($this->coloredOutput ?? true)
+		return $this->coloredOutputDisabled === false
 			&& Terminal::supportsColor();
 	}
 }

@@ -99,25 +99,30 @@ class ColorSupport extends Test
 	
 	public function cliResponseFollowsDetectionAndCanOnlyVeto(): bool
 	{
-		Subject::setSupportsColor(true);
-		$response = new Response\Cli;
-		$auto = $response->getColoredOutput();
-		
-		// a response silences color for itself...
-		$vetoed = $response->setColoredOutput(false)->getColoredOutput();
-		$released = $response->setColoredOutput(null)->getColoredOutput();
-		
-		// ...but cannot force it on where the environment said no, so that one
-		// switch governs tables and log lines alike
-		Subject::setSupportsColor(false);
-		$forced = $response->setColoredOutput(true)->getColoredOutput();
-		
-		Subject::setSupportsColor(null);
+		// try/finally: this pins the app-wide memo, and a throw in between would
+		// leave every later test running against the pinned answer
+		try
+		{
+			Subject::setSupportsColor(true);
+			$auto = (new Response\Cli)->getColoredOutput();
+			
+			// a response silences color for itself, permanently — there is no
+			// un-veto, because a fresh response already defers to the environment
+			$vetoed = (new Response\Cli)->disableColoredOutput()->getColoredOutput();
+			
+			// and where detection says no, a fresh response says no too: forcing
+			// belongs to CLI_COLOR, which governs log lines and tables alike
+			Subject::setSupportsColor(false);
+			$denied = (new Response\Cli)->getColoredOutput();
+		}
+		finally
+		{
+			Subject::setSupportsColor(null);
+		}
 		
 		return $auto === true
 			&& $vetoed === false
-			&& $released === true
-			&& $forced === false;
+			&& $denied === false;
 	}
 	
 	/**

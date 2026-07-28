@@ -79,9 +79,47 @@ class Highlighter extends Test
 		$highlighted = Subject::sql("SELECT '\33[31m<green>evil'");
 		$visible = Formatter::stripMarkup($highlighted);
 		
-		// no raw escape, and no attacker-supplied color left to resolve
-		return str_contains($highlighted, "\33[") === false
-			&& $visible === "SELECT 'evil'";
+		// the ESC byte goes, so the terminal cannot act; what followed it stays
+		// as inert text rather than vanishing, which keeps the value honest in a
+		// tool whose whole job is showing what was sent
+		return str_contains($highlighted, "\33") === false
+			&& $visible === "SELECT '[31mevil'"
+			// and no attacker-supplied colour survives to be resolved
+			&& str_contains($highlighted, '<green>') === false;
+	}
+	
+	/**
+	 * The families the old SGR-only regex let through — every one of these
+	 * reached the terminal and acted on it
+	 */
+	public function sanitizeStripsEveryEscapeFamily(): bool
+	{
+		$attacks = [
+			"\33]52;c;cm0gLXJmIH4gIw==\7", // OSC 52: writes the system clipboard
+			"\33]8;;http://evil.example/\7click\33]8;;\7", // OSC 8: hidden link
+			"\33]0;pwned\7", // window title
+			"\33[?1049h", // alternate screen — '?' is not in [0-9;]
+			"\33(0", // line-drawing charset: garbles everything after it
+			"\33c", // RIS: full terminal reset
+			"\33\33[0mc", // the same reset, assembled by a single-pass strip
+			"safe\rEVIL", // CR redraws over what was already printed
+			"\33P q\33\\", // DCS
+			"\33_apc\33\\", // APC
+		];
+		
+		foreach($attacks as $attack)
+		{
+			$sanitized = Subject::sanitize($attack);
+			
+			// no ESC, no BEL, no CR — nothing left that a terminal interprets
+			if(preg_match('/[\x00-\x08\x0b-\x1f\x7f]/', $sanitized) === 1)
+			{
+				return false;
+			}
+		}
+		
+		// and the legitimate content a cell carries survives untouched
+		return Subject::sanitize("zażółć\tgęślą\njaźń") === "zażółć\tgęślą\njaźń";
 	}
 	
 	public function redisColorsTheVerbAndTheKeys(): bool

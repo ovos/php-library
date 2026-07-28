@@ -378,21 +378,30 @@ class Table
 	/**
 	 * The string to print: convert <color> markup to ANSI when markup is on,
 	 * otherwise strip both the markup tokens and any raw ANSI.
+	 *
+	 * Escapes are stripped from the CONTENT either way. A cell's own colour
+	 * arrives as markup, so a raw sequence in one came from data — and with
+	 * markup on it used to pass straight through to the terminal, which let a
+	 * captured message paint itself. Stripping first, then resolving markup,
+	 * keeps our colours and drops the data's.
 	 */
 	protected function display(
 		string $content,
 	): string
 	{
+		$content = Formatter::stripControls($content);
+		
 		if($this->markup)
 		{
 			return Formatter::handleMarkup($content);
 		}
 		
-		return $this->stripAnsi(Formatter::stripMarkup($content));
+		return Formatter::stripMarkup($content);
 	}
 	
 	/**
-	 * Visible width: strip <color> tokens and raw ANSI, then measure.
+	 * Visible width: strip <color> tokens and every escape, then measure. The
+	 * two must agree with display() or the box stops lining up.
 	 */
 	protected function width(
 		string $content,
@@ -405,7 +414,7 @@ class Table
 		string $content,
 	): string
 	{
-		return (string)preg_replace('/\e\[[0-9;]*m/', '', $content);
+		return Formatter::stripControls($content);
 	}
 	
 	/**
