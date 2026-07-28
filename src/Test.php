@@ -76,7 +76,7 @@ abstract class Test
 	{
 		Terminal::status(
 			Highlighter::className(static::class . '::' . $method),
-			markup: true,
+			markup: Terminal::supportsColor(),
 		);
 	}
 	
