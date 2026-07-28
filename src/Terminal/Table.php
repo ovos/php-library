@@ -13,7 +13,6 @@ use function floor;
 use function implode;
 use function max;
 use function mb_strwidth;
-use function preg_replace;
 use function rtrim;
 use function str_repeat;
 use function str_replace;
@@ -24,9 +23,20 @@ use const PHP_EOL;
  * Table
  *
  * Small, dependency-free terminal table renderer (replaces the former
- * symfony/console wrapper). Markup-aware through Terminal\Formatter:
- * column widths are measured on the *visible* text, so colored cells and
- * wide (CJK) characters still line up.
+ * symfony/console wrapper). Markup-aware through Terminal\Formatter: column
+ * widths are measured on the *visible* text, so colored cells and wide (CJK)
+ * characters still line up.
+ *
+ * It never resolves that markup, though — the rendered table carries the
+ * <color> tokens it was given, and whoever prints it decides. Hand it to
+ * Controller\Cli::log() or Terminal::output() and the environment decides for
+ * you; append it to a Response body and you must resolve it yourself, with
+ * Terminal::getMessage($table->getTable(), $response->getColoredOutput()).
+ *
+ * That split is deliberate: a table that resolved its own colour decided for
+ * every consumer of the string at once, and they disagree — a cron log has to
+ * stay plain while the profiler's browser pane, which reads the same message
+ * before Terminal::output() formats it, should still show colour.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -87,36 +97,12 @@ class Table
 	 */
 	protected array $alignments = [];
 	
-	/**
-	 * true resolves <color> markup to ANSI, false strips it, and null leaves it
-	 * in place for whoever prints the table to decide — see display()
-	 */
-	protected ?bool $markup = false;
-	
 	protected string $style = self::STYLE_UNICODE;
 	
 	/**
 	 * Spaces of padding either side of a cell's content
 	 */
 	protected int $padding = 1;
-	
-	/**
-	 * null suits a table printed through Terminal::output() — anything a
-	 * Controller\Cli logs — because that funnel resolves or strips the markup per
-	 * environment, and the profiler's listener sees it raw beforehand.
-	 *
-	 * A table appended to a Response body must NOT use null: nothing downstream
-	 * resolves it, so the tokens would print literally. Hand those
-	 * Response\Cli::getColoredOutput(). See display().
-	 */
-	public function hasMarkup(
-		?bool $markup = true,
-	): static
-	{
-		$this->markup = $markup;
-
-		return $this;
-	}
 	
 	public function setStyle(
 		string $style,
@@ -367,7 +353,7 @@ class Table
 	}
 	
 	/**
-	 * Resolves markup, then pads the visible content to $width per alignment.
+	 * Pads the visible content to $width per the column alignment.
 	 */
 	protected function formatCell(
 		string $content,
@@ -389,38 +375,21 @@ class Table
 	}
 	
 	/**
-	 * The string to print: convert <color> markup to ANSI when markup is on,
-	 * otherwise strip both the markup tokens and any raw ANSI.
+	 * The string to print. Control bytes go — a cell's own colour arrives as
+	 * markup, so a raw escape in one came from data, and data has no business
+	 * acting on a terminal.
 	 *
-	 * Escapes are stripped from the CONTENT either way. A cell's own colour
-	 * arrives as markup, so a raw sequence in one came from data — and with
-	 * markup on it used to pass straight through to the terminal, which let a
-	 * captured message paint itself. Stripping first, then resolving markup,
-	 * keeps our colours and drops the data's.
+	 * The <color> markup itself is handed on untouched: resolving it here would
+	 * decide for every consumer of the string at once, and they disagree — a cron
+	 * log must stay plain while the profiler pane, which sees the same message
+	 * before Terminal::output() formats it, should show colour. Whoever prints the
+	 * table resolves it: log() and output() already do, per environment.
 	 */
 	protected function display(
 		string $content,
 	): string
 	{
-		$content = Formatter::stripControls($content);
-
-		// null: hand the markup on untouched. A table that resolves its own
-		// colour has decided for every consumer of that string, and the two
-		// consumers want different things — a cron log must stay plain, while the
-		// profiler's browser pane (which sees the message raw, before
-		// Terminal::output() formats it) should still show the table in colour.
-		// Leaving the tokens in place lets each decide for itself.
-		if($this->markup === null)
-		{
-			return $content;
-		}
-
-		if($this->markup)
-		{
-			return Formatter::handleMarkup($content);
-		}
-
-		return Formatter::stripMarkup($content);
+		return Formatter::stripControls($content);
 	}
 	
 	/**
@@ -431,14 +400,9 @@ class Table
 		string $content,
 	): int
 	{
-		return mb_strwidth($this->stripAnsi(Formatter::stripMarkup($content)));
-	}
-	
-	protected function stripAnsi(
-		string $content,
-	): string
-	{
-		return Formatter::stripControls($content);
+		return mb_strwidth(
+			Formatter::stripControls(Formatter::stripMarkup($content)),
+		);
 	}
 	
 	/**

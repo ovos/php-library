@@ -12,7 +12,7 @@ use function array_unique;
 use function count;
 use function explode;
 use function mb_strwidth;
-use function preg_replace;
+use function preg_match;
 use function rtrim;
 use function str_contains;
 use function str_repeat;
@@ -234,7 +234,6 @@ class Highlighter extends Test
 			->addRow([$sql, '0.00001000'])
 			->getTable();
 		$colored = (new Table)
-			->hasMarkup()
 			->setHeaders([Subject::header('Q'), Subject::header('Time')])
 			->addRow([Subject::sql($sql), Subject::time('0.00001000')])
 			->getTable();
@@ -252,14 +251,15 @@ class Highlighter extends Test
 		// a table built the way the profiler view builds it
 		$sql = 'SELECT ' . str_repeat('very_long_column_name, ', 20) . 'id FROM users';
 		$table = (new Table)
-			->hasMarkup()
 			->addRow([Subject::sql(wordwrap($sql, 60, "\n")), Subject::time('0.00100000')])
 			->getTable();
 		
 		$widths = [];
 		foreach(explode("\n", rtrim($table, "\n")) as $line)
 		{
-			$widths[] = mb_strwidth((string)preg_replace('/\e\[[0-9;]*m/', '', $line));
+			// the table hands its markup on now, so the invisible part to discount
+			// is the tokens rather than resolved ANSI
+			$widths[] = mb_strwidth(Formatter::stripMarkup($line));
 		}
 		
 		// every rendered line of the box is the same width
