@@ -3,20 +3,18 @@ declare(strict_types=1);
 
 namespace Ovos\Terminal;
 
-use function array_key_exists;
 use function array_keys;
+use function array_map;
 use function htmlspecialchars;
 use function implode;
 use function preg_replace;
+use function preg_quote;
 use function preg_split;
-use function str_pad;
-use function str_replace;
+use function strtr;
 
 use const ENT_QUOTES;
 use const ENT_SUBSTITUTE;
 use const PREG_SPLIT_DELIM_CAPTURE;
-use const STR_PAD_BOTH;
-use const PHP_EOL;
 
 /**
  * Formatter
@@ -67,31 +65,38 @@ class Formatter
 		self::COLOR_WHITE => "\33[1;37m",
 	];
 	
-	public static function getColor(
-		string $color,
-	): ?string
-	{
-		if(array_key_exists($color, self::$colors) === false)
-		{
-			return null;
-		}
-		
-		return self::$colors[$color];
-	}
-	
+	/**
+	 * Resolves every <color> token to its ANSI sequence.
+	 *
+	 * strtr() rather than a str_replace() per colour: one pass over the string
+	 * instead of seventeen, and — the reason that matters — it never re-examines
+	 * what it has already written. A sequential replace does, which is how
+	 * stripMarkup() could rebuild a token out of the text around one it removed.
+	 */
 	public static function handleMarkup(
 		string $message,
 	): string
 	{
-		foreach(self::$colors as $color => $replace)
+		$replacements = [];
+		foreach(self::$colors as $color => $ansi)
 		{
-			$message = str_replace("<$color>",
-				$replace,
-				$message,
-			);
+			$replacements['<' . $color . '>'] = $ansi;
 		}
 		
-		return $message;
+		return strtr($message, $replacements);
+	}
+	
+	/**
+	 * The colour names as a regex alternation, quoted. $colors is public and
+	 * mutable, so a name carrying a metacharacter would otherwise break both
+	 * patterns built from it — today that is survivable only by accident.
+	 */
+	protected static function names(): string
+	{
+		return implode('|', array_map(
+			static fn(string $color): string => preg_quote($color, '/'),
+			array_keys(self::$colors),
+		));
 	}
 	
 	/**
@@ -105,7 +110,7 @@ class Formatter
 		string $message,
 	): string
 	{
-		$pattern = '/<(?:' . implode('|', array_keys(self::$colors)) . ')>/';
+		$pattern = '/<(?:' . self::names() . ')>/';
 		
 		do
 		{
@@ -141,21 +146,6 @@ class Formatter
 		return (string)preg_replace('/[\x00-\x08\x0b-\x1f\x7f]/', '', $message);
 	}
 	
-	public static function stripTerminalMarkup(
-		string $message,
-	): string
-	{
-		foreach(self::$colors as $color => $replace)
-		{
-			$message = str_replace($replace,
-				'',
-				$message,
-			);
-		}
-		
-		return $message;
-	}
-	
 	/**
 	 * Resolves markup to HTML instead of ANSI: coloured runs become
 	 * <span class="term-cyan">, which is the same class the profiler page's
@@ -171,7 +161,7 @@ class Formatter
 		string $message,
 	): string
 	{
-		$pattern = '/<(' . implode('|', array_keys(self::$colors)) . ')>/';
+		$pattern = '/<(' . self::names() . ')>/';
 		$parts = preg_split($pattern,
 			$message,
 			flags: PREG_SPLIT_DELIM_CAPTURE,
@@ -220,14 +210,4 @@ class Formatter
 		);
 	}
 	
-	public static function getHeader(
-		string $header,
-	): string
-	{
-		return str_pad(' ' . $header . ' ',
-			 50,
-			 '-', STR_PAD_BOTH
-		)
-		. PHP_EOL;
-	}
 }
