@@ -175,6 +175,63 @@ class Logger extends Test
 	 * pwd has no "pass" substring, so pass(word|wd)? misses it — it needs its
 	 * own pattern (it is also wp-login's field name).
 	 */
+	/**
+	 * Single-use credentials travel in PATHS and are followed over GET, where a
+	 * query-parameter rule never sees them. The cases mirror ovos/console's
+	 * shared corpus (project/application/tests/fixtures/looks-secret.json) —
+	 * this library cannot read that file, so keep the two in step: the console's
+	 * browser and node clients and its server-side backstop all answer the same.
+	 */
+	public function redactsTokenShapedPathSegments(): bool
+	{
+		$logger = new Subject;
+		
+		return $logger->removeFromUrl('/reset/eyJhbGciOiJIUzI1NiJ9.payloadpayload.sigsig/')
+				=== '/reset/[removed]/'
+			&& $logger->removeFromUrl('/invite/3f2504e0-4f89-11d3-9a0c-0305e82c3301')
+				=== '/invite/[removed]'
+			&& $logger->removeFromUrl('/x/a1b2c3d4e5f6a7b8c9d0e1f2') === '/x/[removed]'
+			&& $logger->removeFromUrl('/x/Xk7Qm2Rt9Zp4Lw8Nv3Bc6Hj1Fd5Gy0As') === '/x/[removed]';
+	}
+	
+	/**
+	 * The other half, and the reason the rule is not length-only: a readable
+	 * slug is not a secret, and a version that redacted every 24+ character
+	 * segment turned German page paths into /de/[removed]/ wherever it shipped.
+	 */
+	public function leavesReadableSlugsIntact(): bool
+	{
+		$logger = new Subject;
+		
+		foreach(['/de/pre-und-onboarding/', '/de/anmeldung-und-registrierung/',
+			'/produkte/loesungen-fuer-unternehmen-2024/',
+			'/blog/how-we-cut-our-p95-latency-in-half/',
+			'/berichte/jahresbericht-2025-final'] as $url)
+		{
+			if($logger->removeFromUrl($url) !== $url)
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * ?key= is where reset tokens actually travel (WordPress: wp-login.php?
+	 * action=rp&key=<20 chars>&login=<user>) and api[_-]?key never matched it.
+	 * Only as a query NAME — as a field name `key` is a cache key half the time.
+	 */
+	public function redactsGenericQueryNames(): bool
+	{
+		$logger = new Subject;
+		
+		return $logger->removeFromUrl('/wp-login.php?action=rp&key=Qw3rTy8ZxC1vB2nM4kL6&login=x')
+				=== '/wp-login.php?action=rp&key=[removed]&login=x***'
+			&& $logger->removeFromUrl('/dl?sig=abc123&file=r.pdf') === '/dl?sig=[removed]&file=r.pdf'
+			&& ($logger->remove(['key' => 'cache-v3'])['key'] ?? null) === 'cache-v3';
+	}
+	
 	public function redactsThePwdAbbreviation(): bool
 	{
 		$out = (new Subject)->remove([

@@ -14,21 +14,27 @@ use function array_merge;
 use function date;
 use function get_class;
 use function implode;
+use function in_array;
 use function is_array;
 use function is_string;
 use function json_encode;
 use function ltrim;
+use function max;
 use function mb_substr;
 use function method_exists;
 use function preg_match;
 use function preg_replace;
 use function preg_replace_callback;
+use function preg_split;
 use function rawurldecode;
 use function rawurlencode;
 use function sprintf;
+use function strlen;
 use function strpos;
+use function strtolower;
 use function strtr;
 use function substr;
+use function trim;
 
 /**
  * Logger
@@ -68,6 +74,36 @@ class Logger extends Service implements Writer
 	];
 	
 	/**
+	 * A PATH segment long enough to be worth judging. Single-use credentials
+	 * travel in paths and are followed over GET — /reset-password/<jwt>,
+	 * /invite/<token>, a magic link — and a query-parameter rule never sees
+	 * them.
+	 *
+	 * Loose on purpose: the DECISION is looksSecret(). A length-only rule (any
+	 * 24+ character segment) is also what a readable slug looks like, and it
+	 * turned /de/pre-und-onboarding/ into /de/[removed]/ wherever it shipped.
+	 */
+	protected const string PATH_CANDIDATE = '~(/)([A-Za-z0-9_.-]{20,})(?=[/?#]|$)~';
+	
+	/**
+	 * Names that are credentials ONLY as query parameters — too generic to drop
+	 * as field names, where `key` is a cache key half the time.
+	 *
+	 * `key` is the one that matters: single-use tokens travel as ?key=
+	 * (WordPress's password reset is wp-login.php?action=rp&key=<20 chars>, and
+	 * plenty of unsubscribe and invite links use the same name), and none of the
+	 * patterns above touch it — api[_-]?key needs the api. Extend per project
+	 * with addQueryNames().
+	 */
+	protected array $queryNames = [
+		'key',
+		'auth',
+		'code',
+		'sig',
+		'signature',
+	];
+	
+	/**
 	 * Field names whose value is masked to all-but-the-first character
 	 * (e.g. "marcin" -> "m***"). Anchored so identifier fields like userId
 	 * or userAgent are left intact; extend per project with addUsernames()
@@ -100,6 +136,24 @@ class Logger extends Service implements Writer
 		$this->usernames = array_merge($this->usernames, $usernames);
 		
 		return $this;
+	}
+	
+	/**
+	 * Extra query-parameter names to drop (a project's own single-use token
+	 * parameter) — see $queryNames.
+	 */
+	public function addQueryNames(
+		array $names,
+	): static
+	{
+		$this->queryNames = array_merge($this->queryNames, $names);
+		
+		return $this;
+	}
+	
+	public function getQueryNames(): array
+	{
+		return $this->queryNames;
 	}
 	
 	public function getUsernames(): array
@@ -269,6 +323,13 @@ class Logger extends Service implements Writer
 		string $url,
 	): string
 	{
+		// the PATH first: a token there is not a query parameter, and nothing
+		// else in this class would look at it
+		$position = strpos($url, '?');
+		$url = $this->removeFromPath(
+			$position === false ? $url : substr($url, 0, $position),
+		) . ($position === false ? '' : substr($url, $position));
+		
 		$position = strpos($url, '?');
 		if($position !== false)
 		{
@@ -276,7 +337,9 @@ class Logger extends Service implements Writer
 				'~(^|&)([^&=]+)=([^&]*)~',
 				function(array $match): string
 				{
-					if($this->matchesAny($this->remove, rawurldecode($match[2])))
+					$name = rawurldecode($match[2]);
+					if($this->matchesAny($this->remove, $name)
+						|| in_array(strtolower(trim($name)), $this->queryNames, true))
 					{
 						return $match[1] . $match[2] . '=[removed]';
 					}
@@ -306,6 +369,63 @@ class Logger extends Service implements Writer
 		
 		// a plain e-mail in the path (unsubscribe links and the like)
 		return $this->maskEmails($url);
+	}
+	
+	/**
+	 * Token-shaped PATH segments -> [removed], leaving readable slugs alone.
+	 */
+	public function removeFromPath(
+		string $path,
+	): string
+	{
+		return (string)preg_replace_callback(
+			self::PATH_CANDIDATE,
+			fn(array $match): string => $this->looksSecret($match[2])
+				? $match[1] . '[removed]'
+				: $match[0],
+			$path,
+		);
+	}
+	
+	/**
+	 * A path segment is a secret, not a slug, when it has no word structure and
+	 * carries the character mix a generated token does: a JWT, a uuid, a long
+	 * hex string, or one long run of mixed case with digits. A slug is words
+	 * joined by - or _, lower case, at most the odd year.
+	 *
+	 * Where it is genuinely ambiguous this errs towards redaction: an
+	 * unreadable URI costs less than a leaked reset token. The rule is shared
+	 * with ovos/console's own Scrubber and its browser and node clients — none
+	 * of which can share code with this — so keep them equal; the console repo
+	 * carries the corpus that pins all of them.
+	 */
+	public function looksSecret(
+		string $segment,
+	): bool
+	{
+		if(preg_match('~^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$~', $segment) === 1
+			|| preg_match('~^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$~i', $segment) === 1
+			|| preg_match('~^[0-9a-f]{24,}$~i', $segment) === 1)
+		{
+			return true;
+		}
+		
+		if(strlen($segment) < 24)
+		{
+			return false;
+		}
+		
+		$longest = 0;
+		foreach(preg_split('~[-_.]+~', $segment) ?: [] as $run)
+		{
+			$longest = max($longest, strlen($run));
+		}
+		
+		$digits = preg_match('~[0-9]~', $segment) === 1;
+		
+		// one long mixed-case run with digits, or a very long single run
+		return ($digits && preg_match('~[A-Z]~', $segment) === 1 && $longest >= 16)
+			|| ($digits && $longest >= 32);
 	}
 	
 	/**
