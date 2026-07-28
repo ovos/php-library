@@ -3,20 +3,15 @@ declare(strict_types=1);
 
 namespace Ovos;
 
+use Ovos\Net\Cidr;
 use Throwable;
 
 use function array_map;
 use function array_reverse;
 use function explode;
 use function filter_var;
-use function inet_pton;
-use function intdiv;
-use function ord;
 use function Ovos\container;
-use function str_contains;
 use function str_starts_with;
-use function strlen;
-use function strncmp;
 use function strpos;
 use function strval;
 use function substr;
@@ -231,51 +226,16 @@ class Client
 	}
 	
 	/**
-	 * Bitwise prefix comparison on the packed forms, so v4 and v6 need no
-	 * separate paths and 172.16/12 covers 172.16-172.31 (the old string-prefix
-	 * test matched only the literal "172.16.").
+	 * Whether an address falls inside a CIDR range or equals a plain one.
+	 * The matching itself lives in Net\Cidr - the uptime probe needs the
+	 * same decision, and security logic should exist once.
 	 */
 	protected static function inRange(
 		string $address,
 		string $range,
 	): bool
 	{
-		if(str_contains($range, '/') === false)
-		{
-			return $address === $range;
-		}
-		
-		[$subnet, $bits] = explode('/', $range, 2);
-		
-		$packedAddress = inet_pton($address);
-		$packedSubnet = inet_pton($subnet);
-		$bits = (int)$bits;
-		
-		if($packedAddress === false || $packedSubnet === false
-			|| strlen($packedAddress) !== strlen($packedSubnet)
-			|| $bits < 0 || $bits > strlen($packedSubnet) * 8)
-		{
-			return false;
-		}
-		
-		$wholeBytes = intdiv($bits, 8);
-		$remainingBits = $bits % 8;
-		
-		if($wholeBytes > 0
-			&& strncmp($packedAddress, $packedSubnet, $wholeBytes) !== 0)
-		{
-			return false;
-		}
-		
-		if($remainingBits === 0)
-		{
-			return true;
-		}
-		
-		$mask = ~((1 << (8 - $remainingBits)) - 1) & 0xff;
-		
-		return (ord($packedAddress[$wholeBytes]) & $mask)
-			=== (ord($packedSubnet[$wholeBytes]) & $mask);
+		return Cidr::matches($address, $range);
 	}
 	
 	/**

@@ -54,6 +54,11 @@ class Request
 	protected bool $bestEffort = false;
 	
 	/**
+	 * Response body cap in bytes — see setResponseLimit(). Null reads it all.
+	 */
+	protected ?int $responseLimit = null;
+	
+	/**
 	 */
 	public function __construct(
 		string $url,
@@ -110,7 +115,7 @@ class Request
 		}
 		
 		$this->responseMetaData = stream_get_meta_data($stream);
-		$this->response = stream_get_contents($stream);
+		$this->response = stream_get_contents($stream, $this->responseLimit ?? -1);
 		fclose($stream);
 		
 		$this->getMeasurement()->stop();
@@ -448,6 +453,22 @@ class Request
 	): static
 	{
 		$this->bestEffort = $bestEffort;
+		
+		return $this;
+	}
+	
+	/**
+	 * Stop reading the body after $bytes. The status line and headers have
+	 * already arrived by then, so a probe that only wants the status code
+	 * does not have to download whatever the far end decided to send —
+	 * without this, one health URL answering with a gigabyte is the whole
+	 * cron run's memory. Null (the default) reads to the end as before.
+	 */
+	public function setResponseLimit(
+		?int $bytes,
+	): static
+	{
+		$this->responseLimit = $bytes;
 		
 		return $this;
 	}
