@@ -122,10 +122,25 @@ class Api extends Controller
 	/**
 	 * 500 — an unexpected error; logged (not silent) so it reaches the event log.
 	 */
+	/**
+	 * 500 — the same contract as unavailable() above: the client gets the
+	 * generic $error, the caught $cause is logged server-side. Without the
+	 * second parameter callers had nowhere to put the exception, so they
+	 * concatenated its message into the response instead — which is how an
+	 * SMTP host, a DSN or a file path ends up in a JSON body.
+	 */
 	protected function serverError(
 		string|Exception $error = 'internal error',
+		?Throwable $cause = null,
 	): Json
 	{
+		if($cause !== null && $this->container->isRegistered(Events::SYMBOL))
+		{
+			$this->container
+				->get(Events::SYMBOL)
+				->log($cause);
+		}
+		
 		return (new Json)
 			->failure($error)
 			->setHttpCode(500);
