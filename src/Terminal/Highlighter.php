@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace Ovos\Terminal;
 
 use function array_keys;
-use function array_shift;
 use function end;
 use function explode;
 use function implode;
 use function preg_match;
 use function preg_match_all;
 use function preg_replace;
+use function preg_split;
 use function preg_replace_callback;
 use function rtrim;
 use function str_contains;
@@ -19,6 +19,9 @@ use function strrpos;
 use function strtolower;
 use function strtoupper;
 use function substr;
+use function usort;
+
+use const PREG_SPLIT_DELIM_CAPTURE;
 
 /**
  * Highlighter
@@ -47,8 +50,8 @@ class Highlighter
 	
 	/**
 	 * SQL keywords worth picking out: statement verbs, clauses, and the
-	 * operators that carry the structure of a query. Multi-word entries must
-	 * precede their shorter prefixes — alternation is first-match-wins.
+	 * operators that carry the structure of a query. Order does not matter —
+	 * keywordPatterns() sorts the longest first so a prefix cannot mask them.
 	 */
 	protected const array SQL_KEYWORDS =
 	[
@@ -116,26 +119,47 @@ class Highlighter
 	{
 		$call = self::sanitize($call);
 		
-		$parts = explode(' ', $call);
-		$command = array_shift($parts);
-		if($command === null || $command === '')
+		// split on whitespace but keep it. The caller wraps before highlighting,
+		// so a run of spaces or a line break is content here — splitting on a
+		// single ' ' turned a double space into an empty coloured token, dropped
+		// the highlighting entirely when the call led with one, and hid a key
+		// that a wrap had cut in half
+		$parts = preg_split('/(\s+)/', $call, flags: PREG_SPLIT_DELIM_CAPTURE);
+		if($parts === false)
 		{
 			return $call;
 		}
 		
-		$rendered = ['<cyan>' . strtoupper($command) . '<reset>'];
+		$rendered = '';
+		$command = true;
 		
-		foreach($parts as $part)
+		foreach($parts as $index => $part)
 		{
+			// odd offsets are the whitespace runs, passed through as they came
+			if($index % 2 === 1 || $part === '')
+			{
+				$rendered .= $part;
+				
+				continue;
+			}
+			
+			if($command)
+			{
+				$rendered .= '<cyan>' . strtoupper($part) . '<reset>';
+				$command = false;
+				
+				continue;
+			}
+			
 			// by position the keys lead the arguments, but not every command
 			// reports them that way — FCALL puts the function name first — so
 			// each token is judged on its own shape instead
-			$rendered[] = self::isRedisKey($part)
+			$rendered .= self::isRedisKey($part)
 				? '<green>' . $part . '<reset>'
 				: '<gray>' . $part . '<reset>';
 		}
 		
-		return self::balanceLines(implode(' ', $rendered));
+		return self::balanceLines($rendered);
 	}
 	
 	/**
@@ -212,7 +236,7 @@ class Highlighter
 			default => 'gray',
 		};
 		
-		return '<' . $color . '>' . self::sanitize($type) . '<reset>';
+		return self::color($type, $color);
 	}
 	
 	/**
@@ -225,6 +249,11 @@ class Highlighter
 	): string
 	{
 		$class = self::sanitize($class);
+		if($class === '')
+		{
+			return '';
+		}
+		
 		$member = '';
 		
 		if(str_contains($class, '::'))
@@ -251,7 +280,7 @@ class Highlighter
 		string $header,
 	): string
 	{
-		return '<white>' . self::sanitize($header) . '<reset>';
+		return self::color($header, 'white');
 	}
 	
 	/**
@@ -409,8 +438,16 @@ class Highlighter
 	 */
 	protected static function keywordPatterns(): array
 	{
+		$keywords = self::SQL_KEYWORDS;
+		// longest first, because alternation is first-match-wins: with 'ON'
+		// ahead of it, 'ON DUPLICATE KEY' could never match. Sorting here means
+		// the list above can be grouped however reads best.
+		usort($keywords,
+			static fn(string $a, string $b): int => strlen($b) <=> strlen($a),
+		);
+		
 		$patterns = [];
-		foreach(self::SQL_KEYWORDS as $keyword)
+		foreach($keywords as $keyword)
 		{
 			$patterns[] = (string)preg_replace('/\s+/', '\s+', $keyword);
 		}

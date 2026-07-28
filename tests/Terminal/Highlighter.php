@@ -142,6 +142,43 @@ class Highlighter extends Test
 			&& str_contains($highlighted, '<green>console:*<reset>');
 	}
 	
+	public function redisKeepsItsSpacingAndFindsAWrappedKey(): bool
+	{
+		// the view wraps at 150 columns BEFORE highlighting, so a key can arrive
+		// split across a line break — it used to fail isRedisKey() and both halves
+		// went grey
+		$wrapped = Subject::redis("HGET console:issues:abc\nproject");
+		
+		return str_contains($wrapped, '<green>console:issues:abc<reset>')
+			// a run of spaces is content, not a delimiter: splitting on a single
+			// space made an empty coloured token out of the gap
+			&& Subject::redis('GET  foo') === '<cyan>GET<reset>  <gray>foo<reset>'
+			// and a leading one used to skip highlighting altogether
+			&& Subject::redis(' GET foo') === ' <cyan>GET<reset> <gray>foo<reset>';
+	}
+	
+	public function keywordOrderCannotMaskALongerEntry(): bool
+	{
+		// alternation is first-match-wins, and the list had ON ahead of
+		// ON DUPLICATE KEY, which made the longer entry unmatchable
+		$upsert = Subject::sql('INSERT INTO t VALUES (1) ON DUPLICATE KEY UPDATE a = 2');
+		
+		return str_contains($upsert, '<cyan>ON DUPLICATE KEY<reset>')
+			&& str_contains(Subject::sql('SELECT a FOR UPDATE'), '<cyan>FOR UPDATE<reset>')
+			&& str_contains(Subject::sql('SELECT a FROM t'), '<cyan>FROM<reset>');
+	}
+	
+	public function emptyInputNeverCarriesMarkup(): bool
+	{
+		// a cell with nothing in it must not render as a coloured run of padding —
+		// color()/tally()/time()/memory() always held to that, these three did not
+		return Subject::className('') === ''
+			&& Subject::header('') === ''
+			&& Subject::messageType('') === ''
+			// and a real label still colours
+			&& Subject::header('Time') === '<white>Time<reset>';
+	}
+	
 	public function timeAndMemoryEscalateWithTheirThresholds(): bool
 	{
 		return str_contains(Subject::time('0.00001200'), '<gray>')

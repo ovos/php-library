@@ -9,6 +9,7 @@ use SplQueue;
 use function count;
 use function array_walk;
 use function is_numeric;
+use function str_replace;
 use function substr_replace;
 use function strpos;
 use function strlen;
@@ -87,7 +88,11 @@ class Reporter
 	{
 		if(!empty($parameters))
 		{
-			// quote the values
+			// quote the values, doubling any quote inside them the way SQL does.
+			// Without it a value like O'Brien closes its own literal, and every
+			// literal after it in the statement is off by one — the rendered
+			// query stops being something you could paste back into a client,
+			// and anything reading it as SQL (the highlighter, an eye) is misled
 			array_walk($parameters, static function(&$value)
 			{
 				if(null === $value)
@@ -95,7 +100,7 @@ class Reporter
 					$value = 'NULL';
 					return;
 				}
-				$value = "'" . $value . "'";
+				$value = "'" . str_replace("'", "''", (string)$value) . "'";
 			});
 			
 			// replace the values
