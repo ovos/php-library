@@ -123,15 +123,28 @@ class Terminal
 	}
 	
 	/**
-	 * Whether STDOUT is a terminal that renders escape sequences. On Windows
-	 * the console needs VT processing switched on first, and the call reports
-	 * whether that succeeded.
+	 * Whether STDOUT is a terminal that renders escape sequences — the question
+	 * cursor control has to ask, since \r and an erase sequence mean nothing to
+	 * a pipe and everything to a screen. Colour is a separate question, and one
+	 * a user is allowed to answer 'no' to without losing the cursor with it.
 	 *
-	 * The seam the color tests replace — a suite run from a real terminal would
-	 * otherwise see a tty no matter which environment it sets up.
+	 * On Windows the console needs VT processing switched on before it renders
+	 * any of it, and the call reports whether that succeeded.
+	 *
+	 * The SAPI check has to come first: STDOUT is only defined for CLI, so a
+	 * pinned setSupportsColor(true) under FPM would otherwise reach a constant
+	 * that does not exist.
+	 *
+	 * Also the seam the colour tests replace — a suite run from a real terminal
+	 * would otherwise see a tty no matter which environment it sets up.
 	 */
-	protected static function isInteractive(): bool
+	public static function isInteractive(): bool
 	{
+		if(PHP_SAPI !== self::SAPI_CLI)
+		{
+			return false;
+		}
+		
 		if(stream_isatty(STDOUT) === false)
 		{
 			return false;
@@ -212,15 +225,18 @@ class Terminal
 	 * clearLine() overwrites it in place.
 	 *
 	 * A no-op unless something is watching: the \r and the erase sequence only
-	 * mean anything to a terminal, and a cron log would collect them as junk.
-	 * The line is transient by design, so nothing is lost by dropping it.
+	 * mean anything to a screen, and a cron log collects them as junk. The line
+	 * is transient by design, so nothing is lost by dropping it.
+	 *
+	 * Gated on isInteractive(), not supportsColor(): NO_COLOR asks for plain
+	 * output, not for the progress line to vanish with it.
 	 */
 	public static function status(
 		string $message,
 		bool $markup = false,
 	): void
 	{
-		if(self::supportsColor() === false)
+		if(self::isInteractive() === false)
 		{
 			return;
 		}
@@ -237,7 +253,7 @@ class Terminal
 	 */
 	public static function clearLine(): void
 	{
-		if(self::supportsColor() === false)
+		if(self::isInteractive() === false)
 		{
 			return;
 		}
@@ -246,7 +262,16 @@ class Terminal
 	}
 	
 	/**
-	 * Parses color markers and returns a formatted message
+	 * Resolves <color> markers for printing — NOT a pure formatter.
+	 *
+	 * $markup only declares that the string carries markup; whether it becomes
+	 * ANSI or is stripped is still the environment's call, so a caller passing
+	 * true cannot force escapes into a redirected log. That safety net is why
+	 * the argument exists at all, and several callers pass a literal true.
+	 *
+	 * Building a coloured string for somewhere else — a file to be read with
+	 * `less -R`, a golden test — wants Formatter::handleMarkup(), which resolves
+	 * unconditionally.
 	 */
 	public static function getMessage(
 		string $message,

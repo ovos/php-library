@@ -20,7 +20,7 @@ class TerminalProbe extends Terminal
 {
 	protected static ?bool $supportsColor = null;
 	
-	protected static function isInteractive(): bool
+	public static function isInteractive(): bool
 	{
 		return false;
 	}
