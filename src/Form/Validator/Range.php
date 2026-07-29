@@ -43,9 +43,19 @@ class Range extends Validator
 		self::ERROR_TOO_LARGE => '"%s" must be %s or less.',
 	];
 	
+	/**
+	 * @param bool $nullable whether an unset value (null or '') passes. True
+	 *                       is the HTML-form meaning — optional field,
+	 *                       requiredness is NotEmpty's job. A JSON caller can
+	 *                       send an EXPLICIT null, and a field whose column
+	 *                       cannot hold one needs nullable: false, or the null
+	 *                       sails past the range straight into a database
+	 *                       error.
+	 */
 	public function __construct(
 		protected int|float|null $min = null,
 		protected int|float|null $max = null,
+		protected bool $nullable = true,
 	)
 	{
 	}
@@ -56,7 +66,14 @@ class Range extends Validator
 	{
 		if($value === null || $value === '')
 		{
-			return true;
+			if($this->nullable)
+			{
+				return true;
+			}
+			
+			$this->fail(self::ERROR_NOT_NUMERIC);
+			
+			return false;
 		}
 		
 		if(is_numeric($value) === false)
