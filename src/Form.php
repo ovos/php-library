@@ -23,8 +23,6 @@ class Form implements Iterator
 {
 	use Translatable;
 	
-	protected Application $app;
-	
 	protected ?string $id = null;
 	
 	/**
@@ -48,11 +46,18 @@ class Form implements Iterator
 	 */
 	protected array $defaults = [];
 	
+	/**
+	 * No app() here. It set a protected $app that nothing ever read — not this
+	 * class, not Translatable (which goes through Translator:: statically), not
+	 * one of the twenty-two form subclasses in bo2go — and its only real effect
+	 * was to make a form unconstructible outside a booted application. A form
+	 * is named values, filters and validators; none of that needs the
+	 * application, and now a unit test or a CLI script can build one.
+	 */
 	public function __construct(
 		?string $id = null,
 	)
 	{
-		$this->app = app();
 		$this->id = $id;
 		
 		$this->init();
@@ -343,8 +348,16 @@ class Form implements Iterator
 		
 		foreach($this->elements as $element)
 		{
-			$isValid = $isValid
-				&& $element->isValid();
+			// every element, not `$isValid && $element->isValid()` — && SHORT
+			// CIRCUITS, so once one field had failed none of the elements after
+			// it were validated at all. The form reported the FIRST broken
+			// field and nothing else: the user fixed it, submitted, and met the
+			// next one, one round trip per mistake. getErrors() was equally
+			// short, so an API answering with them listed one of five.
+			if($element->isValid() === false)
+			{
+				$isValid = false;
+			}
 		}
 		
 		return $isValid;

@@ -159,4 +159,137 @@ class Validators extends Test
 			&& $bothChecked === true
 			&& $unchecked === true;
 	}
+	
+	/**
+	 * Range — and the reason it does not use empty(): 0 and '0' ARE empty(),
+	 * and they are exactly the values a `min: 1` exists to reject.
+	 */
+	public function rangeChecksBoundsAndKeepsZeroCheckable(): bool
+	{
+		$validator = new Validator\Range(1, 3650);
+		$this->element($validator, 'retention');
+		
+		return $validator->isValid(1) === true
+			&& $validator->isValid(3650) === true
+			&& $validator->isValid(0) === false
+			&& $validator->isValid('0') === false
+			&& $validator->isValid(3651) === false
+			&& $validator->isValid(-5) === false
+			// unset is NotEmpty's business, not a range's
+			&& $validator->isValid(null) === true
+			&& $validator->isValid('') === true;
+	}
+	
+	/** a range says the field IS a number, so junk is not silently a 0 */
+	public function rangeRejectsWhatIsNotANumber(): bool
+	{
+		$validator = new Validator\Range(1, 10);
+		$this->element($validator, 'count');
+		
+		return $validator->isValid('12abc') === false
+			&& $validator->isValid('abc') === false
+			&& $validator->isValid('7') === true
+			&& $validator->isValid(7.5) === true;
+	}
+	
+	public function rangeBoundsAreOptional(): bool
+	{
+		$min = new Validator\Range(min: 0);
+		$this->element($min, 'floor');
+		$max = new Validator\Range(max: 100);
+		$this->element($max, 'ceiling');
+		
+		return $min->isValid(999999) === true
+			&& $min->isValid(-1) === false
+			&& $max->isValid(-999999) === true
+			&& $max->isValid(101) === false;
+	}
+	
+	/** characters, not bytes — the cap usually mirrors a utf8mb4 VARCHAR */
+	public function lengthCountsCharactersNotBytes(): bool
+	{
+		$validator = new Validator\Length(max: 5);
+		$this->element($validator, 'name');
+		
+		return $validator->isValid('Grüße') === true      // 5 chars, 7 bytes
+			&& $validator->isValid('Übergröße') === false
+			&& $validator->isValid('12345') === true
+			&& $validator->isValid('123456') === false
+			&& $validator->isValid(null) === true;
+	}
+	
+	public function lengthHasAMinimumToo(): bool
+	{
+		$validator = new Validator\Length(min: 3, max: 8);
+		$this->element($validator, 'slug');
+		
+		return $validator->isValid('ab') === false
+			&& $validator->isValid('abc') === true
+			&& $validator->isValid('abcdefgh') === true
+			&& $validator->isValid('abcdefghi') === false;
+	}
+	
+	/**
+	 * InArray is STRICT by default — a loose in_array() is the classic way a
+	 * whitelist stops being one
+	 */
+	public function inArrayIsStrict(): bool
+	{
+		$validator = new Validator\InArray(['admin', 'viewer']);
+		$this->element($validator, 'role');
+		
+		return $validator->isValid('admin') === true
+			&& $validator->isValid('root') === false
+			&& $validator->isValid(0) === false
+			&& $validator->isValid(null) === true;
+	}
+	
+	/** one declaration covers "role" and "roles" */
+	public function inArrayChecksEveryEntryOfAList(): bool
+	{
+		$validator = new Validator\InArray(['http', 'cli', 'js']);
+		$this->element($validator, 'types');
+		
+		return $validator->isValid(['http', 'js']) === true
+			&& $validator->isValid(['http', 'php']) === false
+			&& $validator->isValid([]) === true;
+	}
+	
+	/**
+	 * The point of a Url validator over FILTER_VALIDATE_URL: that filter is
+	 * perfectly happy with javascript: and data:, and a stored URL is one that
+	 * will be followed or linked.
+	 */
+	public function urlRefusesDangerousSchemes(): bool
+	{
+		$validator = new Validator\Url;
+		$this->element($validator, 'health url');
+		
+		return $validator->isValid('https://example.com/health') === true
+			&& $validator->isValid('javascript:alert(1)') === false
+			&& $validator->isValid('data:text/html,<script>') === false
+			&& $validator->isValid('http://example.com') === false // https only
+			&& $validator->isValid(null) === true;
+	}
+	
+	public function urlSchemesAreConfigurable(): bool
+	{
+		$validator = new Validator\Url(['http', 'https']);
+		$this->element($validator, 'link');
+		
+		return $validator->isValid('http://example.com') === true
+			&& $validator->isValid('https://example.com') === true
+			&& $validator->isValid('ftp://example.com') === false;
+	}
+	
+	/** a host is required — FILTER_VALIDATE_URL passes several hostless shapes */
+	public function urlNeedsAHost(): bool
+	{
+		$validator = new Validator\Url;
+		$this->element($validator, 'link');
+		
+		return $validator->isValid('https://') === false
+			&& $validator->isValid('https:///path') === false
+			&& $validator->isValid('not a url') === false;
+	}
 }
