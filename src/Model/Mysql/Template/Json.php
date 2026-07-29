@@ -43,17 +43,42 @@ class Json extends Template
 	 */
 	protected null|string|Closure $class = null;
 	
+	/**
+	 * @param bool $numericCheck encode with JSON_NUMERIC_CHECK (the default,
+	 *                           and the long-standing behaviour): numeric
+	 *                           STRINGS store as numbers — "404" becomes 404,
+	 *                           "01234" becomes 1234. Right for data that is
+	 *                           numeric by nature; pass false for fields
+	 *                           where the string form is the value (type
+	 *                           codes, postal codes, external ids) and the
+	 *                           coercion would change what was stored.
+	 */
 	public function __construct(
 		array $properties = [],
 		string $type = self::TYPE_ARRAY,
-		null|string|Closure $class = null
+		null|string|Closure $class = null,
+		protected bool $numericCheck = true,
 	)
 	{
 		parent::__construct();
-	
+		
 		$this->properties = $properties;
 		$this->type = $type;
 		$this->class = $class;
+	}
+	
+	public function setNumericCheck(
+		bool $numericCheck,
+	): static
+	{
+		$this->numericCheck = $numericCheck;
+		
+		return $this;
+	}
+	
+	public function getNumericCheck(): bool
+	{
+		return $this->numericCheck;
 	}
 	
 	public function setProperties(
@@ -129,11 +154,16 @@ class Json extends Template
 			throw new Exception('Cannot encode a string.');
 		}
 		
-		$string = json_encode($object, JSON_THROW_ON_ERROR
+		$flags = JSON_THROW_ON_ERROR
 			| JSON_UNESCAPED_UNICODE
-			| JSON_UNESCAPED_SLASHES
-			| JSON_NUMERIC_CHECK
-		);
+			| JSON_UNESCAPED_SLASHES;
+		
+		if($this->numericCheck)
+		{
+			$flags |= JSON_NUMERIC_CHECK;
+		}
+		
+		$string = json_encode($object, $flags);
 		
 		// escape backslashes
 		// https://stackoverflow.com/questions/74481967/mysql-valid-json-causes-missing-a-comma-or-after-an-object-member
