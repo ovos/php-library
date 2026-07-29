@@ -292,4 +292,42 @@ class Validators extends Test
 			&& $validator->isValid('https:///path') === false
 			&& $validator->isValid('not a url') === false;
 	}
+
+	/**
+	 * `static fn` is the ordinary way to write a callback that needs no $this.
+	 * The rebinding that lets a NON-static closure call $this->setMessage()
+	 * used to run unconditionally — a warning on a static closure today, an
+	 * error in PHP 9.
+	 */
+	public function callbackAcceptsAStaticClosure(): bool
+	{
+		$validator = new Validator\Callback(static fn(mixed $value): bool => $value === 'yes');
+		$this->element($validator, 'flag');
+		
+		return $validator->isValid('yes') === true
+			&& $validator->isValid('no') === false;
+	}
+	
+	/** …while a non-static closure still gets $this for dynamic messages */
+	public function callbackStillBindsANonStaticClosure(): bool
+	{
+		$validator = new Validator\Callback(function(mixed $value): bool
+		{
+			if($value === 'bad')
+			{
+				$this->setMessage(Validator\Callback::ERROR_CALLBACK, 'dynamically refused');
+				
+				return false;
+			}
+			
+			return true;
+		});
+		$this->element($validator, 'field');
+		
+		$refused = $validator->isValid('bad');
+		$message = $validator->getErrors()[0]->getMessage() ?? '';
+		
+		return $refused === false
+			&& $message === 'dynamically refused';
+	}
 }
