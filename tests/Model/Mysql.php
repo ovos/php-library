@@ -373,4 +373,52 @@ class Mysql extends Test
 		$this->store->source()
 			->exec('DROP TABLE IF EXISTS tests');
 	}
+	
+	/**
+	 * JSON_NUMERIC_CHECK is the template's DEFAULT and long-standing
+	 * behaviour: numeric strings store as numbers. numericCheck: false is
+	 * the opt-out for fields where the string form IS the value — a "404"
+	 * type code, a postal code with its leading zero, a "1.10" version.
+	 */
+	public function jsonNumericCheckIsOnByDefaultAndOptable(): bool
+	{
+		// default: strings that look like numbers become numbers
+		$model = new $this->model;
+		$model->object = ['404', '01234', '1.10'];
+		$model->save();
+		
+		$stored = $this->store->executeFind(where: ['id' => $model->id])
+			->fetchObject($this->model::class)
+			->object;
+		
+		$coerced = $stored === [404, 1234, 1.1];
+		
+		// opted out: the strings survive byte for byte
+		$plain = new class() extends Model
+		{
+			public static object $store;
+			
+			public static function getStoreClass(): string
+			{
+				return self::$store::class;
+			}
+			
+			public function setUp(): void
+			{
+				$this->addTemplate(new Template\Json(['object'],
+					Template\Json::TYPE_ARRAY, numericCheck: false));
+			}
+		};
+		$plain::$store = $this->store;
+		
+		$model = new ($plain::class);
+		$model->object = ['404', '01234', '1.10'];
+		$model->save();
+		
+		$kept = $this->store->executeFind(where: ['id' => $model->id])
+			->fetchObject($plain::class)
+			->object;
+		
+		return $coerced && $kept === ['404', '01234', '1.10'];
+	}
 }
