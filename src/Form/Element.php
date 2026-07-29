@@ -8,8 +8,6 @@ use Ovos\Form;
 
 use function count;
 use function is_array;
-use function is_numeric;
-use function is_scalar;
 use function sprintf;
 
 /**
@@ -40,7 +38,7 @@ class Element
 	/**
 	 * Whole-value transform-or-reject steps — see addNormalizer()
 	 *
-	 * @var array{0: callable, 1: ?string}[]
+	 * @var Normalizer[]
 	 */
 	protected array $normalizers = [];
 	
@@ -58,13 +56,13 @@ class Element
 	protected array $casts = [];
 	
 	/**
-	 * The type gate — see asText()/asNumber()/asCollection(). Judges the RAW
-	 * value before filters, normalizers and validators run; a value of the
-	 * wrong shape is the field's single error.
-	 *
-	 * @var array{0: string, 1: string, 2: callable}|null [error code, message, conforms]
+	 * The type gate — see asText()/asNumber()/asCollection(). A VALIDATOR
+	 * (Validator\Text|Number|Collection) that judges the RAW value before
+	 * filters, normalizers and validators run: a value of the wrong shape is
+	 * the field's single error, and the message lives on the validator,
+	 * overwritable exactly like every other rule's.
 	 */
-	protected ?array $gate = null;
+	protected ?Validator $gate = null;
 	
 	/**
 	 * @var Error[]
@@ -177,14 +175,14 @@ class Element
 			// multi-input contract), which is exactly what a whole-array
 			// normalizer cannot live with
 			$this->normalizerError = null;
-			foreach($this->normalizers as [$normalizer, $message])
+			foreach($this->normalizers as $normalizer)
 			{
-				$value = $normalizer($value);
+				$value = $normalizer->normalize($value);
 				
 				if($value === null)
 				{
 					$this->normalizerError = sprintf(
-						$message ?? '"%s" is not valid.',
+						(string)$normalizer->getMessage(Normalizer::ERROR_NORMALIZER),
 						$this->getName(),
 					);
 					
@@ -277,13 +275,31 @@ class Element
 	 * follows the validator convention — %s becomes the element name.
 	 */
 	public function addNormalizer(
-		callable $normalizer,
+		callable|Normalizer $normalizer,
 		?string $message = null,
 	): static
 	{
-		$this->normalizers[] = [$normalizer, $message];
+		if($normalizer instanceof Normalizer === false)
+		{
+			$normalizer = new Normalizer\Callback($normalizer);
+		}
+		
+		if($message !== null)
+		{
+			$normalizer->setMessage(Normalizer::ERROR_NORMALIZER, $message);
+		}
+		
+		$this->normalizers[] = $normalizer;
 		
 		return $this;
+	}
+	
+	/**
+	 * @return Normalizer[]
+	 */
+	public function getNormalizers(): array
+	{
+		return $this->normalizers;
 	}
 	
 	/**
@@ -335,11 +351,11 @@ class Element
 		?string $message = null,
 	): static
 	{
-		$this->gate = [
-			'type_text',
-			$message ?? '"%s" must be text.',
-			static fn(mixed $value): bool => $value === null || is_scalar($value),
-		];
+		$this->gate = new Validator\Text;
+		if($message !== null)
+		{
+			$this->gate->withMessage($message);
+		}
 		
 		return $this->addCast(static fn(mixed $value): ?string
 			=> $value === null ? null : (string)$value);
@@ -356,12 +372,11 @@ class Element
 		?string $message = null,
 	): static
 	{
-		$this->gate = [
-			'type_number',
-			$message ?? '"%s" must be a number.',
-			static fn(mixed $value): bool
-				=> $value === null || $value === '' || is_numeric($value),
-		];
+		$this->gate = new Validator\Number;
+		if($message !== null)
+		{
+			$this->gate->withMessage($message);
+		}
 		
 		return $this->addCast(static fn(mixed $value): null|int|float
 			=> $value === null || $value === '' ? null : $value + 0);
@@ -393,22 +408,22 @@ class Element
 		?string $message = null,
 	): static
 	{
-		$this->gate = [
-			'type_collection',
-			$message ?? '"%s" must be a list.',
-			static fn(mixed $value): bool => $value === null || is_array($value),
-		];
+		$this->gate = new Validator\Collection;
+		if($message !== null)
+		{
+			$this->gate->withMessage($message);
+		}
 		
 		return $this;
 	}
 	
 	/**
-	 * Whether the raw value passes the type gate; true when no gate is set
+	 * The type gate's validator — overwrite its message from outside exactly
+	 * as on any validator: getGate()?->withMessage(…)
 	 */
-	protected function conforms(): bool
+	public function getGate(): ?Validator
 	{
-		return $this->gate === null
-			|| $this->gate[2]($this->getForm()->getRawValue($this->getId(withFormId: false)));
+		return $this->gate;
 	}
 	
 	public function addValidator(
@@ -427,12 +442,18 @@ class Element
 		// the type gate judges the RAW value — a wrong shape is this single
 		// field error, before a filter, normalizer or validator could trip
 		// over it
-		if($this->conforms() === false)
+		if($this->gate !== null)
 		{
-			$this->addError(new Error($this->gate[0],
-				sprintf($this->gate[1], $this->getName())));
+			$this->gate->setElement($this);
+			$this->gate->clearErrors();
 			
-			return false;
+			if($this->gate->isValid($this->getForm()
+				->getRawValue($this->getId(withFormId: false))) === false)
+			{
+				$this->addErrors($this->gate->getErrors());
+				
+				return false;
+			}
 		}
 		
 		$value = $this->getUserValue();
@@ -441,7 +462,8 @@ class Element
 		// error, and the validators never see the rejected input
 		if($this->normalizerError !== null)
 		{
-			$this->addError(new Error('normalizer', $this->normalizerError));
+			$this->addError(new Error(Normalizer::ERROR_NORMALIZER,
+				$this->normalizerError));
 			
 			return false;
 		}

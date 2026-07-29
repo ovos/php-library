@@ -292,7 +292,7 @@ class Validators extends Test
 			&& $validator->isValid('https:///path') === false
 			&& $validator->isValid('not a url') === false;
 	}
-
+	
 	/**
 	 * `static fn` is the ordinary way to write a callback that needs no $this.
 	 * The rebinding that lets a NON-static closure call $this->setMessage()

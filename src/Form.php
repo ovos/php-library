@@ -33,9 +33,12 @@ class Form implements Iterator
 	protected Url $action;
 	
 	/**
-	 * Element and Form objects, ordered
+	 * The elements, ordered — and only elements: a nested form relates
+	 * through setForm(), which drives the id/name prefixing of rendered
+	 * fields, and is fed and read directly; it never sits among the
+	 * parent's elements (__set() is typed accordingly).
 	 *
-	 * @var Element[]|Form[]
+	 * @var Element[]
 	 */
 	protected array $elements = [];
 	
@@ -147,13 +150,15 @@ class Form implements Iterator
 	}
 	
 	/**
-	 * Raw value (unfiltered)
+	 * Raw value (unfiltered) — null both when the key holds null and when
+	 * it is absent: a return value cannot carry the difference, that is
+	 * hasValue()'s job
 	 */
 	public function getRawValue(
 		string $id,
 	): null|string|bool|int|float|array
 	{
-		if(isset($this->values[$id]))
+		if(array_key_exists($id, $this->values))
 		{
 			return $this->values[$id];
 		}
@@ -167,6 +172,99 @@ class Form implements Iterator
 	public function getRawValues(): array
 	{
 		return $this->values;
+	}
+	
+	/**
+	 * Whether this field is present in the fed values AT ALL — whatever
+	 * setValues() was given: an HTML submission, a request body, a database
+	 * row. A browser cannot produce a present null, but data can, so:
+	 * array_key_exists, not isset — an explicit null is a value, and the
+	 * difference between "clear it" and "leave it" is exactly what a
+	 * partial update turns on.
+	 */
+	public function hasValue(
+		string $id,
+	): bool
+	{
+		return array_key_exists($id, $this->values);
+	}
+	
+	/**
+	 * Treat these fields as present even when they are not — for a CREATE,
+	 * where "absent" cannot mean "keep the stored value" because there is
+	 * nothing stored to keep.
+	 *
+	 * An absent id becomes an explicit null, so the element's own validators
+	 * produce the proper field error (NotEmpty says "name cannot be empty",
+	 * a non-nullable Range says what the bounds are) instead of the save
+	 * dying on a NOT NULL column. The caller applies this only on create;
+	 * the form cannot know a create from an update.
+	 */
+	public function requireValues(
+		string ...$ids,
+	): static
+	{
+		foreach($ids as $id)
+		{
+			if($this->hasValue($id) === false)
+			{
+				$this->setValue($id, null);
+			}
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * Only the fields actually present, filtered, validated and CAST — the
+	 * storage form. getInputValues() answers for EVERY declared element
+	 * (defaults included), which is what you want when writing a whole
+	 * record; this is what you want when writing a partial one and the
+	 * storage layer treats "present" as "assign".
+	 */
+	public function getPresentValues(): array
+	{
+		$values = [];
+		
+		foreach($this->elements as $element)
+		{
+			$id = $element->getId(withFormId: false);
+			if($this->hasValue($id))
+			{
+				// the CAST value — the storage form. Casts run only here,
+				// after validation saw the uncast value; the HTML accessors
+				// (getValues/getInputValues) stay cast-free.
+				$values[$id] = $element->getCastValue();
+			}
+		}
+		
+		return $values;
+	}
+	
+	/**
+	 * field => first message, the shape an API error body wants.
+	 *
+	 * First and not all of them: a field with three broken rules is still one
+	 * broken field to the caller, and the UI draws one line under one input.
+	 *
+	 * @return array<string, string>
+	 */
+	public function getErrorMessages(): array
+	{
+		$messages = [];
+		
+		foreach($this->getErrors() as $error)
+		{
+			$element = $error->getElement();
+			$id = $element === null ? '' : $element->getId(withFormId: false);
+			
+			if($id !== '' && array_key_exists($id, $messages) === false)
+			{
+				$messages[$id] = (string)$error->getMessage();
+			}
+		}
+		
+		return $messages;
 	}
 	
 	/**
@@ -384,7 +482,7 @@ class Form implements Iterator
 	}
 	
 	/**
-	 * @return Element[]|Form[]
+	 * @return Element[]
 	 */
 	public function toArray(): array
 	{

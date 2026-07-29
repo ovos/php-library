@@ -29,7 +29,7 @@ class Json extends Test
 	 * optional bounded number, and a URL — with the stored record as defaults.
 	 */
 	protected function form(
-		array $sent,
+		array $present,
 	): Subject
 	{
 		$form = new Subject;
@@ -52,18 +52,18 @@ class Json extends Test
 			'retention_days' => 21,
 			'health_url' => 'https://stored.example.com/health',
 		]);
-		$form->setValues($sent);
+		$form->setValues($present);
 		
 		return $form;
 	}
 	
 	/** array_key_exists, not isset — an explicit null IS a value */
-	public function wasSentTellsAbsentFromNull(): bool
+	public function hasValueTellsAbsentFromNull(): bool
 	{
 		$form = $this->form(['retention_days' => null]);
 		
-		return $form->wasSent('retention_days') === true
-			&& $form->wasSent('name') === false;
+		return $form->hasValue('retention_days') === true
+			&& $form->hasValue('name') === false;
 	}
 	
 	/**
@@ -79,7 +79,7 @@ class Json extends Test
 	}
 	
 	/** …but a required field the caller DID send is enforced */
-	public function aSentRequiredFieldIsStillValidated(): bool
+	public function aPresentRequiredFieldIsStillValidated(): bool
 	{
 		$form = $this->form(['name' => '']);
 		$valid = $form->isValid();
@@ -90,7 +90,7 @@ class Json extends Test
 			&& $errors['name'] !== '';
 	}
 	
-	/** what is not sent keeps what is stored — the partial-update contract */
+	/** what is not present keeps what is stored — the partial-update contract */
 	public function absentFieldsFallBackToTheStoredValue(): bool
 	{
 		$values = $this->form(['retention_days' => 30])->getInputValues();
@@ -100,25 +100,25 @@ class Json extends Test
 			&& $values['health_url'] === 'https://stored.example.com/health';
 	}
 	
-	/** and the caller can ask for only what was actually sent */
-	public function getSentValuesIsOnlyWhatArrived(): bool
+	/** and the caller can ask for only what is actually present */
+	public function getPresentValuesIsOnlyWhatArrived(): bool
 	{
 		$form = $this->form(['retention_days' => 30, 'name' => ' spaced ']);
 		
-		return $form->getSentValues() === [
+		return $form->getPresentValues() === [
 			'name' => 'spaced', // filters still run
 			'retention_days' => 30,
 		];
 	}
 	
 	/** an explicit null is a real instruction, not an absence */
-	public function anExplicitNullIsSentAndPassesAnOptionalRule(): bool
+	public function anExplicitNullIsPresentAndPassesAnOptionalRule(): bool
 	{
 		$form = $this->form(['retention_days' => null]);
 		
 		return $form->isValid() === true
-			&& $form->wasSent('retention_days') === true
-			&& $form->getSentValues() === ['retention_days' => null];
+			&& $form->hasValue('retention_days') === true
+			&& $form->getPresentValues() === ['retention_days' => null];
 	}
 	
 	public function errorMessagesAreKeyedByField(): bool
@@ -149,23 +149,23 @@ class Json extends Test
 	
 	/**
 	 * On a CREATE, absent cannot mean "keep the stored value" — there is
-	 * nothing stored. requireSent() turns an absent field into an explicit
+	 * nothing stored. requireValues() turns an absent field into an explicit
 	 * null, so the declared validators produce a proper field error instead
 	 * of the save dying on a NOT NULL column.
 	 */
-	public function requireSentMakesAbsentFieldsFail(): bool
+	public function requireValuesMakesAbsentFieldsFail(): bool
 	{
 		$form = $this->form(['retention_days' => 30]);
-		$form->requireSent('name', 'retention_days');
+		$form->requireValues('name', 'retention_days');
 		$valid = $form->isValid();
 		$errors = $form->getErrorMessages();
 		
 		return $valid === false
 			// absent name became null -> NotEmpty speaks
 			&& isset($errors['name'])
-			// retention WAS sent — requireSent must not disturb it
+			// retention WAS sent — requireValues must not disturb it
 			&& isset($errors['retention_days']) === false
-			&& $form->getSentValues()['retention_days'] === 30;
+			&& $form->getPresentValues()['retention_days'] === 30;
 	}
 	
 	/** a non-nullable Range refuses the explicit null a NOT NULL column
@@ -186,7 +186,7 @@ class Json extends Test
 	 * The skip is FORM-level, not element-level, so every element type gets
 	 * JSON semantics — the plain Element and any specialised subclass a
 	 * project attaches with setElement(). An element-local override would
-	 * silently revert those to validating fields nobody sent.
+	 * silently revert those to validating fields nobody provided.
 	 */
 	public function anyElementTypeGetsTheAbsentFieldSkip(): bool
 	{

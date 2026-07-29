@@ -137,5 +137,21 @@ class Form extends Test
 		return $form->isValid() === false
 			&& count($form->fine->getErrors()) === 0
 			&& count($form->getErrors()) === 1;
+	}	
+	/**
+	 * The presence API lives on the BASE form: any fed data can be asked
+	 * what it mentions. An explicit null IS present (array_key_exists, not
+	 * isset) - the three-state reality of partial data.
+	 */
+	public function presenceIsAnswerableOnAnyForm(): bool
+	{
+		$form = new BaseForm;
+		$form->name->addFilter(new Filter\Trim);
+		$form->setValues(['name' => '  x  ', 'nulled' => null]);
+		
+		return $form->hasValue('name')
+			&& $form->hasValue('nulled')
+			&& $form->hasValue('absent') === false
+			&& $form->getPresentValues() === ['name' => 'x'];
 	}
 }
