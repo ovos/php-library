@@ -62,7 +62,7 @@ class Element
 	 * the field's single error, and the message lives on the validator,
 	 * overwritable exactly like every other rule's.
 	 */
-	protected ?Validator $gate = null;
+	protected ?Validator\Gate $gate = null;
 	
 	/**
 	 * @var Error[]
@@ -157,6 +157,16 @@ class Element
 		// some filters also process null values (for example, casting to int)
 		if($this->value === null)
 		{
+			// a value the gate refuses has no usable value: filters and
+			// normalizers are written assuming the gate protected them, so
+			// running them on a hostile shape warns or worse — the field
+			// error is isValid()'s business, and every read answers null
+			if($this->gate !== null
+				&& $this->gate->conforms($value) === false)
+			{
+				return null;
+			}
+			
 			if(is_array($value))
 			{
 				foreach($value as &$item)
@@ -421,7 +431,7 @@ class Element
 	 * The type gate's validator — overwrite its message from outside exactly
 	 * as on any validator: getGate()?->withMessage(…)
 	 */
-	public function getGate(): ?Validator
+	public function getGate(): ?Validator\Gate
 	{
 		return $this->gate;
 	}
