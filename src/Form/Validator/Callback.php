@@ -6,6 +6,7 @@ namespace Ovos\Form\Validator;
 use Ovos\Form\Error;
 use Ovos\Form\Validator;
 use Closure;
+use ReflectionFunction;
 
 /**
  * Callback
@@ -39,7 +40,14 @@ class Callback extends Validator
 		Closure $callback,
 	): static
 	{
-		$this->callback = $callback->bindTo($this, $this);
+		// the rebinding is what lets a closure call $this->setMessage(...) for
+		// a dynamic error text — but a STATIC closure cannot be rebound, and
+		// `static fn` is the ordinary way to write a callback that needs no
+		// $this. Binding unconditionally turned that idiom into a warning
+		// today and an error in PHP 9.
+		$this->callback = (new ReflectionFunction($callback))->isStatic()
+			? $callback
+			: $callback->bindTo($this, $this);
 		
 		return $this;
 	}
