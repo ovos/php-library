@@ -108,9 +108,9 @@ each call, lazy proxies on PHP 8.4+. → [Dependency Injection](#dependency-inje
 **Redis Functions** deployed *with* your code and self-healed via source-hash
 markers (standalone and cluster) · **typed request bodies** with
 `$this->input()` (forgiving, dot-path, never a blind cast) · a dependency-free
-**UUIDv4** · a built-in **test & benchmark runner** · **forms** with
-filters/validators/rendering · **gettext translations** with per-vendor
-overrides.
+**UUIDv4** · a built-in **test & benchmark runner** · **forms** with a
+filter/normalizer/validator/cast pipeline, for HTML pages and JSON APIs ·
+**gettext translations** with per-vendor overrides.
 
 ## Companion modules
 
@@ -162,10 +162,15 @@ overrides.
 - [CLI Commands](#cli-commands)
 - [Forms](#forms)
   - [Creating a Form Component](#creating-a-form-component)
+  - [The Value Pipeline](#the-value-pipeline)
   - [Elements](#elements)
+  - [Typed Elements](#typed-elements)
   - [Filters](#filters)
+  - [Normalizers](#normalizers)
   - [Validators](#validators)
+  - [Casts](#casts)
   - [Using Forms in Controllers](#using-forms-in-controllers)
+  - [JSON Forms (Form\Json)](#json-forms-formjson)
   - [Rendering Forms in Views](#rendering-forms-in-views)
 
 ---
@@ -2362,7 +2367,7 @@ table, renaming your terminal window, or writing your clipboard via OSC 52.
 
 ## Forms
 
-The framework includes a form component system for building, validating, filtering, and rendering HTML forms. Forms are defined as PHP classes, used in controllers, and rendered in views via a helper.
+The framework includes a form component system for describing, validating and filtering input. A form is *logical* — it declares fields and their rules, not HTML: the same machinery backs an HTML page (rendered in views via a helper) and a JSON API endpoint (via [Form\Json](#json-forms-formjson)). Forms are defined as PHP classes and used in controllers.
 
 ### Creating a Form Component
 
@@ -2491,6 +2496,31 @@ class ExtendedSearchForm extends SearchForm
 }
 ```
 
+### The Value Pipeline
+
+A submitted value passes through up to four stages — each with one job, each optional:
+
+```
+raw value ─▶ type gate ─▶ filters ─▶ normalizers ─▶ validators ─▶ casts
+             (shape,       (clean,    (transform     (judge)       (storage
+              one error)    per item)   or reject)                   form)
+```
+
+- **Type gate** ([typed elements](#typed-elements)) — refuses a value of the wrong *shape* (a JSON array where text belongs) as a single field error, before anything else could trip over it.
+- **Filters** — cosmetic cleaning that cannot fail (`Trim`, `StripTags`). Applied *per item* when the value is an array — the HTML multi-input contract.
+- **Normalizers** — a whole-value transform that may *reject*: returning `null` fails the field with the normalizer's message, and the validators are skipped.
+- **Validators** — judge the (filtered, normalized) value without changing it. All of them run, so a field can report every rule it breaks.
+- **Casts** — post-validation transforms into the *storage form*, applied only by `getCastValue()`. The HTML accessors (`getValue()`, `getValues()`) never apply them.
+
+Rules of thumb — the transform:
+
+- cannot fail and works item by item → **filter**
+- needs the whole value, or can say "no" → **normalizer**
+- judges without transforming → **validator**
+- changes only what the database stores → **cast**
+
+A plain HTML form typically uses filters + validators and reads `getValue()` — the other stages only exist once you ask for them.
+
 ### Elements
 
 #### Element (default)
@@ -2565,9 +2595,38 @@ $file->type;      // MIME type (set by validator)
 $file->ext;       // Extension (set by validator)
 ```
 
+### Typed Elements
+
+HTML input is always a string (or an array of strings), so the base element accepts any shape. A JSON payload can carry anything — `{"title": ["an", "array"]}` where text belongs — so an element can declare its expected *type*. A value of the wrong shape then becomes a single, friendly field error instead of a warning (or a 500) somewhere downstream.
+
+Type an element the form's own way — on first access, in the same chain that configures it:
+
+```php
+$this->title->asText();
+
+$this->period
+    ->asNumber('must be a number of minutes')
+    ->addValidator(new Validator\Range(1, 10080, nullable: false));
+
+$this->active->asFlag();
+
+$this->origins->asCollection();
+```
+
+| Method | Gate (raw value must be) | Storage cast (`getCastValue()`) |
+|--------|--------------------------|---------------------------------|
+| `asText($message?)` | null or scalar | string (null stays null) |
+| `asNumber($message?)` | null, `''` or numeric | int\|float (`"15"` → `15`); null/`''` → null |
+| `asFlag()` | anything — no gate | truthy → `1`, else `0` |
+| `asCollection($message?)` | null or array | — none |
+
+- `null` always passes a gate: whether the field may be absent or empty is the *validators'* business (`NotEmpty`, `Range(nullable: false)`).
+- The optional `$message` replaces the default `'"%s" must be …'` gate error.
+- `Element\Text`, `Element\Number`, `Element\Flag` and `Element\Collection` are the same machinery spelled as classes, for explicit assignment: `$this->title = new Element\Text;`
+
 ### Filters
 
-Filters transform values before validation. They are applied in the order they are added.
+Filters transform values before validation. They are applied in the order they are added, and **per item** when the value is an array (each input of an HTML multi-input is filtered individually). A filter cannot reject a value — cleaning is its whole job.
 
 ```php
 $this->username
@@ -2591,9 +2650,27 @@ $this->username
 | `Shorten($length, $ending)` | Truncate string | `new Shorten(100, '...')` |
 | `Callback($fn)` | Custom filter function | `new Callback(fn($v) => strtolower($v))` |
 
+### Normalizers
+
+A normalizer is a whole-value *transform-or-reject* step. It runs after the filters, always receives the value **as a whole** (filters apply per item of an array value — exactly what a whole-list transform cannot live with), and its return value becomes the element's value. Returning `null` **rejects** the value: `isValid()` reports the normalizer's message as the field's single error, and the validators never see the rejected input.
+
+```php
+$this->js_origins
+    ->asCollection()
+    ->addNormalizer(
+        self::normalizeOrigins(...),   // lowercase, de-dupe, refuse a bad entry
+        'origins must look like https://example.com (no path)'
+    );
+```
+
+Use a normalizer when the transform needs the whole value or when it can fail; keep the logic in a `public static` method so the accepted forms can be unit-tested directly. Two conventions to know:
+
+- Because `null` means "reject", a normalizer on a clearable field maps "empty" to `''` — reserve `null` for refusal. For a field where `null` is itself a legal value, use validators instead.
+- Normalizers chain — each receives the previous one's output. The message follows the validator convention: `%s` becomes the element name.
+
 ### Validators
 
-Validators check values after filters have been applied. A form element can have multiple validators, all of which must pass. Validators that fail produce `Ovos\Form\Error` objects.
+Validators check values after filters and normalizers have been applied. A form element can have multiple validators, all of which must pass — and all of which run, so a field reports every rule it breaks, not just the first. Validators that fail produce `Ovos\Form\Error` objects.
 
 ```php
 $this->email
@@ -2623,6 +2700,15 @@ $validator->setMessage(
 $this->field->addValidator($validator);
 ```
 
+When one message should cover *every* error code of a validator — the common case for a JSON API, where the UI shows one message per field — use `withMessage()`, or the `message:` constructor argument that `Range`, `Length`, `InArray`, `Url` and `Callback` provide as a shorthand:
+
+```php
+$this->name->addValidator((new Validator\NotEmpty)->withMessage('name is required'));
+
+$this->period->addValidator(new Validator\Range(1, 10080,
+    nullable: false, message: 'must be between 1 and 10080 minutes'));
+```
+
 **Custom validator with element access:**
 
 Callback closures are bound to the validator instance, giving access to the element and the full form:
@@ -2638,6 +2724,20 @@ $this->birthdate->addValidator(
     )
 );
 ```
+
+### Casts
+
+A cast is a post-validation transform into the *storage form* — applied only by `getCastValue()` (and `Form\Json::getSentValues()`), after filters, normalizers and validators have all seen the untransformed value. The HTML accessors (`getValue()`, `getValues()`, `getInputValues()`) never apply casts, so a redisplayed form shows what the user typed.
+
+```php
+// "no installation" is stored as NULL, not 0
+$this->installation_id
+    ->asNumber()
+    ->addValidator(new Validator\Range(min: 0))
+    ->addCast(static fn (mixed $value): ?int => $value > 0 ? (int) $value : null);
+```
+
+Casts run after validation on purpose: a cast that de-duplicates a list, or collapses "all options selected" to `null`, would otherwise hide from the validators exactly what they need to judge (six entries with a typo must not collapse the typo away). Typed elements register their storage cast automatically — `asNumber()` stores `"15"` as `15` without any code.
 
 ### Using Forms in Controllers
 
@@ -2745,6 +2845,68 @@ $values = $form->getValues();
 $model->fromArray($values);
 $model->save();
 ```
+
+### JSON Forms (Form\Json)
+
+`Ovos\Form\Json` feeds a form from a decoded JSON request body instead of POST data, adding the semantics a JSON API needs. The important one is the difference between a field that was **sent** and one that was **absent**:
+
+- an **absent** field is skipped entirely — not validated, not returned. On an update, absent means "leave the stored value alone" (partial-save / PATCH semantics).
+- a **sent `null`** is a value like any other, and the field's rules judge it — `Range(nullable: false)` refuses it, a `Flag` stores it as `0`.
+
+A JSON form component looks like any other — it just leans on the later pipeline stages:
+
+```php
+use Ovos\Form\Json;
+use Ovos\Form\Validator;
+
+class MonitorForm extends Json
+{
+    public function init(): void
+    {
+        $this->name
+            ->asText('name is required')
+            ->addNormalizer(static fn (mixed $value): string
+                => mb_substr(trim((string) $value), 0, 190))
+            ->addValidator((new Validator\NotEmpty)->withMessage('name is required'));
+
+        $this->period_minutes
+            ->asNumber('must be between 1 and 10080 minutes')
+            ->addValidator(new Validator\Range(1, 10080,
+                nullable: false, message: 'must be between 1 and 10080 minutes'));
+
+        $this->active->asFlag();
+    }
+}
+```
+
+The controller workflow (see [`Ovos\Controller\Api`](#controllers) for the envelope helpers):
+
+```php
+$form = new MonitorForm;
+$form->setValues($body->all());                // the decoded JSON body
+
+// on CREATE, absent must not mean "skip" — treat these as explicitly sent
+$form->requireSent('name', 'period_minutes');
+
+if ($form->isValid() === false)
+{
+    return $this->unprocessable($form->getErrorMessages());
+}
+
+foreach ($form->getSentValues() as $field => $value)
+{
+    $monitor->$field = $value;                 // storage form: casts applied
+}
+```
+
+| Method | Purpose |
+|--------|---------|
+| `wasSent($id)` | whether the key was present in the payload — a sent `null` counts as sent |
+| `requireSent(...$ids)` | treat absent fields as explicitly sent `null`, so their rules run — for create endpoints |
+| `getSentValues()` | only the sent fields, casts applied — storage-ready columns |
+| `getErrorMessages()` | `field => first error message` — a 422 payload the UI can map onto its inputs |
+
+What belongs in the form is what each field *must be*; what stays in the controller is what a form cannot know — loading the row, uniqueness checks that need to know which row is asking, and the save itself.
 
 ### Rendering Forms in Views
 

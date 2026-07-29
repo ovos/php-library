@@ -1,3 +1,4 @@
 .env*
 /vendor/
+/application/logs/
 composer.lock

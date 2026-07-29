@@ -8,6 +8,8 @@ use Ovos\Form;
 
 use function count;
 use function is_array;
+use function is_numeric;
+use function is_scalar;
 use function sprintf;
 
 /**
@@ -54,6 +56,15 @@ class Element
 	 * @var callable[]
 	 */
 	protected array $casts = [];
+	
+	/**
+	 * The type gate — see asText()/asNumber()/asCollection(). Judges the RAW
+	 * value before filters, normalizers and validators run; a value of the
+	 * wrong shape is the field's single error.
+	 *
+	 * @var array{0: string, 1: string, 2: callable}|null [error code, message, conforms]
+	 */
+	protected ?array $gate = null;
 	
 	/**
 	 * @var Error[]
@@ -306,6 +317,100 @@ class Element
 		return $value;
 	}
 	
+	/**
+	 * Type the element as text: a non-scalar value (a JSON array or object
+	 * where a string belongs) is a single field error, and the storage form
+	 * (getCastValue()) is the string. NULL passes the gate — whether the
+	 * field may be absent or empty stays the business of the validators.
+	 *
+	 * The as*() family types the element the form's own way — on first
+	 * access, in the same chain that configures it:
+	 *
+	 *   $this->title->asText()->addValidator(new Validator\NotEmpty);
+	 *
+	 * The Element\Text|Number|Flag|Collection classes are the same thing
+	 * spelled as a class, for setElement().
+	 */
+	public function asText(
+		?string $message = null,
+	): static
+	{
+		$this->gate = [
+			'type_text',
+			$message ?? '"%s" must be text.',
+			static fn(mixed $value): bool => $value === null || is_scalar($value),
+		];
+		
+		return $this->addCast(static fn(mixed $value): ?string
+			=> $value === null ? null : (string)$value);
+	}
+	
+	/**
+	 * Type the element as a number: anything not numeric ("12abc") is a
+	 * single field error, never a silent (int) cast downstream. NULL and ''
+	 * pass the gate as "unset" (the notion Validator\Range uses) — pair with
+	 * Range(nullable: false) for a NOT NULL column. The storage form is the
+	 * actual int|float ("15" becomes 15); null and '' become null.
+	 */
+	public function asNumber(
+		?string $message = null,
+	): static
+	{
+		$this->gate = [
+			'type_number',
+			$message ?? '"%s" must be a number.',
+			static fn(mixed $value): bool
+				=> $value === null || $value === '' || is_numeric($value),
+		];
+		
+		return $this->addCast(static fn(mixed $value): null|int|float
+			=> $value === null || $value === '' ? null : $value + 0);
+	}
+	
+	/**
+	 * Type the element as an on/off switch. No gate and no rules: anything
+	 * truthy counts as on — a JSON true, an HTML checkbox's "on", a 1 — and
+	 * the storage form is 1/0, which is what a TINYINT column wants. A sent
+	 * null is off, so a NOT NULL column never meets a NULL.
+	 */
+	public function asFlag(): static
+	{
+		return $this->addCast(static fn(mixed $value): int => $value ? 1 : 0);
+	}
+	
+	/**
+	 * Type the element as a list: a scalar where an array belongs is a
+	 * single field error, before it could reach an array-shaped normalizer
+	 * or a JSON column. NULL passes the gate — for several list fields null
+	 * is itself a value ("no restriction"), and where it is not, the field's
+	 * normalizer or validators say so.
+	 *
+	 * Remember that FILTERS apply per item of an array value (the HTML
+	 * multi-input contract) — a whole-list transform belongs in a normalizer
+	 * or a cast, not a filter.
+	 */
+	public function asCollection(
+		?string $message = null,
+	): static
+	{
+		$this->gate = [
+			'type_collection',
+			$message ?? '"%s" must be a list.',
+			static fn(mixed $value): bool => $value === null || is_array($value),
+		];
+		
+		return $this;
+	}
+	
+	/**
+	 * Whether the raw value passes the type gate; true when no gate is set
+	 */
+	protected function conforms(): bool
+	{
+		return $this->gate === null
+			|| $this->gate[2]($this->getForm()->getRawValue($this->getId(withFormId: false)));
+	}
+	
 	public function addValidator(
 		Validator $validator,
 	): static
@@ -318,6 +423,18 @@ class Element
 	public function isValid(): bool
 	{
 		$this->errors = []; // reset errors
+		
+		// the type gate judges the RAW value — a wrong shape is this single
+		// field error, before a filter, normalizer or validator could trip
+		// over it
+		if($this->conforms() === false)
+		{
+			$this->addError(new Error($this->gate[0],
+				sprintf($this->gate[1], $this->getName())));
+			
+			return false;
+		}
+		
 		$value = $this->getUserValue();
 		
 		// a normalizer rejected the value — its message is the field's one
