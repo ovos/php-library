@@ -57,8 +57,13 @@ class Url extends Validator
 	 */
 	public function __construct(
 		protected array $schemes = ['https'],
+		?string $message = null,
 	)
 	{
+		if($message !== null)
+		{
+			$this->withMessage($message);
+		}
 	}
 	
 	public function isValid(

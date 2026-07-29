@@ -31,9 +31,15 @@ class Callback extends Validator
 	
 	public function __construct(
 		Closure $callback,
+		?string $message = null,
 	)
 	{
 		$this->setCallback($callback);
+		
+		if($message !== null)
+		{
+			$this->withMessage($message);
+		}
 	}
 	
 	public function setCallback(

@@ -56,8 +56,13 @@ class Range extends Validator
 		protected int|float|null $min = null,
 		protected int|float|null $max = null,
 		protected bool $nullable = true,
+		?string $message = null,
 	)
 	{
+		if($message !== null)
+		{
+			$this->withMessage($message);
+		}
 	}
 	
 	public function isValid(

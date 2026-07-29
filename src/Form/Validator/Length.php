@@ -44,8 +44,13 @@ class Length extends Validator
 	public function __construct(
 		protected ?int $min = null,
 		protected ?int $max = null,
+		?string $message = null,
 	)
 	{
+		if($message !== null)
+		{
+			$this->withMessage($message);
+		}
 	}
 	
 	public function isValid(

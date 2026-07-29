@@ -8,6 +8,7 @@ use Ovos\Form;
 
 use function count;
 use function is_array;
+use function sprintf;
 
 /**
  * Element
@@ -33,6 +34,26 @@ class Element
 	 * @var Filter[]
 	 */
 	protected array $filters = [];
+	
+	/**
+	 * Whole-value transform-or-reject steps — see addNormalizer()
+	 *
+	 * @var array{0: callable, 1: ?string}[]
+	 */
+	protected array $normalizers = [];
+	
+	/**
+	 * The message of the normalizer that rejected the current value;
+	 * null while the value passes
+	 */
+	protected ?string $normalizerError = null;
+	
+	/**
+	 * Post-validation transforms — see addCast()
+	 *
+	 * @var callable[]
+	 */
+	protected array $casts = [];
 	
 	/**
 	 * @var Error[]
@@ -140,6 +161,26 @@ class Element
 				$value = $this->filterValue($value);
 			}
 			
+			// normalizers run AFTER the filters and always on the value as a
+			// WHOLE — filters apply per item of an array value (the HTML
+			// multi-input contract), which is exactly what a whole-array
+			// normalizer cannot live with
+			$this->normalizerError = null;
+			foreach($this->normalizers as [$normalizer, $message])
+			{
+				$value = $normalizer($value);
+				
+				if($value === null)
+				{
+					$this->normalizerError = sprintf(
+						$message ?? '"%s" is not valid.',
+						$this->getName(),
+					);
+					
+					break;
+				}
+			}
+			
 			$this->value = $value;
 		}
 		
@@ -162,6 +203,7 @@ class Element
 	public function reset(): static
 	{
 		$this->value = null;
+		$this->normalizerError = null;
 		
 		return $this;
 	}
@@ -211,6 +253,59 @@ class Element
 		return $this;
 	}
 	
+	/**
+	 * A whole-value transform-or-reject step, for input a filter cannot
+	 * express: it runs AFTER the filters, always on the value as a whole
+	 * (filters apply per item of an array value — the HTML multi-input
+	 * contract), its return becomes the element's value, and returning NULL
+	 * rejects the value — isValid() then reports the message and skips the
+	 * validators, so a field carries one error, not a cascade.
+	 *
+	 * For a field where null is itself a legal value, use validators: a
+	 * normalizer is for fields whose null means "invalid". The message
+	 * follows the validator convention — %s becomes the element name.
+	 */
+	public function addNormalizer(
+		callable $normalizer,
+		?string $message = null,
+	): static
+	{
+		$this->normalizers[] = [$normalizer, $message];
+		
+		return $this;
+	}
+	
+	/**
+	 * A post-validation transform, applied by getCastValue() only — after
+	 * filters, normalizers and validators have all seen the untransformed
+	 * value. For the storage form ("0 stores as null", "the full set
+	 * collapses", "the flag becomes 1/0") where transforming earlier would
+	 * hide what validation needs to see.
+	 */
+	public function addCast(
+		callable $cast,
+	): static
+	{
+		$this->casts[] = $cast;
+		
+		return $this;
+	}
+	
+	/**
+	 * The value with the casts applied — the storage form
+	 */
+	public function getCastValue(): null|string|bool|int|float|array
+	{
+		$value = $this->getValue();
+		
+		foreach($this->casts as $cast)
+		{
+			$value = $cast($value);
+		}
+		
+		return $value;
+	}
+	
 	public function addValidator(
 		Validator $validator,
 	): static
@@ -224,6 +319,15 @@ class Element
 	{
 		$this->errors = []; // reset errors
 		$value = $this->getUserValue();
+		
+		// a normalizer rejected the value — its message is the field's one
+		// error, and the validators never see the rejected input
+		if($this->normalizerError !== null)
+		{
+			$this->addError(new Error('normalizer', $this->normalizerError));
+			
+			return false;
+		}
 		
 		$isValid = true;
 		

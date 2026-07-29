@@ -111,7 +111,10 @@ class Json extends Form
 			$id = $element->getId(withFormId: false);
 			if($this->wasSent($id))
 			{
-				$values[$id] = $element->getValue();
+				// the CAST value — the storage form. Casts run only here,
+				// after validation saw the uncast value; the HTML accessors
+				// (getValues/getInputValues) stay cast-free.
+				$values[$id] = $element->getCastValue();
 			}
 		}
 		
