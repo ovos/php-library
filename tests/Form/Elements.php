@@ -196,6 +196,40 @@ class Elements extends Test
 		return $scalarFails && $nullPasses;
 	}
 	
+	/**
+	 * The form's own idiom, kept: an element is created on FIRST ACCESS and
+	 * typed in the same chain that configures it — no class, no setElement().
+	 * The Element\* classes are the same machinery spelled as classes.
+	 */
+	public function aFieldIsTypedOnFirstAccess(): bool
+	{
+		$form = new Json;
+		$form->period->asNumber('must be a number');
+		$form->setValues(['period' => '12abc']);
+		$junk = $form->isValid() === false
+			&& $form->getErrorMessages()['period'] === 'must be a number';
+		
+		$form = new Json;
+		$form->period->asNumber();
+		$form->active->asFlag();
+		$form->types->asCollection();
+		$form->title->asText();
+		$form->setValues([
+			'period' => '15',
+			'active' => true,
+			'types' => null,
+			'title' => 7,
+		]);
+		$values = $form->getSentValues();
+		$typed = $form->isValid()
+			&& $values['period'] === 15
+			&& $values['active'] === 1
+			&& $values['types'] === null
+			&& $values['title'] === '7';
+		
+		return $junk && $typed;
+	}
+	
 	/** withMessage covers every code; the ctor message param is the same thing */
 	public function oneMessageCoversEveryErrorCode(): bool
 	{

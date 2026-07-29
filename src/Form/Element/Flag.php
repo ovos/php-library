@@ -6,12 +6,9 @@ namespace Ovos\Form\Element;
 use Ovos\Form\Element;
 
 /**
- * An on/off switch.
- *
- * No gate and no rules: anything truthy counts as on — a JSON true, an
- * HTML checkbox's "on", a 1 — and the storage form is 1/0, which is what
- * a TINYINT column wants. A sent null is off, so a NOT NULL column never
- * meets a NULL.
+ * An on/off switch — the class spelling of Element::asFlag(), for
+ * setElement(). See asFlag() for the contract: anything truthy counts as
+ * on, the storage form is 1/0, a sent null is off.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -19,6 +16,6 @@ class Flag extends Element
 {
 	public function __construct()
 	{
-		$this->addCast(static fn(mixed $value): int => $value ? 1 : 0);
+		$this->asFlag();
 	}
 }
