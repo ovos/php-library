@@ -148,6 +148,41 @@ class Json extends Test
 	}
 	
 	/**
+	 * On a CREATE, absent cannot mean "keep the stored value" — there is
+	 * nothing stored. requireSent() turns an absent field into an explicit
+	 * null, so the declared validators produce a proper field error instead
+	 * of the save dying on a NOT NULL column.
+	 */
+	public function requireSentMakesAbsentFieldsFail(): bool
+	{
+		$form = $this->form(['retention_days' => 30]);
+		$form->requireSent('name', 'retention_days');
+		$valid = $form->isValid();
+		$errors = $form->getErrorMessages();
+		
+		return $valid === false
+			// absent name became null -> NotEmpty speaks
+			&& isset($errors['name'])
+			// retention WAS sent — requireSent must not disturb it
+			&& isset($errors['retention_days']) === false
+			&& $form->getSentValues()['retention_days'] === 30;
+	}
+	
+	/** a non-nullable Range refuses the explicit null a NOT NULL column
+		could never hold — with a field error, not a database error */
+	public function aNonNullableRangeRefusesAnExplicitNull(): bool
+	{
+		$form = new Subject;
+		$form->period_minutes
+			->setLabel('period')
+			->addValidator(new Validator\Range(1, 10080, nullable: false));
+		$form->setValues(['period_minutes' => null]);
+		
+		return $form->isValid() === false
+			&& isset($form->getErrorMessages()['period_minutes']);
+	}
+	
+	/**
 	 * The skip is FORM-level, not element-level, so every element type gets
 	 * JSON semantics — the plain Element and any specialised subclass a
 	 * project attaches with setElement(). An element-local override would

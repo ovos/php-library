@@ -64,6 +64,32 @@ class Json extends Form
 	}
 	
 	/**
+	 * Treat these fields as sent even when they are not — for a CREATE, where
+	 * "absent" cannot mean "keep the stored value" because there is nothing
+	 * stored to keep.
+	 *
+	 * An absent id becomes an explicit null, so the element's own validators
+	 * produce the proper field error (NotEmpty says "name cannot be empty",
+	 * a non-nullable Range says what the bounds are) instead of the save
+	 * dying on a NOT NULL column. The caller applies this only on create;
+	 * the form cannot know a create from an update.
+	 */
+	public function requireSent(
+		string ...$ids,
+	): static
+	{
+		foreach($ids as $id)
+		{
+			if($this->wasSent($id) === false)
+			{
+				$this->setValue($id, null);
+			}
+		}
+		
+		return $this;
+	}
+	
+	/**
 	 * Only the fields the caller actually sent, filtered and validated.
 	 *
 	 * getInputValues() answers for EVERY declared element (defaults included),
