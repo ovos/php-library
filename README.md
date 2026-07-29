@@ -2621,7 +2621,7 @@ $this->origins->asCollection();
 | `asCollection($message?)` | null or array | — none |
 
 - `null` always passes a gate: whether the field may be absent or empty is the *validators'* business (`NotEmpty`, `Range(nullable: false)`).
-- The optional `$message` replaces the default `'"%s" must be …'` gate error.
+- The gate **is** a validator — `Validator\Text`, `Validator\Number` or `Validator\Collection`, also usable standalone — applied to the *raw* value, and failing it suppresses everything else so the field carries one error. Reach it via `getGate()`; the optional `$message` is a shorthand for `getGate()->withMessage(…)`.
 - `Element\Text`, `Element\Number`, `Element\Flag` and `Element\Collection` are the same machinery spelled as classes, for explicit assignment: `$this->title = new Element\Text;`
 
 ### Filters
@@ -2663,10 +2663,11 @@ $this->js_origins
     );
 ```
 
-Use a normalizer when the transform needs the whole value or when it can fail; keep the logic in a `public static` method so the accepted forms can be unit-tested directly. Two conventions to know:
+Use a normalizer when the transform needs the whole value or when it can fail; keep the logic in a `public static` method so the accepted forms can be unit-tested directly. Conventions to know:
 
 - Because `null` means "reject", a normalizer on a clearable field maps "empty" to `''` — reserve `null` for refusal. For a field where `null` is itself a legal value, use validators instead.
 - Normalizers chain — each receives the previous one's output. The message follows the validator convention: `%s` becomes the element name.
+- `Ovos\Form\Normalizer` completes the class family alongside `Filter` and `Validator`: `addNormalizer()` accepts a plain callable — wrapped in `Normalizer\Callback` — or a `Normalizer` instance; subclass it for reusable rules. The message lives on the instance (`setMessage()`), defaulting to `'"%s" is not valid.'`.
 
 ### Validators
 
@@ -2709,6 +2710,36 @@ $this->period->addValidator(new Validator\Range(1, 10080,
     nullable: false, message: 'must be between 1 and 10080 minutes'));
 ```
 
+**Overwriting the messages:**
+
+No translator runs inside the form machinery, and every message is a plain English default that lives on its *rule* — the validators' `$messages`, the type gate's (a validator too), the normalizer's own — each behind the same public `setMessage()`/`withMessage()` API. A project overwrites any of them from outside, per form — with a different wording, or a translation. The natural places are the form component itself and the application's form plugin (whose `_()` literals gettext extracts like any application source):
+
+```php
+// validators: per error code, or one message for every code
+$validator->setMessage(Validator\NotEmpty::ERROR_EMPTY,
+    $this->_('"{0}" cannot be empty.', $label));
+$this->period->addValidator((new Validator\Range(1, 10080, nullable: false))
+    ->withMessage('must be between 1 and 10080 minutes'));
+
+// the type gate is a validator — same API, via getGate()
+$this->period->asNumber()->getGate()->withMessage($this->_('"%s" must be a number.'));
+
+// a normalizer owns its message
+$normalizer->setMessage(Normalizer::ERROR_NORMALIZER, $this->_('"%s" is not valid.'));
+```
+
+The `as*()`, `addNormalizer()` and validator `message:` parameters accept the final text directly, so a component that owns a field's wording just passes it there. And after validation, an application plugin can still rewrite any error by its code — the classic `handleErrors()` pattern:
+
+```php
+else if ($error->getCode() === Validator\Number::ERROR_NUMBER) // 'type_number'
+{
+    $error->setMessage($this->_('"{0}" must be a number.',
+        $error->getElement()->getLabel()));
+}
+```
+
+Gate errors carry their validator like any other error; only a normalizer rejection does not — a plugin must not call `getValidator()` on an error whose code is `Normalizer::ERROR_NORMALIZER`. A normalizer's own message (the `addNormalizer()` parameter) is authored in the form component to begin with.
+
 **Custom validator with element access:**
 
 Callback closures are bound to the validator instance, giving access to the element and the full form:
@@ -2727,7 +2758,7 @@ $this->birthdate->addValidator(
 
 ### Casts
 
-A cast is a post-validation transform into the *storage form* — applied only by `getCastValue()` (and `Form\Json::getSentValues()`), after filters, normalizers and validators have all seen the untransformed value. The HTML accessors (`getValue()`, `getValues()`, `getInputValues()`) never apply casts, so a redisplayed form shows what the user typed.
+A cast is a post-validation transform into the *storage form* — applied only by `getCastValue()` (and `Form\Json::getPresentValues()`), after filters, normalizers and validators have all seen the untransformed value. The HTML accessors (`getValue()`, `getValues()`, `getInputValues()`) never apply casts, so a redisplayed form shows what the user typed.
 
 ```php
 // "no installation" is stored as NULL, not 0
@@ -2848,10 +2879,12 @@ $model->save();
 
 ### JSON Forms (Form\Json)
 
-`Ovos\Form\Json` feeds a form from a decoded JSON request body instead of POST data, adding the semantics a JSON API needs. The important one is the difference between a field that was **sent** and one that was **absent**:
+`Ovos\Form\Json` is for forms fed with plain data — a decoded JSON request body, a database row — instead of an HTML submission. The difference the class exists for is what **absence** means: a browser posts every field of the form it rendered, so an absent field is itself an instruction (an unchecked required checkbox must fail its `NotEmpty` — which is why this cannot be the base behavior). Data names only the fields it carries, so there:
 
 - an **absent** field is skipped entirely — not validated, not returned. On an update, absent means "leave the stored value alone" (partial-save / PATCH semantics).
-- a **sent `null`** is a value like any other, and the field's rules judge it — `Range(nullable: false)` refuses it, a `Flag` stores it as `0`.
+- a **present `null`** is a value like any other, and the field's rules judge it — `Range(nullable: false)` refuses it, a `Flag` stores it as `0`.
+
+The presence *API* itself lives on `Ovos\Form` — any form can be asked what its fed data mentions — while `Form\Json` changes exactly one thing: `isValid()` skips absent fields.
 
 A JSON form component looks like any other — it just leans on the later pipeline stages:
 
@@ -2885,25 +2918,25 @@ The controller workflow (see [`Ovos\Controller\Api`](#controllers) for the envel
 $form = new MonitorForm;
 $form->setValues($body->all());                // the decoded JSON body
 
-// on CREATE, absent must not mean "skip" — treat these as explicitly sent
-$form->requireSent('name', 'period_minutes');
+// on CREATE, absent must not mean "skip" — treat these as explicitly present
+$form->requireValues('name', 'period_minutes');
 
 if ($form->isValid() === false)
 {
     return $this->unprocessable($form->getErrorMessages());
 }
 
-foreach ($form->getSentValues() as $field => $value)
+foreach ($form->getPresentValues() as $field => $value)
 {
     $monitor->$field = $value;                 // storage form: casts applied
 }
 ```
 
-| Method | Purpose |
+| Method (on `Ovos\Form`) | Purpose |
 |--------|---------|
-| `wasSent($id)` | whether the key was present in the payload — a sent `null` counts as sent |
-| `requireSent(...$ids)` | treat absent fields as explicitly sent `null`, so their rules run — for create endpoints |
-| `getSentValues()` | only the sent fields, casts applied — storage-ready columns |
+| `hasValue($id)` | whether the key exists in the fed values at all — an explicit `null` counts as present |
+| `requireValues(...$ids)` | treat absent fields as explicitly present `null`, so their rules run — for create endpoints |
+| `getPresentValues()` | only the present fields, casts applied — storage-ready columns |
 | `getErrorMessages()` | `field => first error message` — a 422 payload the UI can map onto its inputs |
 
 What belongs in the form is what each field *must be*; what stays in the controller is what a form cannot know — loading the row, uniqueness checks that need to know which row is asking, and the save itself.

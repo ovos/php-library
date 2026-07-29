@@ -42,7 +42,7 @@ class Elements extends Test
 		
 		return $form->isValid()
 			&& $seen === ['https://a.test', 'https://b.test']
-			&& $form->getSentValues()['origins'] === ['normalized'];
+			&& $form->getPresentValues()['origins'] === ['normalized'];
 	}
 	
 	/** a null return rejects, with the message, and validators are skipped */
@@ -80,7 +80,7 @@ class Elements extends Test
 		$form->setValues(['name' => 'x']);
 		
 		return $form->isValid()
-			&& $form->getSentValues()['name'] === 'X-ONE';
+			&& $form->getPresentValues()['name'] === 'X-ONE';
 	}
 	
 	/** filters still run first (trim before the normalizer judges) */
@@ -94,11 +94,11 @@ class Elements extends Test
 		$form->setValues(['slug' => '  clean  ']);
 		
 		return $form->isValid()
-			&& $form->getSentValues()['slug'] === 'accepted';
+			&& $form->getPresentValues()['slug'] === 'accepted';
 	}
 	
 	/**
-	 * Casts run only in getCastValue()/getSentValues() — validation sees the
+	 * Casts run only in getCastValue()/getPresentValues() — validation sees the
 	 * UNCAST value, and the HTML accessors never apply them at all.
 	 */
 	public function castsAreForTheStorageFormOnly(): bool
@@ -119,7 +119,7 @@ class Elements extends Test
 		$form->isValid();
 		
 		return $sawInValidator === '0'                       // validators: uncast
-			&& $form->getSentValues()['installation_id'] === null // storage: cast
+			&& $form->getPresentValues()['installation_id'] === null // storage: cast
 			&& $form->getValues()['installation_id'] === '0';     // HTML path: uncast
 	}
 	
@@ -129,7 +129,7 @@ class Elements extends Test
 		$form = new Json;
 		$form->setElement('title', new Element\Text);
 		$form->setValues(['title' => 5]);
-		$intPasses = $form->isValid() && $form->getSentValues()['title'] === '5';
+		$intPasses = $form->isValid() && $form->getPresentValues()['title'] === '5';
 		
 		$form = new Json;
 		$form->setElement('title', new Element\Text);
@@ -148,7 +148,7 @@ class Elements extends Test
 		$form = new Json;
 		$form->setElement('period', new Element\Number);
 		$form->setValues(['period' => '15']);
-		$numeric = $form->isValid() && $form->getSentValues()['period'] === 15;
+		$numeric = $form->isValid() && $form->getPresentValues()['period'] === 15;
 		
 		$form = new Json;
 		$form->setElement('period', new Element\Number);
@@ -159,7 +159,7 @@ class Elements extends Test
 		$form = new Json;
 		$form->setElement('period', new Element\Number);
 		$form->setValues(['period' => null]);
-		$unset = $form->isValid() && $form->getSentValues()['period'] === null;
+		$unset = $form->isValid() && $form->getPresentValues()['period'] === null;
 		
 		return $numeric && $junk && $unset;
 	}
@@ -173,7 +173,7 @@ class Elements extends Test
 		$form->setElement('off', new Element\Flag);
 		$form->setValues(['active' => true, 'enabled' => null, 'off' => false]);
 		
-		$values = $form->getSentValues();
+		$values = $form->getPresentValues();
 		
 		return $form->isValid()
 			&& $values === ['active' => 1, 'enabled' => 0, 'off' => 0];
@@ -220,7 +220,7 @@ class Elements extends Test
 			'types' => null,
 			'title' => 7,
 		]);
-		$values = $form->getSentValues();
+		$values = $form->getPresentValues();
 		$typed = $form->isValid()
 			&& $values['period'] === 15
 			&& $values['active'] === 1
