@@ -56,8 +56,13 @@ class InArray extends Validator
 	public function __construct(
 		protected array $allowed,
 		protected bool $strict = true,
+		?string $message = null,
 	)
 	{
+		if($message !== null)
+		{
+			$this->withMessage($message);
+		}
 	}
 	
 	public function isValid(
