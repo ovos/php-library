@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Form\Validator;
 
 use Ovos\Form\Error;
-use Ovos\Form\Validator;
 
 use function is_array;
 use function sprintf;
@@ -18,7 +17,7 @@ use function sprintf;
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Collection extends Validator
+class Collection extends Gate
 {
 	// Errors
 	public const string ERROR_COLLECTION = 'type_collection';
@@ -31,11 +30,18 @@ class Collection extends Validator
 		self::ERROR_COLLECTION => '"%s" must be a list.',
 	];
 	
+	public function conforms(
+		mixed $value,
+	): bool
+	{
+		return $value === null || is_array($value);
+	}
+	
 	public function isValid(
 		mixed $value,
 	): bool
 	{
-		if($value === null || is_array($value))
+		if($this->conforms($value))
 		{
 			return true;
 		}

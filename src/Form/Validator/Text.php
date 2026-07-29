@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Form\Validator;
 
 use Ovos\Form\Error;
-use Ovos\Form\Validator;
 
 use function is_scalar;
 use function sprintf;
@@ -17,7 +16,7 @@ use function sprintf;
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Text extends Validator
+class Text extends Gate
 {
 	// Errors
 	public const string ERROR_TEXT = 'type_text';
@@ -30,11 +29,18 @@ class Text extends Validator
 		self::ERROR_TEXT => '"%s" must be text.',
 	];
 	
+	public function conforms(
+		mixed $value,
+	): bool
+	{
+		return $value === null || is_scalar($value);
+	}
+	
 	public function isValid(
 		mixed $value,
 	): bool
 	{
-		if($value === null || is_scalar($value))
+		if($this->conforms($value))
 		{
 			return true;
 		}

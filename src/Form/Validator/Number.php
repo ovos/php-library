@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Form\Validator;
 
 use Ovos\Form\Error;
-use Ovos\Form\Validator;
 
 use function is_numeric;
 use function sprintf;
@@ -18,7 +17,7 @@ use function sprintf;
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Number extends Validator
+class Number extends Gate
 {
 	// Errors
 	public const string ERROR_NUMBER = 'type_number';
@@ -31,11 +30,18 @@ class Number extends Validator
 		self::ERROR_NUMBER => '"%s" must be a number.',
 	];
 	
+	public function conforms(
+		mixed $value,
+	): bool
+	{
+		return $value === null || $value === '' || is_numeric($value);
+	}
+	
 	public function isValid(
 		mixed $value,
 	): bool
 	{
-		if($value === null || $value === '' || is_numeric($value))
+		if($this->conforms($value))
 		{
 			return true;
 		}

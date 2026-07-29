@@ -330,4 +330,26 @@ class Validators extends Test
 		return $refused === false
 			&& $message === 'dynamically refused';
 	}
+	
+	/**
+	 * The gate validators are ordinary validators too - attachable via
+	 * addValidator() wherever a shape must hold, no typed element involved
+	 */
+	public function gateValidatorsWorkStandalone(): bool
+	{
+		$number = new Validator\Number;
+		$this->element($number);
+		$rejects = $number->isValid('12abc') === false
+			&& $number->getErrors() !== []
+			&& $number->isValid('1.5');
+		
+		$conforms = (new Validator\Text)->conforms('plain')
+			&& (new Validator\Text)->conforms(null)
+			&& (new Validator\Text)->conforms(['a']) === false
+			&& (new Validator\Collection)->conforms(['a'])
+			&& (new Validator\Collection)->conforms('scalar') === false
+			&& (new Validator\Number)->conforms('');
+		
+		return $rejects && $conforms;
+	}
 }

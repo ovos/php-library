@@ -200,4 +200,16 @@ class Json extends Test
 		return $form->isValid() === true
 			&& $form->getErrorMessages() === [];
 	}
+	
+	/** requireValues() puts absent fields on the table, present ones untouched */
+	public function requireValuesLeavesPresentValuesAlone(): bool
+	{
+		$form = new Subject;
+		$form->name;
+		$form->role;
+		$form->setValues(['name' => 'x']);
+		$form->requireValues('name', 'role');
+		
+		return $form->getPresentValues() === ['name' => 'x', 'role' => null];
+	}
 }

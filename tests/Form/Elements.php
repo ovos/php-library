@@ -6,11 +6,14 @@ namespace Tests\Form;
 use Ovos\Form\Element;
 use Ovos\Form\Filter;
 use Ovos\Form\Json;
+use Ovos\Form\Normalizer;
 use Ovos\Form\Validator;
 use Ovos\Test;
 
 use function count;
 use function is_array;
+use function is_string;
+use function strtolower;
 use function strtoupper;
 
 /**
@@ -228,6 +231,134 @@ class Elements extends Test
 			&& $values['title'] === '7';
 		
 		return $junk && $typed;
+	}
+	
+	/**
+	 * A value the gate refuses has no usable value: getValue() answers null
+	 * WITHOUT running the filters or normalizers — they are written assuming
+	 * the gate protected them, and a controller reading a failed field must
+	 * not trip a warning that validation already reported as a clean field
+	 * error.
+	 */
+	public function aGateRefusedValueNeverReachesTheNormalizers(): bool
+	{
+		$normalizerRan = false;
+		$form = new Json;
+		$form->period->asNumber();
+		$form->period->addNormalizer(function(mixed $value) use (&$normalizerRan): mixed
+		{
+			$normalizerRan = true;
+			
+			return $value;
+		});
+		$form->setValues(['period' => ['an', 'array']]);
+		
+		return $form->isValid() === false
+			&& $form->getErrorMessages()['period'] === '"period" must be a number.'
+			&& $form->period->getValue() === null
+			&& $normalizerRan === false;
+	}
+	
+	/** every gate guards its element's reads the same way */
+	public function everyGateRefusalReadsAsNull(): bool
+	{
+		$form = new Json;
+		$form->title->asText();
+		$form->types->asCollection();
+		$form->setValues(['title' => ['a'], 'types' => 'scalar']);
+		$form->isValid();
+		
+		return $form->title->getValue() === null
+			&& $form->title->getInputValue() === null
+			&& $form->types->getValue() === null;
+	}
+	
+	/**
+	 * The whole pipeline, in its documented order: filters clean, normalizers
+	 * judge the whole value, validators see the uncast result, casts produce
+	 * the storage form last - each stage exactly once per value.
+	 */
+	public function thePipelineRunsInOrder(): bool
+	{
+		$order = [];
+		$form = new Json;
+		$form->field
+			->addFilter(new Filter\Callback(function(mixed $value) use (&$order): mixed
+			{
+				$order[] = 'filter';
+				
+				return $value;
+			}))
+			->addNormalizer(function(mixed $value) use (&$order): mixed
+			{
+				$order[] = 'normalizer';
+				
+				return $value;
+			})
+			->addValidator(new Validator\Callback(function(mixed $value) use (&$order): bool
+			{
+				$order[] = 'validator';
+				
+				return true;
+			}))
+			->addCast(function(mixed $value) use (&$order): mixed
+			{
+				$order[] = 'cast';
+				
+				return $value;
+			});
+		$form->setValues(['field' => 'x']);
+		$form->isValid();
+		$form->getPresentValues();
+		
+		return $order === ['filter', 'normalizer', 'validator', 'cast'];
+	}
+	
+	/** casts chain - the typed element's storage cast first, then addCast() */
+	public function castsChainInOrder(): bool
+	{
+		$form = new Json;
+		$form->installation
+			->asNumber()
+			->addCast(static fn(mixed $value): mixed => $value > 0 ? $value : null);
+		$form->setValues(['installation' => '0']);
+		$form->isValid();
+		
+		return $form->getPresentValues()['installation'] === null
+			&& $form->getValues()['installation'] === '0';
+	}
+	
+	/** the number gate passes floats and stores them as floats */
+	public function numberStoresFloats(): bool
+	{
+		$form = new Json;
+		$form->ratio->asNumber();
+		$form->setValues(['ratio' => '1.5']);
+		
+		return $form->isValid()
+			&& $form->getPresentValues()['ratio'] === 1.5;
+	}
+	
+	/** a reusable Normalizer subclass plugs in like the callable form */
+	public function aNormalizerSubclassPlugsIn(): bool
+	{
+		$normalizer = new class extends Normalizer
+		{
+			public function normalize(
+				mixed $value,
+			): mixed
+			{
+				return is_string($value) ? strtolower($value) : null;
+			}
+		};
+		
+		$form = new Json;
+		$form->slug->addNormalizer($normalizer);
+		$form->setValues(['slug' => 'MiXeD']);
+		
+		return $form->isValid()
+			&& $form->getPresentValues()['slug'] === 'mixed'
+			&& $form->slug->getNormalizers() === [$normalizer];
 	}
 	
 	/** withMessage covers every code; the ctor message param is the same thing */

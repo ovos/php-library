@@ -19,7 +19,7 @@ class EmailAddress extends Validator
 {
 	// Errors
 	public const string ERROR_INVALID = 'email_invalid';
-
+	
 	/**
 	 * @var string[]
 	 */
