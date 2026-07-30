@@ -288,9 +288,10 @@ class Controller
 	
 	/**
 	 * The dispatch lifecycle by NAME — never an action, whoever declares it.
-	 * An override moves a hook's declaring class off the base, so the
-	 * namespace rule in resolveActionMethod() cannot see one; these three
-	 * names are the dispatch contract itself — fixed, not a list that grows.
+	 * An APPLICATION override moves a hook's declaring class out of the
+	 * framework, so the family rule in resolveActionMethod() cannot see one;
+	 * these three names are the dispatch contract itself — fixed, not a list
+	 * that grows.
 	 */
 	protected const array HOOKS = ['dispatch', 'preDispatch', 'postDispatch'];
 	
@@ -310,13 +311,17 @@ class Controller
 	 *    dispatch/<action> re-entered the dispatcher and ran <action> while
 	 *    the request still reported "dispatch" as its action — the string
 	 *    authorization plugins look up. Every list-based admin or demo guard
-	 *    was bypassable that way. The exclusion covers the whole Ovos\
-	 *    namespace, not just this class: Controller\Cli declares ten public
-	 *    plumbing methods of its own, and its preDispatch OVERRIDE had moved
-	 *    that hook's declaring class off the base — quietly re-exposing it on
-	 *    every CLI controller. No framework class contributes actions; the
-	 *    whole public surface is plumbing. (Module controllers live in the
-	 *    application namespace and are untouched.)
+	 *    was bypassable that way. The exclusion covers the whole Controller
+	 *    FAMILY (this class and Controller\*), not just this class:
+	 *    Controller\Cli declares ten public plumbing methods of its own, and
+	 *    its preDispatch OVERRIDE had moved that hook's declaring class off
+	 *    the base — quietly re-exposing it on every CLI controller. No
+	 *    framework controller base contributes actions; the whole public
+	 *    surface is plumbing. The family is also exactly as far as the rule
+	 *    CAN see: only controllers dispatch, and single inheritance pins
+	 *    every ancestor of a dispatched class to this family — so the rule
+	 *    claims no more than its callers guarantee. (Module controllers live
+	 *    in the application namespace and are untouched.)
 	 *
 	 * 3. NEVER THE HOOKS. dispatch/preDispatch/postDispatch are refused by
 	 *    NAME, whoever declares them — an application override is dispatch
@@ -339,11 +344,13 @@ class Controller
 		}
 		
 		$reflection = new ReflectionMethod($controllerClass, $method);
+		$declaring = $reflection->getDeclaringClass()->getName();
 		
 		if($reflection->isPublic() === false
 			|| $reflection->isStatic()
 			|| in_array($reflection->getName(), self::HOOKS, true)
-			|| str_starts_with($reflection->getDeclaringClass()->getName(), __NAMESPACE__ . '\\'))
+			|| $declaring === self::class
+			|| str_starts_with($declaring, self::class . '\\'))
 		{
 			return null;
 		}
