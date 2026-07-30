@@ -126,8 +126,9 @@ class Router extends Test
 	 * Controller\Cli both DECLARES public plumbing of its own (log, getPid,
 	 * the http-access surface) and OVERRIDES preDispatch — which used to move
 	 * the hook's declaring class off the base and quietly re-expose it as an
-	 * action on every CLI controller. The exclusion covers the whole Ovos\
-	 * namespace now: no framework class contributes actions.
+	 * action on every CLI controller. The exclusion covers the whole
+	 * Controller family now: no framework controller base contributes
+	 * actions.
 	 */
 	public function frameworkDeclaredPlumbingNeverResolves(): bool
 	{
