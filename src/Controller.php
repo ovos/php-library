@@ -16,6 +16,7 @@ use function class_exists;
 use function count;
 use function in_array;
 use function method_exists;
+use function str_starts_with;
 use function strpos;
 use function substr;
 
@@ -286,8 +287,13 @@ class Controller
 	}
 	
 	/**
-	 * Name of the class without \Controllers\ namespace
+	 * The dispatch lifecycle by NAME — never an action, whoever declares it.
+	 * An override moves a hook's declaring class off the base, so the
+	 * namespace rule in resolveActionMethod() cannot see one; these three
+	 * names are the dispatch contract itself — fixed, not a list that grows.
 	 */
+	protected const array HOOKS = ['dispatch', 'preDispatch', 'postDispatch'];
+	
 	/**
 	 * The canonical method name for a URL action, or null when the segment
 	 * must not dispatch.
@@ -300,12 +306,22 @@ class Controller
 	 *    every controller was therefore a URL-addressable endpoint, and a
 	 *    codebase that avoids `private` (house style) has nothing but those.
 	 *
-	 * 2. NOT DECLARED HERE. dispatch() is public, so /<controller>/dispatch/
-	 *    <action> re-entered the dispatcher and ran <action> while the request
-	 *    still reported "dispatch" as its action — the string authorization
-	 *    plugins look up. Every list-based admin or demo guard was bypassable
-	 *    that way. Nothing on this base class is an action; the whole public
-	 *    surface here is plumbing.
+	 * 2. NOT FRAMEWORK-DECLARED. dispatch() is public, so /<controller>/
+	 *    dispatch/<action> re-entered the dispatcher and ran <action> while
+	 *    the request still reported "dispatch" as its action — the string
+	 *    authorization plugins look up. Every list-based admin or demo guard
+	 *    was bypassable that way. The exclusion covers the whole Ovos\
+	 *    namespace, not just this class: Controller\Cli declares ten public
+	 *    plumbing methods of its own, and its preDispatch OVERRIDE had moved
+	 *    that hook's declaring class off the base — quietly re-exposing it on
+	 *    every CLI controller. No framework class contributes actions; the
+	 *    whole public surface is plumbing. (Module controllers live in the
+	 *    application namespace and are untouched.)
+	 *
+	 * 3. NEVER THE HOOKS. dispatch/preDispatch/postDispatch are refused by
+	 *    NAME, whoever declares them — an application override is dispatch
+	 *    machinery all the same. Compared on the reflected name, which is the
+	 *    declared spelling, so a lowercase probe cannot slip past.
 	 *
 	 * The returned name is the DECLARED spelling. PHP dispatches methods
 	 * case-insensitively while guard maps compare strings, so /errors/deletE
@@ -326,7 +342,8 @@ class Controller
 		
 		if($reflection->isPublic() === false
 			|| $reflection->isStatic()
-			|| $reflection->getDeclaringClass()->getName() === self::class)
+			|| in_array($reflection->getName(), self::HOOKS, true)
+			|| str_starts_with($reflection->getDeclaringClass()->getName(), __NAMESPACE__ . '\\'))
 		{
 			return null;
 		}

@@ -86,7 +86,7 @@ class Router extends Test
 			&& Controller::resolveActionMethod(RouterTestController::class, 'nope')
 				=== null;
 	}
-
+	
 	/**
 	 * dispatch() is public, so /<controller>/dispatch/<action> re-entered the
 	 * dispatcher and ran <action> while the request still reported "dispatch"
@@ -104,10 +104,10 @@ class Router extends Test
 				return false;
 			}
 		}
-
+		
 		return true;
 	}
-
+	
 	/**
 	 * PHP calls methods case-insensitively while guard maps compare strings,
 	 * so /errors/deletE reached delete() past a map listing "delete". The
@@ -119,6 +119,45 @@ class Router extends Test
 		return Controller::resolveActionMethod(RouterTestController::class, 'TEST')
 				=== 'test'
 			&& Controller::resolveActionMethod(RouterTestController::class, 'tESt')
+				=== 'test';
+	}
+	
+	/**
+	 * Controller\Cli both DECLARES public plumbing of its own (log, getPid,
+	 * the http-access surface) and OVERRIDES preDispatch — which used to move
+	 * the hook's declaring class off the base and quietly re-expose it as an
+	 * action on every CLI controller. The exclusion covers the whole Ovos\
+	 * namespace now: no framework class contributes actions.
+	 */
+	public function frameworkDeclaredPlumbingNeverResolves(): bool
+	{
+		foreach(['preDispatch', 'log', 'getPid', 'setAllowHttpAccess',
+			'getMemoryUsageMb', 'usesColor'] as $method)
+		{
+			if(Controller::resolveActionMethod(RouterTestCliController::class, $method) !== null)
+			{
+				return false;
+			}
+		}
+		
+		// the controller's own actions still resolve — the rule refuses the
+		// framework's surface, not the class
+		return Controller::resolveActionMethod(RouterTestCliController::class, 'work')
+			=== 'work';
+	}
+	
+	/**
+	 * The hooks are refused by NAME, whoever declares them — an application
+	 * override is dispatch machinery all the same. Compared on the reflected
+	 * name (the declared spelling), so a lowercase probe cannot slip past.
+	 */
+	public function hooksNeverResolveWhoeverDeclaresThem(): bool
+	{
+		return Controller::resolveActionMethod(RouterTestHookController::class, 'preDispatch')
+				=== null
+			&& Controller::resolveActionMethod(RouterTestHookController::class, 'predispatch')
+				=== null
+			&& Controller::resolveActionMethod(RouterTestHookController::class, 'test')
 				=== 'test';
 	}
 }
@@ -139,6 +178,27 @@ class RouterTestController extends Controller
 	
 	/** not an action — reachable as one before resolveActionMethod() */
 	protected function helper(): void
+	{
+	}
+}
+
+class RouterTestCliController extends Controller\Cli
+{
+	public function work(): void
+	{
+	}
+}
+
+class RouterTestHookController extends Controller
+{
+	/** an application-level hook override — still never an action */
+	public function preDispatch(
+		array $actionParams,
+	): void
+	{
+	}
+	
+	public function test(): void
 	{
 	}
 }
