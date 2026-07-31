@@ -117,6 +117,72 @@ class Client extends Test
 	}
 
 	/**
+	 * NOTHING guarantees a $_SERVER key is present. REQUEST_SCHEME is absent on
+	 * PHP's built-in server, on php-fpm behind an nginx that does not pass it,
+	 * on every CLI run — and, per the method's own docblock, behind a TLS
+	 * offloading load balancer, which is the case it was written for.
+	 *
+	 * Read unguarded it raised "Undefined array key", and an application that
+	 * promotes warnings to exceptions turned that into a failed request. It
+	 * surfaced inside the shutdown handler, where the second error buries the
+	 * first.
+	 */
+	public function anAbsentSchemeIsPlainHttpNotAWarning(): bool
+	{
+		return $this->protocol([]) === Subject::PROTOCOL_HTTP;
+	}
+	
+	public function directTlsIsRecognised(): bool
+	{
+		return $this->protocol(['REQUEST_SCHEME' => 'https']) === Subject::PROTOCOL_HTTPS
+			&& $this->protocol(['REQUEST_SCHEME' => 'http']) === Subject::PROTOCOL_HTTP;
+	}
+	
+	/** the offloading case: the forwarded header is the only evidence there is */
+	public function offloadedTlsIsRecognisedFromTheForwardedHeader(): bool
+	{
+		return $this->protocol(['HTTP_X_FORWARDED_PROTO' => 'https']) === Subject::PROTOCOL_HTTPS
+			&& $this->protocol(['REQUEST_SCHEME' => 'http',
+				'HTTP_X_FORWARDED_PROTO' => 'https']) === Subject::PROTOCOL_HTTPS;
+	}
+	
+	/**
+	 * reset() has to clear the memoized protocol as well — it did not, so the
+	 * first request a worker served decided the scheme for every one after it
+	 */
+	public function resetClearsTheMemoizedProtocol(): bool
+	{
+		$first = $this->protocol(['REQUEST_SCHEME' => 'https']);
+		$second = $this->protocol(['REQUEST_SCHEME' => 'http']);
+	
+		return $first === Subject::PROTOCOL_HTTPS && $second === Subject::PROTOCOL_HTTP;
+	}
+	
+	/**
+	 * @param array<string, string> $server
+	 */
+	protected function protocol(
+		array $server,
+	): string
+	{
+		Subject::reset();
+	
+		unset($_SERVER['REQUEST_SCHEME'], $_SERVER['HTTP_X_FORWARDED_PROTO']);
+	
+		foreach($server as $key => $value)
+		{
+			$_SERVER[$key] = $value;
+		}
+	
+		$protocol = Subject::getProtocol();
+	
+		unset($_SERVER['REQUEST_SCHEME'], $_SERVER['HTTP_X_FORWARDED_PROTO']);
+		Subject::reset();
+	
+		return $protocol;
+	}
+	
+	/**
 	 * @param array<string, string> $server
 	 * @param string[] $proxies
 	 */

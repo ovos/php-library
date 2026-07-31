@@ -343,7 +343,7 @@ class Application
 		// check from second bootstrap
 		while($bootstrap = $iterator->current())
 		{
-			if(str_starts_with($_SERVER['REQUEST_URI'], 
+			if(str_starts_with((string)($_SERVER['REQUEST_URI'] ?? ''),
 				$systemConfig->path . $bootstrap->path))
 			{
 				$this->setBoostrap($bootstrap);
@@ -427,7 +427,7 @@ class Application
 		// compare SERVER_NAME against a list of domains in config and set the matching one
 		while($current = $iterator->current())
 		{
-			if(str_contains($_SERVER['SERVER_NAME'], $current)) // in theory str_starts_with should be sufficient,
+			if(str_contains((string)($_SERVER['SERVER_NAME'] ?? ''), $current)) // in theory str_starts_with should be sufficient,
 			// but we allow the case of misconfigured domains (e.g. www.domain.com instead of domain.com)
 			{
 				$this->setDomain($current);
