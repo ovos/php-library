@@ -120,7 +120,7 @@ class Url
 			
 			if(app()->isInterfaceHttp())
 			{
-				$uri = $_SERVER['REQUEST_URI'];
+				$uri = (string)($_SERVER['REQUEST_URI'] ?? '');
 				$source = parse_url($uri, PHP_URL_PATH);
 				if($source === null // example: "//app.config.json"
 					|| $source === false // malformed URL
@@ -137,7 +137,9 @@ class Url
 			}
 			else if(app()->isInterfaceCli())
 			{
-				$components = $_SERVER['argv'];
+				// argv is absent when register_argc_argv is off — a CLI run
+				// with no arguments is the right reading of that, not a warning
+				$components = (array)($_SERVER['argv'] ?? []);
 				array_shift($components); // remove filename
 			}
 		}

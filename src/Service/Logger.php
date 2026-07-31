@@ -216,7 +216,9 @@ class Logger extends Service implements Writer
 			$prepend.= sprintf
 			(
 				"%s: %s\n%s %s",
-				$_SERVER['REQUEST_METHOD'],
+				// the neighbours were guarded already; this one was why a log
+				// line about an error could raise a second error
+				$_SERVER['REQUEST_METHOD'] ?? '',
 				$_SERVER['REQUEST_URI'] ?? '',
 				Client::getIp(),
 				$_SERVER['HTTP_USER_AGENT'] ?? ''

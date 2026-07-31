@@ -97,9 +97,13 @@ class Redirect extends Response
 			$url = SYSTEM_HOST . $url;
 		}
 		
-		if($this->withQueryString && $_SERVER['QUERY_STRING'] !== '')
+		// QUERY_STRING is absent, not empty, on a request without one —
+		// PHP's built-in server never sets it, and neither does a CLI
+		// run that happens to build a URL
+		$query = (string)($_SERVER['QUERY_STRING'] ?? '');
+		if($this->withQueryString && $query !== '')
 		{
-			$url.= '?' . $_SERVER['QUERY_STRING']; 
+			$url.= '?' . $query;
 		}
 		
 		return $url;
