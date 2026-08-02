@@ -390,6 +390,19 @@ class Logger extends Service implements Writer
 	}
 	
 	/**
+	 * A path segment ending in one of these is a static asset, not a
+	 * credential — see looksSecret().
+	 *
+	 * Build output and media only. `pdf`, `zip`, `csv`, `xlsx`, `json`, `xml`
+	 * and friends are deliberately absent: a signed one-time download link ends
+	 * in one of those, and none of them is ever emitted by a bundler.
+	 */
+	protected const string ASSET_PATTERN = '~\.(?:js|mjs|cjs|jsx|ts|tsx|css|scss|less|map|wasm'
+		. '|woff2?|ttf|otf|eot'
+		. '|svg|png|jpe?g|gif|webp|avif|ico|bmp'
+		. '|mp3|mp4|webm|ogg|wav)$~i';
+	
+	/**
 	 * A path segment is a secret, not a slug, when it has no word structure and
 	 * carries the character mix a generated token does: a JWT, a uuid, a long
 	 * hex string, or one long run of mixed case with digits. A slug is words
@@ -400,16 +413,31 @@ class Logger extends Service implements Writer
 	 * with ovos/console's own Scrubber and its browser and node clients — none
 	 * of which can share code with this — so keep them equal; the console repo
 	 * carries the corpus that pins all of them.
+	 *
+	 * A cache-busted STATIC ASSET is the exception, and not an ambiguous one.
+	 * Every bundler names its output after a content hash — main.<md5>.js,
+	 * index-DkL9mQxZ8vB2nR4tY7wA.js, <group>_<md5>.<mtime>.js — and each trips
+	 * a rule below on its 32-character or mixed-case run. Nothing was protected
+	 * by redacting them: the file was fetched over a plain, uncredentialed
+	 * request. It cost `file`, the field a JS error is read from.
 	 */
 	public function looksSecret(
 		string $segment,
 	): bool
 	{
+		// before the asset rule: a uuid and a bare hex run hold no dot, so only
+		// a JWT could end in something that reads like an extension, and a JWT
+		// stays a JWT
 		if(preg_match('~^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$~', $segment) === 1
 			|| preg_match('~^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$~i', $segment) === 1
 			|| preg_match('~^[0-9a-f]{24,}$~i', $segment) === 1)
 		{
 			return true;
+		}
+		
+		if(preg_match(self::ASSET_PATTERN, $segment) === 1)
+		{
+			return false;
 		}
 		
 		if(strlen($segment) < 24)
