@@ -218,6 +218,38 @@ class Logger extends Test
 	}
 	
 	/**
+	 * The same rule read a content hash as a token, which is what every build
+	 * tool names its output after. A JS error names the file it came from, and
+	 * one site stored 273 reports whose file was ".../[redacted]?group=true" —
+	 * unable to say which bundle threw. Nothing was protected: the browser had
+	 * fetched the file over a plain, uncredentialed request.
+	 */
+	public function leavesHashedAssetFilenamesIntact(): bool
+	{
+		$logger = new Subject;
+		
+		foreach([
+			// <group>_<md5>.<mtime>.js — a CMS group bundle
+			'/base_bf6051fdf10449dbde8945baf61cdf14.1785056998.js',
+			// webpack contenthash, and its source map
+			'/static/main.9f8e7d6c5b4a39281706f5e4d3c2b1a0.js.map',
+			// vite, which trips the mixed-case clause instead
+			'/assets/index-DkL9mQxZ8vB2nR4tY7wA.js',
+			'/fonts/fa-solid-900.d0b8e0c6f4a2b1937c5d8e2f.woff2',
+		] as $url)
+		{
+			if($logger->removeFromUrl($url) !== $url)
+			{
+				return false;
+			}
+		}
+		
+		// and the line holds: an extension is not an escape hatch
+		return $logger->removeFromUrl('/files/Ab3Cd4Ef5Gh6Ij7Kl8Mn9Op0Qr1St2.pdf')
+			=== '/files/[redacted]';
+	}
+	
+	/**
 	 * ?key= is where reset tokens actually travel (WordPress: wp-login.php?
 	 * action=rp&key=<20 chars>&login=<user>) and api[_-]?key never matched it.
 	 * Only as a query NAME — as a field name `key` is a cache key half the time.
