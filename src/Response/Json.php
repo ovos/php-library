@@ -6,7 +6,7 @@ namespace Ovos\Response;
 use Ovos\Response;
 use Ovos\Exception;
 use Override;
-use Ovos\Service\Events;
+use Ovos\Logger\Traits\LogsEvents;
 use stdClass;
 
 use function Ovos\services;
@@ -26,6 +26,8 @@ use	function count;
  */
 class Json extends Response
 {
+	use LogsEvents;
+	
 	/**
 	 * Object of data
 	 */
@@ -137,7 +139,7 @@ class Json extends Response
 		
 		return $this;
 	}
-
+	
 	/**
 	 * Mark response as failure
 	 */
@@ -160,8 +162,7 @@ class Json extends Response
 			
 			if($silent === false)
 			{
-				$this->container->get(Events::SYMBOL)
-					->log($exception);
+				$this->logEvent($exception);
 			}
 		}
 		
