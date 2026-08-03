@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Console;
 
+use Ovos\Exception\Priority;
+
 use function array_filter;
 use function array_is_list;
 use function array_values;

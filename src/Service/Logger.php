@@ -165,6 +165,8 @@ class Logger extends Service implements Writer
 	 * Logs an event (message/error/exception) to the file. Direct callers get
 	 * file-only logging; forwarding to the error console lives in the Events
 	 * fan-out (Events::log delivers to this writer and the console Writer).
+	 * An optional leading syslog priority selects the severity of a logged
+	 * message; a plain string logs as NOTICE (see Normalizer).
 	 */
 	public function log(
 		...$event,

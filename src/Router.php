@@ -6,12 +6,12 @@ namespace Ovos;
 use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException\FileNotFoundException;
 use Ovos\Exception\NotFoundException;
+use Ovos\Exception\Priority;
 use Ovos\Route\Article;
 use Ovos\Route\ArticleBinder;
 use Ovos\Route\Resolver;
 use Ovos\Route\Resolution;
 use Ovos\Service\Cache;
-use Ovos\Service\Console\Priority;
 use ReflectionMethod;
 use SplFileInfo;
 

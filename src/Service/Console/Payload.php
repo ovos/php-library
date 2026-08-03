@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service\Console;
 
 use Ovos\Exception\HasPriority;
+use Ovos\Exception\Priority;
 use ErrorException;
 use Throwable;
 
