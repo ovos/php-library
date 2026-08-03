@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Console;
 
+use Ovos\Exception\Priority;
 use Throwable;
 
 use function array_merge;

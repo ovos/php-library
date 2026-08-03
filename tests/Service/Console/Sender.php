@@ -6,7 +6,7 @@ namespace Tests\Service\Console;
 use Exception;
 use Ovos\ArrayObject;
 use Ovos\Exception\NotFoundException;
-use Ovos\Service\Console\Priority;
+use Ovos\Exception\Priority;
 use Ovos\Service\Console\Sender as ConsoleSender;
 use Ovos\Test;
 use Throwable;

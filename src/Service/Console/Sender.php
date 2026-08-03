@@ -8,6 +8,7 @@ use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException;
+use Ovos\Exception\Priority;
 use Ovos\Http\Trace;
 use Ovos\Service;
 use Ovos\Service\Events;
