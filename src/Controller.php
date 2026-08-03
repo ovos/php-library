@@ -4,8 +4,9 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Controller\Plugin;
+use Ovos\Exception\Priority;
 use Ovos\Exception\RuntimeException;
-use Ovos\Service\Events;
+use Ovos\Logger\Traits\LogsEvents;
 use ReflectionMethod;
 use Throwable;
 
@@ -27,6 +28,7 @@ use function substr;
  */
 class Controller
 {
+	use LogsEvents;
 	use Translatable;
 	
 	public const string NAMESPACE = 'Controllers\\';
@@ -589,14 +591,10 @@ class Controller
 	{
 		try
 		{
-			if($this->container->isRegistered(Events::SYMBOL))
-			{
-				$this->container
-					->get(Events::SYMBOL)
-					->log('Unknown method/plugin "%s" called on %s (returned null — typo?)',
-						$symbol,
-						static::class);
-			}
+			$this->logEvent('Unknown method/plugin "%s" called on %s (returned null — typo?)',
+				$symbol,
+				static::class,
+				priority: Priority::WARNING);
 		}
 		catch(Throwable)
 		{

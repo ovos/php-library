@@ -8,7 +8,6 @@ use Ovos\Exception;
 use Ovos\Http\Body;
 use Ovos\Http\Input;
 use Ovos\Response\Json;
-use Ovos\Service\Events;
 use Throwable;
 
 /**
@@ -107,11 +106,9 @@ class Api extends Controller
 		?Throwable $cause = null,
 	): Json
 	{
-		if($cause !== null && $this->container->isRegistered(Events::SYMBOL))
+		if($cause !== null)
 		{
-			$this->container
-				->get(Events::SYMBOL)
-				->log($cause);
+			$this->logEvent($cause);
 		}
 		
 		return (new Json)
@@ -134,11 +131,9 @@ class Api extends Controller
 		?Throwable $cause = null,
 	): Json
 	{
-		if($cause !== null && $this->container->isRegistered(Events::SYMBOL))
+		if($cause !== null)
 		{
-			$this->container
-				->get(Events::SYMBOL)
-				->log($cause);
+			$this->logEvent($cause);
 		}
 		
 		return (new Json)
