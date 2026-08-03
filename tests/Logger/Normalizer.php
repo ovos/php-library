@@ -34,15 +34,35 @@ class Normalizer extends Test
 			&& $throwable->getPriority() === Priority::NOTICE;
 	}
 	
-	public function leadingPrioritySetsTheMessagePriority(): bool
+	public function namedPrioritySetsTheMessagePriority(): bool
 	{
-		[$plain] = LoggerNormalizer::normalize([Priority::WARNING, 'disk almost full']);
-		[$formatted] = LoggerNormalizer::normalize([Priority::ERROR, 'mail to %s failed', 'x@y']);
+		// log('disk almost full', priority: Priority::WARNING) — the variadic
+		// collects the named argument under its string key
+		[$plain] = LoggerNormalizer::normalize(['disk almost full', 'priority' => Priority::WARNING]);
+		[$formatted] = LoggerNormalizer::normalize(['mail to %s failed', 'x@y', 'priority' => Priority::ERROR]);
 		
 		return $plain->getMessage() === 'disk almost full'
 			&& $plain->getPriority() === Priority::WARNING
 			&& $formatted->getMessage() === 'mail to x@y failed'
 			&& $formatted->getPriority() === Priority::ERROR;
+	}
+	
+	public function integerSprintfArgumentsAreNotAPriority(): bool
+	{
+		// the reason the priority is a NAMED argument: a trailing positional
+		// integer is indistinguishable from a %d value
+		[$throwable] = LoggerNormalizer::normalize(['found %d errors', 3]);
+		
+		return $throwable->getMessage() === 'found 3 errors'
+			&& $throwable->getPriority() === Priority::NOTICE;
+	}
+	
+	public function nonIntegerPriorityIsIgnored(): bool
+	{
+		[$throwable] = LoggerNormalizer::normalize(['deploy done', 'priority' => 'high']);
+		
+		return $throwable->getMessage() === 'deploy done'
+			&& $throwable->getPriority() === Priority::NOTICE;
 	}
 	
 	public function throwablePassesThroughWithExtras(): bool
@@ -55,10 +75,10 @@ class Normalizer extends Test
 			&& $withExtras === [$event, ['orderId' => 7]];
 	}
 	
-	public function leadingPriorityStampsAnOvosThrowable(): bool
+	public function namedPriorityStampsAnOvosThrowable(): bool
 	{
 		$event = new OvosException('slow response');
-		[$throwable] = LoggerNormalizer::normalize([Priority::INFO, $event]);
+		[$throwable] = LoggerNormalizer::normalize([$event, 'priority' => Priority::INFO]);
 		
 		return $throwable === $event
 			&& $event->getPriority() === Priority::INFO;
@@ -70,13 +90,13 @@ class Normalizer extends Test
 		// Payload::priorityFor keeps deciding from its type
 		$event = new RuntimeException('boom');
 		
-		return LoggerNormalizer::normalize([Priority::INFO, $event]) === [$event, []];
+		return LoggerNormalizer::normalize([$event, 'priority' => Priority::INFO]) === [$event, []];
 	}
 	
 	public function nothingToLogIsNull(): bool
 	{
 		return LoggerNormalizer::normalize([]) === null
-			&& LoggerNormalizer::normalize([Priority::NOTICE]) === null;
+			&& LoggerNormalizer::normalize(['priority' => Priority::NOTICE]) === null;
 	}
 	
 	public function nonThrowableFallbackStaysAnError(): bool
