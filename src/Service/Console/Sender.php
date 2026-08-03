@@ -31,6 +31,7 @@ use function substr;
 
 use const CURLOPT_CONNECTTIMEOUT_MS;
 use const CURLOPT_HTTPHEADER;
+use const CURLOPT_NOSIGNAL;
 use const CURLOPT_POST;
 use const CURLOPT_POSTFIELDS;
 use const CURLOPT_RETURNTRANSFER;
@@ -597,6 +598,13 @@ class Sender extends Service
 			CURLOPT_POSTFIELDS => $json,
 			CURLOPT_HTTPHEADER => $headers,
 			CURLOPT_RETURNTRANSFER => true,
+			// a libcurl without the threaded resolver times sub-second
+			// timeouts via SIGALRM, which cannot do sub-second at all — it
+			// refuses with errno 28 BEFORE even resolving, losing every
+			// batch. NOSIGNAL switches to poll-based timing, where the
+			// 300ms connect bound works; only the DNS phase itself is then
+			// bounded by the system resolver instead of this option.
+			CURLOPT_NOSIGNAL => true,
 			CURLOPT_CONNECTTIMEOUT_MS => 300,
 			CURLOPT_TIMEOUT_MS => (int)($this->config->timeout_ms ?? 1000),
 		]);
