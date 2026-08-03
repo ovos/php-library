@@ -7,7 +7,6 @@ use Ovos\Exception;
 use Ovos\Exception\Priority;
 use Throwable;
 
-use function array_shift;
 use function count;
 use function is_int;
 use function is_string;
@@ -16,14 +15,21 @@ use function sprintf;
 /**
  * Normalizes the variadic Logger/Events log() arguments to a single
  * (Throwable, extras) pair every Writer can consume:
- *   - log('message')                     → Exception('message') at NOTICE, []
- *   - log('fmt %s', $arg, …)             → Exception(sprintf(...)) at NOTICE, []
- *   - log(Priority::WARNING, 'msg', …)   → the message form at the given priority
- *   - log($throwable)                    → $throwable, []
- *   - log($throwable, ['key' => 'val'])  → $throwable, ['key' => 'val']
- *   - log(Priority::INFO, $throwable)    → $throwable stamped via withPriority()
+ *   - log('message')                    → Exception('message') at NOTICE, []
+ *   - log('fmt %s', $arg, …)            → Exception(sprintf(...)) at NOTICE, []
+ *   - log('msg', priority: Priority::WARNING)
+ *                                       → the message form at the given priority
+ *   - log($throwable)                   → $throwable, []
+ *   - log($throwable, ['key' => 'val']) → $throwable, ['key' => 'val']
+ *   - log($throwable, priority: Priority::INFO)
+ *                                       → $throwable stamped via withPriority()
  *     when it is an Ovos\Exception; a foreign throwable keeps its type-based
  *     mapping (see Payload::priorityFor) — set the priority at the throw site
+ *
+ * The named argument survives log()'s variadic because PHP collects unknown
+ * named arguments under their string key; it is plucked here before sprintf
+ * sees the positional list. A trailing POSITIONAL priority could never work:
+ * sprintf arguments are allowed to be integers themselves.
  *
  * A logged string is an operational note, not a failure — hence NOTICE, the
  * lowest severity the console sender ships under its default log_level gate.
@@ -40,12 +46,13 @@ final class Normalizer
 		array $event,
 	): ?array
 	{
-		// an optional leading syslog priority (Priority::*)
-		$priority = null;
-		if($event !== [] && is_int($event[0]))
+		// the optional named priority — log(…, priority: Priority::WARNING)
+		$priority = $event['priority'] ?? null;
+		if(is_int($priority) === false)
 		{
-			$priority = array_shift($event);
+			$priority = null;
 		}
+		unset($event['priority']);
 		
 		$count = count($event);
 		if($count === 0)

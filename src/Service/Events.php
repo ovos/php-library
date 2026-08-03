@@ -101,8 +101,8 @@ class Events
 	 * registered, the console Writer. Each writer is isolated so one failure
 	 * neither blocks the others nor re-enters the log path (which would recurse).
 	 *
-	 * An optional leading syslog priority selects the severity of a logged
-	 * message — log(Priority::WARNING, 'disk almost full on %s', $host); a
+	 * The named priority argument selects the severity of a logged message —
+	 * log('disk almost full on %s', $host, priority: Priority::WARNING); a
 	 * plain string logs as NOTICE (see Normalizer for the full contract).
 	 */
 	public function log(
