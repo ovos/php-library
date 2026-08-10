@@ -14,6 +14,7 @@ use Ovos\Service;
 use Ovos\Service\Events;
 use Ovos\Service\Session;
 use Ovos\Service\Logger;
+use ErrorException;
 use SplObjectStorage;
 use Throwable;
 
@@ -27,6 +28,7 @@ use function defined;
 use function json_encode;
 use function mb_substr;
 use function rtrim;
+use function str_starts_with;
 use function strpos;
 use function substr;
 
@@ -253,6 +255,31 @@ class Sender extends Service
 	}
 	
 	/**
+	 * Whether the throwable records an access event — request noise caused by
+	 * the client, not an application error. A routing miss (unknown
+	 * controller/action) counts when the app opted into 404 reporting; covers
+	 * the Events-service merge (where framework 404s arrive) and an explicit
+	 * NotFoundException capture alike. A request-startup refusal — PHP dropping
+	 * a malformed multipart body before any userland code ran, the signature of
+	 * upload-exploit scanners — always counts: the application never had a say,
+	 * so it must not be blamed. PHP emits the "PHP Request Startup: " prefix
+	 * only for errors raised during that phase; handleShutdown() delivers them
+	 * here as the ErrorException built from error_get_last().
+	 */
+	protected function isAccessEvent(
+		?Throwable $throwable,
+	): bool
+	{
+		if($throwable instanceof NotFoundException)
+		{
+			return $this->reports404();
+		}
+		
+		return $throwable instanceof ErrorException
+			&& str_starts_with($throwable->getMessage(), 'PHP Request Startup: ');
+	}
+	
+	/**
 	 * A type=404 payload (INFO priority). With a throwable its own message is
 	 * preserved — the router's subtype detail ("File not found: …", a controller
 	 * miss) — instead of being flattened; without one the request path becomes
@@ -291,7 +318,7 @@ class Sender extends Service
 			
 			$message = '404 Not Found: ' . $path;
 		}
-
+		
 		$payload = Payload::fromMessage(
 			mb_substr($message, 0, 512),
 			Priority::INFO,
@@ -329,15 +356,10 @@ class Sender extends Service
 			return;
 		}
 		
-		// a routing miss (unknown controller/action) is an access event, not an
-		// application error — report it as a type=404 when the app opts in; covers
-		// the Events-service merge (where framework 404s arrive) and an explicit
-		// NotFoundException capture alike.
-		//
 		// build the payload BEFORE marking the event as seen: if construction
 		// throws, a pre-marked event would count as already queued for the
 		// rest of the request and never get another chance
-		$payload = $throwable instanceof NotFoundException && $this->reports404()
+		$payload = $this->isAccessEvent($throwable)
 			? $this->payload404('', [], $throwable)
 			: $event->toPayload();
 		

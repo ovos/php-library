@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Service\Console;
 
+use ErrorException;
 use Exception;
 use Ovos\ArrayObject;
 use Ovos\Exception\NotFoundException;
@@ -14,6 +15,8 @@ use WeakReference;
 
 use function count;
 use function gc_collect_cycles;
+
+use const E_WARNING;
 
 /**
  * Sender — capture-side queue semantics (no HTTP: the test double
@@ -169,6 +172,52 @@ class Sender extends Test
 		// a normal exception payload: no 404 type override, error priority
 		return ($payload['type'] ?? null) === null
 			&& ($payload['priority'] ?? null) === Priority::ERROR;
+	}
+	
+	/**
+	 * PHP refusing a request body during startup (a malformed multipart POST
+	 * from an upload-exploit scanner) reaches the merge as the ErrorException
+	 * handleShutdown() builds from error_get_last(). The application never had
+	 * a say — access noise like a router 404, NOT gated by the report_404
+	 * opt-in (which exists because a routing miss can be a real broken link).
+	 */
+	public function requestStartupRefusalIsAccessNoiseEvenWithout404Optin(): bool
+	{
+		$sender = $this->makeSender(report404: false);
+		
+		$message = 'PHP Request Startup: Missing boundary in multipart/form-data POST data';
+		$sender->mergeEvent(new ErrorException($message,
+			0,
+			E_WARNING,
+			'Unknown',
+			0,
+		));
+		$payload = $sender->lastPayload();
+		
+		return ($payload['type'] ?? null) === '404'
+			&& ($payload['priority'] ?? null) === Priority::INFO
+			&& ($payload['message'] ?? '') === $message;
+	}
+	
+	/**
+	 * Guard against overbroad matching: only the "PHP Request Startup: "
+	 * prefix marks a warning as client-caused — an ordinary runtime warning
+	 * keeps its place in the error band.
+	 */
+	public function ordinaryWarningStaysInTheErrorBand(): bool
+	{
+		$sender = $this->makeSender(report404: false);
+		
+		$sender->mergeEvent(new ErrorException('Undefined array key "boundary"',
+			0,
+			E_WARNING,
+			'/app/src/Upload.php',
+			42,
+		));
+		$payload = $sender->lastPayload();
+		
+		return ($payload['type'] ?? null) === null
+			&& ($payload['priority'] ?? null) === Priority::WARNING;
 	}
 	
 	/**
