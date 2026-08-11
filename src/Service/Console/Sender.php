@@ -24,7 +24,6 @@ use function count;
 use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
-use function defined;
 use function json_encode;
 use function mb_substr;
 use function rtrim;
@@ -39,6 +38,7 @@ use const CURLOPT_POST;
 use const CURLOPT_POSTFIELDS;
 use const CURLOPT_RETURNTRANSFER;
 use const CURLOPT_TIMEOUT_MS;
+use const DIRECTORY_SEPARATOR;
 use const JSON_INVALID_UTF8_SUBSTITUTE;
 use const JSON_PARTIAL_OUTPUT_ON_ERROR;
 
@@ -510,7 +510,10 @@ class Sender extends Service
 		$isCli = $this->app->isInterfaceCli();
 		
 		$context = [
-			'dir' => defined('BASE_DIR') ? rtrim(BASE_DIR, '/\\') : '',
+			// dir is a TAG on the console side — the rtrim keeps the value
+			// separator-free at the end so every sender agrees on one form;
+			// BASE_DIR itself always ends with DIRECTORY_SEPARATOR
+			'dir' => rtrim(BASE_DIR, DIRECTORY_SEPARATOR),
 			// correlates every error of this request/run in the console —
 			// across services when an inbound traceparent is propagated
 			'traceId' => Trace::id(),
