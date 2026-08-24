@@ -260,6 +260,25 @@ class Session extends Service
 	}
 	
 	/**
+	 * Whether this request HAS a session — one already started during the
+	 * request, or one the request presented in its cookie — answered
+	 * WITHOUT creating anything. Every data accessor starts the session as
+	 * a side effect (that convenience is the point of the lazy store), so
+	 * "is someone logged in?" asked via get() MINTS a session, a Set-Cookie
+	 * and a storage entry for every anonymous visitor and every scanner
+	 * probe. Guard such reads with this first; writes need no guard —
+	 * needing to store something is the legitimate reason to start.
+	 *
+	 * A presented id is taken at its word (no storage I/O): an expired
+	 * session still answers true, and the follow-up read simply starts a
+	 * fresh one — the normal lifecycle for a returning visitor.
+	 */
+	public function exists(): bool
+	{
+		return $this->started || $this->getCookieId() !== null;
+	}
+	
+	/**
 	 * The session id the REQUEST presented in its cookie, whether or
 	 * not a session ever started - no I/O, no side effects, no cookie
 	 * minting; null on the CLI and for cookie-less visitors. Made for
