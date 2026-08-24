@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Tests\Service\Console;
 
 use Ovos\ArrayObject;
+use Ovos\Controller;
 use Ovos\Request;
 use Ovos\Service\Console\Rollup as ConsoleRollup;
 use Ovos\Test;
@@ -68,6 +69,42 @@ class Rollup extends Test
 		$request->setAction('setup-config.php');
 		
 		return ConsoleRollup::routeOf($request) === '__unmatched';
+	}
+	
+	/**
+	 * A 404 answer forces __unmatched even when the route LOOKS resolved:
+	 * the error-page forward that renders the 404 marks the request with
+	 * the error route's own controller/action, so without the status
+	 * override every router miss — the exact traffic __unmatched exists to
+	 * count — would report as a legitimate route. Any other status trusts
+	 * the resolved route.
+	 */
+	public function aFourOhFourIsUnmatchedWhateverTheRouteClaims(): bool
+	{
+		// constructing a controller points the SHARED request at it — put
+		// the runner's own controller back before anything else can notice
+		$shared = $this->app->getRequest();
+		$running = $shared->getControllerInstance();
+		
+		$controller = new class extends Controller
+		{
+			public function index(): void
+			{
+			}
+		};
+		
+		$shared->setControllerInstance($running);
+		
+		$request = new Request;
+		$request->setControllerInstance($controller);
+		$request->setController('index');
+		$request->setAction('index');
+		
+		return ConsoleRollup::routeOf($request) === '/index/index'
+			&& ConsoleRollup::routeFor(404, $request) === '__unmatched'
+			&& ConsoleRollup::routeFor(200, $request) === '/index/index'
+			// a CLI-ish false status trusts the route too — only 404 overrides
+			&& ConsoleRollup::routeFor(false, $request) === '/index/index';
 	}
 	
 	/**

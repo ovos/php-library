@@ -8,7 +8,7 @@ use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Controller;
 use Ovos\Request;
-use Ovos\Service\Session;
+use Ovos\Service\Auth;
 use Throwable;
 
 use function apcu_add;
@@ -165,16 +165,32 @@ class Rollup
 		}
 		
 		$minute = intdiv(time(), 60);
+		$status = http_response_code();
 		
 		$this->count(
 			$minute,
-			http_response_code(),
+			$status,
 			(string)($_SERVER['REQUEST_METHOD'] ?? ''),
-			self::routeOf($app->getRequest()),
+			self::routeFor($status, $app->getRequest()),
 			$this->isAuthed($app),
 		);
 		
 		$this->maybeFlush($minute);
+	}
+	
+	/**
+	 * A request answered 404 matched nothing this app serves, whatever the
+	 * request object claims: the error-page forward that RENDERS the 404
+	 * marks the request with the error route's own controller/action, which
+	 * would disguise every router miss — the exact traffic __unmatched
+	 * exists to count — as a legitimate route.
+	 */
+	public static function routeFor(
+		int|false $status,
+		Request $request,
+	): string
+	{
+		return $status === 404 ? '__unmatched' : self::routeOf($request);
 	}
 	
 	/**
@@ -313,7 +329,7 @@ class Rollup
 		int|false $status,
 		string $method,
 		string $route,
-		bool $authed,
+		?bool $authed,
 	): void
 	{
 		$fields = ['requests'];
@@ -329,7 +345,13 @@ class Rollup
 		}
 		
 		$fields[] = 'r:' . $route;
-		$fields[] = 'a:' . ($authed ? 'yes' : 'no');
+		
+		// null = the app cannot answer the question; no dimension at all is
+		// better than a wrong split
+		if($authed !== null)
+		{
+			$fields[] = 'a:' . ($authed ? 'yes' : 'no');
+		}
 		
 		$ok = false;
 		foreach($fields as $field)
@@ -475,23 +497,26 @@ class Rollup
 	}
 	
 	/**
-	 * Session-backed requests count as authed — the coarse two-way split
-	 * that makes an attack wave against a logged-in area read differently
-	 * from one against public pages
+	 * The coarse split that makes an attack wave against a logged-in area
+	 * read differently from one against public pages — answered by the
+	 * Auth service's RESOLVED USER, never by session presence: an app that
+	 * auto-starts sessions hands every anonymous visitor one, and "everyone
+	 * is authed" is a split worth less than none. An app without the Auth
+	 * service answers null and ships no a: dimension at all.
 	 */
 	protected function isAuthed(
 		Application $app,
-	): bool
+	): ?bool
 	{
 		try
 		{
-			$session = $app->getServices()->session;
+			$auth = $app->getServices()->auth;
 			
-			return $session instanceof Session && $session->getId() !== null;
+			return $auth instanceof Auth ? $auth->getUser() !== null : null;
 		}
 		catch(Throwable)
 		{
-			return false;
+			return null;
 		}
 	}
 	
