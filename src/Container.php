@@ -782,6 +782,21 @@ class Container
 		return isset($this->injectors[$key]);
 	}
 	
+	/**
+	 * Whether the key has already been RESOLVED — constructed and cached —
+	 * as opposed to merely registered. The distinction matters to observers
+	 * that must never cause work: resolving a registered-but-unbuilt service
+	 * runs its constructor, and a constructor may reach for the session or
+	 * the database, which a read-only consumer (a shutdown-time metric, a
+	 * debug surface) has no business triggering.
+	 */
+	public function isResolved(
+		string $key,
+	): bool
+	{
+		return isset($this->resolved[$key]);
+	}
+	
 	public function __debugInfo(): array
 	{
 		return array_keys($this->injectors);
