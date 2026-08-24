@@ -40,6 +40,11 @@ class Messages extends Helper implements Countable
 	 */
 	protected bool $writeThrough = false;
 	
+	/**
+	 * Whether $items is attached to the session storage — see bind()
+	 */
+	protected bool $bound = false;
+	
 	public function __construct()
 	{
 		parent::__construct();
@@ -47,17 +52,39 @@ class Messages extends Helper implements Countable
 		$this->session = $this->container->get(Session::SYMBOL);
 		if($this->session instanceof Session)
 		{
-			if($this->session->getHandler() === Session::HANDLER_JSON)
+			$this->writeThrough =
+				$this->session->getHandler() === Session::HANDLER_JSON;
+			
+			// bind to the stored messages only when the request HAS a
+			// session: a guest without one cannot have flash messages, and
+			// the read would MINT a session (+ Set-Cookie, + storage entry)
+			// on every page that renders this helper
+			if($this->session->exists())
 			{
-				$this->writeThrough = true;
-				$items = $this->session->get(self::SESSION_NAMESPACE);
-				$this->items = is_array($items) ? $items : [];
-			}
-			else
-			{
-				$this->items = &$this->session->{self::SESSION_NAMESPACE};
+				$this->bind();
 			}
 		}
+	}
+	
+	/**
+	 * Attaches $items to the session storage — the access that starts a
+	 * session when none exists. Runs on construction for requests that
+	 * already carry one, and otherwise lazily from the first WRITE, which
+	 * is the legitimate reason to start a session for a guest.
+	 */
+	protected function bind(): void
+	{
+		if($this->writeThrough)
+		{
+			$items = $this->session->get(self::SESSION_NAMESPACE);
+			$this->items = is_array($items) ? $items : [];
+		}
+		else
+		{
+			$this->items = &$this->session->{self::SESSION_NAMESPACE};
+		}
+		
+		$this->bound = true;
 	}
 	
 	public function messages(
@@ -112,6 +139,13 @@ class Messages extends Helper implements Countable
 		?string $title = null,
 	): Message
 	{
+		// a write is what makes a guest's session worth starting — bind
+		// now if construction skipped it for the session-less request
+		if($this->bound === false && $this->session instanceof Session)
+		{
+			$this->bind();
+		}
+		
 		$message = new Message($type, $description, $title);
 		$this->getItems()[] = $message;
 		$this->persist();
@@ -224,7 +258,9 @@ class Messages extends Helper implements Countable
 	
 	protected function persist(): void
 	{
-		if($this->writeThrough === false)
+		// unbound = nothing was ever stored for this request, so there is
+		// nothing to remove — and the remove() would start a session
+		if($this->writeThrough === false || $this->bound === false)
 		{
 			return;
 		}
