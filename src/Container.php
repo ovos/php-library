@@ -267,8 +267,12 @@ class Container
 			return $this;
 		}
 		
+		// two plain assignments, never a reference between the maps: a
+		// reference survives an array copy, so any snapshot of these maps
+		// (tests swap entries that way) would write straight through into
+		// the container instead of into its own copy
 		$this->injectors[$key] = $value;
-		$this->resolved[$key] = &$this->injectors[$key];
+		$this->resolved[$key] = $value;
 		
 		return $this;
 	}
