@@ -1,0 +1,137 @@
+<?php
+declare(strict_types=1);
+
+namespace Tests\Service\Console;
+
+use Ovos\ArrayObject;
+use Ovos\Request;
+use Ovos\Service\Console\Rollup as ConsoleRollup;
+use Ovos\Test;
+
+use function str_repeat;
+
+/**
+ * Rollup — the pure half of the traffic-rollup accumulator: the opt-in
+ * gate, the closed-vocabulary route naming, the identity sanitizer and the
+ * counter-fields-to-fragment mapping. The APCu machinery (accumulation,
+ * the minute-boundary flush, the add()-lock) is exercised against a real
+ * pool, not here — apcu is usually absent on the CLI, and a mocked APCu
+ * would test the mock.
+ *
+ * The one invariant everything below serves: no request-derived string may
+ * become a counter field name. The console refuses fragments that violate
+ * it wholesale, so a client that let one through would not error — it
+ * would silently lose whole minutes.
+ *
+ * @author Marcin Gil <mg@ovos.at>
+ */
+class Rollup extends Test
+{
+	/**
+	 * Rollups are opt-in TWICE (here and on the console project) and need
+	 * the direct transport: an OTLP-only sender has no url/key and exports
+	 * console.rollup.requests through its collector instead.
+	 */
+	public function rollupsNeedTheOptInAndTheDirectTransport(): bool
+	{
+		$enabled = static fn(array $config): bool
+			=> (new ConsoleRollup(new ArrayObject($config)))->isEnabled();
+		
+		$base = [
+			'enabled' => true,
+			'rollups' => true,
+			'url' => 'https://console.invalid',
+			'key' => 'test-key',
+		];
+		
+		return $enabled($base)
+			&& $enabled(['rollups' => false] + $base) === false
+			// absent means OFF — an upgrade must not start counting
+			&& $enabled(['enabled' => true, 'url' => 'https://console.invalid',
+				'key' => 'test-key']) === false
+			&& $enabled(['enabled' => false] + $base) === false
+			&& $enabled(['url' => ''] + $base) === false
+			&& $enabled(['key' => ''] + $base) === false
+			&& (new ConsoleRollup(null))->isEnabled() === false;
+	}
+	
+	/**
+	 * The controller/action strings on a Request are ROUTER INPUT — on a
+	 * 404 they carry whatever the client asked for. Without a constructed
+	 * controller instance the route is __unmatched, whatever the strings
+	 * say; that counter IS the probe signal the console reads.
+	 */
+	public function anUnresolvedRequestIsUnmatchedWhateverItClaims(): bool
+	{
+		$request = new Request;
+		$request->setController('wp-admin');
+		$request->setAction('setup-config.php');
+		
+		return ConsoleRollup::routeOf($request) === '__unmatched';
+	}
+	
+	/**
+	 * Route names come from code, but the shape is enforced anyway: a name
+	 * the console's route rule would refuse collapses to __other, because
+	 * one doubtful field name must never cost the whole fragment.
+	 */
+	public function routeNamesHoldTheConsoleShape(): bool
+	{
+		return ConsoleRollup::routeName('Errors', 'index') === '/errors/index'
+			&& ConsoleRollup::routeName('Api\V1\Ingest', 'rollup') === '/api\v1\ingest/rollup'
+			&& ConsoleRollup::routeName('with space', 'index') === '__other'
+			&& ConsoleRollup::routeName('query?x', 'index') === '__other'
+			&& ConsoleRollup::routeName('escape%2e', 'index') === '__other'
+			&& ConsoleRollup::routeName(str_repeat('a', 220), 'index') === '__other'
+			&& ConsoleRollup::routeName('', '') === '__other';
+	}
+	
+	/**
+	 * host/instance land in a console redis KEY NAME, so the sanitizer is
+	 * held to the same identity shape the server enforces — anything else
+	 * becomes a dash, and 64 chars is the cap.
+	 */
+	public function theHostNameIsReducedToTheIdentityShape(): bool
+	{
+		return ConsoleRollup::hostName('web-03.example.at') === 'web-03.example.at'
+			&& ConsoleRollup::hostName('bad host|name') === 'bad-host-name'
+			&& ConsoleRollup::hostName(str_repeat('h', 80)) === str_repeat('h', 64)
+			&& ConsoleRollup::hostName('') === '';
+	}
+	
+	/**
+	 * The collected counter fields map onto exactly the fragment body the
+	 * console's validator expects — requests at the top, the four
+	 * breakdowns by their prefixes, nothing invented and nothing dropped.
+	 */
+	public function counterFieldsAssembleIntoTheFragmentBody(): bool
+	{
+		$payload = ConsoleRollup::assemble(29248320, [
+			'requests' => 431,
+			's:200' => 52,
+			's:404' => 379,
+			'm:GET' => 431,
+			'r:/product/index' => 52,
+			'r:__unmatched' => 379,
+			'a:no' => 431,
+		]);
+		
+		return $payload === [
+				'minute' => 29248320,
+				'requests' => 431,
+				'status' => ['200' => 52, '404' => 379],
+				'methods' => ['GET' => 431],
+				'routes' => ['/product/index' => 52, '__unmatched' => 379],
+				'authed' => ['no' => 431],
+			]
+			// an empty minute still has the shape, so the caller can rely on it
+			&& ConsoleRollup::assemble(1, []) === [
+				'minute' => 1,
+				'requests' => 0,
+				'status' => [],
+				'methods' => [],
+				'routes' => [],
+				'authed' => [],
+			];
+	}
+}

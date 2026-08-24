@@ -59,6 +59,12 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *     log_level: 5                      # send priority <= this (0-7)
  *     timeout_ms: 1000
  *     release: !ENV CONSOLE[RELEASE]    # optional deploy label (git sha, svn rev, …)
+ *     rollups: no                       # OPT-IN: per-minute traffic counters (requests,
+ *                                       # status/method/route/authed) accumulated in APCu and
+ *                                       # POSTed to /api/v1/ingest/rollup once per minute —
+ *                                       # the console's denominator layer (see Rollup). Needs
+ *                                       # url+key AND rollups_enabled on the console project;
+ *                                       # no APCu means a silent no-op.
  *     otlp_url: ''                      # OPTIONAL: an OpenTelemetry Collector's OTLP/HTTP
  *                                       # logs endpoint VERBATIM (http://collector:4318/v1/logs).
  *                                       # Set -> the batch goes there as OTLP/JSON instead of the
@@ -383,6 +389,18 @@ class Sender extends Service
 		if(self::$flushing)
 		{
 			return;
+		}
+		
+		// the traffic rollup rides the same shutdown hook: one apcu_inc set
+		// per request, a POST only when a minute boundary was crossed — and
+		// the same silence contract, so it runs before anything can bail
+		try
+		{
+			(new Rollup($this->config))->observe($this->app);
+		}
+		catch(Throwable)
+		{
+			// never break the host application
 		}
 		
 		// disabled: drop anything queued so it cannot pile up in a
