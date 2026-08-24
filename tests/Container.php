@@ -12,6 +12,7 @@ use Ovos\Container\ArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Container\Register\TypeClass;
 use Ovos\Container\Register\TypeLazy;
+use ReflectionProperty;
 
 /**
  * Container
@@ -440,6 +441,34 @@ class Container extends Test
 		$result = $container->call($service, 'doWorkWithConfig');
 		
 		return $result === 'root';
+	}
+	
+	/**
+	 * registerValue() used to bind resolved[$key] as a REFERENCE to
+	 * injectors[$key]. A reference survives an array copy, so a test helper
+	 * that snapshots the container maps via reflection and writes a stub into
+	 * its own copy wrote straight through into the live container — and into
+	 * its own before-snapshot, so a finally-restore put the stub back instead
+	 * of the original. The stub then leaked into every later test resolving
+	 * that key, in whichever order the filesystem happened to dictate: green
+	 * on one OS, red on another.
+	 */
+	public function registerValueLeavesNoReferenceBehind(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerValue('service', 'real');
+		
+		foreach(['injectors', 'resolved'] as $property)
+		{
+			$copy = (new ReflectionProperty(BaseContainer::class, $property))
+				->getValue($container);
+			$copy['service'] = 'stub';
+		}
+		
+		return $container->get('service') === 'real'
+			// and the overwrite still updates both maps without the reference
+			&& $container->registerValue('service', 'replaced', overwrite: true)
+				->get('service') === 'replaced';
 	}
 }
 
