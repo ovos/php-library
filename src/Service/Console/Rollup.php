@@ -498,11 +498,17 @@ class Rollup
 	
 	/**
 	 * The coarse split that makes an attack wave against a logged-in area
-	 * read differently from one against public pages — answered by the
-	 * Auth service's RESOLVED USER, never by session presence: an app that
-	 * auto-starts sessions hands every anonymous visitor one, and "everyone
-	 * is authed" is a split worth less than none. An app without the Auth
-	 * service answers null and ships no a: dimension at all.
+	 * read differently from one against public pages — answered by the Auth
+	 * service's RESOLVED USER, never by session presence: session behaviour
+	 * varies per app (never started, started only after login, auto-started
+	 * for everyone), so it can mean anything.
+	 *
+	 * And only by an Auth service THE REQUEST ITSELF already resolved. This
+	 * runs at shutdown as a pure observer; resolving the service here would
+	 * run its constructor, and Auth subclasses restore their user FROM THE
+	 * SESSION there — which on a session-after-login app would start a
+	 * session for an anonymous request, as a metrics side effect. A request
+	 * that never touched auth answers null and ships no a: dimension.
 	 */
 	protected function isAuthed(
 		Application $app,
@@ -510,7 +516,13 @@ class Rollup
 	{
 		try
 		{
-			$auth = $app->getServices()->auth;
+			$container = $app->getContainer();
+			if($container->isResolved(Auth::SYMBOL) === false)
+			{
+				return null;
+			}
+			
+			$auth = $container->resolve(Auth::SYMBOL);
 			
 			return $auth instanceof Auth ? $auth->getUser() !== null : null;
 		}

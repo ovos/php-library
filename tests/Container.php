@@ -194,6 +194,28 @@ class Container extends Test
 			&& $instance->value === 'test';
 	}
 	
+	/**
+	 * isResolved() distinguishes CONSTRUCTED from merely registered, and the
+	 * asking must never construct anything — that is its whole point: a
+	 * read-only consumer (a shutdown-time metric) uses it to avoid running a
+	 * constructor that may reach for the session or the database.
+	 */
+	public function isResolvedNeverConstructsWhatItAsksAbout(): bool
+	{
+		$container = new BaseContainer;
+		$container->registerClass(Dependency1::class);
+		
+		$registeredOnly = $container->isResolved(Dependency1::class);
+		$unknown = $container->isResolved('never-registered');
+		
+		$container->get(Dependency1::class);
+		
+		return $registeredOnly === false
+			&& $unknown === false
+			// asking did not resolve it — only the get() above did
+			&& $container->isResolved(Dependency1::class) === true;
+	}
+	
 	public function registerLazyWithCustomInitializer(): bool
 	{
 		$container = new BaseContainer;
