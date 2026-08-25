@@ -23,7 +23,10 @@ use function scandir;
 use function sort;
 use function str_contains;
 use function str_replace;
+use function str_starts_with;
+use function strlen;
 use function substr;
+use function trim;
 use function umask;
 use function unlink;
 
@@ -109,6 +112,69 @@ class Dir
 	): string
 	{
 		return self::normalize($path, $relative);
+	}
+	
+	/**
+	 * Normalizes to the FIXED '/' separator — normalize()'s sibling for
+	 * paths that cross machines (wire payloads, git trees, archive entries),
+	 * where the answer must not depend on which OS happens to run the code.
+	 * Whitespace padding is trimmed (wire data), a trailing separator is
+	 * dropped, and with $relative a leading one too.
+	 */
+	public static function posix(
+		string $path,
+		bool $relative = false,
+	): string
+	{
+		$path = rtrim(str_replace('\\', '/', trim($path)), '/');
+		if($relative)
+		{
+			$path = ltrim($path, '/');
+		}
+		
+		return $path;
+	}
+	
+	/**
+	 * The relative form of $path under $base, both taken as POSIX — or null
+	 * when no honest answer exists: an empty side, $path === $base, or $path
+	 * outside $base. Containment is checked on a DIRECTORY boundary, so
+	 * /srv/app2/x is never "under" /srv/app.
+	 */
+	public static function relative(
+		string $path,
+		string $base,
+	): ?string
+	{
+		$path = self::posix($path);
+		$base = self::posix($base);
+		
+		if($base === '' || str_starts_with($path, $base . '/') === false)
+		{
+			return null;
+		}
+		
+		$relative = ltrim(substr($path, strlen($base) + 1), '/');
+		
+		return $relative === '' ? null : $relative;
+	}
+	
+	/**
+	 * Whether $path is $prefix itself or lives under it — the
+	 * boundary-anchored prefix test an allowlist needs, where 'vendor'
+	 * (or 'vendor/') must match vendor/lib.php but never vendor.php.
+	 * Both sides are taken as RELATIVE POSIX paths.
+	 */
+	public static function under(
+		string $path,
+		string $prefix,
+	): bool
+	{
+		$path = self::posix($path, true);
+		$prefix = self::posix($prefix, true);
+		
+		return $prefix !== ''
+			&& ($path === $prefix || str_starts_with($path, $prefix . '/'));
 	}
 	
 	/**

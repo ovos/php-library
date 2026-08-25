@@ -34,6 +34,52 @@ class Dir extends Test
 			&& BaseDir::preProcess('/x/y/') === BaseDir::normalize('/x/y/');
 	}
 	
+	/**
+	 * posix() is normalize()'s fixed-'/' sibling for paths that cross
+	 * machines: a Windows sender's D:\app\File.php and a Linux one's
+	 * /srv/app/File.php must land on one vocabulary whatever OS runs this
+	 * code — so the separator is pinned, never DIRECTORY_SEPARATOR
+	 */
+	public function posixPinsForwardSlashesWhateverTheOs(): bool
+	{
+		return BaseDir::posix('D:\\app\\src\\Cart.php') === 'D:/app/src/Cart.php'
+			&& BaseDir::posix('/srv/app/') === '/srv/app'
+			&& BaseDir::posix(' /srv/app/x.php ') === '/srv/app/x.php'
+			&& BaseDir::posix('/a/b/', true) === 'a/b'
+			&& BaseDir::posix('') === '';
+	}
+	
+	/**
+	 * relative() answers null for every "not honestly under" — including
+	 * the /srv/app2-under-/srv/app near-miss, which is a prefix of the
+	 * STRING but not of the PATH; a directory boundary decides
+	 */
+	public function relativeChecksContainmentOnADirectoryBoundary(): bool
+	{
+		return BaseDir::relative('/srv/app/src/Cart.php', '/srv/app') === 'src/Cart.php'
+			&& BaseDir::relative('D:\\app\\src\\Cart.php', 'D:/app/') === 'src/Cart.php'
+			&& BaseDir::relative('/srv/app2/index.php', '/srv/app') === null
+			&& BaseDir::relative('/srv/app', '/srv/app') === null
+			&& BaseDir::relative('/elsewhere/x.php', '/srv/app') === null
+			&& BaseDir::relative('/srv/app/x.php', '') === null
+			&& BaseDir::relative('', '/srv/app') === null;
+	}
+	
+	/**
+	 * under() is the allowlist question: at or below the prefix, anchored
+	 * on the boundary — 'vendor' must cover vendor/lib.php and vendor
+	 * itself, and must never cover vendor.php
+	 */
+	public function underAnchorsThePrefixOnTheBoundary(): bool
+	{
+		return BaseDir::under('vendor/ovos/lib.php', 'vendor/')
+			&& BaseDir::under('vendor', 'vendor')
+			&& BaseDir::under('var/generated/Proxy.php', '/var\\generated')
+			&& BaseDir::under('vendor.php', 'vendor') === false
+			&& BaseDir::under('src/vendor/x.php', 'vendor') === false
+			&& BaseDir::under('anything', '') === false;
+	}
+	
 	public function copyFiles(): bool
 	{
 		$copy = $this->dir . 'copy';
