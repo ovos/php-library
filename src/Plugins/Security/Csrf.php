@@ -8,13 +8,16 @@ use Ovos\Console;
 use Ovos\Controller\Plugin;
 use Ovos\Request;
 use Ovos\Response\Html;
+use Ovos\Service\Console\Sender;
 use Ovos\Service\Logger;
 use Override;
 use Throwable;
 
 use function in_array;
 use function rtrim;
+use function strpos;
 use function strtolower;
+use function substr;
 use function trim;
 
 /**
@@ -214,7 +217,11 @@ class Csrf extends Plugin
 	
 	/**
 	 * A violation: one loud log line (the collection mechanism in report
-	 * mode) plus a dev-console note
+	 * mode) plus a dev-console note — and, when the app runs the console
+	 * sender, a type=security event (kind csrf_reject) so the violation
+	 * reaches the error console's security channel. Report mode sends too:
+	 * that mode exists to collect real cross-site origins, and the channel
+	 * is where they are collected; the mode travels in the message.
 	 */
 	protected function report(
 		string $reason,
@@ -243,6 +250,27 @@ class Csrf extends Plugin
 		catch(Throwable)
 		{
 			// no console in this context
+		}
+		
+		try
+		{
+			// the query is dropped: it can carry tokens, and distinct targets
+			// should stay distinct while one hammered path folds together
+			$uri = (string)$this->request->getServer('REQUEST_URI');
+			$mark = strpos($uri, '?');
+			
+			$sender = $this->container->get(Sender::SYMBOL);
+			if($sender instanceof Sender)
+			{
+				$sender->reportRefusal('csrf_reject',
+					'CSRF ' . $mode . ': ' . $this->request->getMethod() . ' '
+					. ($mark === false ? $uri : substr($uri, 0, $mark))
+					. ' - ' . $reason);
+			}
+		}
+		catch(Throwable)
+		{
+			// no console sender in this app
 		}
 	}
 }
