@@ -90,6 +90,6 @@ class Asset extends Helper
 	public function getFilename(): string
 	{
 		return BASE_DIR . 'public'
-			. DIRECTORY_SEPARATOR . Dir::preProcess($this->asset, true);
+			. DIRECTORY_SEPARATOR . Dir::normalize($this->asset, true);
 	}
 }
