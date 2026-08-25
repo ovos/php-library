@@ -147,6 +147,74 @@ class Sender extends Test
 		return $sender->queueCount() === 0;
 	}
 	
+	/**
+	 * reportRefusal — the security-event channel's sender half. The KIND
+	 * travels as the event's className (what the console indexes, filters
+	 * and fingerprints by), the human line as the message, and the priority
+	 * is INFO by definition (the console pins it there anyway). Placing the
+	 * call is the app-side opt-in; there is deliberately no config switch.
+	 */
+	public function reportRefusalQueuesASecurityTypedPayload(): bool
+	{
+		$sender = $this->makeSender();
+		
+		$sender->reportRefusal('auth_failure', 'login failed for m***');
+		$payload = $sender->lastPayload();
+		
+		return $sender->queueCount() === 1
+			&& ($payload['type'] ?? null) === 'security'
+			&& ($payload['priority'] ?? null) === Priority::INFO
+			&& ($payload['message'] ?? '') === 'login failed for m***'
+			&& ($payload['events'][0]['className'] ?? null) === 'auth_failure'
+			&& ($payload['events'][0]['message'] ?? null) === 'login failed for m***';
+	}
+	
+	/**
+	 * Three silences, each load-bearing: a kind outside the closed
+	 * vocabulary is a no-op (the console refuses it wholesale, so sending
+	 * would only waste the request — and a typo'd kind must not invent a
+	 * category); the rolling cap turns a credential-stuffing wave into at
+	 * most SECURITY_MAX_PER_MINUTE reports; a disabled sender reports
+	 * nothing at all.
+	 */
+	public function reportRefusalRefusesUnknownKindsTheCapAndDisabled(): bool
+	{
+		$sender = $this->makeSender();
+		$sender->reportRefusal('password_wrong', 'not a vocabulary kind');
+		$unknownIsSilent = $sender->queueCount() === 0;
+		
+		$sender->securityAllowed = false;
+		$sender->reportRefusal('auth_failure', 'over the cap');
+		$cappedIsSilent = $sender->queueCount() === 0;
+		
+		$disabled = $this->makeSender(enabled: false);
+		$disabled->reportRefusal('auth_failure', 'sender is off');
+		
+		return $unknownIsSilent
+			&& $cappedIsSilent
+			&& $disabled->queueCount() === 0;
+	}
+	
+	/** a call without a message still names its event — by its kind */
+	public function reportRefusalWithoutAMessageNamesItsKind(): bool
+	{
+		$sender = $this->makeSender();
+		
+		$sender->reportRefusal('csrf_reject');
+		$payload = $sender->lastPayload();
+		
+		return ($payload['message'] ?? '') === 'csrf_reject'
+			&& ($payload['events'][0]['className'] ?? null) === 'csrf_reject';
+	}
+	
+	/** the username mask call sites are told to use — first char, no length leak */
+	public function maskNameKeepsOnlyTheFirstCharacter(): bool
+	{
+		return ConsoleSender::maskName('marcin') === 'm***'
+			&& ConsoleSender::maskName('Ökonom') === 'Ö***'
+			&& ConsoleSender::maskName('') === '';
+	}
+	
 	public function notFoundExceptionBecomesA404WhenEnabled(): bool
 	{
 		$sender = $this->makeSender(report404: true);
@@ -237,6 +305,18 @@ class Sender extends Test
 		
 		return new class($config) extends ConsoleSender
 		{
+			/**
+			 * The rolling APCu cap, scripted: the real allowSecurity() reads a
+			 * shared per-minute counter, so suite runs inside one minute would
+			 * interfere with each other's counts
+			 */
+			public bool $securityAllowed = true;
+			
+			protected function allowSecurity(): bool
+			{
+				return $this->securityAllowed;
+			}
+			
 			public function queueCount(): int
 			{
 				return count($this->queue);

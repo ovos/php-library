@@ -18,18 +18,24 @@ use ErrorException;
 use SplObjectStorage;
 use Throwable;
 
+use function apcu_enabled;
+use function apcu_inc;
 use function array_replace;
 use function array_values;
 use function count;
 use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
+use function function_exists;
+use function in_array;
+use function intdiv;
 use function json_encode;
 use function mb_substr;
 use function rtrim;
 use function str_starts_with;
 use function strpos;
 use function substr;
+use function time;
 
 use const CURLOPT_CONNECTTIMEOUT_MS;
 use const CURLOPT_HTTPHEADER;
@@ -89,6 +95,29 @@ class Sender extends Service
 	 * errors are never starved by a queue already filled with captures.
 	 */
 	public const int QUEUE_MAX = 100;
+	
+	/**
+	 * The closed kind vocabulary for type=security events (reportRefusal) —
+	 * mirrors the console's App::SECURITY_KINDS. A kind outside this list is
+	 * a no-op here and refused server-side; the list only ever grows in a
+	 * deliberate two-sided change.
+	 */
+	public const array SECURITY_KINDS = [
+		'auth_failure',
+		'csrf_reject',
+		'permission_denied',
+		'rate_limited',
+		'validation_refused',
+		'privileged_action',
+	];
+	
+	/**
+	 * Rolling cap on security events across the FPM pool (APCu minute
+	 * counter): a credential-stuffing wave is thousands of auth_failures a
+	 * minute, and the reporter must not become the flood. Without APCu the
+	 * per-request QUEUE_MAX still bounds each batch.
+	 */
+	public const int SECURITY_MAX_PER_MINUTE = 60;
 	
 	protected ?ArrayObject $config;
 	
@@ -258,6 +287,113 @@ class Sender extends Service
 	protected function reports404(): bool
 	{
 		return $this->config?->report_404 === true;
+	}
+	
+	/**
+	 * Reports a refusal or audit line as a type=security event (priority 6,
+	 * INFO — the console pins it there regardless). The console groups these
+	 * apart from application errors, never turns them into issues or alerts
+	 * by default, and gates them by its per-project security_events switch —
+	 * NOT by accept_priority, so a project tuned stricter than INFO still
+	 * receives them. Placing this call is the app-side opt-in; there is no
+	 * config switch here on purpose.
+	 *
+	 * $kind must come from SECURITY_KINDS (anything else is a silent no-op —
+	 * the console refuses unknown kinds wholesale, so sending one would only
+	 * waste the request). $message is the human line and travels into an
+	 * INDEXED, displayed field: mask identifiers yourself — maskName() for
+	 * usernames — and never include a credential; the server scrub is a
+	 * backstop, not permission.
+	 *
+	 *   $sender->reportRefusal('auth_failure',
+	 *       'login failed for ' . Sender::maskName($username));
+	 */
+	public function reportRefusal(
+		string $kind,
+		string $message = '',
+		array $extra = [],
+	): static
+	{
+		if($this->isEnabled() === false
+			|| in_array($kind, self::SECURITY_KINDS, true) === false
+			|| $this->allowSecurity() === false)
+		{
+			return $this;
+		}
+		
+		try
+		{
+			if(count($this->queue) < self::QUEUE_MAX)
+			{
+				$this->queue[] = $this->payloadSecurity($kind, $message, $extra);
+			}
+		}
+		catch(Throwable)
+		{
+			// never break the host application
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * A username reduced to its first character + *** — the same mask every
+	 * scrub path applies (fixed suffix, no length leak), offered here so a
+	 * reportRefusal call site is a one-liner
+	 */
+	public static function maskName(
+		string $value,
+	): string
+	{
+		return $value === '' ? '' : mb_substr($value, 0, 1) . '***';
+	}
+	
+	/**
+	 * A type=security payload: the KIND as the event's className (the field
+	 * the console indexes, filters and fingerprints by), the human line as
+	 * the message — falling back to the kind itself, so a call without a
+	 * message still names its event
+	 */
+	protected function payloadSecurity(
+		string $kind,
+		string $message,
+		array $extra,
+	): array
+	{
+		$message = $message === '' ? $kind : mb_substr($message, 0, 512);
+		
+		$payload = Payload::fromMessage($message, Priority::INFO, $extra);
+		$payload['type'] = 'security';
+		$payload['events'] = [[
+			'message' => $message,
+			'className' => $kind,
+			'file' => '',
+			'line' => 0,
+			'backtrace' => '',
+			'previous' => false,
+		]];
+		
+		return $payload;
+	}
+	
+	/**
+	 * The rolling pool-wide cap (APCu minute counter, created with a TTL so
+	 * quiet minutes leave nothing behind). No APCu means no cross-request
+	 * cap — same standing as 404 reporting, where QUEUE_MAX per request is
+	 * the only bound.
+	 */
+	protected function allowSecurity(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			return true;
+		}
+		
+		$ok = false;
+		$count = apcu_inc(
+			'ovos:console:security:' . intdiv(time(), 60), 1, $ok, 120);
+			
+		return $count === false || $count <= self::SECURITY_MAX_PER_MINUTE;
 	}
 	
 	/**
