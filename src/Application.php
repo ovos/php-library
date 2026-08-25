@@ -549,7 +549,7 @@ class Application
 		
 		foreach($modules as $module)
 		{
-			$module->path = Dir::preProcess($module->path);
+			$module->path = Dir::normalize($module->path);
 			
 			if($module->translations)
 			{

@@ -18,6 +18,22 @@ class Dir extends Test
 		. DIRECTORY_SEPARATOR . 'files'
 		. DIRECTORY_SEPARATOR;
 	
+	public function normalizeUnifiesSeparatorsAndTrims(): bool
+	{
+		$s = DIRECTORY_SEPARATOR;
+		
+		return BaseDir::normalize('a/b\\c/') === 'a' . $s . 'b' . $s . 'c'
+			&& BaseDir::normalize('/a/b/', true) === 'a' . $s . 'b'
+			&& BaseDir::normalize('/a/b/') === $s . 'a' . $s . 'b'
+			&& BaseDir::normalize('') === '';
+	}
+	
+	public function preProcessAliasesNormalize(): bool
+	{
+		return BaseDir::preProcess('/x\\y/', true) === BaseDir::normalize('/x\\y/', true)
+			&& BaseDir::preProcess('/x/y/') === BaseDir::normalize('/x/y/');
+	}
+	
 	public function copyFiles(): bool
 	{
 		$copy = $this->dir . 'copy';

@@ -46,12 +46,12 @@ class Dir
 	public static function create(
 		string $path,
 		int $mode = 0777, // (octal)
-		bool $preProcess = true,
+		bool $normalize = true,
 	): bool
 	{
-		if($preProcess)
+		if($normalize)
 		{
-			$path = self::preProcess($path);
+			$path = self::normalize($path);
 		}
 		
 		if(empty($path) || is_dir($path))
@@ -77,11 +77,14 @@ class Dir
 	}
 	
 	/**
-	 * Pre-processes a path or relative path (second param)
-	 * Removes directory separator from the end and replaces all separators with consistent ones
-	 * Set $relative to true to remove directory separator also from the start of the string
+	 * Normalizes a path to the PLATFORM separator: every / and \ becomes
+	 * DIRECTORY_SEPARATOR, a trailing separator is dropped, and with
+	 * $relative also a leading one. For LOCAL filesystem work only — code
+	 * comparing paths across machines (a reported path against a git tree)
+	 * must normalize to a fixed '/' itself, or the answer depends on which
+	 * OS happens to run it.
 	 */
-	public static function preProcess(
+	public static function normalize(
 		string $path,
 		bool $relative = false,
 	): string
@@ -94,6 +97,18 @@ class Dir
 		}
 		
 		return $path;
+	}
+	
+	/**
+	 * @deprecated the PHP 4 era name of normalize() — use that; this alias
+	 * keeps any external caller working and will go with the next major
+	 */
+	public static function preProcess(
+		string $path,
+		bool $relative = false,
+	): string
+	{
+		return self::normalize($path, $relative);
 	}
 	
 	/**
@@ -175,8 +190,8 @@ class Dir
 		string $path, // relative path
 	): void
 	{
-		$pathToKeep = self::preProcess($pathToKeep);
-		$path = self::preProcess($path, true);
+		$pathToKeep = self::normalize($pathToKeep);
+		$path = self::normalize($path, true);
 		
 		if(!empty($path) && is_dir($pathToKeep))
 		{
@@ -214,8 +229,8 @@ class Dir
 		string $pathTo,
 	): void
 	{
-		$pathFrom = self::preProcess($pathFrom);
-		$pathTo = self::preProcess($pathTo);
+		$pathFrom = self::normalize($pathFrom);
+		$pathTo = self::normalize($pathTo);
 		
 		if(is_dir($pathFrom) && is_dir($pathTo))
 		{
@@ -263,8 +278,8 @@ class Dir
 		?callable $callback = null,
 	): void
 	{
-		$pathFrom = self::preProcess($pathFrom);
-		$pathTo = self::preProcess($pathTo);
+		$pathFrom = self::normalize($pathFrom);
+		$pathTo = self::normalize($pathTo);
 		
 		if(is_dir($pathFrom) && is_dir($pathTo))
 		{
