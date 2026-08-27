@@ -30,7 +30,10 @@ use function function_exists;
 use function in_array;
 use function intdiv;
 use function json_encode;
+use function mb_strlen;
 use function mb_substr;
+use function min;
+use function preg_match;
 use function rtrim;
 use function str_starts_with;
 use function strpos;
@@ -337,15 +340,33 @@ class Sender extends Service
 	}
 	
 	/**
-	 * A username reduced to its first character + *** — the same mask every
-	 * scrub path applies (fixed suffix, no length leak), offered here so a
-	 * reportRefusal call site is a one-liner
+	 * A username reduced to every fourth character, the rest starred (bob ->
+	 * b**, marcin -> m***i*) — the same mask every scrub path applies, offered
+	 * here so a reportRefusal call site is a one-liner. The mask is as long as
+	 * the value it replaced, and past Logger::MASK_MAX it states the real
+	 * length instead ("[200]"); see Logger::maskName(), which this mirrors.
 	 */
 	public static function maskName(
 		string $value,
 	): string
 	{
-		return $value === '' ? '' : mb_substr($value, 0, 1) . '***';
+		if($value === ''
+			|| preg_match(Logger::MASKED_CUT_PATTERN, $value) === 1)
+		{
+			return $value;
+		}
+		
+		$length = mb_strlen($value);
+		$cut = min($length, Logger::MASK_MAX);
+		$masked = '';
+		for($index = 0; $index < $cut; $index++)
+		{
+			$masked.= $index % Logger::MASK_GROUP === 0
+				? mb_substr($value, $index, 1)
+				: '*';
+		}
+		
+		return $length > $cut ? $masked . '[' . $length . ']' : $masked;
 	}
 	
 	/**

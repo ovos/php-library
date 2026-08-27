@@ -9,12 +9,14 @@ use Ovos\ArrayObject;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Service\Console\Sender as ConsoleSender;
+use Ovos\Service\Logger;
 use Ovos\Test;
 use Throwable;
 use WeakReference;
 
 use function count;
 use function gc_collect_cycles;
+use function str_repeat;
 
 use const E_WARNING;
 
@@ -207,12 +209,65 @@ class Sender extends Test
 			&& ($payload['events'][0]['className'] ?? null) === 'csrf_reject';
 	}
 	
-	/** the username mask call sites are told to use — first char, no length leak */
-	public function maskNameKeepsOnlyTheFirstCharacter(): bool
+	/**
+	 * The username mask call sites are told to use: every fourth character
+	 * survives, the rest become stars (counted in CHARACTERS, so a multi-byte
+	 * name masks like its ASCII twin), and the result is as long as the value
+	 * was.
+	 */
+	public function maskNameKeepsEveryFourthCharacter(): bool
 	{
-		return ConsoleSender::maskName('marcin') === 'm***'
-			&& ConsoleSender::maskName('Ökonom') === 'Ö***'
+		return ConsoleSender::maskName('bob') === 'b**'
+			&& ConsoleSender::maskName('erin') === 'e***'
+			&& ConsoleSender::maskName('marcin') === 'm***i*'
+			&& ConsoleSender::maskName('marcinmarcin') === 'm***i***r***'
+			&& ConsoleSender::maskName('Ökonom') === 'Ö***o*'
+			// a single character has nothing to hide behind and no length to state
+			&& ConsoleSender::maskName('a') === 'a'
 			&& ConsoleSender::maskName('') === '';
+	}
+	
+	/**
+	 * Past MASK_MAX the stars stop and the mask states the real length: a login
+	 * field holding 64 or 4000 characters is someone trying something, and the
+	 * cut alone cannot tell that apart from a merely long name. A value exactly
+	 * MASK_MAX long needs no statement — the mask already is that long.
+	 */
+	public function maskNameStatesTheLengthItCutOff(): bool
+	{
+		$full = str_repeat('x***', Logger::MASK_MAX / Logger::MASK_GROUP);
+		
+		return ConsoleSender::maskName(str_repeat('x', Logger::MASK_MAX)) === $full
+			&& ConsoleSender::maskName(str_repeat('x', Logger::MASK_MAX + 1))
+				=== $full . '[' . (Logger::MASK_MAX + 1) . ']'
+			&& ConsoleSender::maskName(str_repeat('x', 200)) === $full . '[200]'
+			// counted in characters, not bytes
+			&& ConsoleSender::maskName(str_repeat('ä', 200))
+				=== str_repeat('ä***', Logger::MASK_MAX / Logger::MASK_GROUP) . '[200]';
+	}
+	
+	/**
+	 * Masking twice is a no-op, and by construction rather than by a guard: the
+	 * revealed positions of a mask hold the same characters again, and every
+	 * other position is a star already. Scrubbing twice is normal — the console
+	 * scrubs again server-side — and a second pass must not chew further into a
+	 * value it has already masked.
+	 */
+	public function maskNameIsIdempotent(): bool
+	{
+		foreach(['a', 'bob', 'marcin', 'marcinmarcin', 'averylongusername',
+			'abc***', str_repeat('x', Logger::MASK_MAX), str_repeat('x', 200),
+			// a value that only LOOKS like a cut mask is still a name
+			'admin[5]x'] as $value)
+		{
+			$masked = ConsoleSender::maskName($value);
+			if(ConsoleSender::maskName($masked) !== $masked)
+			{
+				return false;
+			}
+		}
+		
+		return true;
 	}
 	
 	public function notFoundExceptionBecomesA404WhenEnabled(): bool
