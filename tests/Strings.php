@@ -49,6 +49,23 @@ class Strings extends Test
 			&& str_contains($escaped, '&#039;') === true;
 	}
 	
+	public function displaySafeStripsControlBytesButNeverMarkup(): bool
+	{
+		$hostile = "Evil[2J
+title <= 5.9.8 " . str_repeat('x', 300);
+		$safe = Subject::displaySafe($hostile, 40);
+		
+		return str_contains($safe, "") === false
+			&& str_contains($safe, "") === false
+			&& str_contains($safe, "
+") === false
+			// markup survives — escaping is the RENDERER's job, per surface
+			&& str_contains($safe, '<= 5.9.8') === true
+			&& strlen($safe) <= 40
+			&& Subject::displaySafe(['not' => 'a string'], 10) === ''
+			&& Subject::displaySafe('  padded  ', 10) === 'padded';
+	}
+	
 	public function shortenRespectsMultibyteAndOnlyTruncatesWhenNeeded(): bool
 	{
 		return Subject::shorten('short', 20) === 'short' // under the limit, untouched
