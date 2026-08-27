@@ -20,8 +20,10 @@ use function is_string;
 use function json_encode;
 use function ltrim;
 use function max;
+use function mb_strlen;
 use function mb_substr;
 use function method_exists;
+use function min;
 use function preg_match;
 use function preg_replace;
 use function preg_replace_callback;
@@ -29,6 +31,7 @@ use function preg_split;
 use function rawurldecode;
 use function rawurlencode;
 use function sprintf;
+use function str_repeat;
 use function strlen;
 use function strpos;
 use function strtolower;
@@ -53,6 +56,35 @@ class Logger extends Service implements Writer
 	 * tell providers/customers apart while dropping the identifying part.
 	 */
 	protected const string EMAIL_PATTERN = '~([a-z0-9._%+\-])[a-z0-9._%+\-]*@([a-z0-9.\-]+\.[a-z]{2,})~i';
+	
+	/**
+	 * maskName() keeps every MASK_GROUP-th character of a value and stars the
+	 * rest, so the mask is exactly as long as what it replaced ("bob" -> b**,
+	 * "marcin" -> m***i*) and a log line finally says how much was there. Four
+	 * reveals a quarter of the characters — enough to tell two names apart in
+	 * a trace, little enough that neither reads as itself.
+	 *
+	 * MASK_MAX caps the stars, so a pathological value cannot turn a log line
+	 * into a wall of them — and past the cap the mask states the real length
+	 * instead ("[200]"), because a 30-character login and a 4000-character
+	 * probe are not the same event and the cut alone cannot tell them apart.
+	 */
+	public const int MASK_GROUP = 4;
+	
+	public const int MASK_MAX = 24;
+	
+	/**
+	 * A cut maskName() result: whole revealed-character groups, then the
+	 * bracketed length. This one form is NOT idempotent by construction
+	 * (re-masking would measure the mask, and report 29 for a value of 200),
+	 * so maskName() recognises and returns it untouched. Every uncut mask needs
+	 * no such guard.
+	 *
+	 * Brackets, because that is what [redacted] and [object] already look like
+	 * in these payloads. removeFromUrl() un-encodes them again, the way it
+	 * already does for @ and *, so a cut mask stays readable inside a url.
+	 */
+	public const string MASKED_CUT_PATTERN = '~^(?:.\*{3})+\[\d+\]$~u';
 	
 	protected string $dir = 'events';
 	
@@ -104,11 +136,11 @@ class Logger extends Service implements Writer
 	];
 	
 	/**
-	 * Field names whose value is masked to all-but-the-first character
-	 * (e.g. "marcin" -> "m***"). Anchored so identifier fields like userId
-	 * or userAgent are left intact; extend per project with addUsernames()
-	 * (a custom login field like "nick"). E-mails are handled separately,
-	 * by value.
+	 * Field names whose value is masked to every MASK_GROUP-th character, the
+	 * rest starred (e.g. "bob" -> "b**", "marcin" -> "m***i*"). Anchored so
+	 * identifier fields like userId or userAgent are left intact; extend per
+	 * project with addUsernames() (a custom login field like "nick"). E-mails
+	 * are handled separately, by value.
 	 */
 	protected array $usernames = [
 		'~^user([_-]?(name|login))?$~i',
@@ -362,9 +394,11 @@ class Logger extends Service implements Writer
 						return $match[0];
 					}
 					
-					// keep the mask readable — @ and * are legal in a query
+					// keep the mask readable — @ and * are legal in a query, and
+					// the [] of a stated length are what every reader expects
 					return $match[1] . $match[2] . '='
-						. strtr(rawurlencode($masked), ['%40' => '@', '%2A' => '*']);
+						. strtr(rawurlencode($masked),
+							['%40' => '@', '%2A' => '*', '%5B' => '[', '%5D' => ']']);
 				},
 				substr($url, $position + 1),
 			);
@@ -546,19 +580,43 @@ class Logger extends Service implements Writer
 	}
 	
 	/**
-	 * Keeps the first character and masks the rest (marcin -> m***); an empty
-	 * string stays empty. The fixed suffix does not leak the original length.
+	 * Keeps every MASK_GROUP-th character and stars the rest (bob -> b**,
+	 * marcin -> m***i*, marcinmarcin -> m***i***r***), so the mask is exactly
+	 * as long as the value it replaced — a field that reads "m***" whatever it
+	 * held says nothing about what was there. An empty string stays empty.
+	 *
+	 * Past MASK_MAX characters the stars stop and the real length is stated
+	 * instead (a 200-character login -> "x***x***x***x***x***x***[200]"): a
+	 * value that long is someone trying something, and the size is the signal.
+	 *
+	 * Masking twice is a no-op: an uncut mask by construction — its revealed
+	 * positions hold the same characters again and every other position is a
+	 * star already — and a cut one by MASKED_CUT_PATTERN, whose stated length
+	 * must survive verbatim. Scrubbing twice is normal (the console scrubs
+	 * again server-side as a backstop) and a second pass must not chew further
+	 * into a value it has already masked.
 	 */
 	protected function maskName(
 		string $value,
 	): string
 	{
-		if($value === '')
+		if($value === ''
+			|| preg_match(self::MASKED_CUT_PATTERN, $value) === 1)
 		{
 			return $value;
 		}
 		
-		return mb_substr($value, 0, 1) . '***';
+		$length = mb_strlen($value);
+		$cut = min($length, self::MASK_MAX);
+		$masked = '';
+		for($index = 0; $index < $cut; $index++)
+		{
+			$masked.= $index % self::MASK_GROUP === 0
+				? mb_substr($value, $index, 1)
+				: '*';
+		}
+		
+		return $length > $cut ? $masked . '[' . $length . ']' : $masked;
 	}
 	
 	public function getEvent(

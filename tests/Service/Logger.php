@@ -54,7 +54,12 @@ class Logger extends Test
 			&& $out['Authorization'] === '[redacted]';
 	}
 	
-	public function anonymizesUsernameFieldsKeepingFirstCharacter(): bool
+	/**
+	 * Every fourth character survives and the rest become stars, so the mask is
+	 * exactly as long as the value was — "bob" (3) and "marcin" (6) must not log
+	 * identically, which every value collapsing to "x***" could not tell apart.
+	 */
+	public function anonymizesUsernameFieldsKeepingEveryFourthCharacter(): bool
 	{
 		$out = (new Subject)->remove([
 			'username'   => 'marcin',
@@ -64,10 +69,10 @@ class Logger extends Test
 			'user_login' => 'erin',
 		]);
 		
-		return $out['username'] === 'm***'
-			&& $out['user'] === 'b***'
-			&& $out['login'] === 'a***'
-			&& $out['user_name'] === 'c***'
+		return $out['username'] === 'm***i*'
+			&& $out['user'] === 'b**'
+			&& $out['login'] === 'a***e'
+			&& $out['user_name'] === 'c***l'
 			&& $out['user_login'] === 'e***';
 	}
 	
@@ -139,7 +144,7 @@ class Logger extends Test
 		
 		return $out['nested']['password'] === '[redacted]'
 			&& $out['nested']['email'] === 'd***@nest.io'
-			&& $out['nested']['username'] === 'd***'
+			&& $out['nested']['username'] === 'd***u***'
 			&& $out['nested']['list'][0] === 'a***@b.co' // e-mail reaches numeric keys
 			&& $out['nested']['list'][1] === 'plain'
 			&& $out['nested']['list'][2] === 42;          // non-string untouched
@@ -167,8 +172,8 @@ class Logger extends Test
 			'username' => 'bob', // defaults still apply
 		]);
 		
-		return $out['nick'] === 'm***'
-			&& $out['username'] === 'b***';
+		return $out['nick'] === 'm***i*'
+			&& $out['username'] === 'b**';
 	}
 	
 	/**
@@ -258,8 +263,8 @@ class Logger extends Test
 	{
 		$logger = new Subject;
 		
-		return $logger->removeFromUrl('/wp-login.php?action=rp&key=Qw3rTy8ZxC1vB2nM4kL6&login=x')
-				=== '/wp-login.php?action=rp&key=[redacted]&login=x***'
+		return $logger->removeFromUrl('/wp-login.php?action=rp&key=Qw3rTy8ZxC1vB2nM4kL6&login=root')
+				=== '/wp-login.php?action=rp&key=[redacted]&login=r***'
 			&& $logger->removeFromUrl('/dl?sig=abc123&file=r.pdf') === '/dl?sig=[redacted]&file=r.pdf'
 			&& ($logger->remove(['key' => 'cache-v3'])['key'] ?? null) === 'cache-v3';
 	}
@@ -302,7 +307,7 @@ class Logger extends Test
 		return $logger->removeFromUrl('/checkout?step=2&token=abc123&email=john%40x.com')
 				=== '/checkout?step=2&token=[redacted]&email=j***@x.com'
 			&& $logger->removeFromUrl('/account?login=marcin&page=3')
-				=== '/account?login=m***&page=3'
+				=== '/account?login=m***i*&page=3'
 			&& $logger->removeFromUrl('/unsubscribe/john@x.com?a=1')
 				=== '/unsubscribe/j***@x.com?a=1'
 			&& $logger->removeFromUrl('/plain/path') === '/plain/path';
