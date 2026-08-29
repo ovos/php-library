@@ -103,10 +103,13 @@ class Sender extends Service
 	 * The closed kind vocabulary for type=security events (reportRefusal) —
 	 * mirrors the console's App::SECURITY_KINDS. A kind outside this list is
 	 * a no-op here and refused server-side; the list only ever grows in a
-	 * deliberate two-sided change.
+	 * deliberate two-sided change. auth_success is for exactly one case: a
+	 * login that SUCCEEDED after recent failures for the same account or
+	 * address — never report clean logins.
 	 */
 	public const array SECURITY_KINDS = [
 		'auth_failure',
+		'auth_success',
 		'csrf_reject',
 		'permission_denied',
 		'rate_limited',
