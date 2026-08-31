@@ -229,10 +229,11 @@ class Rollup extends Test
 			'd:/orders:3' => 2,
 		]);
 		
+		// assemble() ksorts its fields, so routes precede the dt:-built total
 		return ($payload['durations'] ?? null) === [
-				'__total' => $vector([0 => 1, 11 => 2]),
-				'/user/:id' => $vector([0 => 1, 11 => 1]),
 				'/orders' => $vector([11 => 1]),
+				'/user/:id' => $vector([0 => 1, 11 => 1]),
+				'__total' => $vector([0 => 1, 11 => 2]),
 			]
 			&& isset($evicted['durations']) === false
 			&& $evicted['requests'] === 2;
