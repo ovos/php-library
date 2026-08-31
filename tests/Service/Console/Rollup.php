@@ -9,6 +9,7 @@ use Ovos\Request;
 use Ovos\Service\Console\Rollup as ConsoleRollup;
 use Ovos\Test;
 
+use function array_fill;
 use function str_repeat;
 
 /**
@@ -170,5 +171,70 @@ class Rollup extends Test
 				'routes' => [],
 				'authed' => [],
 			];
+	}
+	
+	/**
+	 * RULE: the duration bounds are a WIRE CONTRACT pinned byte for byte
+	 * (the console's Console\Stats\Durations carries the same list), and
+	 * bucketFor() classifies "first bound >= value" — pinned AT the
+	 * boundaries, because an off-by-one here shifts every percentile the
+	 * console will ever show for this sender's projects.
+	 */
+	public function durationBucketsClassifyAtTheirBoundaries(): bool
+	{
+		return ConsoleRollup::DURATION_BOUNDS === [25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 30000]
+			&& ConsoleRollup::DURATION_BUCKETS === 12
+			&& ConsoleRollup::bucketFor(0.0) === 0
+			&& ConsoleRollup::bucketFor(25.0) === 0
+			&& ConsoleRollup::bucketFor(25.1) === 1
+			&& ConsoleRollup::bucketFor(30000.0) === 10
+			&& ConsoleRollup::bucketFor(30000.1) === 11;
+	}
+	
+	/**
+	 * RULE: dt:/d: counters assemble into fixed 12-int vectors under the
+	 * durations key — the route split on the LAST colon, because route
+	 * patterns carry colons of their own — and the key ships ONLY when the
+	 * __total headline survived: the console refuses a durations map
+	 * without it whole, so a partial APCu eviction must degrade to "no
+	 * histograms this minute", never to a rejected fragment that also
+	 * loses the traffic counters riding beside it.
+	 */
+	public function durationFieldsAssembleIntoVectorsOrNotAtAll(): bool
+	{
+		$payload = ConsoleRollup::assemble(29248320, [
+			'requests' => 3,
+			'r:/user/:id' => 2,
+			'r:/orders' => 1,
+			'dt:0' => 1,
+			'dt:11' => 2,
+			'd:/user/:id:0' => 1,
+			'd:/user/:id:11' => 1,
+			'd:/orders:11' => 1,
+		]);
+		
+		$vector = static function(array $counts): array
+		{
+			$vector = array_fill(0, ConsoleRollup::DURATION_BUCKETS, 0);
+			foreach($counts as $bucket => $count)
+			{
+				$vector[$bucket] = $count;
+			}
+			
+			return $vector;
+		};
+		
+		$evicted = ConsoleRollup::assemble(29248320, [
+			'requests' => 2,
+			'd:/orders:3' => 2,
+		]);
+		
+		return ($payload['durations'] ?? null) === [
+				'__total' => $vector([0 => 1, 11 => 2]),
+				'/user/:id' => $vector([0 => 1, 11 => 1]),
+				'/orders' => $vector([11 => 1]),
+			]
+			&& isset($evicted['durations']) === false
+			&& $evicted['requests'] === 2;
 	}
 }

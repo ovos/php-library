@@ -12,6 +12,7 @@ use Ovos\Service\Auth;
 use Throwable;
 
 use function apcu_add;
+use function array_fill;
 use function apcu_delete;
 use function apcu_enabled;
 use function apcu_entry;
@@ -28,7 +29,10 @@ use function gethostname;
 use function http_response_code;
 use function in_array;
 use function intdiv;
+use function is_float;
 use function is_int;
+use function is_string;
+use function microtime;
 use function json_encode;
 use function ksort;
 use function preg_match;
@@ -36,6 +40,7 @@ use function preg_quote;
 use function preg_replace;
 use function rtrim;
 use function str_contains;
+use function strrpos;
 use function strtolower;
 use function substr;
 use function time;
@@ -123,6 +128,17 @@ class Rollup
 	 */
 	public const array METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 	
+	/**
+	 * Duration histogram bounds, MILLISECONDS — a WIRE CONTRACT shared
+	 * verbatim with every sender and the console's Console\Stats\Durations:
+	 * bucket i counts durations > bounds[i-1] and <= bounds[i]; the 12th
+	 * bucket is everything past the last bound. Fixed for the life of the
+	 * feature — changing it breaks additivity across time.
+	 */
+	public const array DURATION_BOUNDS = [25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 30000];
+	
+	public const int DURATION_BUCKETS = 12;
+	
 	public function __construct(
 		protected ?ArrayObject $config,
 	)
@@ -167,12 +183,21 @@ class Rollup
 		$minute = intdiv(time(), 60);
 		$status = http_response_code();
 		
+		// request wall time: SAPI start to this shutdown observer — framework
+		// boot included, web server and network excluded. No start marker
+		// means no histogram entry; a wrong duration is worse than none.
+		$started = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+		$duration = is_float($started) || (is_string($started) && $started !== '')
+			? (microtime(true) - (float)$started) * 1000
+			: null;
+		
 		$this->count(
 			$minute,
 			$status,
 			(string)($_SERVER['REQUEST_METHOD'] ?? ''),
 			self::routeFor($status, $app->getRequest()),
 			$this->isAuthed($app),
+			$duration !== null && $duration >= 0 ? $duration : null,
 		);
 		
 		$this->maybeFlush($minute);
@@ -261,6 +286,25 @@ class Rollup
 	 * @param array<string, int> $fields flattened counter fields
 	 *   ('requests', 's:200', 'm:GET', 'r:/x/y', 'a:yes')
 	 */
+	/**
+	 * The histogram bucket one duration falls into: first bound >= value,
+	 * else the overflow bucket
+	 */
+	public static function bucketFor(
+		float $ms,
+	): int
+	{
+		foreach(self::DURATION_BOUNDS as $i => $bound)
+		{
+			if($ms <= $bound)
+			{
+				return $i;
+			}
+		}
+		
+		return self::DURATION_BUCKETS - 1;
+	}
+	
 	public static function assemble(
 		int $minute,
 		array $fields,
@@ -276,6 +320,8 @@ class Rollup
 		];
 		
 		ksort($fields);
+		
+		$durations = [];
 		
 		foreach($fields as $field => $count)
 		{
@@ -294,6 +340,21 @@ class Rollup
 			{
 				$payload['methods'][substr($field, 2)] = $count;
 			}
+			elseif(substr($field, 0, 3) === 'dt:')
+			{
+				$bucket = (int)substr($field, 3);
+				$durations['__total'] ??= array_fill(0, self::DURATION_BUCKETS, 0);
+				$durations['__total'][$bucket] = $count;
+			}
+			elseif(substr($field, 0, 2) === 'd:')
+			{
+				// the bucket index is whatever follows the LAST colon — route
+				// patterns may carry colons of their own
+				$cut = strrpos($field, ':');
+				$route = substr($field, 2, $cut - 2);
+				$durations[$route] ??= array_fill(0, self::DURATION_BUCKETS, 0);
+				$durations[$route][(int)substr($field, $cut + 1)] = $count;
+			}
 			elseif(substr($field, 0, 2) === 'r:')
 			{
 				$payload['routes'][substr($field, 2)] = $count;
@@ -302,6 +363,14 @@ class Rollup
 			{
 				$payload['authed'][substr($field, 2)] = $count;
 			}
+		}
+		
+		// the console requires the __total headline whenever the map is
+		// non-empty; a partial eviction that lost the dt:* keys ships NO
+		// histograms rather than a fragment the endpoint would refuse whole
+		if(isset($durations['__total']))
+		{
+			$payload['durations'] = $durations;
 		}
 		
 		return $payload;
@@ -330,6 +399,7 @@ class Rollup
 		string $method,
 		string $route,
 		?bool $authed,
+		?float $durationMs = null,
 	): void
 	{
 		$fields = ['requests'];
@@ -351,6 +421,17 @@ class Rollup
 		if($authed !== null)
 		{
 			$fields[] = 'a:' . ($authed ? 'yes' : 'no');
+		}
+		
+		// the duration histogram (perf-lite): one increment into the fixed
+		// bucket vocabulary — the __total headline and the route's own
+		// vector, always together, so the console's counts and percentiles
+		// can never describe different route sets
+		if($durationMs !== null)
+		{
+			$bucket = self::bucketFor($durationMs);
+			$fields[] = 'dt:' . $bucket;
+			$fields[] = 'd:' . $route . ':' . $bucket;
 		}
 		
 		$ok = false;
