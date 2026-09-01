@@ -1,0 +1,4 @@
+# Tests\Config\Loader fixture - a double-quoted scalar that never closes
+production:
+  system: "unterminated
+debug: yes

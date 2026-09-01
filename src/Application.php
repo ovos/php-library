@@ -232,10 +232,31 @@ class Application
 			? constant('CONFIGS_DIR')
 			: self::CONFIGS_DIR;
 		
-		$this->config = $this->getConfig(
-			$configsDir . 'environments.yml',
-			$environment,
-		);
+		// the .env Environment is remembered (APCu) only once environments.yml
+		// has a section for it. Remembered first, a .env naming a retired
+		// environment would outlive its own fix: the entry has no mtime, and
+		// the cache clear needs a boot that works. A failed resolution also
+		// drops what an earlier boot remembered, so the corrected .env is
+		// read on the very next request
+		try
+		{
+			$this->config = $this->getConfig(
+				$configsDir . 'environments.yml',
+				$this->environment,
+			);
+		}
+		catch(Throwable $e)
+		{
+			$loader->forget($environmentFile);
+			
+			throw $e;
+		}
+		
+		if($environment !== null)
+		{
+			$loader->remember($environmentFile, $environment);
+		}
+		
 		$this->container
 			->registerObject(Environment::class, $this->environment)
 			->registerObject(self::CONTAINER_KEY_CONFIG, $this->config);
