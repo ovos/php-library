@@ -392,6 +392,11 @@ PASSWORD = ""
   project-specific. Add exactly the sections your `environments.yml` reads via
   `!ENV`, and nothing more; the block above is a common starting point.
 - `ENV` determines which top-level key in `environments.yml` is used (e.g., `development`, `production`)
+- An `ENV` that `environments.yml` does not define fails the boot with a
+  `MissingConfigException` naming the file, the keys it does define and the
+  `ENV` key to fix. The parsed `.env` is cached (APCu) only after its
+  environment resolved, and a failed boot drops an earlier cached copy - so
+  correcting `.env` takes effect on the next request, no cache clear needed
 - Sections like `[MYSQL]` create grouped variables read in YAML as `!ENV MYSQL[HOST]`, `!ENV MYSQL[DATABASE]`, etc.
 - Copy your project's `.env.example` to `.env` and adjust values for your local setup
 - Never commit `.env` to version control
