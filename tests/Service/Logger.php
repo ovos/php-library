@@ -100,8 +100,8 @@ class Logger extends Test
 			'contact' => 'support@gmail.com', // e-mail in a non-e-mail field
 		]);
 		
-		return $out['email'] === 'j***@example.com'
-			&& $out['contact'] === 's***@gmail.com';
+		return $out['email'] === 'j***.***@example.com'
+			&& $out['contact'] === 's***o**@gmail.com';
 	}
 	
 	public function masksEveryEmailInFreeText(): bool
@@ -110,7 +110,7 @@ class Logger extends Test
 			'note' => 'ping bob@x.co and jane+tag@sub.example.org please',
 		]);
 		
-		return $out['note'] === 'ping b***@x.co and j***@sub.example.org please';
+		return $out['note'] === 'ping b**@x.co and j***+***@sub.example.org please';
 	}
 	
 	/**
@@ -122,6 +122,34 @@ class Logger extends Test
 		$out = (new Subject)->remove(['username' => 'john@company.com']);
 		
 		return $out['username'] === 'j***@company.com';
+	}
+	
+	/**
+	 * The mask is exactly as long as the local part was (the statement
+	 * maskName already makes for usernames) — and every shape survives a
+	 * username-named field with its domain intact, including the short
+	 * locals whose mask holds no *** run and the one-character local whose
+	 * mask IS the raw value.
+	 */
+	public function theEmailMaskSaysHowLongTheLocalPartWas(): bool
+	{
+		$logger = new Subject;
+		
+		$out = $logger->remove([
+			'username' => 'tobis@ovos.at',
+			'login' => 'm@ovos.at',
+			'user' => 'j***.***@example.com',
+		]);
+		
+		return $out === [
+				'username' => 't***s@ovos.at',
+				'login' => 'm@ovos.at',
+				'user' => 'j***.***@example.com',
+			]
+			// the login param is untouched, so it stays byte-identical —
+			// %40 and all (values are only re-encoded when changed)
+			&& $logger->removeFromUrl('/x?user=jo%40b.co&login=m%40ovos.at')
+				=== '/x?user=j*@b.co&login=m%40ovos.at';
 	}
 	
 	public function secretsAreRemovedEvenWhenValuedLikeAnEmail(): bool
@@ -145,7 +173,7 @@ class Logger extends Test
 		return $out['nested']['password'] === '[redacted]'
 			&& $out['nested']['email'] === 'd***@nest.io'
 			&& $out['nested']['username'] === 'd***u***'
-			&& $out['nested']['list'][0] === 'a***@b.co' // e-mail reaches numeric keys
+			&& $out['nested']['list'][0] === 'a@b.co' // one-char local: the mask IS the value
 			&& $out['nested']['list'][1] === 'plain'
 			&& $out['nested']['list'][2] === 42;          // non-string untouched
 	}
@@ -336,7 +364,7 @@ class Logger extends Test
 			'password',
 			'[redacted]',
 			'notify',
-			'b***@x.co',
+			'b**@x.co',
 		];
 	}
 }
