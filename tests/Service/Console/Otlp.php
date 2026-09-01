@@ -34,6 +34,7 @@ class Otlp extends Test
 		return $resource['telemetry.sdk.language'] === ['stringValue' => 'php']
 			&& $resource['service.name'] === ['stringValue' => 'shop.example.at']
 			&& $resource['service.version'] === ['stringValue' => 'r-2026']
+			&& $resource['deployment.environment.name'] === ['stringValue' => 'staging']
 			&& $record['severityNumber'] === 17
 			&& $record['severityText'] === 'ERROR'
 			&& $record['body'] === ['stringValue' => 'boom']
@@ -148,6 +149,7 @@ class Otlp extends Test
 			'priority' => 3,
 			'timestamp' => date('c'),
 			'release' => 'r-2026',
+			'environment' => 'staging',
 			'message' => 'boom',
 			'events' => [[
 				'message' => 'boom',
