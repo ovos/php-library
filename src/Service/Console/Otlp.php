@@ -93,6 +93,12 @@ final class Otlp
 			$resource[] = self::attr('service.version', (string)$first['release']);
 		}
 		
+		if(($first['environment'] ?? '') !== '')
+		{
+			$resource[] = self::attr('deployment.environment.name',
+				(string)$first['environment']);
+		}
+		
 		if(is_array($context['args'] ?? null) && $context['args'] !== [])
 		{
 			$resource[] = self::attr('process.command_args', $context['args']);

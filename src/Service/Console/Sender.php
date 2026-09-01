@@ -68,6 +68,9 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *     log_level: 5                      # send priority <= this (0-7)
  *     timeout_ms: 1000
  *     release: !ENV CONSOLE[RELEASE]    # optional deploy label (git sha, svn rev, …)
+ *     environment: staging              # optional deployment stage, sent verbatim. UNSET, the
+ *                                       # app's own .env ENV is sent (production included — the
+ *                                       # console badges only non-production values)
  *     rollups: no                       # OPT-IN: per-minute traffic counters (requests,
  *                                       # status/method/route/authed) accumulated in APCu and
  *                                       # POSTed to /api/v1/ingest/rollup once per minute —
@@ -642,6 +645,15 @@ class Sender extends Service
 		// optional deploy label (git sha, svn revision, any string) —
 		// constant across the batch, read once
 		$release = mb_substr((string)($this->config?->release ?? ''), 0, 64);
+		// deployment stage: an explicit console.environment wins, otherwise
+		// the app's own env name — production included (the console stores
+		// and filters it, but only badges anything else)
+		$environment = (string)($this->config?->environment ?? '');
+		if($environment === '')
+		{
+			$environment = $this->app->getEnv();
+		}
+		$environment = mb_substr($environment, 0, 64);
 		
 		$errors = [];
 		foreach($this->queue as $payload)
@@ -670,6 +682,11 @@ class Sender extends Service
 			if($release !== '')
 			{
 				$payload['release'] = $release;
+			}
+			
+			if($environment !== '')
+			{
+				$payload['environment'] = $environment;
 			}
 			
 			$errors[] = $payload;
