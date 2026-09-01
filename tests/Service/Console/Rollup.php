@@ -238,4 +238,23 @@ class Rollup extends Test
 			&& isset($evicted['durations']) === false
 			&& $evicted['requests'] === 2;
 	}
+	
+	/**
+	 * RULE: a streaming response (text/event-stream) is held open for as
+	 * long as the client listens — its wall time measures the subscription,
+	 * not the work — so observe() counts it as a request and gives it no
+	 * duration; otherwise every stream lands in the overflow bucket and one
+	 * SSE endpoint owns the project's average. The media type the endpoint
+	 * declares is the signal, whatever its case or charset suffix; a header
+	 * that merely mentions the token is not.
+	 */
+	public function aStreamIsRecognisedByItsDeclaredContentType(): bool
+	{
+		return ConsoleRollup::isStream(['Content-Type: text/event-stream']) === true
+			&& ConsoleRollup::isStream(['X-Accel-Buffering: no', 'content-type: TEXT/EVENT-STREAM; charset=utf-8']) === true
+			&& ConsoleRollup::isStream(['Content-Type: text/html; charset=utf-8']) === false
+			&& ConsoleRollup::isStream(['Content-Type: application/json']) === false
+			&& ConsoleRollup::isStream(['Link: </sse>; rel="text/event-stream"']) === false
+			&& ConsoleRollup::isStream([]) === false;
+	}
 }

@@ -76,7 +76,8 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *                                       # POSTed to /api/v1/ingest/rollup once per minute —
  *                                       # the console's denominator layer (see Rollup). Needs
  *                                       # url+key AND rollups_enabled on the console project;
- *                                       # no APCu means a silent no-op.
+ *                                       # no APCu means a silent no-op. A text/event-stream
+ *                                       # response counts as a request but carries no duration.
  *     otlp_url: ''                      # OPTIONAL: an OpenTelemetry Collector's OTLP/HTTP
  *                                       # logs endpoint VERBATIM (http://collector:4318/v1/logs).
  *                                       # Set -> the batch goes there as OTLP/JSON instead of the
