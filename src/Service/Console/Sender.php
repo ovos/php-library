@@ -392,6 +392,7 @@ class Sender extends Service
 		
 		$payload = Payload::fromMessage($message, Priority::INFO, $extra);
 		$payload['type'] = 'security';
+		$payload['kind'] = 'security';
 		$payload['events'] = [[
 			'message' => $message,
 			'className' => $kind,
@@ -420,7 +421,7 @@ class Sender extends Service
 		$ok = false;
 		$count = apcu_inc(
 			'ovos:console:security:' . intdiv(time(), 60), 1, $ok, 120);
-			
+		
 		return $count === false || $count <= self::SECURITY_MAX_PER_MINUTE;
 	}
 	
@@ -495,6 +496,7 @@ class Sender extends Service
 			$extra,
 		);
 		$payload['type'] = '404';
+		$payload['kind'] = 'not_found';
 		
 		return $payload;
 	}
@@ -659,9 +661,11 @@ class Sender extends Service
 		$errors = [];
 		foreach($this->queue as $payload)
 		{
-			// a 404 access event rides the INFO band but is a KIND, not a
-			// severity — the log_level gate (a severity filter) must not drop it
-			if(($payload['type'] ?? '') !== '404'
+			// a 404 access event and a security event ride the INFO band but
+			// are KINDS, not severities — the log_level gate (a severity
+			// filter) must not drop them (security used to fall through it:
+			// a log_level below INFO silently lost every reportRefusal)
+			if(($payload['kind'] ?? 'error') === 'error'
 				&& $payload['priority'] > $logLevel)
 			{
 				continue;
@@ -669,8 +673,15 @@ class Sender extends Service
 			
 			$context ??= $this->buildContext($logger);
 			
-			// respect a type the payload already carries (404); otherwise
-			// take the request-derived type (http/cli)
+			// the console's three axes (ovos/console 2026-09): what ran the
+			// code, how it was entered, what the record IS. `type` is the
+			// legacy slot older consoles read (http/cli/404/security) and
+			// stays beside them until every console has updated
+			$payload['runtime'] = 'php';
+			$payload['entry'] = $context['entry'];
+			$payload['kind'] ??= 'error';
+			// respect a type the payload already carries (404, security);
+			// otherwise take the request-derived type (http/cli)
 			$payload['type'] ??= $context['type'];
 			// per-event context overrides win over the auto-built base;
 			// extras are scrubbed like request variables (secrets, e-mails,
@@ -747,6 +758,7 @@ class Sender extends Service
 		
 		return [
 			'type' => $isCli ? 'cli' : 'http',
+			'entry' => $isCli ? 'cli' : 'web',
 			'context' => $context,
 		];
 	}

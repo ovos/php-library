@@ -125,6 +125,7 @@ class Sender extends Test
 		
 		return $sender->queueCount() === 1
 			&& ($payload['type'] ?? null) === '404'
+			&& ($payload['kind'] ?? null) === 'not_found'
 			&& ($payload['priority'] ?? null) === Priority::INFO
 			&& ($payload['message'] ?? '') === '404 Not Found: /wp-login.php';
 	}
@@ -165,6 +166,7 @@ class Sender extends Test
 		
 		return $sender->queueCount() === 1
 			&& ($payload['type'] ?? null) === 'security'
+			&& ($payload['kind'] ?? null) === 'security'
 			&& ($payload['priority'] ?? null) === Priority::INFO
 			&& ($payload['message'] ?? '') === 'login failed for m***'
 			&& ($payload['events'][0]['className'] ?? null) === 'auth_failure'
@@ -281,6 +283,7 @@ class Sender extends Test
 		$payload = $sender->lastPayload();
 		
 		return ($payload['type'] ?? null) === '404'
+			&& ($payload['kind'] ?? null) === 'not_found'
 			&& ($payload['priority'] ?? null) === Priority::INFO
 			&& ($payload['message'] ?? '') === 'File not found: themes/x/favicon.png';
 	}
@@ -292,8 +295,10 @@ class Sender extends Test
 		$sender->mergeEvent(new NotFoundException('No route'));
 		$payload = $sender->lastPayload();
 		
-		// a normal exception payload: no 404 type override, error priority
+		// a normal exception payload: no 404 type override, no kind yet (flush
+		// stamps `error` beside runtime/entry), error priority
 		return ($payload['type'] ?? null) === null
+			&& ($payload['kind'] ?? null) === null
 			&& ($payload['priority'] ?? null) === Priority::ERROR;
 	}
 	
