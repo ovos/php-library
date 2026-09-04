@@ -27,8 +27,10 @@ use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
 use function function_exists;
+use function http_response_code;
 use function in_array;
 use function intdiv;
+use function is_int;
 use function json_encode;
 use function mb_strlen;
 use function mb_substr;
@@ -744,6 +746,18 @@ class Sender extends Service
 			$context['ip'] = (string)Client::getIp();
 			$context['ua'] = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
 			
+			// the status the response ENDED with (console contract: context.status,
+			// docs/SENDER.md). This runs at the shutdown flush, after the response
+			// went out, so the SAPI has the final word: 500 for an uncaught
+			// exception's error page, 404 for a not-found route, 200 for an
+			// exception caught and answered. Where nothing answers — the CLI SAPI —
+			// no key: the console never guesses one, and neither does the sender
+			$status = $this->responseStatus();
+			if($status !== null)
+			{
+				$context['status'] = $status;
+			}
+			
 			// handler-agnostic: the native session machinery (and its
 			// session_id()) never runs under the json handler
 			$session = $this->app->getServices()->session;
@@ -761,6 +775,28 @@ class Sender extends Service
 			'entry' => $isCli ? 'cli' : 'web',
 			'context' => $context,
 		];
+	}
+	
+	/**
+	 * http_response_code() as an int in the HTTP range, null otherwise (false
+	 * under the CLI SAPI, or a value nothing would send) — its own method so
+	 * a test can script what the SAPI would answer
+	 */
+	protected function responseStatus(): ?int
+	{
+		return self::statusOf(http_response_code());
+	}
+	
+	/**
+	 * What http_response_code() answered, as the context value or nothing:
+	 * an int in the HTTP range 100..599 passes, false (no SAPI status) and
+	 * anything outside the range does not
+	 */
+	public static function statusOf(
+		mixed $status,
+	): ?int
+	{
+		return is_int($status) && $status >= 100 && $status <= 599 ? $status : null;
 	}
 	
 	/**

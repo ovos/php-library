@@ -349,6 +349,34 @@ class Sender extends Test
 	}
 	
 	/**
+	 * The response status the failing request ended with (context.status):
+	 * what http_response_code() answers when it is an int in the HTTP range,
+	 * else nothing — false (no SAPI status) and out-of-range values never
+	 * become a context key, so the console never indexes a made-up status
+	 */
+	public function responseStatusIsTheSapiStatusInTheHttpRange(): bool
+	{
+		return ConsoleSender::statusOf(500) === 500
+			&& ConsoleSender::statusOf(200) === 200
+			&& ConsoleSender::statusOf(100) === 100
+			&& ConsoleSender::statusOf(599) === 599
+			&& ConsoleSender::statusOf(false) === null
+			&& ConsoleSender::statusOf(null) === null
+			&& ConsoleSender::statusOf(99) === null
+			&& ConsoleSender::statusOf(600) === null
+			&& ConsoleSender::statusOf('500') === null;
+	}
+	
+	/**
+	 * Under the CLI SAPI http_response_code() answers false — a CLI run has
+	 * no response, so the sender adds no status rather than a default one
+	 */
+	public function cliRunsCarryNoResponseStatus(): bool
+	{
+		return $this->makeSender()->status() === null;
+	}
+	
+	/**
 	 * @return ConsoleSender&object{queueCount: callable(): int}
 	 */
 	protected function makeSender(
@@ -380,6 +408,14 @@ class Sender extends Test
 			public function queueCount(): int
 			{
 				return count($this->queue);
+			}
+			
+			/**
+			 * What buildContext() would put under context.status
+			 */
+			public function status(): ?int
+			{
+				return $this->responseStatus();
 			}
 			
 			/**
