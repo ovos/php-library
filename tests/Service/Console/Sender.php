@@ -462,6 +462,8 @@ class Sender extends Test
 			&& ConsoleSender::releaseLabel(null, "abc123\nsecond line\n") === 'abc123'
 			&& ConsoleSender::releaseLabel('  ', "  7f3e9  \n") === '7f3e9'
 			&& ConsoleSender::releaseLabel('', null) === ''
+			// a non-string configured value is no value: the stamp speaks, or nothing does
+			&& ConsoleSender::releaseLabel(42, "abc123\n") === 'abc123'
 			&& ConsoleSender::releaseLabel(42, '') === ''
 			&& mb_strlen(ConsoleSender::releaseLabel(str_repeat('x', 80), null)) === ConsoleSender::RELEASE_MAX
 			&& ConsoleSender::stamp(__DIR__ . '/no-such-file.release') === null
