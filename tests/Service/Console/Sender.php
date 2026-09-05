@@ -16,6 +16,7 @@ use WeakReference;
 
 use function count;
 use function gc_collect_cycles;
+use function mb_strlen;
 use function str_repeat;
 
 use const E_WARNING;
@@ -445,5 +446,25 @@ class Sender extends Test
 				// never post from tests
 			}
 		};
+	}
+	/**
+	 * The deploy label (ovos/php-module-system `release stamp`): the configured
+	 * console.release wins whenever it is non-empty — a placeholder like "dev"
+	 * included, deliberately — else the stamp's first line, trimmed and capped;
+	 * nothing anywhere is '' (the behaviour before the stamp), and an absent
+	 * or unreadable stamp reads as no stamp
+	 */
+	public function theReleaseIsTheConfiguredValueElseTheStamp(): bool
+	{
+		return ConsoleSender::releaseLabel('v1.2', "abc123\n") === 'v1.2'
+			&& ConsoleSender::releaseLabel('dev', "abc123\n") === 'dev'
+			&& ConsoleSender::releaseLabel('', "abc123\n") === 'abc123'
+			&& ConsoleSender::releaseLabel(null, "abc123\nsecond line\n") === 'abc123'
+			&& ConsoleSender::releaseLabel('  ', "  7f3e9  \n") === '7f3e9'
+			&& ConsoleSender::releaseLabel('', null) === ''
+			&& ConsoleSender::releaseLabel(42, '') === ''
+			&& mb_strlen(ConsoleSender::releaseLabel(str_repeat('x', 80), null)) === ConsoleSender::RELEASE_MAX
+			&& ConsoleSender::stamp(__DIR__ . '/no-such-file.release') === null
+			&& ConsoleSender::RELEASE_FILE === '.release';
 	}
 }

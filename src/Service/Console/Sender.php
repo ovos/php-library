@@ -26,11 +26,15 @@ use function count;
 use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
+use function explode;
+use function file_get_contents;
 use function function_exists;
 use function http_response_code;
 use function in_array;
 use function intdiv;
 use function is_int;
+use function is_readable;
+use function is_string;
 use function json_encode;
 use function mb_strlen;
 use function mb_substr;
@@ -41,6 +45,7 @@ use function str_starts_with;
 use function strpos;
 use function substr;
 use function time;
+use function trim;
 
 use const CURLOPT_CONNECTTIMEOUT_MS;
 use const CURLOPT_HTTPHEADER;
@@ -69,7 +74,9 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *     key: !ENV CONSOLE[KEY]            # project api_key
  *     log_level: 5                      # send priority <= this (0-7)
  *     timeout_ms: 1000
- *     release: !ENV CONSOLE[RELEASE]    # optional deploy label (git sha, svn rev, …)
+ *     release: !ENV CONSOLE[RELEASE]    # optional deploy label (git sha, svn rev, …); EMPTY =
+ *                                       # the .release stamp beside .env is reported (php cli.php
+ *                                       # release stamp, ovos/php-module-system) — a value here wins
  *     environment: staging              # optional deployment stage, sent verbatim. UNSET, the
  *                                       # app's own .env ENV is sent (production included — the
  *                                       # console badges only non-production values)
@@ -94,6 +101,15 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  */
 class Sender extends Service
 {
+	/**
+	 * The deploy stamp beside .env — per deployment, machine-written, never
+	 * committed (`php cli.php release stamp`); read when console.release is empty
+	 */
+	public const string RELEASE_FILE = '.release';
+	
+	/** the label's cap — the console's column and its own mb_substr agree on it */
+	public const int RELEASE_MAX = 64;
+	
 	public const string SYMBOL = 'consoleSender';
 	
 	/**
@@ -647,9 +663,9 @@ class Sender extends Service
 		// the shared scrub patterns live in the Logger service
 		$logger = $this->getLogger();
 		
-		// optional deploy label (git sha, svn revision, any string) —
-		// constant across the batch, read once
-		$release = mb_substr((string)($this->config?->release ?? ''), 0, 64);
+		// the deploy label (git sha, svn revision, any string): console.release,
+		// else the .release stamp — constant across the batch, read once
+		$release = self::currentRelease($this->config?->release ?? null);
 		// deployment stage: an explicit console.environment wins, otherwise
 		// the app's own env name — production included (the console stores
 		// and filters it, but only badges anything else)
@@ -880,5 +896,72 @@ class Sender extends Service
 		]);
 		
 		curl_exec($handle);
+	}
+	/**
+	 * The deploy label the batch carries: the configured console.release when
+	 * it is non-empty, else the first line of BASE_DIR/.release — the stamp
+	 * `php cli.php release stamp` (ovos/php-module-system) writes on deploy.
+	 * CONFIGURED WINS: a deployment that supplies a value knows something a
+	 * generated stamp cannot, so the stamp is a fallback, never an override —
+	 * which also means a placeholder like "dev" outranks it. Leave
+	 * console.release EMPTY to let the stamp speak. Nothing anywhere is '',
+	 * the behaviour every project had before the stamp existed.
+	 */
+	public static function currentRelease(
+		mixed $configured,
+	): string
+	{
+		return self::releaseLabel($configured, self::stamp(BASE_DIR . self::RELEASE_FILE));
+	}
+	
+	/**
+	 * Pure: the configured value when non-empty, else the stamp — first line,
+	 * trimmed, capped at RELEASE_MAX like the column behind it
+	 */
+	public static function releaseLabel(
+		mixed $configured,
+		?string $stamp,
+	): string
+	{
+		$value = self::firstLine(is_string($configured) ? $configured : '');
+		
+		return $value !== '' ? $value : self::firstLine($stamp ?? '');
+	}
+	
+	/**
+	 * The stamp file's contents, null when absent or unreadable — both mean
+	 * "no label", and neither is worth a warning on the request that reads it
+	 * (Events::handleError would turn one into a thrown ErrorException)
+	 */
+	public static function stamp(
+		string $path,
+	): ?string
+	{
+		if(is_readable($path) === false)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$contents = file_get_contents($path);
+		}
+		catch(Throwable)
+		{
+			return null;
+		}
+		
+		return $contents === false ? null : $contents;
+	}
+	
+	/**
+	 * A stamp written by a shell redirect carries a trailing newline, a
+	 * careless one the whole `git log` — the first line is the label
+	 */
+	protected static function firstLine(
+		string $value,
+	): string
+	{
+		return mb_substr(trim(explode("\n", trim($value))[0]), 0, self::RELEASE_MAX);
 	}
 }
