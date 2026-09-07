@@ -24,6 +24,7 @@ use function array_replace;
 use function array_values;
 use function count;
 use function curl_exec;
+use function curl_getinfo;
 use function curl_init;
 use function curl_setopt_array;
 use function explode;
@@ -36,6 +37,7 @@ use function is_int;
 use function is_readable;
 use function is_string;
 use function json_encode;
+use function max;
 use function mb_strlen;
 use function mb_substr;
 use function min;
@@ -47,6 +49,7 @@ use function substr;
 use function time;
 use function trim;
 
+use const CURLINFO_RESPONSE_CODE;
 use const CURLOPT_CONNECTTIMEOUT_MS;
 use const CURLOPT_HTTPHEADER;
 use const CURLOPT_NOSIGNAL;
@@ -96,6 +99,10 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *                                       # the console — errors would double-report.
  *
  * plus "- Console\Sender" in system.services.http and .cli lists.
+ *
+ * The deploy step tells the console a release shipped the minute it does:
+ * `$sender->announceRelease()` (SENDER.md §7) — the label the events carry,
+ * or the one the caller names, with an optional moment, ref and source.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -669,12 +676,7 @@ class Sender extends Service
 		// deployment stage: an explicit console.environment wins, otherwise
 		// the app's own env name — production included (the console stores
 		// and filters it, but only badges anything else)
-		$environment = (string)($this->config?->environment ?? '');
-		if($environment === '')
-		{
-			$environment = $this->app->getEnv();
-		}
-		$environment = mb_substr($environment, 0, 64);
+		$environment = $this->environment();
 		
 		$errors = [];
 		foreach($this->queue as $payload)
@@ -897,6 +899,138 @@ class Sender extends Service
 		
 		curl_exec($handle);
 	}
+	
+	/**
+	 * Tell the console a release shipped — the deploy step (SENDER.md §7):
+	 * `POST /api/v1/ingest/release` with the project key. The label is the
+	 * one the events carry (console.release, else the .release stamp) unless
+	 * the caller names one; `at` (epoch seconds, ms or ISO 8601), `ref`,
+	 * `source` and `environment` are optional. Synchronous — a deploy step
+	 * wants the answer — and still best-effort: false, never an exception,
+	 * when the sender is off, nothing is stamped or the console is out of
+	 * reach. Direct ingest only: the OTLP collector has no release endpoint.
+	 *
+	 * @param array{at?: int|string, ref?: string, source?: string, environment?: string} $options
+	 * @return bool whether the console accepted the announce (202)
+	 */
+	public function announceRelease(
+		string $release = '',
+		array $options = [],
+	): bool
+	{
+		if($this->config === null || $this->config->enabled !== true
+			|| (string)$this->config->url === '' || (string)$this->config->key === '')
+		{
+			return false;
+		}
+		
+		try
+		{
+			$payload = self::releasePayload(
+				$release !== '' ? $release : self::currentRelease($this->config->release ?? null),
+				$options,
+				$this->environment(),
+			);
+			if($payload === [])
+			{
+				return false;
+			}
+			$json = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE);
+			
+			return $json !== false && $this->post('/api/v1/ingest/release', $json) === 202;
+		}
+		catch(Throwable)
+		{
+			return false;
+		}
+	}
+	
+	/**
+	 * Pure: the announce body — the label's first line capped like the
+	 * column, the source (the deploy tool; this library when unnamed), and
+	 * the optional fields only when given; [] without a label, so a deploy
+	 * step on an unstamped checkout announces nothing rather than an empty
+	 * release
+	 *
+	 * @param array{at?: int|string, ref?: string, source?: string, environment?: string} $options
+	 * @return array<string, int|string>
+	 */
+	public static function releasePayload(
+		string $release,
+		array $options,
+		string $environment,
+	): array
+	{
+		$label = self::firstLine($release);
+		if($label === '')
+		{
+			return [];
+		}
+		
+		$payload = [
+			'release' => $label,
+			'source' => mb_substr(trim((string)($options['source'] ?? 'php-library')), 0, 32),
+		];
+		$at = $options['at'] ?? null;
+		if(is_int($at) || (is_string($at) && trim($at) !== ''))
+		{
+			$payload['at'] = is_int($at) ? $at : trim($at);
+		}
+		$ref = trim((string)($options['ref'] ?? ''));
+		if($ref !== '')
+		{
+			$payload['ref'] = mb_substr($ref, 0, 128);
+		}
+		$stage = trim((string)($options['environment'] ?? $environment));
+		if($stage !== '')
+		{
+			$payload['environment'] = mb_substr($stage, 0, 64);
+		}
+		
+		return $payload;
+	}
+	
+	/**
+	 * The deployment stage the batch and the announce carry: an explicit
+	 * console.environment wins, otherwise the app's own env name
+	 */
+	protected function environment(): string
+	{
+		$environment = (string)($this->config?->environment ?? '');
+		if($environment === '')
+		{
+			$environment = $this->app->getEnv();
+		}
+		
+		return mb_substr($environment, 0, 64);
+	}
+	
+	/**
+	 * One synchronous JSON POST to the console with the project key, the
+	 * response code back (0 = no answer) — the announce's transport; the
+	 * batch keeps send() and its fire-and-forget timing
+	 */
+	protected function post(
+		string $path,
+		string $json,
+	): int
+	{
+		$handle = curl_init(rtrim((string)$this->config->url, '/') . $path);
+		curl_setopt_array($handle, [
+			CURLOPT_POST => true,
+			CURLOPT_POSTFIELDS => $json,
+			CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'X-Console-Key: ' . (string)$this->config->key],
+			CURLOPT_RETURNTRANSFER => true,
+			CURLOPT_NOSIGNAL => true,
+			CURLOPT_CONNECTTIMEOUT_MS => 1000,
+			// a deploy step waits for the answer — longer than the batch's bound
+			CURLOPT_TIMEOUT_MS => max(2000, (int)($this->config->timeout_ms ?? 1000)),
+		]);
+		curl_exec($handle);
+		
+		return (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+	}
+	
 	/**
 	 * The deploy label the batch carries: the configured console.release when
 	 * it is non-empty, else the first line of BASE_DIR/.release — the stamp

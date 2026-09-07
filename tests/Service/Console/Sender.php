@@ -29,6 +29,34 @@ use const E_WARNING;
  */
 class Sender extends Test
 {
+	/**
+	 * The release announce (SENDER.md §7): the body is the label the events
+	 * carry — its first line, capped like the column — the source (this
+	 * library when the deploy step names none) and the optional fields only
+	 * when given; and nothing at all without a label, so a deploy step on an
+	 * unstamped checkout announces nothing rather than an empty release
+	 */
+	public function releasePayloadIsTheAnnounceBodyOrNothing(): bool
+	{
+		$plain = ConsoleSender::releasePayload('42800', [], 'production');
+		$full = ConsoleSender::releasePayload("r42800\nnoise", [
+			'at' => 1788700000, 'ref' => ' r42800 ', 'source' => 'deploy.sh', 'environment' => 'staging'], 'production');
+		$long = ConsoleSender::releasePayload(str_repeat('a', 80), [
+			'ref' => str_repeat('b', 200), 'source' => str_repeat('c', 40)], '');
+		
+		return $plain === ['release' => '42800', 'source' => 'php-library', 'environment' => 'production']
+			&& $full === ['release' => 'r42800', 'source' => 'deploy.sh', 'at' => 1788700000, 'ref' => 'r42800', 'environment' => 'staging']
+			&& mb_strlen($long['release']) === 64
+			&& mb_strlen($long['ref']) === 128
+			&& mb_strlen($long['source']) === 32
+			&& isset($long['environment']) === false
+			&& ConsoleSender::releasePayload('', ['ref' => 'x'], 'production') === []
+			&& ConsoleSender::releasePayload("  \n", [], 'production') === []
+			// an ISO moment travels as given, a blank one not at all
+			&& ConsoleSender::releasePayload('1.0', ['at' => ' 2026-09-07T10:00:00+02:00 '], '')['at'] === '2026-09-07T10:00:00+02:00'
+			&& isset(ConsoleSender::releasePayload('1.0', ['at' => ''], '')['at']) === false;
+	}
+	
 	public function capturesDistinctThrowables(): bool
 	{
 		$sender = $this->makeSender();
