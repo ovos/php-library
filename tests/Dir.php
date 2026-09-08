@@ -80,6 +80,26 @@ class Dir extends Test
 			&& BaseDir::under('anything', '') === false;
 	}
 	
+	/**
+	 * isAbsolute() knows the three roots a configured path may start from
+	 * — POSIX, a Windows drive with either separator, UNC — and nothing
+	 * else: a relative path, an empty one, a bare drive without separator
+	 * and a lone backslash are resolved against the base directory instead
+	 */
+	public function isAbsoluteKnowsPosixDriveAndUnc(): bool
+	{
+		return BaseDir::isAbsolute('/etc/ssl/key.pem')
+			&& BaseDir::isAbsolute('/')
+			&& BaseDir::isAbsolute('C:\\keys\\app.pem')
+			&& BaseDir::isAbsolute('d:/keys/app.pem')
+			&& BaseDir::isAbsolute('\\\\fileserver\\keys\\app.pem')
+			&& BaseDir::isAbsolute('secrets/app.pem') === false
+			&& BaseDir::isAbsolute('./secrets/app.pem') === false
+			&& BaseDir::isAbsolute('C:secrets') === false
+			&& BaseDir::isAbsolute('\\secrets') === false
+			&& BaseDir::isAbsolute('') === false;
+	}
+	
 	public function copyFiles(): bool
 	{
 		$copy = $this->dir . 'copy';

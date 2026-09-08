@@ -178,6 +178,22 @@ class Dir
 	}
 	
 	/**
+	 * Whether $path is absolute on ANY filesystem this code may meet —
+	 * POSIX (/etc/…), a Windows drive (C:\… or C:/…) or UNC (\\host\share)
+	 * — so a configured path is either taken as it is or resolved against
+	 * the application's base directory, whatever OS resolves it. A relative
+	 * path, '' and a bare drive letter without a separator (C:file) are not.
+	 */
+	public static function isAbsolute(
+		string $path,
+	): bool
+	{
+		return str_starts_with($path, '/')
+			|| str_starts_with($path, '\\\\')
+			|| preg_match('~^[A-Za-z]:[\\\\/]~', $path) === 1;
+	}
+	
+	/**
 	 * Remove the directory with all its contents
 	 */
 	public static function remove(
