@@ -4,6 +4,9 @@ declare(strict_types=1);
 namespace Ovos\Store\Mysql\Query;
 
 use Ovos\Store\Mysql\Query;
+use Ovos\Store\Mysql\Query\Traits\Ordering;
+
+use function implode;
 
 /**
  * Delete
@@ -12,9 +15,15 @@ use Ovos\Store\Mysql\Query;
  */
 class Delete extends Query
 {
+	use Ordering;
+	
 	// used for multi-table deletes
 	protected array $aliases = [];
 	
+	/**
+	 * The tables rows are deleted FROM in a joined delete —
+	 * `DELETE i FROM members i INNER JOIN …` names `i` here
+	 */
 	public function aliases(
 		array $aliases,
 	): static
@@ -26,26 +35,14 @@ class Delete extends Query
 	
 	public function getSql(): string
 	{
-		$sql = 'DELETE' . PHP_EOL;
+		$sql = 'DELETE';
 		if($this->aliases !== [])
 		{
 			$sql.= ' ' . implode(', ', $this->aliases);
 		}
+		$sql.= PHP_EOL;
 		$sql.= 'FROM ' . $this->getFrom() . PHP_EOL;
-		
-		if($this->leftJoins !== [])
-		{
-			$sql.= 'LEFT JOIN '
-				. implode(PHP_EOL . 'LEFT JOIN ', $this->leftJoins)
-				. PHP_EOL;
-		}
-		
-		if($this->innerJoins !== [])
-		{
-			$sql.= 'INNER JOIN '
-			. implode(PHP_EOL . 'INNER JOIN ', $this->innerJoins)
-			. PHP_EOL;
-		}
+		$sql.= $this->getJoinsSql();
 		
 		if($this->conditions !== [])
 		{
@@ -53,6 +50,16 @@ class Delete extends Query
 				. PHP_EOL;
 		}
 		
+		$sql.= $this->getOrderingSql();
+		
 		return $sql;
+	}
+	
+	public function getValues(): array
+	{
+		return [
+			...$this->joinValues,
+			...$this->conditionValues,
+		];
 	}
 }

@@ -3,14 +3,26 @@ declare(strict_types=1);
 
 namespace Ovos\Store\Mysql;
 
+use Ovos\Pdo\Expression;
 use Ovos\Store\Mysql\Query\Condition;
 
+use function array_fill;
+use function array_push;
+use function array_shift;
+use function array_values;
 use function count;
-use function is_callable;
 use function implode;
+use function is_array;
+use function is_callable;
 
 /**
  * Query
+ *
+ * A query carries its values. A condition, a join or a HAVING clause given as
+ * a tuple [sql, ...values] records them next to the SQL; INSERT and UPDATE
+ * columns are PHP values (an Expression is SQL and is written as given); and
+ * getValues() hands everything back in the order the SQL emits it.
+ * Store\Mysql::statement() prepares, binds by position and executes.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -22,19 +34,34 @@ abstract class Query
 	public const string CONDITION_OPERATOR_AND = 'AND';
 	public const string CONDITION_OPERATOR_OR = 'OR';
 	
+	// Joins
+	public const string JOIN_LEFT = 'LEFT JOIN';
+	public const string JOIN_INNER = 'INNER JOIN';
+	
 	protected ?string $alias = null;
 	
 	protected string $table;
 	
+	/**
+	 * Column fragments: the SELECT list, UPDATE sets
+	 */
 	protected array $columns = [];
 	
-	protected array $leftJoins = [];
+	/**
+	 * The values of the column fragments: a SELECT tuple's, an UPDATE SET's
+	 */
+	protected array $columnValues = [];
 	
-	protected array $innerJoins = [];
+	/**
+	 * list<array{kind: string, sql: string}>, in call order
+	 */
+	protected array $joins = [];
+	
+	protected array $joinValues = [];
 	
 	protected array $conditions = [];
 	
-	protected string $conditionOperator = Condition::OPERATOR_AND;
+	protected array $conditionValues = [];
 	
 	public function __construct(
 		string $table,
@@ -64,39 +91,164 @@ abstract class Query
 		return $this->table;
 	}
 	
+	/**
+	 * The alias of the primary table: every query kind that emits FROM
+	 * (SELECT, UPDATE, DELETE) may join and then needs one
+	 */
+	public function alias(
+		string $alias,
+	): static
+	{
+		$this->alias = $alias;
+		
+		return $this;
+	}
+	
+	/**
+	 * A join as a string, or as a tuple [sql, ...values] when its ON clause
+	 * carries `?` placeholders; joins are emitted in the order written
+	 */
+	public function innerJoin(
+		string|array ...$joins,
+	): static
+	{
+		return $this->join(self::JOIN_INNER, $joins);
+	}
+	
+	public function leftJoin(
+		string|array ...$joins,
+	): static
+	{
+		return $this->join(self::JOIN_LEFT, $joins);
+	}
+	
+	protected function join(
+		string $kind,
+		array $joins,
+	): static
+	{
+		foreach($joins as $join)
+		{
+			[$sql, $values] = self::fragment($join);
+			$this->joins[] = ['kind' => $kind, 'sql' => $sql];
+			array_push($this->joinValues, ...$values);
+		}
+		
+		return $this;
+	}
+	
+	protected function getJoinsSql(): string
+	{
+		$sql = '';
+		foreach($this->joins as $join)
+		{
+			$sql.= $join['kind'] . ' ' . $join['sql'] . PHP_EOL;
+		}
+		
+		return $sql;
+	}
+	
+	/**
+	 * A fragment given as a string, or as a tuple [sql, ...values]
+	 *
+	 * @return array{string, list<mixed>}
+	 */
+	protected static function fragment(
+		mixed $fragment,
+	): array
+	{
+		if(is_array($fragment) === false)
+		{
+			return [(string)$fragment, []];
+		}
+		
+		$sql = (string)array_shift($fragment);
+		
+		return [$sql, array_values($fragment)];
+	}
+	
+	/**
+	 * What a column value becomes in the SQL: an Expression its text, any
+	 * other value a `?` bound later
+	 */
+	protected static function placeholder(
+		mixed $value,
+	): string
+	{
+		return $value instanceof Expression ? (string)$value : '?';
+	}
+	
 	abstract public function getSql(): string;
+	
+	/**
+	 * The values bound to the `?` placeholders, in the order the SQL emits them
+	 */
+	abstract public function getValues(): array;
 	
 	public function __toString(): string
 	{
 		return $this->getSql();
 	}
 	
+	/**
+	 * Conditions, ANDed: a string, a tuple [sql, ...values], or a Closure
+	 * building a nested group. `where(fn($q) => $q->where('a = 1')->orWhere('b = 1'))`
+	 * emits `(a = 1 OR b = 1)`.
+	 */
 	public function where(
-		string|callable ...$conditions,
+		string|array|callable ...$conditions,
 	): static
 	{
-		$count = count($conditions);
-		if($count === 0)
-		{
-			return $this;
-		}
-		
-		if(is_callable($conditions[0])
-			&& $nestedCondition = $this->getNestedCondition($conditions[0]))
-		{
-			$this->conditions[] = $nestedCondition;
-			
-			return $this;
-		}
-		
+		return $this->addConditions($conditions, Condition::OPERATOR_AND);
+	}
+	
+	public function andWhere(
+		string|array|callable ...$conditions,
+	): static
+	{
+		return $this->where(...$conditions);
+	}
+	
+	public function orWhere(
+		string|array|callable ...$conditions,
+	): static
+	{
+		return $this->addConditions($conditions, Condition::OPERATOR_OR);
+	}
+	
+	protected function addConditions(
+		array $conditions,
+		string $operator,
+	): static
+	{
 		foreach($conditions as $condition)
 		{
-			$this->conditions[] = $condition;
+			// a tuple is never a callable here: arrays are [sql, ...values]
+			if(is_array($condition) === false && is_callable($condition))
+			{
+				$nested = $this->getNestedCondition($condition, $operator);
+				if($nested !== null)
+				{
+					$this->conditions[] = $nested;
+				}
+				
+				continue;
+			}
+			
+			[$sql, $values] = self::fragment($condition);
+			$this->conditions[] = $operator === Condition::OPERATOR_OR
+				? new Condition(Condition::TYPE_DEFAULT, Condition::OPERATOR_OR, $sql)
+				: $sql;
+			array_push($this->conditionValues, ...$values);
 		}
 		
 		return $this;
 	}
 	
+	/**
+	 * The group a Closure builds on a clone of this query; its values join
+	 * this query's where the group sits
+	 */
 	protected function getNestedCondition(
 		callable $condition,
 		string $operator = Condition::OPERATOR_AND,
@@ -104,7 +256,7 @@ abstract class Query
 	{
 		$nestedQuery = clone $this;
 		$nestedQuery->conditions = [];
-		$nestedQuery->conditionOperator = Condition::OPERATOR_AND;
+		$nestedQuery->conditionValues = [];
 		
 		$condition($nestedQuery);
 		
@@ -112,6 +264,8 @@ abstract class Query
 		{
 			return null;
 		}
+		
+		array_push($this->conditionValues, ...$nestedQuery->conditionValues);
 		
 		return new Condition
 		(
@@ -121,120 +275,88 @@ abstract class Query
 		);
 	}
 	
-	public function andWhere(
-		string|callable ...$conditions,
-	): static
-	{
-		return $this->where(...$conditions);
-	}
-	
-	public function orWhere(
-		string|callable ...$conditions,
-	): static
-	{
-		$count = count($conditions);
-		if($count === 0)
-		{
-			return $this;
-		}
-		
-		if(is_callable($conditions[0])
-			&& $nestedCondition= $this->getNestedCondition($conditions[0],
-			Condition::OPERATOR_OR))
-		{
-			$this->conditions[] = $nestedCondition;
-			
-			return $this;
-		}
-		
-		foreach($conditions as $condition)
-		{
-			$this->conditions[] = new Condition
-			(
-				Condition::TYPE_DEFAULT,
-				Condition::OPERATOR_OR,
-				$condition,
-			);
-		}
-		
-		return $this;
-	}
-	
+	/**
+	 * `field IN (...)`. The values are written into the SQL as given (ints,
+	 * or fragments) unless $bind: then one `?` per value, the values bound.
+	 * An empty list adds no condition.
+	 */
 	public function whereIn(
 		string $field,
 		array $values,
+		bool $bind = false,
 	): static
 	{
-		if(count($values) === 0)
-		{
-			return $this;
-		}
-		
-		$condition = $field
-			. ' IN ('
-			. implode(', ', $values)
-			. ')';
-		$this->conditions[] = $condition;
-		
-		return $this;
+		return $this->addIn($field, $values, 'IN', Condition::OPERATOR_AND, $bind);
 	}
 	
 	public function andWhereIn(
 		string $field,
 		array $values,
+		bool $bind = false,
 	): static
 	{
-		return $this->whereIn($field, $values);
+		return $this->whereIn($field, $values, $bind);
+	}
+	
+	public function orWhereIn(
+		string $field,
+		array $values,
+		bool $bind = false,
+	): static
+	{
+		return $this->addIn($field, $values, 'IN', Condition::OPERATOR_OR, $bind);
 	}
 	
 	public function whereNotIn(
 		string $field,
 		array $values,
+		bool $bind = false,
 	): static
 	{
-		if(count($values) === 0)
-		{
-			return $this;
-		}
-		
-		$condition = $field
-			. ' NOT IN ('
-			. implode(', ', $values)
-			. ')';
-		
-		$this->conditions[] = $condition;
-		
-		return $this;
+		return $this->addIn($field, $values, 'NOT IN', Condition::OPERATOR_AND, $bind);
 	}
 	
 	public function andWhereNotIn(
 		string $field,
 		array $values,
+		bool $bind = false,
 	): static
 	{
-		return $this->whereNotIn($field, $values);
+		return $this->whereNotIn($field, $values, $bind);
 	}
 	
 	public function orWhereNotIn(
 		string $field,
 		array $values,
+		bool $bind = false,
 	): static
 	{
-		if(count($values) === 0)
+		return $this->addIn($field, $values, 'NOT IN', Condition::OPERATOR_OR, $bind);
+	}
+	
+	protected function addIn(
+		string $field,
+		array $values,
+		string $operator,
+		string $glue,
+		bool $bind,
+	): static
+	{
+		$values = array_values($values);
+		if($values === [])
 		{
 			return $this;
 		}
 		
-		$condition = $field
-			. ' NOT IN ('
-			. implode(', ', $values)
-			. ')';
-		$this->conditions[] = new Condition
-		(
-			Condition::TYPE_DEFAULT,
-			Condition::OPERATOR_OR,
-			$condition,
-		);
+		$list = $bind ? array_fill(0, count($values), '?') : $values;
+		$sql = $field . ' ' . $operator . ' (' . implode(', ', $list) . ')';
+		$this->conditions[] = $glue === Condition::OPERATOR_OR
+			? new Condition(Condition::TYPE_DEFAULT, Condition::OPERATOR_OR, $sql)
+			: $sql;
+		if($bind)
+		{
+			array_push($this->conditionValues, ...$values);
+		}
 		
 		return $this;
 	}
@@ -269,7 +391,9 @@ abstract class Query
 				// single condition
 				elseif($condition->type === Condition::TYPE_DEFAULT)
 				{
-					$sql[] = $condition->operator . ' ' . $condition->condition;
+					$sql[] = $sql === []
+						? $condition->condition
+						: $condition->operator . ' ' . $condition->condition;
 				}
 			}
 			else

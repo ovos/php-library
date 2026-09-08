@@ -6,6 +6,7 @@ namespace Tests\Store\Mysql;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Model\Mysql as Model;
+use Ovos\Pdo\Expression;
 use Ovos\Store\Mysql as Store;
 use Ovos\Store\Mysql\Traits\Find;
 use Override;
@@ -237,6 +238,44 @@ class ExecuteFind extends Test
 	}
 	
 	/**
+	 * RULE: INSERT and UPDATE columns are PHP values bound by position with
+	 * their types (a false stays 0, a null NULL) and an Expression is SQL;
+	 * row() writes many at once, affected() counts, the fetchers read back.
+	 */
+	public function insertUpdateValues(): bool
+	{
+		$store = $this->store;
+		$inserted = $store->affected($store->query()
+			->insert(id: 10, name: 'Eta', category: new Expression('LOWER("FRUIT")'), active: false)
+			->row(id: 11, name: 'Theta', category: null, active: true));
+		
+		$rows = $store->fetchModels($store->query()
+			->select('*')
+			->whereIn('id', [10, 11], bind: true)
+			->orderBy('id ASC'));
+		
+		$updated = $store->affected($store->query()
+			->update(name: 'Iota', active: new Expression('1 - active'))
+			->where(['id = ?', 10]));
+		$eta = $store->fetchModel($store->query()
+			->select('*')
+			->where(['id = ?', 10]));
+		
+		return $inserted === 2
+			&& count($rows) === 2
+			&& $rows[0]->name === 'Eta'
+			&& $rows[0]->category === 'fruit'
+			&& (int)$rows[0]->active === 0
+			&& $rows[1]->name === 'Theta'
+			&& $rows[1]->category === null
+			&& (int)$rows[1]->active === 1
+			&& $updated === 1
+			&& $eta instanceof TestModel
+			&& $eta->name === 'Iota'
+			&& (int)$eta->active === 1;
+	}
+	
+	/**
 	 * Called by the runner after each test method
 	 */
 	#[Internal]
@@ -245,7 +284,7 @@ class ExecuteFind extends Test
 	{
 		$this->store->source()
 			->exec('TRUNCATE TABLE tests_find');
-			
+		
 		$this->store->source()->exec('
 			INSERT INTO tests_find (id, name, category, active)
 			VALUES

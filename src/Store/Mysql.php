@@ -11,6 +11,7 @@ use Ovos\Model\Relation\One as RelationOne;
 use Ovos\Model\Relations;
 use Ovos\Store;
 use Ovos\Store\Mysql\Query;
+use Ovos\Store\Mysql\Query\Select;
 use Ovos\Store\Mysql\QueryBuilder;
 use Ovos\Pdo\Expression;
 use PDO;
@@ -18,13 +19,17 @@ use PDOStatement;
 use Closure;
 
 use function array_column;
+use function array_combine;
 use function array_keys;
 use function array_map;
 use function array_unique;
+use function array_values;
+use function count;
 use function get_class;
 use function implode;
 use function is_bool;
 use function preg_replace;
+use function range;
 use function reset;
 use function sprintf;
 
@@ -97,8 +102,10 @@ abstract class Mysql extends Store
 	}
 	
 	/**
-	 * Only used for getSql() calls, never used to query the database
-	 * or fetch results
+	 * A builder for this store's table. The query it makes carries its values
+	 * (tuple conditions, PHP values for INSERT/UPDATE columns); statement() and
+	 * the fetchers run it with them, prepareQuery() hands back the bare prepared
+	 * statement.
 	 */
 	public function query(): QueryBuilder
 	{
@@ -113,20 +120,135 @@ abstract class Mysql extends Store
 			->prepare($query->getSql());
 	}
 	
+	/**
+	 * Rows affected. A query carrying values is prepared and executed with
+	 * them (PDO::exec cannot bind).
+	 */
 	public function executeQuery(
 		Query $query,
 	): false|int
 	{
+		if($query->getValues() !== [])
+		{
+			return $this->statement($query)?->rowCount() ?? false;
+		}
+		
 		return $this->getSource()
 			->exec($query->getSql());
 	}
 	
+	/**
+	 * The executed statement. A query carrying values is prepared and
+	 * executed with them (PDO::query cannot bind).
+	 */
 	public function runQuery(
 		Query $query,
 	): false|PDOStatement
 	{
+		if($query->getValues() !== [])
+		{
+			return $this->statement($query) ?? false;
+		}
+		
 		return $this->getSource()
 			->query($query->getSql());
+	}
+	
+	/**
+	 * The query prepared, its values bound by position with their PHP types,
+	 * executed; null without a
+	 * source (the connection failed). The fetchers below answer their empty
+	 * shape in that case, so a read on a down database answers nothing and
+	 * a write touches nothing.
+	 */
+	public function statement(
+		Query $query,
+	): ?PDOStatement
+	{
+		$source = $this->getSource();
+		if($source === null)
+		{
+			return null;
+		}
+		
+		$statement = $source->prepare($query->getSql());
+		$values = $query->getValues();
+		if($values !== [])
+		{
+			// by position, typed: an int stays an int, a bool a bool, a null NULL
+			$this->bindValues($statement, array_combine(range(1, count($values)), $values));
+		}
+		$statement->execute();
+		
+		return $statement;
+	}
+	
+	/**
+	 * @return Model[] this store's MODEL instances
+	 */
+	public function fetchModels(
+		Select $query,
+	): array
+	{
+		return $this->statement($query)
+			?->fetchAll(PDO::FETCH_CLASS, static::getModel()) ?? [];
+	}
+	
+	/**
+	 * The first row as this store's MODEL, null when there is none
+	 */
+	public function fetchModel(
+		Select $query,
+	): ?Model
+	{
+		$model = $this->statement($query)
+			?->fetchObject(static::getModel());
+		
+		return $model instanceof Model ? $model : null;
+	}
+	
+	/**
+	 * @return list<array<string, mixed>>
+	 */
+	public function fetchRows(
+		Select $query,
+	): array
+	{
+		return $this->statement($query)
+			?->fetchAll(PDO::FETCH_ASSOC) ?? [];
+	}
+	
+	/**
+	 * @return list<mixed> the first column of every row
+	 */
+	public function fetchList(
+		Select $query,
+	): array
+	{
+		return $this->statement($query)
+			?->fetchAll(PDO::FETCH_COLUMN) ?? [];
+	}
+	
+	/**
+	 * The first column of the first row; false when there is none
+	 */
+	public function fetchScalar(
+		Select $query,
+	): mixed
+	{
+		return $this->statement($query)
+			?->fetchColumn() ?? false;
+	}
+	
+	/**
+	 * The rows a write touched
+	 */
+	public function affected(
+		Query $query,
+	): int
+	{
+		return $this->statement($query)
+			?->rowCount() ?? 0;
 	}
 	
 	public function tableExists(): bool
@@ -161,33 +283,6 @@ abstract class Mysql extends Store
 		
 		return $statement;
 	}
-	
-	/**
-	 * @deprecated
-	 */
-	/*
-	public function insertUpdateQuery(Model $object, array $conditions = [])
-	{
-		$where = $this->getQueryValues($conditions);
-		$values = $this->getQueryValues($object);
-		
-		$sql = 'INSERT INTO ' . self::getTable() . ' (%s) VALUES (%s)'
-			. ' ON DUPLICATE KEY UPDATE %s;';
-		$sql = sprintf($sql,
-			implode(', ', array_keys($where + $values)),
-			implode(', ', $values),
-			implode(', ', array_map(
-				fn($value) => sprintf('%s=VALUES(%s)', $value, $value)
-			, array_keys($values))),
-		);
-		
-		$statement = $this->getSource()->prepare($sql);
-		$this->bindValues($statement, $conditions);
-		$this->bindValues($statement, $object);
-		
-		return $statement;
-	}
-	*/
 	
 	public function updateQuery(
 		Model $model,
@@ -270,6 +365,10 @@ abstract class Mysql extends Store
 		return $model->insert();
 	}
 	
+	/**
+	 * The PHP values given are bound, never written into the SQL: an IN list
+	 * of names works as well as one of ids
+	 */
 	public function executeFind(
 		array $where = [],
 		string $select = '*',
@@ -283,45 +382,42 @@ abstract class Mysql extends Store
 		?callable $query = null,
 	): false|PDOStatement
 	{
-		$values = array_values($where);
-		
 		$select = $this->query()
 			->select($select);
-			
+		
 		foreach($where as $property => $value)
 		{
-			$select->andWhere($property . ' = ?');
+			$select->andWhere([$property . ' = ?', $value]);
 		}
 		
 		$orConditions = [];
+		$orValues = [];
 		foreach($orWhere as $property => $value)
 		{
 			$orConditions[] = $property . ' = ?';
-			$values[] = $value;
+			$orValues[] = $value;
 		}
 		if($orConditions)
 		{
-			$select->andWhere('(' . implode(' OR ', $orConditions) . ')');
+			$select->andWhere(['(' . implode(' OR ', $orConditions) . ')', ...$orValues]);
 		}
 		
 		foreach($whereIn as $property => $whereValues)
 		{
-			$select->andWhereIn($property, $whereValues);
+			$select->andWhereIn($property, $whereValues, bind: true);
 		}
 		foreach($whereNotIn as $property => $whereValues)
 		{
-			$select->andWhereNotIn($property, $whereValues);
+			$select->andWhereNotIn($property, $whereValues, bind: true);
 		}
 		
 		foreach($like as $property => $value)
 		{
-			$select->andWhere($property . ' LIKE ?');
-			$values[] = $value;
+			$select->andWhere([$property . ' LIKE ?', $value]);
 		}
 		foreach($notLike as $property => $value)
 		{
-			$select->andWhere($property . ' NOT LIKE ?');
-			$values[] = $value;
+			$select->andWhere([$property . ' NOT LIKE ?', $value]);
 		}
 		
 		foreach($isNull as $property)
@@ -338,10 +434,7 @@ abstract class Mysql extends Store
 			$query($select);
 		}
 		
-		$statement = $this->prepareQuery($select);
-		$statement->execute($values);
-		
-		return $statement;
+		return $this->statement($select) ?? false;
 	}
 	
 	public function fetchGrouped(
@@ -368,17 +461,20 @@ abstract class Mysql extends Store
 			return [];
 		}
 		
-		$placeholders = implode(', ', array_fill(0, count($ids), '?'));
 		$query = $this->query()
 			->select($groupBy . ', ' . static::TABLE . '.*')
-			->where($groupBy . ' IN (' . $placeholders . ')');
+			->whereIn($groupBy, $ids, bind: true);
 		if($queryCallback)
 		{
 			$queryCallback($query);
 		}
 		
-		$statement = $this->getSource()->prepare($query->getSql());
-		$statement->execute($ids);
+		$statement = $this->statement($query);
+		if($statement === null)
+		{
+			return [];
+		}
+		
 		return $this->fetchGrouped($statement, $class);
 	}
 	
@@ -395,19 +491,16 @@ abstract class Mysql extends Store
 			return [];
 		}
 		
-		$placeholders = implode(', ', array_fill(0, count($ids), '?'));
 		$query = $this->query()
 			->select(static::TABLE . '.*')
-			->where($referencedBy . ' IN (' . $placeholders . ')');
+			->whereIn($referencedBy, $ids, bind: true);
 		if($queryCallback)
 		{
 			$queryCallback($query);
 		}
 		
-		$statement = $this->getSource()->prepare($query->getSql());
-		$statement->execute($ids);
-		
-		return $statement->fetchAll(PDO::FETCH_CLASS, $class);
+		return $this->statement($query)
+			?->fetchAll(PDO::FETCH_CLASS, $class) ?? [];
 	}
 	
 	public function assignByReference(
@@ -490,14 +583,14 @@ abstract class Mysql extends Store
 			$store = new ($relation->storeClass());
 			$callback = Relations::callback($store, $relation,
 				$overrides[$name] ?? null);
-				
+			
 			if($relation instanceof RelationMany)
 			{
 				$children = $store->fetchByReference($items,
 					$relation->by, $relation->model, $callback);
 				$this->assignByReference($items, $relation->by,
 					$name, $children, $relation->key);
-					
+				
 				foreach($items as $item)
 				{
 					if($item->hasReference($name) === false)
