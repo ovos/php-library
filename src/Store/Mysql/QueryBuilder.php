@@ -38,8 +38,11 @@ class QueryBuilder
 		return $this->table;
 	}
 	
+	/**
+	 * Conditions as where() takes them: strings, tuples [sql, ...values], Closures
+	 */
 	public function delete(
-		null|string|callable ...$conditions,
+		string|array|callable ...$conditions,
 	): Delete
 	{
 		$query = new Delete($this->table);
@@ -49,8 +52,8 @@ class QueryBuilder
 	}
 	
 	/**
-	 * Example usage:
-	 * ->columns(name: ':name', created_at: 'NOW()')
+	 * Columns are PHP values, an Expression is SQL:
+	 * ->insert(name: $name, created_at: new Expression('NOW()'))
 	 */
 	public function insert(
 		mixed ...$columns,
@@ -63,7 +66,7 @@ class QueryBuilder
 	}
 	
 	public function select(
-		string ...$fields,
+		string|array ...$fields,
 	): Select
 	{
 		$query = new Select($this->table);
@@ -77,8 +80,8 @@ class QueryBuilder
 	}
 	
 	/**
-	 * Example usage:
-	 * ->set(name: ':name', created_at: 'NOW()')
+	 * Columns are PHP values, an Expression is SQL:
+	 * ->update(name: $name, modified_at: new Expression('NOW()'))
 	 */
 	public function update(
 		mixed ...$columns,

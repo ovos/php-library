@@ -4,7 +4,9 @@ declare(strict_types=1);
 namespace Ovos\Store\Mysql\Query;
 
 use Ovos\Store\Mysql\Query;
+use Ovos\Store\Mysql\Query\Traits\Ordering;
 
+use function array_push;
 use function implode;
 
 /**
@@ -14,15 +16,15 @@ use function implode;
  */
 class Select extends Query
 {
-	protected array $orderBy = [];
+	use Ordering;
 	
 	protected array $groupBy = [];
 	
 	protected array $having = [];
 	
-	protected mixed $limit = null;
+	protected array $havingValues = [];
 	
-	protected mixed $offset = null;
+	protected ?int $offset = null;
 	
 	/**
 	 * @return string
@@ -31,20 +33,7 @@ class Select extends Query
 	{
 		$sql = 'SELECT ' . implode(', ', $this->columns) . PHP_EOL;
 		$sql.= 'FROM ' . $this->getFrom() . PHP_EOL;
-		
-		if($this->leftJoins !== [])
-		{
-			$sql.= 'LEFT JOIN '
-				. implode(PHP_EOL . 'LEFT JOIN ', $this->leftJoins)
-				. PHP_EOL;
-		}
-		
-		if($this->innerJoins !== [])
-		{
-			$sql.= 'INNER JOIN '
-				. implode(PHP_EOL . 'INNER JOIN ', $this->innerJoins)
-				. PHP_EOL;
-		}
+		$sql.= $this->getJoinsSql();
 		
 		if($this->conditions !== [])
 		{
@@ -56,7 +45,7 @@ class Select extends Query
 		if($this->groupBy !== [])
 		{
 			$sql.= 'GROUP BY '
-				. implode( ' , ', $this->groupBy)
+				. implode(', ', $this->groupBy)
 				. PHP_EOL;
 		}
 		
@@ -67,18 +56,7 @@ class Select extends Query
 				. PHP_EOL;
 		}
 		
-		if($this->orderBy !== [])
-		{
-			$sql.= 'ORDER BY '
-				. implode( ' , ', $this->orderBy)
-				. PHP_EOL;
-		}
-		
-		if($this->limit !== null)
-		{
-			$sql.= 'LIMIT ' . $this->limit
-				. PHP_EOL;
-		}
+		$sql.= $this->getOrderingSql();
 		
 		if($this->offset !== null)
 		{
@@ -89,13 +67,29 @@ class Select extends Query
 		return $sql;
 	}
 	
+	public function getValues(): array
+	{
+		return [
+			...$this->columnValues,
+			...$this->joinValues,
+			...$this->conditionValues,
+			...$this->havingValues,
+		];
+	}
+	
+	/**
+	 * A column as a string, or as a tuple [sql, ...values] when the
+	 * expression carries `?` placeholders
+	 */
 	public function select(
-		string ...$fields,
+		string|array ...$fields,
 	): static
 	{
 		foreach($fields as $field)
 		{
-			$this->columns[] = $field;
+			[$sql, $values] = self::fragment($field);
+			$this->columns[] = $sql;
+			array_push($this->columnValues, ...$values);
 		}
 		
 		return $this;
@@ -115,26 +109,8 @@ class Select extends Query
 		return $this;
 	}
 	
-	public function alias(
-		string $alias,
-	): static
-	{
-		$this->alias = $alias;
-		
-		return $this;
-	}
-	
-	public function limit(
-		mixed $limit,
-	): static
-	{
-		$this->limit = $limit;
-		
-		return $this;
-	}
-	
 	public function offset(
-		mixed $offset,
+		?int $offset,
 	): static
 	{
 		$this->offset = $offset;
@@ -154,53 +130,18 @@ class Select extends Query
 		return $this;
 	}
 	
+	/**
+	 * HAVING conditions, ANDed: a string or a tuple [sql, ...values]
+	 */
 	public function having(
-		string ...$conditions,
+		string|array ...$conditions,
 	): static
 	{
 		foreach($conditions as $condition)
 		{
-			$this->having[] = $condition;
-		}
-		
-		return $this;
-	}
-	
-	public function orderBy(
-		string ...$arguments,
-	): static
-	{
-		foreach($arguments as $argument)
-		{
-			$this->orderBy[] = $argument;
-		}
-		
-		return $this;
-	}
-	
-	public function innerJoin(
-		string ...$joins,
-	): static
-	{
-		$this->leftJoins = [];
-		
-		foreach($joins as $join)
-		{
-			$this->innerJoins[] = $join;
-		}
-		
-		return $this;
-	}
-	
-	public function leftJoin(
-		string ...$joins,
-	): static
-	{
-		$this->innerJoins = [];
-		
-		foreach($joins as $join)
-		{
-			$this->leftJoins[] = $join;
+			[$sql, $values] = self::fragment($condition);
+			$this->having[] = $sql;
+			array_push($this->havingValues, ...$values);
 		}
 		
 		return $this;
