@@ -436,6 +436,22 @@ class Container
 	}
 	
 	/**
+	 * Complete an object built with `new`: the #[Inject] properties it has
+	 * NOT initialized are resolved, what its constructor (or a caller) set
+	 * stays — injectObject() would overwrite a hand-given config with the
+	 * container's. For a test double, or any instance the container did not
+	 * construct itself.
+	 */
+	public function injectMissing(
+		object $object,
+	): object
+	{
+		$this->resolveProperties(new ReflectionClass($object), $object, onlyMissing: true);
+		
+		return $object;
+	}
+	
+	/**
 	 * Inject constructor parameters
 	 */
 	public function injectConstructor(
@@ -698,18 +714,25 @@ class Container
 	}
 	
 	/**
-	 * Resolve object's properties
+	 * Resolve object's properties — every #[Inject] property, or with
+	 * $onlyMissing only those the object has not initialized yet
 	 */
 	public function resolveProperties(
 		ReflectionClass $reflector,
 		object $object,
 		bool $lazy = false,
+		bool $onlyMissing = false,
 	): void
 	{
 		foreach($reflector->getProperties() as $property)
 		{
 			$attributes = $property->getAttributes(Inject::class);
 			if(count($attributes) === 0)
+			{
+				continue;
+			}
+			
+			if($onlyMissing && $property->isInitialized($object))
 			{
 				continue;
 			}

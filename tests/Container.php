@@ -492,6 +492,30 @@ class Container extends Test
 			&& $container->registerValue('service', 'replaced', overwrite: true)
 				->get('service') === 'replaced';
 	}
+	
+	/**
+	 * injectMissing() completes an object built with `new`: the #[Inject]
+	 * property a constructor set stays (injectObject() would replace it with
+	 * the container's own), the one left empty is resolved
+	 */
+	public function injectMissingKeepsWhatWasSetAndFillsTheRest(): bool
+	{
+		$container = new BaseContainer;
+		$own = new Dependency1;
+		
+		$kept = new Service8;
+		$kept->dependency1 = $own;
+		$container->injectMissing($kept);
+		
+		$replaced = new Service8;
+		$replaced->dependency1 = $own;
+		$container->injectObject($replaced);
+		
+		return $kept->dependency1 === $own
+			&& $kept->dependency2 instanceof Dependency2
+			&& $replaced->dependency1 !== $own
+			&& $replaced->dependency1 instanceof Dependency1;
+	}
 }
 
 class Service1
@@ -576,6 +600,14 @@ class Service7
 	)
 	{
 	}
+}
+
+class Service8
+{
+	#[Inject]
+	public Dependency1 $dependency1;
+	#[Inject]
+	public Dependency2 $dependency2;
 }
 
 class Dependency1
