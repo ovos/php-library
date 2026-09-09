@@ -1198,7 +1198,7 @@ class Users extends Mysql
         $query = $this->query()
             ->select()
             ->where('active = 1')
-            ->orderBy('username', 'ASC');
+            ->orderBy('username ASC');
 
         $statement = $this->prepareQuery($query);
         $statement->execute();
@@ -1305,24 +1305,157 @@ $users = $store->find(
 
 ### Query Builder
 
-The query builder provides a fluent interface:
+`$this->query()` hands back a `QueryBuilder` for the store's table; `select()`, `insert()`,
+`update()` and `delete()` open the four query kinds.
+
+**A query carries its values.** A condition, a join or a HAVING clause written as a tuple
+`[sql, ...values]` records its values next to the SQL, INSERT and UPDATE columns are PHP
+values, and `getValues()` hands everything back in the order the SQL emits it — so there is
+nothing to pass alongside the query when it runs.
+
+#### SELECT
 
 ```php
 $query = $this->query()
-    ->select('id, username, email')           // SELECT columns
-    ->from('users')                            // FROM table (optional, uses TABLE const)
-    ->join('orders', 'orders.user_id = users.id')  // JOIN
-    ->where('active = ?')                      // WHERE
-    ->andWhere('role = ?')                     // AND WHERE
-    ->orWhere('email LIKE ?')                  // OR WHERE
-    ->groupBy('role')                          // GROUP BY
-    ->orderBy('created_at', 'DESC')            // ORDER BY
-    ->limit(10)                                // LIMIT
-    ->offset(20);                              // OFFSET
+    ->select('u.id, u.username', ['IF(u.role = ?, 1, 0) AS staff', 'admin'])
+    ->alias('u')
+    ->leftJoin('orders o ON o.user_id = u.id')
+    ->innerJoin(['roles r ON r.id = u.role_id AND r.kind = ?', 'core'])
+    ->where(['u.active = ?', 1])
+    ->andWhere('u.deleted_at IS NULL')
+    ->whereIn('u.status', ['open', 'muted'], bind: true)
+    ->groupBy('u.id')
+    ->having(['COUNT(o.id) > ?', 2])
+    ->orderBy('u.created_at DESC')
+    ->limit(10)
+    ->offset(20);
 
-$statement = $this->prepareQuery($query);
-$statement->execute([$active, $role, $emailPattern]);
+$users = $this->fetchModels($query);
 ```
+
+| Method | Notes |
+|--------|-------|
+| `select(...$fields)` | a string, or a tuple `[sql, ...values]` when the expression carries `?` |
+| `from($table, $alias = null)` | SELECT only, and optional — the store's `TABLE` const is the default |
+| `alias($alias)` | aliases the primary table; on every kind that emits FROM (SELECT, UPDATE, DELETE) |
+| `innerJoin(...)`, `leftJoin(...)` | strings or tuples, emitted **in call order** — the two kinds live side by side |
+| `where()`, `andWhere()`, `orWhere()` | a string, a tuple, or a `Closure` building a nested group; every argument counts |
+| `whereIn($field, $values, bind: false)` | plus `andWhereIn`/`orWhereIn` and the `whereNotIn` trio; an empty list adds no condition |
+| `groupBy(...)`, `orderBy(...)` | varargs, comma-joined — `orderBy('a DESC', 'b')` |
+| `having(...)` | a string or a tuple, ANDed |
+| `limit(?int)`, `offset(?int)` | ints — a native prepare refuses a string-bound LIMIT |
+
+`orderBy()` and `limit()` are UPDATE's and DELETE's too (the batched write); `offset()` is
+SELECT's alone.
+
+#### Values, and what binds
+
+A clause written as `[sql, ...values]` binds; a bare string is SQL as given. A `Closure`
+opens a group, and its values land where the group sits:
+
+```php
+$query = $this->query()
+    ->select('id')
+    ->where(['created_at >= NOW() - INTERVAL ? DAY', 7])
+    ->where(fn($q) => $q->where(['active = ?', 1])->orWhere(['role = ?', 'admin']));
+
+$query->getSql();     // WHERE created_at >= NOW() - INTERVAL ? DAY
+                      // AND (active = ? OR role = ?)
+$query->getValues();  // [7, 1, 'admin']
+```
+
+`whereIn()` writes its list into the SQL as given, which is what ints and fragments want.
+Pass `bind: true` for anything that came from outside — an IN list of names works then too:
+
+```php
+->whereIn('id', $ids)                    // id IN (1, 2, 3)
+->whereIn('role', $roles, bind: true)    // role IN (?, ?), the values bound
+```
+
+#### Running a query
+
+| Method | Returns |
+|--------|---------|
+| `statement($query)` | the prepared, bound and executed `PDOStatement`; `null` when there is no source |
+| `fetchModels($select)` | `Model[]` — instances of the store's `MODEL` |
+| `fetchModel($select)` | the first row as a model, `null` when there is none |
+| `fetchRows($select)` | `list<array<string, mixed>>` |
+| `fetchList($select)` | the first column of every row |
+| `fetchScalar($select)` | the first column of the first row, `false` when there is none |
+| `affected($query)` | the rows a write touched, as an `int` |
+| `executeQuery($query)` | rows affected, `false\|int` |
+| `runQuery($query)` | the executed statement, `false\|PDOStatement` |
+| `prepareQuery($query)` | the **bare** prepared statement — nothing bound, for binding by hand |
+
+Values bind by position **with their PHP type**: an int stays an int, a `false` binds `0`
+rather than `''`, a `null` binds `NULL`. `executeQuery()` and `runQuery()` go through
+`statement()` whenever the query carries values, since `PDO::exec()` and `PDO::query()`
+cannot bind. When there is no source `statement()` is `null` and the fetchers answer their
+empty shape, so a read on a down database answers nothing and a write touches nothing.
+
+#### INSERT, UPDATE and DELETE
+
+Columns are **PHP values**. An `Ovos\Pdo\Expression` is SQL, written as given and binding
+nothing:
+
+```php
+use Ovos\Pdo\Expression;
+
+// INSERT INTO users (name, created_at) VALUES (?, NOW())
+$this->affected($this->query()
+    ->insert(name: $name, created_at: new Expression('NOW()')));
+
+// INSERT IGNORE — a row the unique key already holds is left alone
+$query = $this->query()
+    ->insert(name: $name, created_at: new Expression('NOW()'))
+    ->ignore();
+
+// several rows in one statement, keeping a counter up to date
+$query = $this->query()
+    ->insert(kind: 'view', hits: 1)
+    ->row(kind: 'click', hits: 1)
+    ->rows(['kind' => 'share', 'hits' => 1])
+    ->onDuplicateKeyUpdate(hits: new Expression('hits + VALUES(hits)'));
+
+// UPDATE users u INNER JOIN roles r … SET state = ?, modified_at = NOW() WHERE u.id = ?
+$query = $this->query()
+    ->update(state: 'resolved', modified_at: new Expression('NOW()'))
+    ->alias('u')
+    ->innerJoin(['roles r ON r.id = u.role_id AND r.kind = ?', 'core'])
+    ->where(['u.id = ?', $id]);
+
+// DELETE u FROM users u LEFT JOIN orders o … — the joined delete, aliases() naming
+// the table rows go from
+$query = $this->query()
+    ->delete()
+    ->alias('u')
+    ->aliases(['u'])
+    ->leftJoin('orders o ON o.user_id = u.id')
+    ->where('o.id IS NULL');
+
+// the batched purge
+$purged = $this->affected($this->query()
+    ->delete(['created_at < NOW() - INTERVAL ? DAY', 30])
+    ->orderBy('id ASC')
+    ->limit(1000));
+```
+
+Every row after the first names the first row's columns, in whatever order they are
+written: `rows(['a' => 7, 'b' => false], ['b' => true, 'a' => 8])` emits
+`VALUES (?, ?), (?, ?)` and binds `[7, false, 8, true]`.
+
+#### Upgrading: a column string is a value now
+
+`insert(col: ...)` and `update(col: ...)` changed meaning. A bare string is a **bound
+value**, where it used to be written into the SQL — SQL now has to say so:
+
+```php
+->update(modified_at: 'NOW()')                    // before: went into the SQL
+->update(modified_at: new Expression('NOW()'))    // now: SQL is an Expression
+```
+
+A missed call site fails loudly rather than storing the wrong thing: strict mode rejects
+the text `NOW()` in a `DATETIME` column.
 
 ### Store Usage in Controllers
 
