@@ -1374,24 +1374,41 @@ Pass `bind: true` for anything that came from outside — an IN list of names wo
 
 #### Running a query
 
+Two families, and what separates them is whether the statement is prepared.
+
+**Prepared and bound** — where a query carrying values goes, which is most of them:
+
 | Method | Returns |
 |--------|---------|
 | `statement($query)` | the prepared, bound and executed `PDOStatement`; `null` when there is no source |
+| `affected($query)` | the rows a write touched, as an `int` |
 | `fetchModels($select)` | `Model[]` — instances of the store's `MODEL` |
 | `fetchModel($select)` | the first row as a model, `null` when there is none |
 | `fetchRows($select)` | `list<array<string, mixed>>` |
 | `fetchList($select)` | the first column of every row |
 | `fetchScalar($select)` | the first column of the first row, `false` when there is none |
-| `affected($query)` | the rows a write touched, as an `int` |
-| `executeQuery($query)` | rows affected, `false\|int` |
-| `runQuery($query)` | the executed statement, `false\|PDOStatement` |
 | `prepareQuery($query)` | the **bare** prepared statement — nothing bound, for binding by hand |
 
 Values bind by position **with their PHP type**: an int stays an int, a `false` binds `0`
-rather than `''`, a `null` binds `NULL`. `executeQuery()` and `runQuery()` go through
-`statement()` whenever the query carries values, since `PDO::exec()` and `PDO::query()`
-cannot bind. When there is no source `statement()` is `null` and the fetchers answer their
-empty shape, so a read on a down database answers nothing and a write touches nothing.
+rather than `''`, a `null` binds `NULL`. When there is no source `statement()` is `null`
+and the fetchers answer their empty shape, so a read on a down database answers nothing
+and a write touches nothing.
+
+**Run as given** — `exec()` / `query()`, no prepare, one round trip:
+
+| Method | Returns |
+|--------|---------|
+| `executeQuery($query)` | rows affected, `false\|int` — `PDO::exec()` |
+| `runQuery($query)` | the executed statement, `false\|PDOStatement` — `PDO::query()` |
+
+This pair is what a static statement wants — a `TRUNCATE`, a schema or maintenance
+statement, a purge whose bounds are already written into the SQL — and the only way to
+run what MySQL will not prepare at all. Both answer `false` without a source.
+
+Hand either one a query that *does* carry values and it still does the right thing:
+`exec()` and `query()` cannot bind, so the query goes through `statement()` instead. The
+two cases do not overlap in practice — a statement that needs the unprepared path has
+nothing to bind — so that fallback costs a round trip and never a surprise.
 
 #### INSERT, UPDATE and DELETE
 
@@ -1402,7 +1419,7 @@ nothing:
 use Ovos\Pdo\Expression;
 
 // INSERT INTO users (name, created_at) VALUES (?, NOW())
-$this->affected($this->query()
+$written = $this->affected($this->query()
     ->insert(name: $name, created_at: new Expression('NOW()')));
 
 // INSERT IGNORE — a row the unique key already holds is left alone
@@ -1443,6 +1460,12 @@ $purged = $this->affected($this->query()
 Every row after the first names the first row's columns, in whatever order they are
 written: `rows(['a' => 7, 'b' => false], ['b' => true, 'a' => 8])` emits
 `VALUES (?, ?), (?, ?)` and binds `[7, false, 8, true]`.
+
+`affected()` answers the count, which is what a multi-row insert or an `INSERT IGNORE`
+wants — a `0` from an IGNORE means the unique key already held the row. It does not hand
+back the new id: for that, run the query through `statement()` and ask the connection,
+`$this->getSource()->lastInsertId()`. A single row is usually the model layer's job
+instead, where `$model->insert()` sets the auto-increment id on the model.
 
 #### Upgrading: a column string is a value now
 

@@ -121,8 +121,11 @@ abstract class Mysql extends Store
 	}
 	
 	/**
-	 * Rows affected. A query carrying values is prepared and executed with
-	 * them (PDO::exec cannot bind).
+	 * Rows affected. A query with nothing to bind is run as given — PDO::exec,
+	 * no prepare, one round trip, which is what a static statement wants and
+	 * the only way to run what MySQL will not prepare. A query carrying values
+	 * is prepared and executed with them, exec being unable to bind. false
+	 * without a source.
 	 */
 	public function executeQuery(
 		Query $query,
@@ -134,12 +137,14 @@ abstract class Mysql extends Store
 		}
 		
 		return $this->getSource()
-			->exec($query->getSql());
+			?->exec($query->getSql()) ?? false;
 	}
 	
 	/**
-	 * The executed statement. A query carrying values is prepared and
-	 * executed with them (PDO::query cannot bind).
+	 * The executed statement. A query with nothing to bind is run as given —
+	 * PDO::query, no prepare, one round trip. A query carrying values is
+	 * prepared and executed with them, query being unable to bind. false
+	 * without a source.
 	 */
 	public function runQuery(
 		Query $query,
@@ -151,7 +156,7 @@ abstract class Mysql extends Store
 		}
 		
 		return $this->getSource()
-			->query($query->getSql());
+			?->query($query->getSql()) ?? false;
 	}
 	
 	/**
