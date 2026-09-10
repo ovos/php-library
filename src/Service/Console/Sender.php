@@ -11,6 +11,7 @@ use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Http\Trace;
 use Ovos\Service;
+use Ovos\Service\Auth;
 use Ovos\Service\Events;
 use Ovos\Service\Session;
 use Ovos\Service\Logger;
@@ -342,11 +343,24 @@ class Sender extends Service
 	 *
 	 *   $sender->reportRefusal('auth_failure',
 	 *       'login failed for ' . Sender::maskName($username));
+	 *
+	 * $context is the per-event word on the request context, merged over the
+	 * base the flush builds (array_replace — the caller wins). Its case is
+	 * the ACCOUNT: name it as `userId` (the internal id, never the login
+	 * name) wherever the application knows who — the login that just
+	 * succeeded is reported before the session holds the user, so the Auth
+	 * service cannot supply it there. The console groups a security event by
+	 * kind and account, never by its masked line.
+	 *
+	 *   $sender->reportRefusal('auth_success',
+	 *       'login succeeded for ' . Sender::maskName($username) . ' after 3 recent failures',
+	 *       ['failures' => 3], ['userId' => (string)$user->id]);
 	 */
 	public function reportRefusal(
 		string $kind,
 		string $message = '',
 		array $extra = [],
+		array $context = [],
 	): static
 	{
 		if($this->isEnabled() === false
@@ -360,7 +374,7 @@ class Sender extends Service
 		{
 			if(count($this->queue) < self::QUEUE_MAX)
 			{
-				$this->queue[] = $this->payloadSecurity($kind, $message, $extra);
+				$this->queue[] = $this->payloadSecurity($kind, $message, $extra, $context);
 			}
 		}
 		catch(Throwable)
@@ -405,12 +419,14 @@ class Sender extends Service
 	 * A type=security payload: the KIND as the event's className (the field
 	 * the console indexes, filters and fingerprints by), the human line as
 	 * the message — falling back to the kind itself, so a call without a
-	 * message still names its event
+	 * message still names its event — and the caller's context overrides
+	 * (the account), which the flush merges over the base it builds
 	 */
 	protected function payloadSecurity(
 		string $kind,
 		string $message,
 		array $extra,
+		array $context = [],
 	): array
 	{
 		$message = $message === '' ? $kind : mb_substr($message, 0, 512);
@@ -426,6 +442,10 @@ class Sender extends Service
 			'backtrace' => '',
 			'previous' => false,
 		]];
+		if($context !== [])
+		{
+			$payload['context'] = $context;
+		}
 		
 		return $payload;
 	}
@@ -783,6 +803,17 @@ class Sender extends Service
 				&& ($sessionId = $session->getId()) !== null)
 			{
 				$context['sessionId'] = $sessionId;
+			}
+			
+			// the signed-in account, when the application put its user into
+			// the Auth service: context.userId, the console's indexed user_id
+			// — who an error happened to, and for a security event the
+			// account that IS the case (ovos/console docs/plans/security-
+			// event-identity.md). The internal id, never the login name
+			$auth = $this->app->getServices()->auth;
+			if($auth instanceof Auth && $auth->hasUser() && isset($auth->getUser()->id))
+			{
+				$context['userId'] = (string)$auth->getUser()->id;
 			}
 			
 			$context['request'] = $this->buildRequest($logger);

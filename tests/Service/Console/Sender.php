@@ -228,6 +228,30 @@ class Sender extends Test
 			&& $disabled->queueCount() === 0;
 	}
 	
+	/**
+	 * The identity known at the call site rides the event: a login that just
+	 * succeeded is reported before the session holds the user, so the caller
+	 * names the account in a per-event context the flush lets win over the
+	 * base it builds (ovos/console docs/plans/security-event-identity.md).
+	 * Without one the payload carries no context of its own — the base alone
+	 */
+	public function reportRefusalCarriesThePerEventContext(): bool
+	{
+		$sender = $this->makeSender();
+		
+		$sender->reportRefusal('auth_success', 'login succeeded for m*** after 3 recent failures',
+			['failures' => 3], ['userId' => '17']);
+		$named = $sender->lastPayload();
+		
+		$sender->reportRefusal('auth_failure', 'login failed for m***');
+		$plain = $sender->lastPayload();
+		
+		return ($named['context'] ?? null) === ['userId' => '17']
+			&& ($named['extra']['failures'] ?? null) === 3
+			&& ($named['events'][0]['className'] ?? null) === 'auth_success'
+			&& isset($plain['context']) === false;
+	}
+	
 	/** a call without a message still names its event — by its kind */
 	public function reportRefusalWithoutAMessageNamesItsKind(): bool
 	{
