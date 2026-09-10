@@ -30,6 +30,8 @@ use function trim;
 use function umask;
 use function unlink;
 
+use const SORT_NATURAL;
+
 /**
  * Dir
  * Recursive directory creation and removal
@@ -510,6 +512,15 @@ class Dir
 		return $dirs + $files;
 	}
 	
+	/**
+	 * Every file under $path, keyed by its path relative to it.
+	 *
+	 * Sorted by that key, because a RecursiveDirectoryIterator hands the
+	 * entries back in whatever order the filesystem holds them — NTFS
+	 * alphabetically, ext4 in hash order — and a caller that walks the
+	 * result would otherwise do a different thing per machine. getTree()
+	 * above sorts for the same reason.
+	 */
 	public static function getFiles(
 		string $path,
 		bool $skipHidden = true,
@@ -555,6 +566,9 @@ class Dir
 			
 			$files[$iterator->getSubPathname()] = $file;
 		}
+		
+		// the order depends on filesystem
+		ksort($files, SORT_NATURAL);
 		
 		return $files;
 	}
