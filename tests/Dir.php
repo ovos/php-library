@@ -175,4 +175,28 @@ class Dir extends Test
 		
 		return count(BaseDir::getFiles($copy, filter: BaseDir::FILTER_FILES)) === 6;
 	}
+	
+	/**
+	 * The keys come back in one order on every filesystem. Without the
+	 * sort this is readdir order: hash order on ext4, and on NTFS the
+	 * alphabetical-but-CHILD_FIRST order, where a directory follows its
+	 * own contents — so the list below pins both halves of the guarantee.
+	 */
+	public function getFilesIsSortedWhateverTheFilesystemHolds(): bool
+	{
+		$copy = $this->dir . 'copy';
+		$separator = DIRECTORY_SEPARATOR;
+		
+		return array_keys(BaseDir::getFiles($copy)) === [
+			'dir1',
+			'dir1' . $separator . 'dir1',
+			'dir1' . $separator . 'dir1' . $separator . 'file1.txt',
+			'dir1' . $separator . 'file1.txt',
+			'dir1' . $separator . 'file2.txt',
+			'dir2',
+			'dir2' . $separator . 'file1.txt',
+			'file1.txt',
+			'file2.txt',
+		];
+	}
 }
