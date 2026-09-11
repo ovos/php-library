@@ -590,6 +590,56 @@ class Logger extends Service implements Writer
 	}
 	
 	/**
+	 * Scrubs a raw TEXT body the way remove() scrubs an array — by the same
+	 * secret NAMES, but read out of the punctuation a body is written in
+	 * rather than off an array key: `"password": "x"`, `password=x`,
+	 * `'secret' => 'x'`. For the console's replay keys (docs/SENDER.md
+	 * §context.request): a JSON or form body has no keys to walk, so without
+	 * this the credential inside it would travel whole.
+	 *
+	 * An auth SCHEME counts as part of the value, so `Authorization: Bearer x`
+	 * collapses to one [redacted] rather than redacting the word Bearer and
+	 * then the token behind it. E-mail addresses are masked as everywhere
+	 * else. Idempotent: [redacted] and a mask both survive a second pass, so
+	 * the console scrubbing again server-side agrees with this.
+	 */
+	public function removeText(
+		string $text,
+	): string
+	{
+		if($text === '')
+		{
+			return $text;
+		}
+		
+		$names = [];
+		foreach($this->remove as $pattern)
+		{
+			// the configured patterns are whole regexes (~pass(word|wd)?~i);
+			// spliced into the search below they have to be bare fragments —
+			// and their groups have to stop CAPTURING, or every numbered
+			// backreference below shifts by one and the search matches nothing
+			if(preg_match('~^(.)(.*)\1[a-zA-Z]*$~s', $pattern, $parts) === 1)
+			{
+				$names[] = (string)preg_replace('~\((?!\?)~', '(?:', $parts[2]);
+			}
+		}
+		if($names !== [])
+		{
+			$text = (string)preg_replace_callback(
+				'~(["\']?)([A-Za-z0-9_.\-]{0,24}(?:' . implode('|', $names) . ')[A-Za-z0-9_.\-]{0,24})\1'
+					. '(\s*(?:=>|[:=])\s*)(["\']?)(?:(?:bearer|basic|token|digest)\s+)?'
+					. '([^"\'\s,;)&}]{1,512})\4~i',
+				static fn(array $match): string => $match[1] . $match[2] . $match[1]
+					. $match[3] . $match[4] . '[redacted]' . $match[4],
+				$text,
+			);
+		}
+		
+		return $this->maskEmails($text);
+	}
+	
+	/**
 	 * Masks every e-mail address in a string: the local part becomes a
 	 * maskName() mask — as long as the address was, every MASK_GROUP-th
 	 * character revealed — and the domain is kept

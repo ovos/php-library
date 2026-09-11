@@ -29,13 +29,16 @@ use function curl_getinfo;
 use function curl_init;
 use function curl_setopt_array;
 use function explode;
+use function fclose;
 use function file_get_contents;
+use function fopen;
 use function function_exists;
 use function http_response_code;
 use function in_array;
 use function intdiv;
 use function is_int;
 use function is_readable;
+use function is_scalar;
 use function is_string;
 use function json_encode;
 use function max;
@@ -44,8 +47,12 @@ use function mb_substr;
 use function min;
 use function preg_match;
 use function rtrim;
+use function str_replace;
 use function str_starts_with;
+use function stream_get_contents;
+use function stripos;
 use function strpos;
+use function strtolower;
 use function substr;
 use function time;
 use function trim;
@@ -154,6 +161,34 @@ class Sender extends Service
 	 * per-request QUEUE_MAX still bounds each batch.
 	 */
 	public const int SECURITY_MAX_PER_MINUTE = 60;
+	
+	/**
+	 * What the console's REPLAY needs to re-issue the request that failed
+	 * (docs/SENDER.md §context.request): the raw body, its content type and
+	 * the headers that change what the application answers. The caps are the
+	 * console's own — a body past this is cut, not dropped, since the head of
+	 * a body is still a body.
+	 */
+	public const int BODY_MAX = 16384;
+	
+	public const int CONTENT_TYPE_MAX = 128;
+	
+	public const int HEADER_VALUE_MAX = 1024;
+	
+	public const int HEADERS_MAX = 24;
+	
+	/** the standard names worth sending; the project's own `x-…` go too (buildHeaders) */
+	public const array REQUEST_HEADERS = ['accept', 'accept-language', 'accept-charset', 'accept-encoding',
+		'content-type', 'x-requested-with'];
+	
+	/**
+	 * Never sent: the forwarding family describes the customer's END USER
+	 * (their address, the host they asked for), and a replay carrying them
+	 * would claim to come from that person — through headers applications
+	 * routinely trust for rate limits, geo and access rules.
+	 */
+	public const array HEADERS_NEVER = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-port',
+		'x-forwarded-proto', 'x-forwarded-server', 'x-real-ip', 'forwarded'];
 	
 	protected ?ArrayObject $config;
 	
@@ -867,7 +902,15 @@ class Sender extends Service
 	
 	/**
 	 * Request variables, redacted with the Logger patterns
-	 * (the console scrubs again server-side as a backstop)
+	 * (the console scrubs again server-side as a backstop).
+	 *
+	 * Beside get/post this logs what the console's REPLAY needs to re-issue
+	 * the request that failed (docs/SENDER.md §context.request): the raw
+	 * BODY with its content type, and the request headers that change what
+	 * the application answers. A JSON API call's $_POST is EMPTY — the body
+	 * is a stream PHP never populates — so without these a replay of it is a
+	 * bare method and URL, which is a different request wearing the same
+	 * name.
 	 */
 	protected function buildRequest(
 		Logger $logger,
@@ -885,6 +928,24 @@ class Sender extends Service
 			{
 				$request['post'] = $logger->remove($_POST);
 			}
+			
+			$contentType = trim((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+			if($contentType !== '')
+			{
+				$request['contentType'] = mb_substr($contentType, 0, self::CONTENT_TYPE_MAX);
+			}
+			
+			$body = $this->readBody($contentType);
+			if($body !== '')
+			{
+				$request['body'] = $logger->removeText($body);
+			}
+			
+			$headers = $this->buildHeaders($logger);
+			if($headers !== [])
+			{
+				$request['headers'] = $headers;
+			}
 		}
 		catch(Throwable)
 		{
@@ -892,6 +953,102 @@ class Sender extends Service
 		}
 		
 		return $request;
+	}
+	
+	/**
+	 * The raw request body, capped — php://input is re-readable for every
+	 * content type EXCEPT multipart/form-data, which is skipped anyway: a
+	 * file upload's body is megabytes of binary and $_POST already carries
+	 * its fields. Read lazily, so a GET costs nothing.
+	 */
+	protected function readBody(
+		string $contentType,
+	): string
+	{
+		if(($_SERVER['REQUEST_METHOD'] ?? '') === 'GET'
+			|| stripos($contentType, 'multipart/form-data') !== false)
+		{
+			return '';
+		}
+		
+		$handle = @fopen('php://input', 'rb');
+		if($handle === false)
+		{
+			return '';
+		}
+		
+		try
+		{
+			return (string)stream_get_contents($handle, self::BODY_MAX);
+		}
+		finally
+		{
+			fclose($handle);
+		}
+	}
+	
+	/**
+	 * The request headers worth sending: the ones that change what the
+	 * application ANSWERS, plus the project's own X- names — never a cookie,
+	 * an authorization or anything else the Logger calls secret by name. The
+	 * console applies the same allow list again on write.
+	 *
+	 * @return array<string, string>
+	 */
+	protected function buildHeaders(
+		Logger $logger,
+	): array
+	{
+		$headers = [];
+		foreach($_SERVER as $key => $value)
+		{
+			if(count($headers) >= self::HEADERS_MAX)
+			{
+				break;
+			}
+			if(is_string($key) === false || is_scalar($value) === false
+				|| str_starts_with($key, 'HTTP_') === false)
+			{
+				continue;
+			}
+			$name = strtolower(str_replace('_', '-', substr($key, 5)));
+			if(in_array($name, self::REQUEST_HEADERS, true) === false
+				&& str_starts_with($name, 'x-') === false)
+			{
+				continue;
+			}
+			// the secret names are the Logger's, so one list governs both
+			if(in_array($name, self::HEADERS_NEVER, true) || $this->isSecretHeader($logger, $name))
+			{
+				continue;
+			}
+			$headers[$name] = mb_substr((string)$value, 0, self::HEADER_VALUE_MAX);
+		}
+		
+		return $headers;
+	}
+	
+	/**
+	 * A header name the Logger would redact as a FIELD name is one we never
+	 * send. The patterns are the Logger's own (getRemove(), extendable per
+	 * project with addRemove) rather than a copy of them — a name added there
+	 * has to take effect here too, or the header allow list grows a hole
+	 * exactly where someone believed they closed one.
+	 */
+	protected function isSecretHeader(
+		Logger $logger,
+		string $name,
+	): bool
+	{
+		foreach($logger->getRemove() as $pattern)
+		{
+			if(preg_match($pattern, $name) === 1)
+			{
+				return true;
+			}
+		}
+		
+		return false;
 	}
 	
 	protected function send(
