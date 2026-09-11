@@ -6,6 +6,8 @@ namespace Tests\Service;
 use Ovos\Service\Logger as Subject;
 use Ovos\Test;
 
+use function str_contains;
+
 /**
  * Logger — request-variable scrubbing: secret fields are dropped, username
  * fields and e-mail addresses (anywhere) are anonymized. remove() is the
@@ -37,6 +39,38 @@ class Logger extends Test
 		}
 		
 		return true;
+	}
+	
+	/**
+	 * removeText() — the raw request BODY the console's replay needs
+	 * (docs/SENDER.md §context.request). An array has keys to walk; a JSON or
+	 * form body has none, so the same secret NAMES are read out of the
+	 * punctuation a body is written in instead.
+	 *
+	 * Prevents: shipping the credential inside a body whole. Without this the
+	 * console stores it and the REPLAY posts it straight back at the site.
+	 */
+	public function redactsSecretsInsideARawBody(): bool
+	{
+		$logger = new Subject;
+		$json = $logger->removeText('{"sku":"X-1","password":"hunter2","note":"bob@example.com"}');
+		$form = $logger->removeText('q=shoes&access_token=abc123&page=2');
+		$header = $logger->removeText('Authorization: Bearer abc.def.xyz');
+		
+		return str_contains($json, '"sku":"X-1"')
+			&& str_contains($json, 'hunter2') === false
+			&& str_contains($json, '[redacted]')
+			// the address is masked, its domain kept
+			&& str_contains($json, 'bob@example.com') === false
+			&& str_contains($json, '@example.com')
+			&& str_contains($form, 'q=shoes') && str_contains($form, 'page=2')
+			&& str_contains($form, 'abc123') === false
+			// the auth scheme is part of the value, so it collapses to one redaction
+			&& str_contains($header, 'abc.def.xyz') === false
+			&& $header === 'Authorization: [redacted]'
+			// idempotent: the console scrubs again server-side
+			&& $logger->removeText($json) === $json
+			&& $logger->removeText('') === '';
 	}
 	
 	public function redactionIsCaseInsensitiveAndMatchesSubstrings(): bool

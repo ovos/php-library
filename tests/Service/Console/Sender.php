@@ -14,10 +14,13 @@ use Ovos\Test;
 use Throwable;
 use WeakReference;
 
+use function array_key_exists;
 use function count;
 use function gc_collect_cycles;
+use function in_array;
 use function mb_strlen;
 use function str_repeat;
+use function str_starts_with;
 
 use const E_WARNING;
 
@@ -432,6 +435,66 @@ class Sender extends Test
 	/**
 	 * @return ConsoleSender&object{queueCount: callable(): int}
 	 */
+	/**
+	 * The replay keys (docs/SENDER.md §context.request): the raw BODY with its
+	 * content type and the headers that change what the application answers —
+	 * what the console's replay needs to re-issue the request that FAILED.
+	 *
+	 * A JSON API call's $_POST is EMPTY (the body is a stream PHP never
+	 * populates), so without these the console replays such a write as a bare
+	 * method and URL — a different request wearing the same name, whose
+	 * verdict is wrong rather than missing.
+	 *
+	 * Prevents, on the sending side: shipping a cookie or an authorization
+	 * header, and shipping the credential inside a body whole.
+	 */
+	public function theRequestCarriesTheBodyAndItsSafeHeaders(): bool
+	{
+		$sender = $this->makeSender();
+		$server = $_SERVER;
+		$post = $_POST;
+		$_POST = [];
+		// the suite shares $_SERVER, so another test's headers would otherwise
+		// land in the exact comparison below
+		foreach($_SERVER as $key => $value)
+		{
+			if(str_starts_with((string)$key, 'HTTP_'))
+			{
+				unset($_SERVER[$key]);
+			}
+		}
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_SERVER['CONTENT_TYPE'] = 'application/json';
+		$_SERVER['HTTP_ACCEPT'] = 'application/json';
+		$_SERVER['HTTP_X_TENANT_ID'] = 'acme';
+		$_SERVER['HTTP_COOKIE'] = 'session=abc';
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer abc.def';
+		$_SERVER['HTTP_X_API_KEY'] = 'k-1';
+		$_SERVER['HTTP_VIA'] = '1.1 proxy';
+		try
+		{
+			$request = $sender->request(new Logger);
+			// a multipart body is never read: megabytes of binary, and $_POST
+			// already carries its fields
+			$multipart = $sender->body('multipart/form-data; boundary=x');
+			$_SERVER['REQUEST_METHOD'] = 'GET';
+			$read = $sender->body('application/json');
+		}
+		finally
+		{
+			$_SERVER = $server;
+			$_POST = $post;
+		}
+		
+		return ($request['contentType'] ?? '') === 'application/json'
+			&& ($request['headers'] ?? []) === ['accept' => 'application/json', 'x-tenant-id' => 'acme']
+			// php://input is empty in a CLI test run, so the key stays out
+			&& array_key_exists('body', $request) === false
+			&& $multipart === '' && $read === ''
+			&& ConsoleSender::BODY_MAX === 16384
+			&& in_array('accept-language', ConsoleSender::REQUEST_HEADERS, true);
+	}
+	
 	protected function makeSender(
 		bool $enabled = true,
 		bool $report404 = false,
@@ -496,6 +559,22 @@ class Sender extends Test
 			): void
 			{
 				// never post from tests
+			}
+			
+			/** what buildRequest() puts under context.request (docs/SENDER.md) */
+			public function request(
+				Logger $logger,
+			): array
+			{
+				return $this->buildRequest($logger);
+			}
+			
+			/** the raw body it would read for a content type */
+			public function body(
+				string $contentType,
+			): string
+			{
+				return $this->readBody($contentType);
 			}
 		};
 	}
