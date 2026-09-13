@@ -26,7 +26,7 @@ these, and each stands on its own:
 None of them asks you to adopt the framework: the ideas are the point, and the
 code is here to check them against.
 
-**GitHub:** https://github.com/ovos/php-library
+**GitHub:** https://github.com/ovos/php-library · **Licence:** [PolyForm Noncommercial 1.0.0](LICENSE.md) — read it, run it, learn from it; commercial use needs a word with us
 
 
 ## What makes it different
