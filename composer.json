@@ -1,6 +1,8 @@
 {
   "name": "ovos/php-library",
-  "description": "ovos library",
+  "description": "A batteries-included MVC framework and infrastructure toolkit for modern PHP: a cache that never stampedes (MemoLock), lazy RedisJSON sessions, filesystem routing, relations as attributes with zero N+1, a live profiler and a self-wiring DI container.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "homepage": "https://github.com/ovos/php-library",
   "type": "library",
   "authors": [
     {
