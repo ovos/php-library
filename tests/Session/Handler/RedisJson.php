@@ -371,7 +371,7 @@ class RedisJson extends Test
 	}
 	
 	/**
-	 * A plain user-space class (here Ovos\Url, exactly what bo2go stores as
+	 * A plain user-space class (here Ovos\Url, exactly what a production application stores as
 	 * the post-login return_url) is not JsonSerializable/stdClass/ArrayObject,
 	 * so it round-trips through the serialized leaf and comes back as a real
 	 * instance - unlike DateTime it has no __serialize magic, so this covers

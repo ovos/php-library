@@ -32,8 +32,8 @@ use function strtotime;
  * travel), and request variables survive only as unindexed extra.
  *
  * Sibling implementations kept shape-compatible with this one: the CMS
- * projects' CMS\Log\Writer\Otel (byte-identical between westbahn and
- * leadersnet) and the browser client's otlp mode — all three converge
+ * projects' CMS\Log\Writer\Otel (byte-identical between the two CMS
+ * clients) and the browser client's otlp mode — all three converge
  * on the console's OTLP intake with the same attribute vocabulary.
  *
  * @author Marcin Gil <mg@ovos.at>
