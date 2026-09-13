@@ -37,7 +37,7 @@ class ArticleBinding extends Test
 		');
 		$this->store->source()->exec('
 			INSERT INTO tests_route_articles (id, url_title) VALUES
-				(101600, "leistung-ist-das-fundament-unseres-wohlstands");
+				(4711, "der-lange-weg-zur-kurzen-antwort");
 		');
 	}
 
@@ -63,26 +63,26 @@ class ArticleBinding extends Test
 	{
 		$bound = (new ArticleBinder)->bind(
 			$this->url(['news', 'article',
-				'leistung-ist-das-fundament-unseres-wohlstands,101600.html']),
-			'leistung-ist-das-fundament-unseres-wohlstands,101600.html',
+				'der-lange-weg-zur-kurzen-antwort,4711.html']),
+			'der-lange-weg-zur-kurzen-antwort,4711.html',
 			$this->attribute(),
 		);
 
 		return $bound instanceof RouteArticle
-			&& (int)$bound->id === 101600;
+			&& (int)$bound->id === 4711;
 	}
 
 	public function redirectsWhenTheSlugDrifts(): bool
 	{
 		$bound = (new ArticleBinder)->bind(
-			$this->url(['news', 'article', 'stale-old-headline,101600.html']),
-			'stale-old-headline,101600.html',
+			$this->url(['news', 'article', 'stale-old-headline,4711.html']),
+			'stale-old-headline,4711.html',
 			$this->attribute(),
 		);
 
 		return $bound instanceof Url
 			&& (string)$bound->getComponents()[2]
-				=== 'leistung-ist-das-fundament-unseres-wohlstands,101600.html';
+				=== 'der-lange-weg-zur-kurzen-antwort,4711.html';
 	}
 
 	public function declinesWhenNotATail(): bool
@@ -124,13 +124,13 @@ class ArticleBinding extends Test
 
 		$bound = (new ArticleBinder)->bind(
 			$this->url(['news',
-				'leistung-ist-das-fundament-unseres-wohlstands-101600']),
-			'leistung-ist-das-fundament-unseres-wohlstands-101600',
+				'der-lange-weg-zur-kurzen-antwort-4711']),
+			'der-lange-weg-zur-kurzen-antwort-4711',
 			$article,
 		);
 
 		return $bound instanceof RouteArticle
-			&& (int)$bound->id === 101600;
+			&& (int)$bound->id === 4711;
 	}
 
 	/**

@@ -170,20 +170,20 @@ class Logger extends Test
 		$logger = new Subject;
 		
 		$out = $logger->remove([
-			'username' => 'tobis@ovos.at',
-			'login' => 'm@ovos.at',
+			'username' => 'stefa@example.at',
+			'login' => 'm@example.at',
 			'user' => 'j***.***@example.com',
 		]);
 		
 		return $out === [
-				'username' => 't***s@ovos.at',
-				'login' => 'm@ovos.at',
+				'username' => 's***a@example.at',
+				'login' => 'm@example.at',
 				'user' => 'j***.***@example.com',
 			]
 			// the login param is untouched, so it stays byte-identical —
 			// %40 and all (values are only re-encoded when changed)
-			&& $logger->removeFromUrl('/x?user=jo%40b.co&login=m%40ovos.at')
-				=== '/x?user=j*@b.co&login=m%40ovos.at';
+			&& $logger->removeFromUrl('/x?user=jo%40b.co&login=m%40example.at')
+				=== '/x?user=j*@b.co&login=m%40example.at';
 	}
 	
 	public function secretsAreRemovedEvenWhenValuedLikeAnEmail(): bool

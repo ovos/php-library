@@ -106,7 +106,7 @@ title <= 5.9.8 " . str_repeat('x', 300);
 	
 	public function slugifyProducesUrlSafeText(): bool
 	{
-		return Subject::slugify('Leistung ist das Fundament!') === 'leistung-ist-das-fundament'
+		return Subject::slugify('Der lange Weg zur kurzen Antwort!') === 'der-lange-weg-zur-kurzen-antwort'
 			// German transliteration: ü -> ue, ä -> ae
 			&& Subject::slugify('Über Ähnliches') === 'ueber-aehnliches';
 	}

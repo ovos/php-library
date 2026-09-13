@@ -21,7 +21,7 @@ class Environment extends Test
 		return new Subject([
 			'ENV' => 'development',
 			'UI_AUTH' => [
-				'WHITELIST' => '127.0.0.1, 91.196.8.71 ,116.203.34.163',
+				'WHITELIST' => '127.0.0.1, 198.51.100.71 ,203.0.113.163',
 				'EMPTY' => '',
 			],
 		]);
@@ -32,7 +32,7 @@ class Environment extends Test
 		$env = $this->subject();
 
 		return $env->getYamlTag('ENV', '!ENV', 0) === 'development'
-			&& $env->getYamlTag('UI_AUTH[WHITELIST]', '!ENV', 0) === '127.0.0.1, 91.196.8.71 ,116.203.34.163'
+			&& $env->getYamlTag('UI_AUTH[WHITELIST]', '!ENV', 0) === '127.0.0.1, 198.51.100.71 ,203.0.113.163'
 			// missing key with no default -> null; with a "|default" -> the default
 			&& $env->getYamlTag('MISSING[KEY]', '!ENV', 0) === null
 			&& $env->getYamlTag('MISSING[KEY]|fallback', '!ENV', 0) === 'fallback';
@@ -42,7 +42,7 @@ class Environment extends Test
 	{
 		$list = $this->subject()->getYamlListTag('UI_AUTH[WHITELIST]', '!ENV_LIST', 0);
 
-		return $list === ['127.0.0.1', '91.196.8.71', '116.203.34.163'];
+		return $list === ['127.0.0.1', '198.51.100.71', '203.0.113.163'];
 	}
 
 	public function envListTagYieldsAnEmptyListForMissingOrEmptyValues(): bool
