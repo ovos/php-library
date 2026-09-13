@@ -52,7 +52,7 @@ class Form implements Iterator
 	/**
 	 * No app() here. It set a protected $app that nothing ever read — not this
 	 * class, not Translatable (which goes through Translator:: statically), not
-	 * one of the twenty-two form subclasses in bo2go — and its only real effect
+	 * one of the twenty-two form subclasses in a large application of ours — and its only real effect
 	 * was to make a form unconstructible outside a booted application. A form
 	 * is named values, filters and validators; none of that needs the
 	 * application, and now a unit test or a CLI script can build one.

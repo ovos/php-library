@@ -14,7 +14,20 @@ workloads.
 	<img src="docs/highlights.png" alt="Framework highlights: cache, sessions, routing, relations, profiler, container" width="940">
 </p>
 
+**Here for the cache?** Most people who open this repository came for one of
+these, and each stands on its own:
+
+| if you want | read |
+|-------------|------|
+| the cache, and why a stampede never happens | [README.CACHE.md](README.CACHE.md) — the four stores, their invalidation strategies, and when each one is the right answer |
+| the lock that makes it work | [README.MEMOLOCK.md](README.MEMOLOCK.md) — one request rebuilds, the rest wait on Pub/Sub |
+| sessions as documents, not blobs | [README.SESSION.md](README.SESSION.md) — lazy RedisJSON, per-path reads, per-value locks |
+
+None of them asks you to adopt the framework: the ideas are the point, and the
+code is here to check them against.
+
 **GitHub:** https://github.com/ovos/php-library
+
 
 ## What makes it different
 

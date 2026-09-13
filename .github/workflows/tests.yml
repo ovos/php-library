@@ -1,8 +1,15 @@
 name: "Tests"
 
+# Public repository, private sibling packages: a fork's pull request gets no
+# secrets, so the SSH step below could only ever fail for an outside
+# contributor and paint the Actions tab red. Runs on our own pushes and on
+# pull requests raised inside this repository.
 on:
-  - pull_request
-  - push
+  push:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
 
 defaults:
   run:
