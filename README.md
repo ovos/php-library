@@ -1,5 +1,5 @@
 <p align="center">
-	<img src="docs/logo.svg" alt="ovos php-library" width="940">
+	<img src="docs/header.png" alt="ovos php-library — production concerns, handled once" width="940">
 </p>
 
 # ovos php-library
@@ -11,7 +11,7 @@ applications for over a decade and is developed against real production
 workloads.
 
 <p align="center">
-	<img src="docs/highlights.svg" alt="Framework highlights: cache, sessions, routing, relations, profiler, container" width="940">
+	<img src="docs/highlights.png" alt="Framework highlights: cache, sessions, routing, relations, profiler, container" width="940">
 </p>
 
 **GitHub:** https://github.com/ovos/php-library
@@ -55,20 +55,6 @@ namespace; the next segment is the action; the rest become its arguments —
 **typed** (`yes`→`true`, `42`→`int`) and **matched by name** (`company-id` →
 `$companyId`). It's locale-aware and needs zero configuration — nothing to
 register, nothing to keep in sync with the code.
-
-SEO entity URLs layer on top of that: an action opts into a trailing
-`{slug},{id}{suffix}` with `#[Route\Article]` — looked up by the **authoritative
-id**, a drifted slug **301s** to canonical for free, the typed entity injected.
-
-```php
-class News extends Controller
-{
-    #[Route\Article(model: Article::class, slug: 'url_title')]
-    public function article(Article $article): Response { /* entity bound */ }
-}
-```
-
-→ [Custom resolvers (SEO URLs)](#custom-resolvers-seo-urls)
 
 ### 🎯 Relations declared as attributes, with zero N+1
 
@@ -2385,7 +2371,7 @@ How `invalidateTags()` differs across the persistent stores - the tag-hash and
 RediSearch stores delete matched items eagerly (cost grows with matches), while
 the versioned stores append one rule and resolve staleness lazily (constant cost):
 
-![Cache backends - invalidation strategy compared](docs/cache/comparison.svg)
+![Cache backends - invalidation strategy compared](docs/cache/comparison.png)
 
 See [README.CACHE.md](README.CACHE.md) for the per-store read/write/invalidate flows.
 
@@ -2417,7 +2403,7 @@ $value = $perishable->get('key', resolver: fn() => 'computed', ttl: 60);
 
 When many requests hit an expired cache key simultaneously, MemoLock ensures only one request computes the value while others wait. **MemoLock is enabled by default** - if you use `get()` with a resolver, you're already protected.
 
-![MemoLock - one request rebuilds while the rest wait on Pub/Sub](docs/cache/memolock.svg)
+![MemoLock - one request rebuilds while the rest wait on Pub/Sub](docs/cache/memolock.png)
 
 ```php
 $value = $store->get(

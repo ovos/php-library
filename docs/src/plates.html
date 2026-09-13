@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ovos php-library — README header</title>
+<style>
+@font-face { font-family: 'Rajdhani'; font-weight: 400; src: url('fonts/rajdhani-400.woff2') format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 600; src: url('fonts/rajdhani-600.woff2') format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 700; src: url('fonts/rajdhani-700.woff2') format('woff2'); }
+
+:root
+{
+	--bg: #0a0a12;
+	--border: #26263a;
+	--cyan: #00f0ff;
+	--yellow: #fcee0a;
+	--muted: #8b8ba7;
+	--text: #e8e8f0;
+	--mono: Consolas, "Courier New", monospace;
+	--display: 'Rajdhani', 'Segoe UI', sans-serif;
+}
+
+*
+{
+	box-sizing: border-box;
+}
+
+body
+{
+	margin: 0;
+	background: #000;
+}
+
+.plate
+{
+	position: relative;
+	width: 940px;
+	overflow: hidden;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	font-family: var(--display);
+	color: var(--text);
+}
+
+.plate::before
+{
+	content: '';
+	position: absolute;
+	inset: 0;
+	background-image:
+		linear-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+		linear-gradient(90deg, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
+	background-size: 44px 44px, 44px 44px;
+}
+
+.plate::after
+{
+	content: '';
+	position: absolute;
+	inset: 0;
+	background:
+		radial-gradient(120% 120% at 80% 40%, rgba(0, 240, 255, 0.10), transparent 62%),
+		radial-gradient(80% 90% at 6% 10%, rgba(252, 238, 10, 0.05), transparent 60%),
+		linear-gradient(90deg, rgba(10, 10, 18, 0.9) 0%, rgba(10, 10, 18, 0.5) 60%, rgba(10, 10, 18, 0.2) 100%);
+}
+
+.ink
+{
+	position: relative;
+	z-index: 2;
+	padding: 26px 40px;
+}
+
+.eyebrow
+{
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: .42em;
+	color: var(--muted);
+	text-transform: uppercase;
+}
+
+.eyebrow .on
+{
+	color: var(--cyan);
+	opacity: .85;
+}
+
+/* --- header plate ---------------------------------------------------- */
+
+#header
+{
+	height: 250px;
+}
+
+.word
+{
+	margin-top: 10px;
+	font-size: 46px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	line-height: 1;
+}
+
+.word .a
+{
+	color: var(--yellow);
+	text-shadow: 0 0 22px rgba(252, 238, 10, 0.45);
+}
+
+.word .b
+{
+	color: var(--cyan);
+	text-shadow: 0 0 22px rgba(0, 240, 255, 0.45);
+}
+
+.claim
+{
+	margin-top: 14px;
+	font-size: 26px;
+	font-weight: 600;
+	line-height: 1.15;
+	max-width: 560px;
+}
+
+.claim .g
+{
+	color: var(--cyan);
+}
+
+.rule
+{
+	margin-top: 14px;
+	width: 470px;
+	height: 1px;
+	background: linear-gradient(90deg, var(--cyan), rgba(38, 38, 58, 0.9) 30%, rgba(38, 38, 58, 0));
+}
+
+.sub
+{
+	margin-top: 11px;
+	font-family: var(--mono);
+	font-size: 11.5px;
+	letter-spacing: .09em;
+	color: var(--muted);
+}
+
+.stamp
+{
+	position: absolute;
+	z-index: 2;
+	right: 44px;
+	top: 50%;
+	transform: translateY(-50%);
+	text-align: center;
+}
+
+.stamp .v
+{
+	font-size: 58px;
+	font-weight: 700;
+	letter-spacing: .06em;
+	line-height: 1;
+	color: var(--cyan);
+	text-shadow: 0 0 26px rgba(0, 240, 255, 0.35);
+}
+
+.stamp .l
+{
+	margin-top: 6px;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: .24em;
+	color: var(--muted);
+}
+
+/* --- highlights board ------------------------------------------------ */
+
+#highlights
+{
+	/* auto: six cards decide the height, not a number that leaves a third of
+		the board empty */
+	padding-bottom: 6px;
+}
+
+.cards
+{
+	position: relative;
+	z-index: 2;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 16px;
+	padding: 0 40px 30px;
+}
+
+.card
+{
+	border: 1px solid var(--border);
+	border-top: 2px solid var(--cyan);
+	background: rgba(13, 13, 23, 0.75);
+	padding: 14px 16px 16px;
+}
+
+.card:nth-child(3n + 2)
+{
+	border-top-color: var(--yellow);
+}
+
+.card .n
+{
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: .2em;
+	color: var(--muted);
+}
+
+.card h3
+{
+	margin: 6px 0 8px;
+	font-size: 20px;
+	font-weight: 700;
+	letter-spacing: .08em;
+	color: var(--cyan);
+}
+
+.card:nth-child(3n + 2) h3
+{
+	color: var(--yellow);
+}
+
+.card p
+{
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--muted);
+}
+</style>
+</head>
+<body>
+
+<div class="plate" id="header">
+	<div class="ink">
+		<div class="eyebrow">OVOS <span class="on">// FRAMEWORK CORE</span></div>
+		<div class="word"><span class="a">PHP</span> <span class="b">LIBRARY</span></div>
+		<div class="claim">Production concerns, handled once.</div>
+		<div class="rule"></div>
+		<div class="sub">sessions · cache · memolock · redis functions · di · http · profiler</div>
+	</div>
+	<div class="stamp">
+		<div class="v">8.5</div>
+		<div class="l">PHP 8.3+</div>
+	</div>
+</div>
+
+<div class="plate" id="highlights">
+	<div class="ink">
+		<div class="eyebrow">OVOS <span class="on">// FRAMEWORK HIGHLIGHTS</span></div>
+	</div>
+	<div class="cards">
+		<div class="card">
+			<div class="n">01</div>
+			<h3>CACHE</h3>
+			<p>MemoLock — one request rebuilds, the rest wait</p>
+		</div>
+		<div class="card">
+			<div class="n">02</div>
+			<h3>SESSIONS</h3>
+			<p>lazy RedisJSON, per-path reads · searchable index</p>
+		</div>
+		<div class="card">
+			<div class="n">03</div>
+			<h3>ROUTING</h3>
+			<p>routes from the filesystem, typed params · locale-aware</p>
+		</div>
+		<div class="card">
+			<div class="n">04</div>
+			<h3>RELATIONS</h3>
+			<p>declared as attributes, batch-loaded · zero N+1</p>
+		</div>
+		<div class="card">
+			<div class="n">05</div>
+			<h3>PROFILER</h3>
+			<p>live per-request stream, queries · redis · timings</p>
+		</div>
+		<div class="card">
+			<div class="n">06</div>
+			<h3>CONTAINER</h3>
+			<p>attribute injection + zero-config autowire</p>
+		</div>
+	</div>
+</div>
+
+</body>
+</html>

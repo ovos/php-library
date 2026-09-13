@@ -1,5 +1,5 @@
 <p align="center">
-	<img src="docs/logo.svg" alt="ovos php-library" width="940">
+	<img src="docs/header.png" alt="ovos php-library" width="940">
 </p>
 
 # Session - Lazy RedisJSON Session Storage
@@ -44,9 +44,9 @@ Request B → get('user.locale')           → 1 round trip, untouched by A's lo
 Request C → get('basket.products')       → waits (Pub/Sub) only for THAT value, then reads A's write
 ```
 
-![handler php vs handler json — whole-blob + global lock vs per-path + per-value locks](docs/session/comparison.svg)
+![handler php vs handler json — whole-blob + global lock vs per-path + per-value locks](docs/session/comparison.png)
 
-![A request under the json handler — open, touch, per-path reads, update, close](docs/session/lifecycle.svg)
+![A request under the json handler — open, touch, per-path reads, update, close](docs/session/lifecycle.png)
 
 ## Storage layout
 
@@ -66,7 +66,7 @@ Reserved document keys: `__meta` (`{created: <unix>}`, stamped atomically
 on first write) and `__journey` (the timeline, see below). Everything else
 is application data.
 
-![One session in Redis — the document, its lock satellites, the activity zset and the optional index](docs/session/anatomy.svg)
+![One session in Redis — the document, its lock satellites, the activity zset and the optional index](docs/session/anatomy.png)
 
 ## Configuration
 
@@ -190,7 +190,7 @@ refuses while one is held; the writer then waits for ONE release and
 retries - unconditionally on the retry (availability over strictness,
 the lock TTL bounds the wait). Your own locks never block you.
 
-![Per-value locks — a waiting reader woken by Pub/Sub, and the atomic write guard](docs/session/locking.svg)
+![Per-value locks — a waiting reader woken by Pub/Sub, and the atomic write guard](docs/session/locking.png)
 
 **Locks are hierarchical**: a lock on `basket` (or the whole session, the
 `[]` root path) also covers `basket.products` - descendant reads and lock
