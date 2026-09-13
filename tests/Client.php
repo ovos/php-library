@@ -30,9 +30,9 @@ class Client extends Test
 	public function withoutTrustedProxiesHeadersAreIgnored(): bool
 	{
 		$xff = $this->ip(['REMOTE_ADDR' => '203.0.113.9',
-			'HTTP_X_FORWARDED_FOR' => '91.225.132.123'], []);
+			'HTTP_X_FORWARDED_FOR' => '198.51.100.123'], []);
 		$legacy = $this->ip(['REMOTE_ADDR' => '203.0.113.9',
-			'HTTP_CLIENT_IP' => '91.225.132.123'], []);
+			'HTTP_CLIENT_IP' => '198.51.100.123'], []);
 
 		return $xff === '203.0.113.9' && $legacy === '203.0.113.9';
 	}
@@ -41,7 +41,7 @@ class Client extends Test
 	public function untrustedPeerCannotForward(): bool
 	{
 		return $this->ip(['REMOTE_ADDR' => '203.0.113.9',
-			'HTTP_X_FORWARDED_FOR' => '91.225.132.123'], ['10.0.0.0/8'])
+			'HTTP_X_FORWARDED_FOR' => '198.51.100.123'], ['10.0.0.0/8'])
 			=== '203.0.113.9';
 	}
 
@@ -59,7 +59,7 @@ class Client extends Test
 	public function leftmostEntryIsNotBelieved(): bool
 	{
 		return $this->ip(['REMOTE_ADDR' => '10.0.0.5',
-			'HTTP_X_FORWARDED_FOR' => '91.225.132.123, 198.51.100.7'],
+			'HTTP_X_FORWARDED_FOR' => '198.51.100.123, 198.51.100.7'],
 			['10.0.0.0/8']) === '198.51.100.7';
 	}
 
