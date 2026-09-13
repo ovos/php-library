@@ -59,7 +59,7 @@ matches. The versioned stores (`RedisVersioned`, `RedisClusterVersioned`) **appe
 single invalidation rule** and let reads resolve staleness lazily, so the cost
 is constant no matter how many items match.
 
-![Cache backends - invalidation strategy compared](docs/cache/comparison.svg)
+![Cache backends - invalidation strategy compared](docs/cache/comparison.png)
 
 ### APCu (`Ovos\Cache\Store\Apcu`)
 - In-process memory cache (per PHP worker).
@@ -73,7 +73,7 @@ is constant no matter how many items match.
 - Uses Redis Pub/Sub for MemoLock queueing (needs a separate queue connection).
 - Best for: shared state, session-adjacent data, anything needing tag invalidation.
 
-![Redis store - write, read and invalidate flow](docs/cache/redis.svg)
+![Redis store - write, read and invalidate flow](docs/cache/redis.png)
 
 ### Redisearch (`Ovos\Cache\Store\Redisearch`)
 - Distributed cache with tag invalidation powered by RediSearch.
@@ -84,7 +84,7 @@ is constant no matter how many items match.
   `getTags()` or `getAllTags()`.
 - Best for: projects with many tagged cache entries where invalidation speed matters.
 
-![Redisearch store - write, read and invalidate flow](docs/cache/redisearch.svg)
+![Redisearch store - write, read and invalidate flow](docs/cache/redisearch.png)
 
 ### RedisVersioned (`Ovos\Cache\Store\RedisVersioned`)
 - Distributed cache with **rule based (logical) tag invalidation**:
@@ -102,7 +102,7 @@ is constant no matter how many items match.
 - Best for: projects with very large tag invalidations, where deleting the
   matched items at invalidation time is too expensive.
 
-![RedisVersioned store - write, read and invalidate flow](docs/cache/redis-versioned.svg)
+![RedisVersioned store - write, read and invalidate flow](docs/cache/redis-versioned.png)
 
 A closer look at the read path - how a `get()` fetches the item in one
 `HMGET` and uses its `mark` (the version it was stamped with) to evaluate,
@@ -110,7 +110,7 @@ in PHP over a short-lived local rule cache (`rules_cache_ms`), only the
 invalidation rules it has not seen yet (id > mark), matches them against the
 item's tags, and serves a fresh hit or lazily unlinks a stale item:
 
-![RedisVersioned cache GET - tags, versions and XRANGE](docs/cache/redis-versioned-get.svg)
+![RedisVersioned cache GET - tags, versions and XRANGE](docs/cache/redis-versioned-get.png)
 
 ### RedisClusterVersioned (`Ovos\Cache\Store\RedisClusterVersioned`)
 - The RedisVersioned store on a **Redis Cluster**: same data model and
@@ -121,7 +121,7 @@ item's tags, and serves a fresh hit or lazily unlinks a stale item:
   pub/sub (see the configuration reference below).
 - No RediSearch module required on the cluster nodes.
 
-![RedisClusterVersioned store - write, read and invalidate flow](docs/cache/redis-cluster.svg)
+![RedisClusterVersioned store - write, read and invalidate flow](docs/cache/redis-cluster.png)
 
 ### Cost at a glance
 
