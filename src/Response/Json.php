@@ -22,7 +22,6 @@ use	function count;
  * Set GET variable "debug" to see formatted JSON on output
  *
  * @author Marcin Gil <mg@ovos.at>
- * @author Maciej Hołyszko <mh@ovos.at>
  */
 class Json extends Response
 {
