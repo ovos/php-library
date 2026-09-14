@@ -36,6 +36,7 @@ use function function_exists;
 use function http_response_code;
 use function in_array;
 use function intdiv;
+use function is_array;
 use function is_int;
 use function is_readable;
 use function is_scalar;
@@ -105,12 +106,21 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *                                       # its own exporter, so url/key become optional here. Never
  *                                       # combine with url+key when the collector exports back to
  *                                       # the console — errors would double-report.
+ *     files:                            # OPTIONAL: the untracked pass (Untracked; SENDER.md §7 "Files")
+ *       web: [public]                   # the web-reachable directories, relative to the working copy
+ *                                       # root ('.' = the root itself is the docroot). An untracked PHP
+ *                                       # file there is URGENT, elsewhere HIGH. Run from a cron line —
+ *                                       # `php cli.php console files` (ovos/php-module-system) or
+ *                                       # $sender->reportUntracked() — CLI only, never a web request;
+ *                                       # needs files_enabled on the console project (403 says so).
  *
  * plus "- Console\Sender" in system.services.http and .cli lists.
  *
  * The deploy step tells the console a release shipped the minute it does:
  * `$sender->announceRelease()` (SENDER.md §7) — the label the events carry,
- * or the one the caller names, with an optional moment, ref and source.
+ * or the one the caller names, with an optional moment, ref and source. A
+ * cron line asks the working copy what nobody committed:
+ * `$sender->reportUntracked()` (Untracked; SENDER.md §7 "Files").
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -1131,6 +1141,125 @@ class Sender extends Service
 		{
 			return false;
 		}
+	}
+	
+	/**
+	 * The untracked pass (Untracked; SENDER.md §7 "Files"): the working copy
+	 * at or above BASE_DIR asked what the repository does not track, posted
+	 * as an integrity-scan report to `POST /api/v1/ingest/files` — the one
+	 * detector that sees a dropped file BEFORE anything runs it. CLI only: a
+	 * cron line or a deploy step, never a web request (it spawns git or svn
+	 * and reads the tree). Synchronous and best-effort like the announce:
+	 * false when the sender is off, when this is not a CLI run, when nothing
+	 * can be known (no .git/.svn, proc_open closed, a non-zero exit — never a
+	 * guess) or when the console refuses (403 = files_enabled is off for the
+	 * project). An EMPTY answer is still posted: that is how a finding the
+	 * console holds goes GONE.
+	 *
+	 * @param array{web?: list<string>, mode?: string, timeout_ms?: int} $options
+	 * @return bool whether the console accepted the report (202)
+	 */
+	public function reportUntracked(
+		array $options = [],
+	): bool
+	{
+		$report = $this->untrackedReport($options);
+		
+		return $report !== null && $this->reportFiles($report) === 202;
+	}
+	
+	/**
+	 * The pass alone — the report the console would get, or null when
+	 * nothing can be known (or this is not a CLI run); the CLI command prints
+	 * from it before posting. The web-reachable directories come from the
+	 * options, else console.files.web, else Untracked::WEB_DEFAULT; the
+	 * release and environment are the ones the events carry.
+	 *
+	 * @param array{web?: list<string>, mode?: string, timeout_ms?: int} $options
+	 */
+	public function untrackedReport(
+		array $options = [],
+	): ?array
+	{
+		if($this->config === null || $this->config->enabled !== true
+			|| (string)$this->config->url === '' || (string)$this->config->key === ''
+			|| isset($this->app) === false || $this->app->isInterfaceCli() === false)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$found = $this->workingCopy();
+			if($found === null)
+			{
+				return null;
+			}
+			
+			$web = $options['web'] ?? $this->config->files?->web ?? null;
+			if($web instanceof ArrayObject)
+			{
+				$web = array_values($web->getArrayCopy());
+			}
+			
+			return $this->untracked()->scan($found['root'], [
+				'vcs' => $found['vcs'],
+				'web' => is_array($web) ? $web : Untracked::WEB_DEFAULT,
+				'mode' => (string)($options['mode'] ?? Untracked::MODE_BACKGROUND),
+				'timeout_ms' => (int)($options['timeout_ms'] ?? Untracked::TIMEOUT_MS),
+				'release' => self::currentRelease($this->config->release ?? null),
+				'environment' => $this->environment(),
+			]);
+		}
+		catch(Throwable)
+		{
+			return null;
+		}
+	}
+	
+	/**
+	 * One integrity-scan report to the console (the shape Untracked builds;
+	 * ovos/console docs/API.V1.md "Files"), the response code back — 202
+	 * accepted, 403 file reports off for the project, 0 no answer. Direct
+	 * ingest only: the OTLP collector has no files endpoint.
+	 */
+	public function reportFiles(
+		array $report,
+	): int
+	{
+		if($this->config === null || (string)$this->config->url === '' || (string)$this->config->key === '')
+		{
+			return 0;
+		}
+		
+		try
+		{
+			$json = json_encode($report, JSON_INVALID_UTF8_SUBSTITUTE);
+			
+			return $json === false ? 0 : $this->post('/api/v1/ingest/files', $json);
+		}
+		catch(Throwable)
+		{
+			return 0;
+		}
+	}
+	
+	/**
+	 * The working copy the pass reads — its own method so a test can name one
+	 *
+	 * @return array{root: string, vcs: string}|null
+	 */
+	protected function workingCopy(): ?array
+	{
+		return Untracked::root(BASE_DIR);
+	}
+	
+	/**
+	 * The pass — its own method so a test can script the working copy's answer
+	 */
+	protected function untracked(): Untracked
+	{
+		return new Untracked;
 	}
 	
 	/**
