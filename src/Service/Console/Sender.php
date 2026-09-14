@@ -106,10 +106,10 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *                                       # its own exporter, so url/key become optional here. Never
  *                                       # combine with url+key when the collector exports back to
  *                                       # the console — errors would double-report.
- *     files:                            # OPTIONAL: the untracked pass (Untracked; SENDER.md §7 "Files")
+ *     files:                            # OPTIONAL: the working-copy pass (Untracked; SENDER.md §7 "Files")
  *       web: [public]                   # the web-reachable directories, relative to the working copy
- *                                       # root ('.' = the root itself is the docroot). An untracked PHP
- *                                       # file there is URGENT, elsewhere HIGH. Run from a cron line —
+ *                                       # root ('.' = the root itself is the docroot). An untracked or
+ *                                       # modified PHP file there is URGENT, elsewhere HIGH. Run from a cron line —
  *                                       # `php cli.php console files` (ovos/php-module-system) or
  *                                       # $sender->reportUntracked() — CLI only, never a web request;
  *                                       # needs files_enabled on the console project (403 says so).
@@ -119,7 +119,8 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  * The deploy step tells the console a release shipped the minute it does:
  * `$sender->announceRelease()` (SENDER.md §7) — the label the events carry,
  * or the one the caller names, with an optional moment, ref and source. A
- * cron line asks the working copy what nobody committed:
+ * cron line asks the working copy what nobody committed — untracked files,
+ * tracked files that differ, tracked files that are gone:
  * `$sender->reportUntracked()` (Untracked; SENDER.md §7 "Files").
  *
  * @author Marcin Gil <mg@ovos.at>
@@ -1144,10 +1145,13 @@ class Sender extends Service
 	}
 	
 	/**
-	 * The untracked pass (Untracked; SENDER.md §7 "Files"): the working copy
-	 * at or above BASE_DIR asked what the repository does not track, posted
-	 * as an integrity-scan report to `POST /api/v1/ingest/files` — the one
-	 * detector that sees a dropped file BEFORE anything runs it. CLI only: a
+	 * The working-copy pass (Untracked; SENDER.md §7 "Files"): the working
+	 * copy at or above BASE_DIR asked what the repository did not ship — files
+	 * it does not track, tracked files that differ from the commit, tracked
+	 * files that are gone — posted as an integrity-scan report to `POST
+	 * /api/v1/ingest/files`; the untracked half is the one detector that
+	 * sees a dropped file BEFORE anything runs it, the modified half is where
+	 * a payload written INTO an existing file shows. CLI only: a
 	 * cron line or a deploy step, never a web request (it spawns git or svn
 	 * and reads the tree). Synchronous and best-effort like the announce:
 	 * false when the sender is off, when this is not a CLI run, when nothing

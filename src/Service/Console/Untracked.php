@@ -64,10 +64,13 @@ use const PHP_OS_FAMILY;
 use const PHP_VERSION;
 
 /**
- * The untracked pass — what the working copy holds that the repository does
- * not know (ovos/console docs/plans/file-appearance-sensor.md, detector 5):
- * the one detector that sees a dropped file BEFORE anything runs it. Asks git
- * or svn, read-only, and builds the integrity-scan report the console's
+ * The working-copy pass — what the deployed tree holds that the repository
+ * did not ship (ovos/console docs/plans/file-appearance-sensor.md, detector
+ * 5, and its modified half): a file the repository does not track, a tracked
+ * file whose content differs from the commit, a tracked file that is gone.
+ * The first is the one detector that sees a dropped file BEFORE anything runs
+ * it; the second is where a payload written INTO an existing file shows. Asks
+ * git or svn, read-only, and builds the integrity-scan report the console's
  * `POST /api/v1/ingest/files` takes from every sender (the same shape the
  * WordPress plugin's tree walk sends), so the ledger, the cases, the alert
  * and the attack-wave correlation apply unchanged.
@@ -75,25 +78,35 @@ use const PHP_VERSION;
  * Read-only by contract, and careful with the working copy it reads:
  *
  *   git --no-optional-locks ls-files --others --exclude-standard -z
+ *   git --no-optional-locks -c core.fileMode=false diff --no-renames --name-status -z HEAD
  *   svn status --non-interactive
  *
  * never `git status` (it refreshes and locks the index — a killed run leaves
  * `index.lock` for the customer's next deploy), never `svn status -u`, never
- * `svn cleanup`. Ignored files stay out (.gitignore / svn:ignore): measured
- * on the console repo, 3 untracked against 793 ignored — the ignored pass
- * would drown the signal.
+ * `svn cleanup`. `--no-optional-locks` keeps the diff from writing the index
+ * too: a deploy that touched every file's mtime after checkout (a chmod -R)
+ * leaves a stale stat cache, and then every pass re-hashes those files — run
+ * `git update-index --refresh` once in such a deploy step. core.fileMode=false
+ * so a mode change alone is not a modification. Ignored files stay out
+ * (.gitignore / svn:ignore): measured on the console repo, 3 untracked
+ * against 793 ignored — the ignored pass would drown the signal.
  *
- * What gets a path in the report, and what only a count: an executable-shaped
- * file (.php, .phtml, .phar, .inc …) and a server config file (.htaccess,
- * .user.ini, php.ini, web.config) are listed by path; everything else is
- * counted PER DIRECTORY with an extension histogram, because
- * `uploads/offer-acme-gmbh.pdf` names a customer. Under a web-reachable
- * directory (config `console.files.web`, default `public`) an untracked PHP
- * file is URGENT, elsewhere HIGH; a config file there is HIGH, elsewhere info.
+ * What gets a path in the report, and what only a count: an untracked
+ * executable-shaped file (.php, .phtml, .phar, .inc …) or server config file
+ * (.htaccess, .user.ini, php.ini, web.config) is listed by path; every other
+ * untracked file is counted PER DIRECTORY with an extension histogram,
+ * because `uploads/offer-acme-gmbh.pdf` names a customer. A modified or
+ * missing TRACKED file is always listed by path — its name is repository
+ * content, not customer data. Under a web-reachable directory (config
+ * `console.files.web`, default `public`) an untracked or modified PHP file is
+ * URGENT, elsewhere HIGH; a config file there is HIGH, elsewhere info; a
+ * modified script the browser runs (.js, .html, .svg) there is HIGH — a card
+ * skimmer is exactly that; a missing tracked file is info.
  *
  * Every failure is "cannot know" — null, never a guess and never a warning:
  * no working copy, `proc_open` closed, a non-zero exit (git's `safe.directory`
- * refusal included), a run past the budget.
+ * refusal included), a run past the budget. Both git answers are needed: a
+ * report built from one of them would mark the other half's findings GONE.
  *
  * CLI/cron only — Sender::untrackedReport() enforces it. Spawning git in a
  * web request costs latency and, on a big tree, the filesystem cache.
@@ -118,8 +131,14 @@ final class Untracked
 	/** a server config file the repository does not track — listed by path */
 	public const string DETECTOR_CONFIG = 'untracked_config';
 	
-	/** everything else, counted per directory — the path IS the directory */
+	/** every other untracked file, counted per directory — the path IS the directory */
 	public const string DETECTOR_DIR = 'untracked_dir';
+	
+	/** a tracked file whose content differs from the commit — listed by path */
+	public const string DETECTOR_MODIFIED = 'modified';
+	
+	/** a tracked file that is not on disk — listed by path */
+	public const string DETECTOR_MISSING = 'missing';
 	
 	public const string TIER_URGENT = 'urgent';
 	
@@ -152,9 +171,14 @@ final class Untracked
 	
 	public const string EXECUTABLE = '~\.(?:php[3-8]?|phtml|phar|inc|pht|phps)$~i';
 	
+	/** what the browser runs — a modified one under a web directory is the skimmer's shape */
+	public const string WEB_SCRIPT = '~\.(?:m?js|html?|svg)$~i';
+	
 	public const array CONFIG_NAMES = ['.htaccess', '.user.ini', 'php.ini', 'web.config'];
 	
 	public const array GIT_COMMAND = ['git', '--no-optional-locks', 'ls-files', '--others', '--exclude-standard', '-z'];
+	
+	public const array GIT_DIFF_COMMAND = ['git', '--no-optional-locks', '-c', 'core.fileMode=false', 'diff', '--no-renames', '--name-status', '-z', 'HEAD'];
 	
 	public const array SVN_COMMAND = ['svn', 'status', '--non-interactive'];
 	
@@ -262,31 +286,37 @@ final class Untracked
 		
 		$started = time();
 		$clock = hrtime(true);
-		
-		$output = ($this->runner)(
-			$vcs === self::GIT ? self::GIT_COMMAND : self::SVN_COMMAND,
-			$root,
-			max(1000, (int)($options['timeout_ms'] ?? self::TIMEOUT_MS)),
-		);
-		if($output === null)
-		{
-			return null;
-		}
+		$timeout = max(1000, (int)($options['timeout_ms'] ?? self::TIMEOUT_MS));
 		
 		$unreadable = 0;
 		if($vcs === self::GIT)
 		{
-			$paths = self::parseGit($output);
+			$others = ($this->runner)(self::GIT_COMMAND, $root, $timeout);
+			$diff = $others === null ? null : ($this->runner)(self::GIT_DIFF_COMMAND, $root, $timeout);
+			if($others === null || $diff === null)
+			{
+				return null;
+			}
+			
+			$changes = ['untracked' => self::parseGit($others)] + self::parseGitDiff($diff);
 		}
 		else
 		{
-			$expanded = self::expand(self::parseSvn($output), $root);
-			$paths = $expanded['paths'];
+			$status = ($this->runner)(self::SVN_COMMAND, $root, $timeout);
+			if($status === null)
+			{
+				return null;
+			}
+			
+			$changes = self::parseSvn($status);
+			$expanded = self::expand($changes['untracked'], $root);
+			$changes['untracked'] = $expanded['paths'];
 			$unreadable = $expanded['unreadable'];
 		}
 		
 		$web = self::webDirs(is_array($options['web'] ?? null) ? $options['web'] : self::WEB_DEFAULT);
-		$built = self::findings($paths, $root, $web);
+		$built = self::findings($changes, $root, $web);
+		$files = count($changes['untracked']) + count($changes['modified']) + count($changes['missing']);
 		
 		return [
 			'v' => 1,
@@ -305,7 +335,7 @@ final class Untracked
 				'duration' => intdiv(hrtime(true) - $clock, 1_000_000),
 				'chunks' => 1,
 				'complete' => true,
-				'files' => count($paths),
+				'files' => $files,
 				'dirs' => $built['dirs'],
 				'unreadable' => $unreadable,
 				'symlinks' => 0,
@@ -316,11 +346,15 @@ final class Untracked
 			'areas' => [
 				self::AREA => [
 					'root' => $root,
-					'files' => count($paths),
+					'files' => $files,
 					'dirs' => $built['dirs'],
 					'executable' => $built['executable'],
 					'bytes' => $built['bytes'],
 					'probed' => 0,
+					// the checksum pass's words, which fit: foreign = the repository never shipped it
+					'foreign' => count($changes['untracked']),
+					'modified' => count($changes['modified']),
+					'missing' => count($changes['missing']),
 				],
 			],
 			'findings' => $built['findings'],
@@ -332,7 +366,8 @@ final class Untracked
 	}
 	
 	/**
-	 * git's `-z` answer: NUL-separated paths, forward slashes, no quoting
+	 * git's `ls-files -z` answer: NUL-separated paths, forward slashes, no
+	 * quoting
 	 *
 	 * @return list<string>
 	 */
@@ -354,32 +389,93 @@ final class Untracked
 	}
 	
 	/**
-	 * svn's status lines: only a `?` in the first column is untracked (`M`,
-	 * `!`, `A` are tracked files in some state); the path follows the seven
-	 * status columns. Backslashes (a Windows checkout) become slashes.
+	 * git's `diff --name-status -z HEAD` answer: status, NUL, path, NUL —
+	 * M (and T, a type change, or A, staged but never committed) is a
+	 * tracked file that differs from the commit, D one that is gone; a pair
+	 * whose status is not a letter is skipped, never guessed at
 	 *
-	 * @return list<string>
+	 * @return array{modified: list<string>, missing: list<string>}
+	 */
+	public static function parseGitDiff(
+		string $output,
+	): array
+	{
+		$modified = [];
+		$missing = [];
+		$tokens = explode("\0", $output);
+		
+		for($index = 0; $index + 1 < count($tokens); $index += 2)
+		{
+			$status = $tokens[$index];
+			if(preg_match('~^[A-Z]~', $status) !== 1)
+			{
+				continue;
+			}
+			
+			$clean = self::cleanPath($tokens[$index + 1]);
+			if($clean === null)
+			{
+				continue;
+			}
+			
+			switch($status[0])
+			{
+				case 'M':
+				case 'T':
+				case 'A':
+					$modified[$clean] = true;
+					break;
+				case 'D':
+					$missing[$clean] = true;
+					break;
+			}
+		}
+		
+		return ['modified' => array_keys($modified), 'missing' => array_keys($missing)];
+	}
+	
+	/**
+	 * svn's status lines, by the FIRST column only: `?` untracked, `M` (or
+	 * `A`, `R`) a tracked file whose content differs, `!` (or `D`) a tracked
+	 * file that is gone; a property-only change (second column) is no
+	 * modification. The path follows the seven status columns; backslashes
+	 * (a Windows checkout) become slashes.
+	 *
+	 * @return array{untracked: list<string>, modified: list<string>, missing: list<string>}
 	 */
 	public static function parseSvn(
 		string $output,
 	): array
 	{
-		$paths = [];
+		$rows = ['untracked' => [], 'modified' => [], 'missing' => []];
+		
 		foreach(preg_split('~\r\n|\n|\r~', $output) ?: [] as $line)
 		{
-			if(preg_match('~^\?\s+(.+?)\s*$~', $line, $match) !== 1)
+			if(preg_match('#^([?MAR!D])[ A-Z+~]{0,6}\s+(.+?)\s*$#', $line, $match) !== 1)
 			{
 				continue;
 			}
 			
-			$clean = self::cleanPath(str_replace('\\', '/', $match[1]));
-			if($clean !== null)
+			$clean = self::cleanPath(str_replace('\\', '/', $match[2]));
+			if($clean === null)
 			{
-				$paths[$clean] = true;
+				continue;
 			}
+			
+			$kind = match($match[1])
+			{
+				'?' => 'untracked',
+				'M', 'A', 'R' => 'modified',
+				default => 'missing',
+			};
+			$rows[$kind][$clean] = true;
 		}
 		
-		return array_keys($paths);
+		return [
+			'untracked' => array_keys($rows['untracked']),
+			'modified' => array_keys($rows['modified']),
+			'missing' => array_keys($rows['missing']),
+		];
 	}
 	
 	/**
@@ -446,7 +542,7 @@ final class Untracked
 	}
 	
 	/**
-	 * What one untracked path IS, and how much attention it deserves — or
+	 * What one UNTRACKED path is, and how much attention it deserves — or
 	 * null for a file that is only counted (never listed by path)
 	 *
 	 * @param list<string> $web the web-reachable directories (webDirs)
@@ -474,18 +570,54 @@ final class Untracked
 	}
 	
 	/**
-	 * The findings for a list of untracked paths: executables and config
-	 * files listed by path with their size and mtime, everything else folded
-	 * into one info row per directory (count, bytes, newest mtime, extension
-	 * histogram) — in tier order, capped, the remainder counted per tier
+	 * How much attention a MODIFIED tracked file deserves: an executable
+	 * urgent under a web directory and high elsewhere, a server config file
+	 * high there and info elsewhere, a browser script high under a web
+	 * directory (the skimmer's shape), anything else info — always listed
 	 *
-	 * @param list<string> $paths relative to $root
+	 * @param list<string> $web the web-reachable directories (webDirs)
+	 */
+	public static function classifyModified(
+		string $path,
+		array $web,
+	): string
+	{
+		$name = basename($path);
+		$reachable = self::reachable($path, $web);
+		
+		if(preg_match(self::EXECUTABLE, $name) === 1)
+		{
+			return $reachable ? self::TIER_URGENT : self::TIER_HIGH;
+		}
+		
+		if(in_array(strtolower($name), self::CONFIG_NAMES, true))
+		{
+			return $reachable ? self::TIER_HIGH : self::TIER_INFO;
+		}
+		
+		if($reachable && preg_match(self::WEB_SCRIPT, $name) === 1)
+		{
+			return self::TIER_HIGH;
+		}
+		
+		return self::TIER_INFO;
+	}
+	
+	/**
+	 * The findings for what the working copy answered: untracked executables
+	 * and config files listed by path with their size and mtime, every other
+	 * untracked file folded into one info row per directory (count, bytes,
+	 * newest mtime, extension histogram), modified tracked files listed by
+	 * path with their tier, missing tracked files listed as info — in tier
+	 * order, capped, the remainder counted per tier
+	 *
+	 * @param array{untracked?: list<string>, modified?: list<string>, missing?: list<string>} $changes paths relative to $root
 	 * @param list<string> $web the web-reachable directories (webDirs)
 	 * @return array{findings: list<array>, counts: array<string, int>, truncated: array<string, int>,
 	 *   dirs: int, executable: int, bytes: int}
 	 */
 	public static function findings(
-		array $paths,
+		array $changes,
 		string $root,
 		array $web,
 		int $max = self::MAX_FINDINGS,
@@ -498,7 +630,7 @@ final class Untracked
 		$executable = 0;
 		$bytes = 0;
 		
-		foreach($paths as $path)
+		foreach($changes['untracked'] ?? [] as $path)
 		{
 			$dir = self::dirOf($path);
 			$dirs[$dir] = true;
@@ -512,15 +644,7 @@ final class Untracked
 				{
 					$executable++;
 				}
-				$listed[$class['tier']][] = [
-					'detector' => $class['detector'],
-					'tier' => $class['tier'],
-					'area' => self::AREA,
-					'path' => $path,
-					'size' => $stat['size'],
-					'mtime' => $stat['mtime'],
-					'detail' => '',
-				];
+				$listed[$class['tier']][] = self::row($class['detector'], $class['tier'], $path, $stat);
 				continue;
 			}
 			
@@ -538,15 +662,27 @@ final class Untracked
 		
 		foreach($folded as $dir => $sum)
 		{
-			$listed[self::TIER_INFO][] = [
-				'detector' => self::DETECTOR_DIR,
-				'tier' => self::TIER_INFO,
-				'area' => self::AREA,
-				'path' => (string)$dir,
-				'size' => $sum['bytes'],
-				'mtime' => $sum['mtime'],
-				'detail' => self::describe($sum),
-			];
+			$listed[self::TIER_INFO][] = self::row(self::DETECTOR_DIR, self::TIER_INFO, (string)$dir,
+				['size' => $sum['bytes'], 'mtime' => $sum['mtime']], self::describe($sum));
+		}
+		
+		foreach($changes['modified'] ?? [] as $path)
+		{
+			$dirs[self::dirOf($path)] = true;
+			$stat = self::stat($root . '/' . $path);
+			$bytes += $stat['size'] ?? 0;
+			if(preg_match(self::EXECUTABLE, basename($path)) === 1)
+			{
+				$executable++;
+			}
+			$tier = self::classifyModified($path, $web);
+			$listed[$tier][] = self::row(self::DETECTOR_MODIFIED, $tier, $path, $stat);
+		}
+		
+		foreach($changes['missing'] ?? [] as $path)
+		{
+			$dirs[self::dirOf($path)] = true;
+			$listed[self::TIER_INFO][] = self::row(self::DETECTOR_MISSING, self::TIER_INFO, $path, ['size' => null, 'mtime' => null]);
 		}
 		
 		$findings = [];
@@ -729,6 +865,30 @@ final class Untracked
 		}
 		
 		return $output === false ? null : $output;
+	}
+	
+	/**
+	 * One finding in the console's shape
+	 *
+	 * @param array{size: ?int, mtime: ?int} $stat
+	 */
+	protected static function row(
+		string $detector,
+		string $tier,
+		string $path,
+		array $stat,
+		string $detail = '',
+	): array
+	{
+		return [
+			'detector' => $detector,
+			'tier' => $tier,
+			'area' => self::AREA,
+			'path' => $path,
+			'size' => $stat['size'],
+			'mtime' => $stat['mtime'],
+			'detail' => $detail,
+		];
 	}
 	
 	/**
