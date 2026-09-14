@@ -17,6 +17,7 @@ use WeakReference;
 
 use function Ovos\container;
 
+use function array_filter;
 use function array_key_exists;
 use function count;
 use function json_decode;
@@ -645,7 +646,9 @@ class Sender extends Test
 				
 				protected function untracked(): Untracked
 				{
-					return new Untracked(fn(array $command, string $cwd, int $timeoutMs): ?string => $this->output);
+					// the untracked list is scripted; the diff names one modified file under www
+					return new Untracked(fn(array $command, string $cwd, int $timeoutMs): ?string
+						=> in_array('diff', $command, true) ? ($this->output === null ? null : "M\0www/lib.php\0") : $this->output);
 				}
 				
 				protected function post(
@@ -667,6 +670,7 @@ class Sender extends Test
 		$empty = $make(true, '');
 		$emptyAccepted = $empty->reportUntracked();
 		$emptyReport = json_decode($empty->posts[0][1] ?? '', true) ?? [];
+		$emptyReport['findings'] = array_filter($emptyReport['findings'] ?? [], static fn(array $row): bool => $row['detector'] !== 'modified');
 		
 		$silent = $make(true, null);
 		$off = $make(false, "www/x.php\0");
@@ -680,14 +684,18 @@ class Sender extends Test
 			&& ($report['environment'] ?? '') === 'staging'
 			&& ($report['scan']['mode'] ?? '') === 'manual'
 			&& ($report['areas']['root']['root'] ?? '') === '/srv/site'
-			// console.files.web named www, so the PHP under it is urgent
-			&& ($report['findings'][0]['path'] ?? '') === 'www/x.php'
+			// console.files.web named www, so the PHP under it is urgent — the modified one too
+			&& ($report['findings'][0]['path'] ?? '') === 'www/lib.php'
+			&& ($report['findings'][0]['detector'] ?? '') === 'modified'
 			&& ($report['findings'][0]['tier'] ?? '') === 'urgent'
-			&& ($report['findings'][1]['detector'] ?? '') === 'untracked_dir'
+			&& ($report['findings'][1]['path'] ?? '') === 'www/x.php'
+			&& ($report['findings'][1]['tier'] ?? '') === 'urgent'
+			&& ($report['findings'][2]['detector'] ?? '') === 'untracked_dir'
+			&& ($report['areas']['root']['modified'] ?? null) === 1
 			&& ($report['posture']['working_copy'] ?? '') === 'git'
 			&& $emptyAccepted === true
 			&& ($emptyReport['findings'] ?? null) === []
-			&& ($emptyReport['scan']['files'] ?? null) === 0
+			&& ($emptyReport['areas']['root']['foreign'] ?? null) === 0
 			&& $silent->reportUntracked() === false && $silent->posts === []
 			&& $off->reportUntracked() === false && $off->posts === []
 			&& $off->untrackedReport() === null;

@@ -9,7 +9,6 @@ use Ovos\Test\Internal;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use Throwable;
 
 use function array_column;
 use function array_filter;
@@ -21,13 +20,13 @@ use function getmypid;
 use function hrtime;
 use function in_array;
 use function is_dir;
-use function is_file;
 use function mkdir;
 use function preg_match;
 use function rmdir;
 use function sort;
 use function str_ends_with;
 use function str_repeat;
+use function str_replace;
 use function strlen;
 use function sys_get_temp_dir;
 use function unlink;
@@ -35,13 +34,15 @@ use function unlink;
 use const PHP_BINARY;
 
 /**
- * Service\Console\Untracked — the untracked pass (ovos/console
- * docs/plans/file-appearance-sensor.md, detector 5): the working copy found
- * at or above a directory, git's and svn's answers parsed into clean relative
- * paths, an unversioned svn directory opened, every path classified by shape
- * and reach, the executables listed and the rest counted per directory, the
- * report in the console's shape — and null, never a guess, when nothing can
- * be known. The runner is proven on real processes (this PHP binary).
+ * Service\Console\Untracked — the working-copy pass (ovos/console
+ * docs/plans/file-appearance-sensor.md, detector 5 and its modified half):
+ * the working copy found at or above a directory, git's and svn's answers
+ * parsed into clean relative paths of three kinds (untracked, modified,
+ * missing), an unversioned svn directory opened, every path classified by
+ * shape and reach, the untracked executables listed and the rest counted per
+ * directory, the tracked changes always listed, the report in the console's
+ * shape — and null, never a guess, when nothing can be known. The runner is
+ * proven on real processes (this PHP binary).
  *
  * The fixture is a throwaway tree under the system temp dir, built before
  * each test and removed after it.
@@ -71,6 +72,8 @@ class Untracked extends Test
 			'wc/public/.user.ini' => 'auto_prepend_file=x',
 			'wc/public/uploads/a.pdf' => str_repeat('a', 100),
 			'wc/public/uploads/b.PDF' => str_repeat('b', 50),
+			'wc/public/index.php' => '<?php // entry',
+			'wc/public/app.js' => 'skim();',
 			'wc/tools/cron.php' => '<?php',
 			'wc/.htaccess' => 'Deny from all',
 			'wc/var/dump.log' => 'x',
@@ -130,25 +133,37 @@ class Untracked extends Test
 	}
 	
 	/**
-	 * RULE: git's -z answer and svn's status lines both become clean
-	 * relative paths — `?` rows only for svn, backslashes turned, a `./`
-	 * prefix dropped, duplicates folded; an absolute path, a traversal
-	 * segment or a control character is refused, not repaired
+	 * RULE: git's -z answers and svn's status lines all become clean
+	 * relative paths of the right kind — untracked from `?` / ls-files,
+	 * modified from `M` (git also T and A; svn also A and R), missing from
+	 * `D` / `!`, a property-only svn change no modification at all;
+	 * backslashes turned, a `./` prefix dropped, duplicates folded; an
+	 * absolute path, a traversal segment or a control character is refused,
+	 * not repaired
 	 */
 	public function gitAndSvnOutputParseIntoCleanRelativePaths(): bool
 	{
 		$git = Pass::parseGit("public/x.php\0./var/dump.log\0var/dump.log\0\0../evil.php\0a/../b.php\0/abs.php\0ok/..\0C:/win.php\0bad\x01.php\0");
-		$svn = Pass::parseSvn("?       drop\nM       tracked.php\n!       gone.php\nA       added.php\n?       public\\x.php  \r\n        ?  not-a-status\n?\t\tspaced/name with space.pdf\n");
+		$diff = Pass::parseGitDiff("M\0README.md\0D\0public/index.php\0T\0lib/link.php\0A\0staged.php\0M\0../evil.php\0www/x.php\0docs/a.pdf\0M\0README.md\0");
+		$svn = Pass::parseSvn("?       drop\nMM      tracked.php\n M      propmod.php\n!       gone.php\nA       added.php\nR       replaced.php\nD       scheduled.php\n?       public\\x.php  \r\n        ?  not-a-status\n?\t\tspaced/name with space.pdf\nM     + keyword.php\n");
 		
 		return $git === ['public/x.php', 'var/dump.log']
-			&& $svn === ['drop', 'public/x.php', 'spaced/name with space.pdf'];
+			&& $diff === ['modified' => ['README.md', 'lib/link.php', 'staged.php'], 'missing' => ['public/index.php']]
+			&& $svn === [
+				'untracked' => ['drop', 'public/x.php', 'spaced/name with space.pdf'],
+				'modified' => ['tracked.php', 'added.php', 'replaced.php', 'keyword.php'],
+				'missing' => ['gone.php', 'scheduled.php'],
+			];
 	}
 	
 	/**
-	 * RULE: shape and reach decide — an executable under a web directory is
-	 * urgent, elsewhere high; a server config file under a web directory is
-	 * high, elsewhere info; anything else is only counted (null); '.' makes
-	 * the whole working copy reachable
+	 * RULE: shape and reach decide — an untracked executable under a web
+	 * directory is urgent, elsewhere high; a server config file under a web
+	 * directory is high, elsewhere info; anything else untracked is only
+	 * counted (null); a modified tracked file follows the same two rules, a
+	 * browser script under a web directory is high (the skimmer's shape) and
+	 * everything else modified is info; '.' makes the whole working copy
+	 * reachable
 	 */
 	public function shapeAndReachDecideTheDetectorAndTheTier(): bool
 	{
@@ -165,45 +180,65 @@ class Untracked extends Test
 			&& Pass::classify('.HTACCESS', $web) === ['detector' => 'untracked_config', 'tier' => 'info']
 			&& Pass::classify('public/uploads/a.pdf', $web) === null
 			&& Pass::classify('x.php.jpg', $web) === null
-			&& Pass::classify('tools/cron.php', ['.']) === ['detector' => 'untracked', 'tier' => 'urgent'];
+			&& Pass::classify('tools/cron.php', ['.']) === ['detector' => 'untracked', 'tier' => 'urgent']
+			&& Pass::classifyModified('public/index.php', $web) === 'urgent'
+			&& Pass::classifyModified('lib/Model.php', $web) === 'high'
+			&& Pass::classifyModified('public/.htaccess', $web) === 'high'
+			&& Pass::classifyModified('.htaccess', $web) === 'info'
+			&& Pass::classifyModified('public/app.js', $web) === 'high'
+			&& Pass::classifyModified('public/checkout.html', $web) === 'high'
+			&& Pass::classifyModified('assets/app.js', $web) === 'info'
+			&& Pass::classifyModified('public/logo.png', $web) === 'info'
+			&& Pass::classifyModified('README.md', $web) === 'info';
 	}
 	
 	/**
-	 * RULE: executables and config files are listed by path with their size
-	 * and mtime; everything else is ONE info row per directory carrying the
-	 * count, the bytes, the newest mtime and the extension histogram — never
-	 * a file name; tier order, then path order; the cap keeps the head and
-	 * counts the remainder per tier
+	 * RULE: untracked executables and config files are listed by path with
+	 * their size and mtime; every other untracked file is ONE info row per
+	 * directory carrying the count, the bytes, the newest mtime and the
+	 * extension histogram — never a file name; a modified tracked file is
+	 * listed with its tier, a missing one as info without numbers; tier
+	 * order, then path order; the cap keeps the head and counts the
+	 * remainder per tier
 	 */
 	public function executablesAreListedAndTheRestIsCountedPerDirectory(): bool
 	{
-		$paths = ['var/dump.log', 'public/uploads/b.PDF', 'tools/cron.php', 'public/x.php', 'public/uploads/a.pdf', '.htaccess', 'public/.user.ini', 'gone/never.pdf'];
-		$built = Pass::findings($paths, $this->wc, ['public']);
+		$changes = [
+			'untracked' => ['var/dump.log', 'public/uploads/b.PDF', 'tools/cron.php', 'public/x.php', 'public/uploads/a.pdf', '.htaccess', 'public/.user.ini', 'gone/never.pdf'],
+			'modified' => ['public/index.php', 'public/app.js', 'README.md'],
+			'missing' => ['lib/Guard.php'],
+		];
+		$built = Pass::findings($changes, $this->wc, ['public']);
 		$rows = $built['findings'];
 		$listed = array_column($rows, 'path');
-		$uploads = array_filter($rows, static fn(array $row): bool => $row['path'] === 'public/uploads');
-		$uploads = array_values($uploads)[0] ?? [];
+		$byPath = static fn(string $path) => array_values(array_filter($rows, static fn(array $row): bool => $row['path'] === $path))[0] ?? [];
+		$uploads = $byPath('public/uploads');
+		$index = $byPath('public/index.php');
+		$guard = $byPath('lib/Guard.php');
 		
-		$capped = Pass::findings($paths, $this->wc, ['public'], 2);
+		$capped = Pass::findings($changes, $this->wc, ['public'], 2);
 		
-		return array_column($rows, 'tier') === ['urgent', 'high', 'high', 'info', 'info', 'info', 'info']
-			&& $listed === ['public/x.php', 'public/.user.ini', 'tools/cron.php', '.htaccess', 'gone', 'public/uploads', 'var']
+		return array_column($rows, 'tier') === ['urgent', 'urgent', 'high', 'high', 'high', 'info', 'info', 'info', 'info', 'info', 'info']
+			&& $listed === ['public/index.php', 'public/x.php', 'public/.user.ini', 'public/app.js', 'tools/cron.php',
+				'.htaccess', 'README.md', 'gone', 'lib/Guard.php', 'public/uploads', 'var']
 			&& array_filter($listed, static fn(string $path): bool => str_ends_with($path, '.pdf') || str_ends_with($path, '.log')) === []
-			&& $rows[0]['detector'] === 'untracked' && $rows[0]['size'] === 13 && $rows[0]['mtime'] > 0 && $rows[0]['detail'] === ''
-			&& $rows[3]['detector'] === 'untracked_config' && $rows[3]['path'] === '.htaccess' && $rows[3]['detail'] === ''
+			&& $rows[1]['detector'] === 'untracked' && $rows[1]['size'] === 13 && $rows[1]['mtime'] > 0 && $rows[1]['detail'] === ''
+			&& $rows[5]['detector'] === 'untracked_config' && $rows[5]['path'] === '.htaccess' && $rows[5]['detail'] === ''
+			&& ($index['detector'] ?? '') === 'modified' && ($index['size'] ?? 0) === 14 && ($index['mtime'] ?? 0) > 0
+			&& ($guard['detector'] ?? '') === 'missing' && ($guard['tier'] ?? '') === 'info' && $guard['size'] === null && $guard['mtime'] === null
 			&& ($uploads['detector'] ?? '') === 'untracked_dir'
 			&& ($uploads['detail'] ?? '') === '2 files · .pdf ×2'
 			&& ($uploads['size'] ?? 0) === 150
 			&& ($uploads['mtime'] ?? 0) > 0
-			&& $rows[4]['detail'] === '1 file · .pdf ×1' && $rows[4]['size'] === 0 && $rows[4]['mtime'] === null
-			&& $built['counts'] === ['urgent' => 1, 'high' => 2, 'info' => 4]
+			&& $byPath('gone')['detail'] === '1 file · .pdf ×1' && $byPath('gone')['size'] === 0 && $byPath('gone')['mtime'] === null
+			&& $built['counts'] === ['urgent' => 2, 'high' => 3, 'info' => 6]
 			&& $built['truncated'] === ['urgent' => 0, 'high' => 0, 'info' => 0]
-			&& $built['dirs'] === 6
-			&& $built['executable'] === 2
-			&& $built['bytes'] === 13 + 100 + 50 + 5 + 13 + 1 + 19
+			&& $built['dirs'] === 7
+			&& $built['executable'] === 3
+			&& $built['bytes'] === 13 + 100 + 50 + 5 + 13 + 1 + 19 + 14 + 7 + 0
 			&& count($capped['findings']) === 2
-			&& $capped['counts'] === ['urgent' => 1, 'high' => 2, 'info' => 4]
-			&& $capped['truncated'] === ['urgent' => 0, 'high' => 1, 'info' => 4];
+			&& $capped['counts'] === ['urgent' => 2, 'high' => 3, 'info' => 6]
+			&& $capped['truncated'] === ['urgent' => 0, 'high' => 3, 'info' => 6];
 	}
 	
 	/**
@@ -223,28 +258,40 @@ class Untracked extends Test
 	
 	/**
 	 * RULE: the report is the console's integrity-scan shape — platform php,
-	 * the sender named, one root area, the working copy in the posture, the
-	 * VCS directory reported exposed when a web directory holds it — and
-	 * null, with nothing asked, when the root is no working copy; null when
-	 * the working copy does not answer
+	 * the sender named, one root area with the untracked/modified/missing
+	 * counters, the working copy in the posture, the VCS directory reported
+	 * exposed when a web directory holds it; git is asked twice (the
+	 * untracked list and the diff) and BOTH must answer; svn once; null with
+	 * nothing asked when the root is no working copy
 	 */
 	public function theReportIsTheConsolesShapeOrNothing(): bool
 	{
-		$asked = 0;
-		$scripted = static function(?string $output) use (&$asked): Pass
+		$asked = [];
+		$scripted = static function(?string $others, ?string $diff, ?string $svn = null) use (&$asked): Pass
 		{
-			return new Pass(static function(array $command, string $cwd, int $timeoutMs) use ($output, &$asked): ?string
+			return new Pass(static function(array $command, string $cwd, int $timeoutMs) use ($others, $diff, $svn, &$asked): ?string
 			{
-				$asked++;
+				$asked[] = $command[0] . ($command[0] === 'git' ? '-' . (in_array('diff', $command, true) ? 'diff' : 'others') : '');
+				if($timeoutMs !== 1000)
+				{
+					return null;
+				}
 				
-				return $command[0] === 'git' && $timeoutMs === 1000 ? $output : null;
+				return match(true)
+				{
+					$command[0] === 'svn' => $svn,
+					in_array('diff', $command, true) => $diff,
+					default => $others,
+				};
 			});
 		};
 		
-		$report = $scripted("public/x.php\0var/dump.log\0")->scan($this->wc, ['timeout_ms' => 5]);
-		$manual = $scripted("public/x.php\0")->scan($this->wc, ['mode' => 'manual', 'web' => ['.'], 'release' => 'r1', 'environment' => 'staging', 'timeout_ms' => 5]);
-		$silent = $scripted(null)->scan($this->wc, ['timeout_ms' => 5]);
-		$nowhere = $scripted("x.php\0")->scan($this->base . '/plain/a', ['timeout_ms' => 5]);
+		$report = $scripted("public/x.php\0var/dump.log\0", "M\0public/index.php\0D\0lib/Guard.php\0")->scan($this->wc, ['timeout_ms' => 5]);
+		$manual = $scripted("public/x.php\0", '')->scan($this->wc, ['mode' => 'manual', 'web' => ['.'], 'release' => 'r1', 'environment' => 'staging', 'timeout_ms' => 5]);
+		$halfSilent = $scripted("public/x.php\0", null)->scan($this->wc, ['timeout_ms' => 5]);
+		$silent = $scripted(null, "M\0a.php\0")->scan($this->wc, ['timeout_ms' => 5]);
+		$svn = $scripted(null, null, "?       drop\nM       public/index.php\n!       lib/Guard.php\n")->scan($this->base . '/svn', ['timeout_ms' => 5]);
+		$nowhere = $scripted("x.php\0", '')->scan($this->base . '/plain/a', ['timeout_ms' => 5]);
 		
 		return $report !== null
 			&& $report['type'] === 'files' && $report['platform'] === 'php'
@@ -254,19 +301,30 @@ class Untracked extends Test
 			&& $report['release'] === '' && $report['environment'] === ''
 			&& preg_match('~^[0-9a-f]{16}$~', $report['scan']['id']) === 1
 			&& $report['scan']['mode'] === 'background' && $report['scan']['complete'] === true
-			&& $report['scan']['files'] === 2 && $report['scan']['dirs'] === 2 && $report['scan']['chunks'] === 1
-			&& $report['scan']['counts'] === ['urgent' => 1, 'high' => 0, 'info' => 1]
+			&& $report['scan']['files'] === 4 && $report['scan']['dirs'] === 3 && $report['scan']['chunks'] === 1
+			&& $report['scan']['counts'] === ['urgent' => 2, 'high' => 0, 'info' => 2]
 			&& $report['scan']['truncated'] === ['urgent' => 0, 'high' => 0, 'info' => 0]
-			&& $report['areas'] === ['root' => ['root' => $this->wc, 'files' => 2, 'dirs' => 2, 'executable' => 1, 'bytes' => 14, 'probed' => 0]]
+			&& $report['areas'] === ['root' => ['root' => $this->wc, 'files' => 4, 'dirs' => 3, 'executable' => 2, 'bytes' => 28, 'probed' => 0,
+				'foreign' => 2, 'modified' => 1, 'missing' => 1]]
 			&& array_map(static fn(array $row): array => [$row['detector'], $row['tier'], $row['area'], $row['path']], $report['findings'])
-				=== [['untracked', 'urgent', 'root', 'public/x.php'], ['untracked_dir', 'info', 'root', 'var']]
+				=== [['modified', 'urgent', 'root', 'public/index.php'], ['untracked', 'urgent', 'root', 'public/x.php'],
+					['missing', 'info', 'root', 'lib/Guard.php'], ['untracked_dir', 'info', 'root', 'var']]
 			&& $report['posture'] === ['working_copy' => 'git', 'vcs_exposed' => []]
 			&& $manual !== null
 			&& $manual['scan']['mode'] === 'manual' && $manual['release'] === 'r1' && $manual['environment'] === 'staging'
 			&& $manual['posture'] === ['working_copy' => 'git', 'vcs_exposed' => ['.git']]
+			&& $manual['areas']['root']['modified'] === 0 && $manual['areas']['root']['missing'] === 0
+			&& $halfSilent === null
 			&& $silent === null
+			&& $svn !== null
+			&& $svn['posture']['working_copy'] === 'svn'
+			&& $svn['areas']['root'] === ['root' => $this->base . '/svn', 'files' => 3, 'dirs' => 3, 'executable' => 1, 'bytes' => 0, 'probed' => 0,
+				'foreign' => 1, 'modified' => 1, 'missing' => 1]
+			// info rows sort by path: the folded '.' (svn's unversioned entry at the root) before lib/
+			&& array_column($svn['findings'], 'detector') === ['modified', 'untracked_dir', 'missing']
 			&& $nowhere === null
-			&& $asked === 3
+			// git: two asks for a full report, two for the manual one, two when the diff is silent, ONE when the list is (the diff is never asked for nothing); svn: one
+			&& $asked === ['git-others', 'git-diff', 'git-others', 'git-diff', 'git-others', 'git-diff', 'git-others', 'svn']
 			&& Pass::word('dev-release/8.5') === 'dev-release-8.5'
 			&& Pass::word('') === 'dev'
 			&& strlen(Pass::word(str_repeat('9', 40))) === 32;
