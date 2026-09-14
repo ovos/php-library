@@ -11,11 +11,11 @@
   "repositories": [
     {
       "type": "git",
-      "url": "git@github.com:ovos/php-library.git"
+      "url": "https://github.com/ovos/php-library.git"
     },
     {
       "type": "git",
-      "url": "git@github.com:ovos/php-module-system.git"
+      "url": "https://github.com/ovos/php-module-system.git"
     }
   ],
   "require" : {

@@ -52,14 +52,6 @@ jobs:
           
     name: PHP ${{ matrix.php-version }} Test on ${{ matrix.operating-system }}
     steps:
-      - name: Install SSH keys
-        uses: webfactory/ssh-agent@v0.10.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.OVOS_PHP_LIBRARY }}
-            ${{ secrets.OVOS_PHP_MODULE_SYSTEM }}
-            ${{ secrets.OVOS_PHP_MODULE_ADMIN }}
-    
       - name: Checkout Code
         uses: actions/checkout@v6
               
