@@ -2,7 +2,7 @@
 
 <https://polyformproject.org/licenses/noncommercial/1.0.0>
 
-Copyright (c) 2012-2026 ovos media GmbH, Innsbruck, Austria
+Copyright (c) 2012-2026 ovos media GmbH, Vienna, Austria
 
 ## Acceptance
 
