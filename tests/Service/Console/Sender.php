@@ -9,13 +9,17 @@ use Ovos\ArrayObject;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Service\Console\Sender as ConsoleSender;
+use Ovos\Service\Console\Untracked;
 use Ovos\Service\Logger;
 use Ovos\Test;
 use Throwable;
 use WeakReference;
 
+use function Ovos\container;
+
 use function array_key_exists;
 use function count;
+use function json_decode;
 use function gc_collect_cycles;
 use function in_array;
 use function mb_strlen;
@@ -599,5 +603,93 @@ class Sender extends Test
 			&& mb_strlen(ConsoleSender::releaseLabel(str_repeat('x', 80), null)) === ConsoleSender::RELEASE_MAX
 			&& ConsoleSender::stamp(__DIR__ . '/no-such-file.release') === null
 			&& ConsoleSender::RELEASE_FILE === '.release';
+	}
+	
+	/**
+	 * The untracked pass (SENDER.md §7 "Files"): from the CLI, the report the
+	 * working copy answers goes to /api/v1/ingest/files with the console's
+	 * own shape and the labels the events carry, and the answer is the
+	 * console's code; an empty answer still posts (GONE needs it); nothing is
+	 * known — and nothing posts — when the working copy does not answer or
+	 * the sender is off
+	 */
+	public function reportUntrackedPostsTheWorkingCopysAnswerFromTheCli(): bool
+	{
+		$make = static function(bool $enabled, ?string $output): ConsoleSender
+		{
+			$config = new ArrayObject([
+				'enabled' => $enabled,
+				'url' => 'https://console.invalid/',
+				'key' => 'test-key',
+				'release' => 'r77',
+				'environment' => 'staging',
+				'files' => ['web' => ['www']],
+			]);
+			
+			return container()->injectMissing(new class($config, $output) extends ConsoleSender
+			{
+				public array $posts = [];
+				
+				public function __construct(
+					ArrayObject $config,
+					protected ?string $output,
+				)
+				{
+					parent::__construct($config);
+				}
+				
+				protected function workingCopy(): ?array
+				{
+					return ['root' => '/srv/site', 'vcs' => Untracked::GIT];
+				}
+				
+				protected function untracked(): Untracked
+				{
+					return new Untracked(fn(array $command, string $cwd, int $timeoutMs): ?string => $this->output);
+				}
+				
+				protected function post(
+					string $path,
+					string $json,
+				): int
+				{
+					$this->posts[] = [$path, $json];
+					
+					return 202;
+				}
+			});
+		};
+		
+		$sender = $make(true, "www/x.php\0docs/a.pdf\0");
+		$accepted = $sender->reportUntracked(['mode' => Untracked::MODE_MANUAL]);
+		$report = json_decode($sender->posts[0][1] ?? '', true) ?? [];
+		
+		$empty = $make(true, '');
+		$emptyAccepted = $empty->reportUntracked();
+		$emptyReport = json_decode($empty->posts[0][1] ?? '', true) ?? [];
+		
+		$silent = $make(true, null);
+		$off = $make(false, "www/x.php\0");
+		
+		return $accepted === true
+			&& count($sender->posts) === 1
+			&& $sender->posts[0][0] === '/api/v1/ingest/files'
+			&& ($report['platform'] ?? '') === 'php'
+			&& ($report['type'] ?? '') === 'files'
+			&& ($report['release'] ?? '') === 'r77'
+			&& ($report['environment'] ?? '') === 'staging'
+			&& ($report['scan']['mode'] ?? '') === 'manual'
+			&& ($report['areas']['root']['root'] ?? '') === '/srv/site'
+			// console.files.web named www, so the PHP under it is urgent
+			&& ($report['findings'][0]['path'] ?? '') === 'www/x.php'
+			&& ($report['findings'][0]['tier'] ?? '') === 'urgent'
+			&& ($report['findings'][1]['detector'] ?? '') === 'untracked_dir'
+			&& ($report['posture']['working_copy'] ?? '') === 'git'
+			&& $emptyAccepted === true
+			&& ($emptyReport['findings'] ?? null) === []
+			&& ($emptyReport['scan']['files'] ?? null) === 0
+			&& $silent->reportUntracked() === false && $silent->posts === []
+			&& $off->reportUntracked() === false && $off->posts === []
+			&& $off->untrackedReport() === null;
 	}
 }
