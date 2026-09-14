@@ -176,22 +176,14 @@ filter/normalizer/validator/cast pipeline, for HTML pages and JSON APIs ·
 
 ## Installation
 
-1. Add SSH config for private repositories:
-```
-Host ovos.php-library
-    HostName github.com
-    PreferredAuthentications publickey
-    IdentityFile ~/.ssh/ovos.php-library
-```
-
-2. Create a new project directory and `composer.json`:
+1. Create a new project directory and `composer.json`:
 ```json
 {
   "name": "ovos/my-project",
   "type": "project",
   "repositories": [
-    { "type": "git", "url": "git@github.com:ovos/php-library.git" },
-    { "type": "git", "url": "git@github.com:ovos/php-module-system.git" },
+    { "type": "git", "url": "https://github.com/ovos/php-library.git" },
+    { "type": "git", "url": "https://github.com/ovos/php-module-system.git" },
     { "type": "git", "url": "git@github.com:ovos/php-module-admin.git" }
   ],
   "require": {
