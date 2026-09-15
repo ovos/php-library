@@ -138,6 +138,110 @@ class RedisVersioned extends Test
 		return $result === null;
 	}
 	
+	/**
+	 * The rules stream is the only record that an invalidation happened: it
+	 * must carry no TTL, or a volatile-* eviction policy could pick it
+	 */
+	public function rulesKeyIsNotVolatile(): bool
+	{
+		$client = $this->store->getClient();
+		$rulesKey = $this->store->getRulesKey();
+		
+		$this->store->invalidateTags(['tag1']);
+		
+		if($client->pttl($rulesKey) !== -1)
+		{
+			return false;
+		}
+		
+		// a stream left behind by an earlier version, which gave it a TTL
+		$client->pexpire($rulesKey, 60000);
+		$this->store->invalidateTags(['tag1']);
+		
+		return $client->pttl($rulesKey) === -1;
+	}
+	
+	/**
+	 * An invalidated item must not come back when the rules stream is lost
+	 * (evicted, deleted, gone with its slot) before anyone read the item
+	 */
+	public function lostRulesDoNotResurrectAnItem(): bool
+	{
+		$tags = ['tag1'];
+		
+		// a rule before the item, so the item carries a real watermark
+		$this->store->invalidateTags(['earlier']);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->invalidateTags($tags);
+		
+		$this->store->getClient()
+			->del($this->store->getRulesKey());
+		
+		$result = $this->store->get(self::KEY_ITEM, queue: false);
+		
+		try
+		{
+			return $result === null;
+		}
+		finally
+		{
+			$this->store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	/**
+	 * The same, when another invalidation rebuilt the stream in between: the
+	 * head is fresh again, and the rule that staled the item is nowhere in it
+	 */
+	public function lostRulesDoNotResurrectAnItemAfterAnotherRule(): bool
+	{
+		$tags = ['tag1'];
+		
+		$this->store->invalidateTags(['earlier']);
+		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
+		$this->store->invalidateTags($tags);
+		
+		$this->store->getClient()
+			->del($this->store->getRulesKey());
+		$this->store->invalidateTags(['unrelated']);
+		
+		$result = $this->store->get(self::KEY_ITEM, queue: false);
+		
+		try
+		{
+			return $result === null;
+		}
+		finally
+		{
+			$this->store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	/**
+	 * An item written after the loss has seen no rule: the rebuilt stream
+	 * must not be held against it
+	 */
+	public function itemWrittenAfterLostRulesIsServed(): bool
+	{
+		$this->store->invalidateTags(['earlier']);
+		$this->store->getClient()
+			->del($this->store->getRulesKey());
+		
+		$this->store->set(self::KEY_ITEM, 'test', tags: ['tag1']);
+		$this->store->invalidateTags(['unrelated']);
+		
+		$result = $this->store->get(self::KEY_ITEM, queue: false);
+		
+		try
+		{
+			return $result === 'test';
+		}
+		finally
+		{
+			$this->store->delete(self::KEY_ITEM);
+		}
+	}
+	
 	public function clearPhysical(): bool
 	{
 		$this->store->set(self::KEY_ITEM, 'test');

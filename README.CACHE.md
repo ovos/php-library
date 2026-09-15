@@ -98,6 +98,11 @@ is constant no matter how many items match.
 - `rules_retention_s` (default 30 days) is the default **and maximum** item
   lifetime: a ttl of 0 means "as long as the store allows", a ttl above the
   retention is capped to it (and logged).
+- The rules stream carries no TTL, so a `volatile-*` (or `noeviction`)
+  eviction policy never evicts it - run one of those. Should it be lost anyway
+  (`allkeys-*`, a `DEL`, a slot gone with a cluster node), the read path fails
+  safe: an item stamped with a rule the stream no longer remembers is a miss,
+  never a stale hit, at the price of recomputing the group once.
 - Does not expose `getTags()` or `getAllTags()`; no RediSearch module needed.
 - Best for: projects with very large tag invalidations, where deleting the
   matched items at invalidation time is too expensive.
