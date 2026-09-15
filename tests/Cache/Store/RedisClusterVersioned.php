@@ -239,20 +239,27 @@ class RedisClusterVersioned extends Test
 	public function lostRulesDoNotResurrectAnItemAfterAnotherRule(): bool
 	{
 		$tags = ['tag1'];
+		$client = $this->store->getClient();
+		$rules = $this->store->getRulesKey();
 		
-		$this->store->invalidateTags(['earlier']);
+		// The stream is opened by hand, on an id from 1970, and the item stamps
+		// on THAT: a stream reborn from the server clock is then newer than the
+		// stamp by construction. Waiting for the clock to move instead is a race
+		// this test lost on every CI runner - stream ids are milliseconds, and a
+		// host that writes the item, invalidates, drops the stream and rebuilds
+		// it inside one of them reopens on the id the item already carries,
+		// which rulesLostSince() reads (correctly, see its own note) as nothing
+		// lost. The rule's fields are the shape cache_versioned_invalidate
+		// writes, and `first` says this one opened the stream.
+		$client->xAdd($rules, '1-0', ['mode' => 'any', 'tags' => 'seed', 'first' => '1']);
+		
 		$this->store->set(self::KEY_ITEM, 'test', tags: $tags);
 		$this->store->invalidateTags($tags);
 		
-		$this->store->getClient()
-			->del($this->store->getRulesKey());
+		$client->del($rules);
 		
-		// a reborn stream takes its ids from the server clock, so a host fast
-		// enough to run all of this inside one millisecond opens it on the id
-		// the item already carries - and an opening rule that is not newer
-		// than the stamp says nothing was lost. Let the clock move first
-		usleep(2000);
-		
+		// and this one opens it again, at the server clock: decades newer than
+		// the stamp, whatever the runner's speed
 		$this->store->invalidateTags(['unrelated']);
 		
 		$result = $this->store->get(self::KEY_ITEM, queue: false);
