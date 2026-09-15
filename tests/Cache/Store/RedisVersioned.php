@@ -203,6 +203,13 @@ class RedisVersioned extends Test
 		
 		$this->store->getClient()
 			->del($this->store->getRulesKey());
+		
+		// a reborn stream takes its ids from the server clock, so a host fast
+		// enough to run all of this inside one millisecond opens it on the id
+		// the item already carries - and an opening rule that is not newer
+		// than the stamp says nothing was lost. Let the clock move first
+		usleep(2000);
+		
 		$this->store->invalidateTags(['unrelated']);
 		
 		$result = $this->store->get(self::KEY_ITEM, queue: false);
