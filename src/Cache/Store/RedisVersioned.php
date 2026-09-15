@@ -38,6 +38,14 @@ use function sprintf;
  * rules with a newer id can invalidate it - no clock comparison happens
  * anywhere (stream ids are generated monotonically by the rules node).
  *
+ * The rules stream is the only record that an invalidation happened, so it
+ * carries no TTL: under a volatile-* (or noeviction) policy it is then never
+ * an eviction candidate - run one of those. Should it be lost anyway (an
+ * allkeys-* policy, a DEL, a slot gone with a cluster node), the read path
+ * fails safe: an item stamped with a rule the stream no longer remembers is
+ * a miss, never a stale hit, at the price of recomputing the group once
+ * (see isStale()).
+ *
  * @author Marcin Gil <mg@ovos.at>
  */
 class RedisVersioned extends Store
@@ -80,6 +88,14 @@ class RedisVersioned extends Store
 	 * Locally cached parsed rules: [ms, sequence, mode, tags[]][]
 	 */
 	protected ?array $rules = null;
+	
+	/**
+	 * Whether the oldest rule held opened the stream (was appended to an
+	 * empty one) - null when it did not say, having been written before the
+	 * library recorded it. An item stamped older than such a rule has seen
+	 * rules the stream has lost (see isStale())
+	 */
+	protected ?bool $rulesFirstOpened = null;
 	
 	protected ?float $rulesFetchedAtMs = null;
 	
@@ -323,6 +339,7 @@ class RedisVersioned extends Store
 	protected function resetRulesCache(): void
 	{
 		$this->rules = null;
+		$this->rulesFirstOpened = null;
 		$this->rulesFetchedAtMs = null;
 	}
 	
@@ -397,6 +414,7 @@ class RedisVersioned extends Store
 		}
 		
 		$rules = [];
+		$firstOpened = null;
 		
 		try
 		{
@@ -407,6 +425,15 @@ class RedisVersioned extends Store
 			{
 				foreach($entries as $id => $fields)
 				{
+					if(count($rules) === 0)
+					{
+						// the oldest entry: does it say it opened the stream?
+						$first = $fields['first'] ?? null;
+						$firstOpened = $first === null
+							? null
+							: (string)$first === '1';
+					}
+					
 					$id = explode('-', (string)$id);
 					$tags = (string)($fields['tags'] ?? '');
 					
@@ -437,6 +464,7 @@ class RedisVersioned extends Store
 		}
 		
 		$this->rules = $rules;
+		$this->rulesFirstOpened = $firstOpened;
 		$this->rulesFetchedAtMs = $nowMs;
 		
 		return $rules;
@@ -458,6 +486,16 @@ class RedisVersioned extends Store
 		$markMs = (int)($mark[0] ?? 0);
 		$markSequence = (int)($mark[1] ?? 0);
 		
+		$rules = $this->getRules();
+		
+		// an item stamped with a real id has seen the stream hold at least
+		// that rule: if the stream lost it, the rules in between may have
+		// invalidated the item, and the only safe verdict is that they did
+		if($this->rulesLostSince($markMs, $markSequence, $rules))
+		{
+			return true;
+		}
+		
 		$itemTags = [];
 		if($tags !== '')
 		{
@@ -467,7 +505,7 @@ class RedisVersioned extends Store
 			}
 		}
 		
-		foreach($this->getRules() as [$ms, $sequence, $mode, $ruleTags])
+		foreach($rules as [$ms, $sequence, $mode, $ruleTags])
 		{
 			// only the rules the item has not seen can invalidate it
 			if($ms < $markMs
@@ -507,5 +545,43 @@ class RedisVersioned extends Store
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * Has the rules stream lost rules an item stamped with this watermark
+	 * has seen?
+	 *
+	 * If nothing is held now, or the oldest rule held opened the stream and
+	 * is newer than the stamp, whatever stood between is gone - evicted,
+	 * deleted, or lost with a cluster slot. An item stamped 0-0 saw no rule,
+	 * so nothing lost can concern it; and the first rule a group ever gets
+	 * opens the stream without being a rebuild, which is what makes that
+	 * exemption exact.
+	 */
+	protected function rulesLostSince(
+		int $markMs,
+		int $markSequence,
+		array $rules,
+	): bool
+	{
+		if($markMs === 0 && $markSequence === 0)
+		{
+			return false;
+		}
+		
+		if(count($rules) === 0)
+		{
+			return true;
+		}
+		
+		if($this->rulesFirstOpened !== true)
+		{
+			return false;
+		}
+		
+		[$firstMs, $firstSequence] = $rules[0];
+		
+		return $firstMs > $markMs
+			|| ($firstMs === $markMs && $firstSequence > $markSequence);
 	}
 }
