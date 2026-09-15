@@ -557,6 +557,14 @@ class RedisVersioned extends Store
 	 * so nothing lost can concern it; and the first rule a group ever gets
 	 * opens the stream without being a rebuild, which is what makes that
 	 * exemption exact.
+	 *
+	 * The comparison is an ordering, so it cannot see a rebuild that opened
+	 * on an id the item already carries: ids come from the server clock, and
+	 * a stream lost and reborn inside the millisecond its items were stamped
+	 * in starts again at that same id. An item stamped on the opening rule of
+	 * a stream that still holds it is the common case and must stay fresh, so
+	 * equality cannot be read as loss. Telling the two apart needs identity
+	 * rather than order - a token on the opening rule, carried by the stamp
 	 */
 	protected function rulesLostSince(
 		int $markMs,
