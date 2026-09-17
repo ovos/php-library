@@ -5,6 +5,7 @@ namespace Ovos\Service\Console;
 
 use Ovos\Application;
 use Ovos\ArrayObject;
+use Ovos\Cache\Prefixer;
 use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
@@ -180,8 +181,19 @@ class Sender extends Service
 	 * counter): a credential-stuffing wave is thousands of auth_failures a
 	 * minute, and the reporter must not become the flood. Without APCu the
 	 * per-request QUEUE_MAX still bounds each batch.
+	 *
+	 * ACROSS THE POOL, NOT ACROSS INSTALLS: the counter is keyed per install
+	 * (see securityKey), because a pool can serve several and a shared
+	 * budget means one install's attack wave spends the others' allowance —
+	 * and their security events then go unreported, silently, for as long as
+	 * the wave lasts.
 	 */
 	public const int SECURITY_MAX_PER_MINUTE = 60;
+	
+	/**
+	 * The security limiter's key namespace, beneath the install's own
+	 */
+	public const string SECURITY_PREFIX = 'ovos:console:security:';
 	
 	/**
 	 * What the console's REPLAY needs to re-issue the request that failed
@@ -521,9 +533,25 @@ class Sender extends Service
 		
 		$ok = false;
 		$count = apcu_inc(
-			'ovos:console:security:' . intdiv(time(), 60), 1, $ok, 120);
+			self::securityKey(self::cachePrefix($this->app), intdiv(time(), 60)),
+			1, $ok, 120);
 		
 		return $count === false || $count <= self::SECURITY_MAX_PER_MINUTE;
+	}
+	
+	/**
+	 * The minute counter's APCu key: the install's configured cache prefix
+	 * in front of SECURITY_PREFIX, joined by the same Cache\Prefixer the
+	 * cache stores use. APCu belongs to the whole FPM pool, so without the
+	 * install's own namespace two of them share one budget.
+	 */
+	public static function securityKey(
+		?string $prefix,
+		int $minute,
+	): string
+	{
+		return (new Prefixer($prefix !== '' ? $prefix : null))
+			->prefix(self::SECURITY_PREFIX . $minute);
 	}
 	
 	/**
