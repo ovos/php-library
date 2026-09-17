@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Test\Cache\Store;
 
+use Ovos\Cache\Store\KeyValue;
 use Ovos\Test\Internal;
 
 /**
@@ -21,16 +22,24 @@ use Ovos\Test\Internal;
  * - CHURN_ROUNDS    clear/read/rebuild cycles in the churn scenario
  * - CHURN_BATCH     items in the churn working set (the invalidation fan-out)
  * - CHURN_HOT       hot items re-read each churn round (the rest stay cold)
+ * - FRESH_INSTANCE_EVERY  reads per "request" in the FPM model (a store is
+ *                   re-created every that many reads)
  *
  * The using class provides the store as $this->store and may override
- * resetStore() (clear vs clearPhysical) and tearDownStore() (e.g. dropping
- * a RediSearch index) for backend-specific teardown.
+ * resetStore() (clear vs clearPhysical), tearDownStore() (e.g. dropping
+ * a RediSearch index) for backend-specific teardown, and freshStore() when
+ * its store is built some other way than getStore().
  *
  * Reading the results:
  * - readHits* show the read cost. The eager stores (Redis, Redisearch)
  *   stay flat as the backlog grows; the versioned stores pay more per read
  *   the longer the un-trimmed rule backlog gets - this is the cost the O(1)
  *   invalidation defers to the read path.
+ * - readHitsFreshInstance* model PHP-FPM, where every request is a fresh
+ *   process: what a cold store instance pays before its first hit. The
+ *   eager stores hold nothing and land where readHitsAfterLargeBacklog does;
+ *   the versioned stores show the rules load per request, and what sharing
+ *   the rules through APCu saves (their NoSharedRules twin switches it off).
  * - invalidateMatching* show the invalidation cost. The eager stores scale
  *   with the number of matched items; the versioned stores are flat (one
  *   appended rule) regardless of the match size.
@@ -47,6 +56,12 @@ trait TraitStoreBenchmark
 	 * (the 100% match case). Not meant to be tuned.
 	 */
 	protected const string TAG_GLOBAL = 'all';
+	
+	/**
+	 * Store options for the instances freshStore() builds; empty = the
+	 * configured tier (see readHitsFreshInstanceAfterLargeBacklog())
+	 */
+	protected array $freshStoreOptions = [];
 	
 	/**
 	 * Builds a list of $count tags ("$prefix1", "$prefix2", ...);
@@ -141,6 +156,52 @@ trait TraitStoreBenchmark
 	{
 		$this->invalidateUnrelated(static::BACKLOG_LARGE);
 		$this->readAll();
+	}
+	
+	/**
+	 * The FPM model. Under PHP-FPM every request is a fresh process, so a
+	 * fresh store instance with nothing held over from the last one: reads
+	 * every item behind the large backlog, re-creating the store every
+	 * FRESH_INSTANCE_EVERY reads, so each "request" starts cold and pays
+	 * whatever a cold instance pays before its first hit. The eager stores
+	 * hold no state and land where readHitsAfterLargeBacklog does; the
+	 * versioned stores show what loading the rules costs a request, and what
+	 * the shared rules cache saves it
+	 */
+	public function readHitsFreshInstanceAfterLargeBacklog(): void
+	{
+		$this->invalidateUnrelated(static::BACKLOG_LARGE);
+		$this->readAllFromFreshInstances();
+	}
+	
+	/**
+	 * Reads every item once, from a store re-created every
+	 * FRESH_INSTANCE_EVERY reads (see freshStore())
+	 */
+	protected function readAllFromFreshInstances(): void
+	{
+		$store = null;
+		
+		for($i = 1; $i <= static::ITEMS; $i++)
+		{
+			if($store === null
+				|| ($i - 1) % static::FRESH_INSTANCE_EVERY === 0)
+			{
+				$store = $this->freshStore();
+			}
+			
+			$store->get('item' . $i);
+		}
+	}
+	
+	/**
+	 * A store instance as a new request would build it: the same connections
+	 * and config, nothing held. Overridable, for a store built some other way
+	 * than getStore()
+	 */
+	protected function freshStore(): KeyValue
+	{
+		return $this->getStore($this->store::class, $this->freshStoreOptions);
 	}
 	
 	/**

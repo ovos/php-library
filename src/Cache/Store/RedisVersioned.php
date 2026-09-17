@@ -5,6 +5,8 @@ namespace Ovos\Cache\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
+use Ovos\Cache\Versioned\Rules;
+use Ovos\Cache\Versioned\SharedRules;
 use Override;
 use RedisClusterException;
 use RedisException;
@@ -13,8 +15,10 @@ use function count;
 use function explode;
 use function implode;
 use function is_array;
+use function json_encode;
 use function microtime;
 use function sprintf;
+use function usleep;
 
 /**
  * RedisVersioned
@@ -23,8 +27,15 @@ use function sprintf;
  * rule to a stream instead of deleting the matched items - O(1)
  * regardless of whether 10 or 700000 items match. A read fetches the item
  * with one HMGET and evaluates the rules it has not seen yet against its
- * tags in PHP, over a locally cached rule set (rules_cache_ms); stale
- * items are lazily unlinked and physically expire by their TTL.
+ * tags in PHP, over a locally held rule set (see Rules); stale items are
+ * lazily unlinked and physically expire by their TTL.
+ *
+ * The rule set is compacted (the newest rule per tag) and follows the
+ * stream incrementally: a refresh, at most once per rules_cache_ms, fetches
+ * only the rules appended since the last id held. Where APCu is available
+ * the set is shared by the workers of a server (see SharedRules), so a
+ * fresh process - every request, under PHP-FPM - adopts it instead of
+ * loading the whole stream; "rules_shared_cache: no" switches that off.
  *
  * "rules_retention_s" is the default AND maximum item lifetime of the
  * store: an item must never outlive the rule that made it stale, or it
@@ -44,7 +55,7 @@ use function sprintf;
  * allkeys-* policy, a DEL, a slot gone with a cluster node), the read path
  * fails safe: an item stamped with a rule the stream no longer remembers is
  * a miss, never a stale hit, at the price of recomputing the group once
- * (see isStale()).
+ * (see Rules::isStale()).
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -67,6 +78,21 @@ class RedisVersioned extends Store
 	public const string TYPE_RULES = 'rules';
 	
 	/**
+	 * How long a worker holding no rules waits for the worker elected to load
+	 * the stream before loading it on its own - the cold start of a server
+	 * whose APCu was just emptied, where every request would otherwise load
+	 * the whole stream at once
+	 * Unit: milliseconds
+	 */
+	public const int COLD_WAIT_MS = 250;
+	
+	/**
+	 * How often that worker looks whether the load has landed
+	 * Unit: milliseconds
+	 */
+	public const int COLD_POLL_MS = 2;
+	
+	/**
 	 * Invalidation rules (and therefore items) live at most this long.
 	 * The default of 30 days sits above the longest TTL in use across
 	 * the projects (typical items live ~3 days); note an explicit TTL is
@@ -76,28 +102,39 @@ class RedisVersioned extends Store
 	protected int $rulesRetentionS = 2592000; // 30 days
 	
 	/**
-	 * How long locally fetched rules may be reused before refetching - the
+	 * How long a fetched rule set may be reused before it is refreshed - the
 	 * read path (and the cluster write watermark) evaluate against this
-	 * cached set, a bounded staleness window. Set to 0 to refetch on every
-	 * read (exact, but it re-scans the backlog each time).
+	 * held set, a bounded staleness window. Set to 0 to refresh on every
+	 * read (exact, at a round trip each; the refresh is incremental, so it
+	 * carries only what was appended since).
 	 * Unit: milliseconds
 	 */
 	protected int $rulesCacheMs = 1000;
 	
 	/**
-	 * Locally cached parsed rules: [ms, sequence, mode, tags[]][]
+	 * Whether the rule set is shared across the workers of a server through
+	 * APCu; null decides by availability (see SharedRules::isAvailable())
 	 */
-	protected ?array $rules = null;
+	protected ?bool $rulesSharedCache = null;
 	
 	/**
-	 * Whether the oldest rule held opened the stream (was appended to an
-	 * empty one) - null when it did not say, having been written before the
-	 * library recorded it. An item stamped older than such a rule has seen
-	 * rules the stream has lost (see isStale())
+	 * The rule set this instance holds
 	 */
-	protected ?bool $rulesFirstOpened = null;
+	protected ?Rules $rules = null;
 	
+	/**
+	 * When the held set was last fetched from (or reconciled with) the server
+	 */
 	protected ?float $rulesFetchedAtMs = null;
+	
+	/**
+	 * This instance appended a rule the held set has not seen yet: the next
+	 * read fetches the delta whatever the window says, so a process always
+	 * sees its own invalidations at once
+	 */
+	protected bool $rulesDirty = false;
+	
+	protected ?SharedRules $sharedRules = null;
 	
 	/**
 	 * The TTL-above-retention warning is logged once per instance
@@ -116,6 +153,10 @@ class RedisVersioned extends Store
 		if(($cacheMs = $options->offsetGet('rules_cache_ms')) !== null)
 		{
 			$this->rulesCacheMs = (int)$cacheMs;
+		}
+		if(($shared = $options->offsetGet('rules_shared_cache')) !== null)
+		{
+			$this->rulesSharedCache = (bool)$shared;
 		}
 		
 		return $this;
@@ -182,14 +223,13 @@ class RedisVersioned extends Store
 	/**
 	 * Fetches an item with a single HMGET (data, tags, mark) and evaluates the
 	 * rules it has not seen yet (newer than its mark) in PHP, against the
-	 * locally cached rule set - see getRules() / isStale() - instead of
-	 * re-scanning the rules stream on the server for every read. One round
-	 * trip; the rules are fetched once per rules_cache_ms; a stale item is
-	 * lazily unlinked.
+	 * held rule set - see getRules() / isStale() - instead of re-scanning the
+	 * rules stream on the server for every read. One round trip; the rules
+	 * are refreshed at most once per rules_cache_ms; a stale item is lazily
+	 * unlinked.
 	 *
 	 * This trades exact invalidation for a bounded staleness window
-	 * (rules_cache_ms) so a read no longer re-scans the backlog every time -
-	 * set rules_cache_ms to 0 to re-read the rules on every read instead.
+	 * (rules_cache_ms) - set it to 0 to refresh the rules on every read.
 	 */
 	#[Override]
 	protected function fetch(
@@ -222,7 +262,7 @@ class RedisVersioned extends Store
 			}
 			
 			// only the rules newer than the item's mark are evaluated,
-			// against the locally cached rule set
+			// against the held rule set
 			if($this->isStale(
 				(string)$item[static::KEY_TAGS],
 				(string)$item[static::KEY_MARK],
@@ -325,22 +365,33 @@ class RedisVersioned extends Store
 	 */
 	public function clearPhysical(): bool|int
 	{
-		// the rules stream is wiped too - drop the locally cached rules so a
-		// write that follows is not evaluated against rules that no longer exist
+		// the rules stream is wiped too - drop the held rules, here and in the
+		// shared cache, so a write that follows is not evaluated against rules
+		// that no longer exist
 		$this->resetRulesCache();
 		
 		return parent::clear();
 	}
 	
 	/**
-	 * Drops the locally cached rules so the next read refetches them - called
-	 * whenever the rules stream changes under us (a new rule, or a physical wipe)
+	 * Drops the held rules, and the set shared with the other workers, so the
+	 * next read loads the stream afresh - for when the stream itself is gone
+	 * (a physical wipe). A rule appended by this instance does not need it:
+	 * addRule() marks the set dirty and the next read fetches the delta.
 	 */
 	protected function resetRulesCache(): void
 	{
 		$this->rules = null;
-		$this->rulesFirstOpened = null;
 		$this->rulesFetchedAtMs = null;
+		$this->rulesDirty = false;
+		
+		// the shared set described a stream that is gone for every worker:
+		// drop it whether or not this instance reads it
+		if(SharedRules::isAvailable())
+		{
+			$this->newSharedRules()
+				->forget();
+		}
 	}
 	
 	/**
@@ -367,8 +418,9 @@ class RedisVersioned extends Store
 					$this->rulesRetentionS * 1000, // ms
 				]);
 			
-			// the locally cached rules are stale now
-			$this->resetRulesCache();
+			// the held set is behind the rule just written: the next read
+			// fetches it (and whatever anyone else appended) in one range
+			$this->rulesDirty = true;
 			
 			return (int)$result === 1;
 		}
@@ -381,215 +433,285 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Returns the parsed invalidation rules ([ms, sequence, mode, tags[]]),
-	 * locally cached for rulesCacheMs (used by the cluster read path,
-	 * where the rules cannot be evaluated server side).
+	 * The rule set, refreshed at most every rules_cache_ms - incrementally,
+	 * from the last id it holds, and shared with the other workers of this
+	 * server where APCu allows (see SharedRules).
+	 *
+	 * In order: the held set while it is fresh; the shared set, adopted
+	 * unless what is held is newer, and final when it is fresh - no round
+	 * trip; otherwise a refresh: one XRANGE from the last id held, absorbed,
+	 * stamped and stored for the next worker.
+	 *
+	 * Where several workers cross the window together, one is elected to
+	 * refresh (SharedRules::lead()) and the others keep the set they hold for
+	 * this read - one refresh away from exact, never blocked. A worker that
+	 * holds nothing, on a server whose APCu was just emptied, waits for the
+	 * leader's load for a bounded time (COLD_WAIT_MS) rather than join a herd
+	 * of full loads, then loads on its own. Exact reads (rules_cache_ms = 0)
+	 * elect nobody: every read refreshes.
 	 *
 	 * Fails safe: if the rules cannot be (re)loaded it reuses the last-known
-	 * set, or throws when none is cached - the caller then treats the item as
+	 * set, or throws when none is held - the caller then treats the item as
 	 * a miss rather than serving data a rule it could not see might invalidate.
 	 */
-	protected function getRules(): array
+	protected function getRules(): Rules
 	{
 		$nowMs = microtime(true) * 1000;
 		
 		if($this->rules !== null
-			&& $this->rulesFetchedAtMs !== null
-			&& $nowMs - $this->rulesFetchedAtMs < $this->rulesCacheMs)
+			&& $this->rulesDirty === false
+			&& $this->rulesAreFresh($nowMs))
 		{
 			return $this->rules;
 		}
 		
-		if(($client = $this->getClient()) === null)
+		// not after our own invalidation: the shared set cannot have it yet,
+		// and a process must see what it just invalidated
+		$shared = $this->rulesDirty
+			? null
+			: $this->getSharedRules();
+		$leading = false;
+		
+		if($shared !== null)
 		{
-			// no client to refresh from: reuse the last-known rules if we
-			// have them, otherwise fail safe (see the catch below) rather
-			// than report "no rules" and let stale items read as fresh
-			if($this->rules !== null)
+			if($this->adoptSharedRules($shared)
+				&& $this->rulesAreFresh($nowMs))
 			{
 				return $this->rules;
 			}
 			
-			throw new RedisException('Cannot load invalidation rules: no Redis client.');
-		}
-		
-		$rules = [];
-		$firstOpened = null;
-		
-		try
-		{
-			// [id => [field => value]], the ids are "<ms>-<sequence>"
-			$entries = $client->xRange($this->getRulesKey(), '-', '+');
-			
-			if(is_array($entries))
+			if($this->rulesCacheMs > 0)
 			{
-				foreach($entries as $id => $fields)
+				$leading = $shared->lead();
+				
+				if($leading === false)
 				{
-					if(count($rules) === 0)
+					// another worker is refreshing right now: what we hold is
+					// one refresh away from exact, good enough for this read
+					if($this->rules !== null)
 					{
-						// the oldest entry: does it say it opened the stream?
-						$first = $fields['first'] ?? null;
-						$firstOpened = $first === null
-							? null
-							: (string)$first === '1';
+						return $this->rules;
 					}
 					
-					$id = explode('-', (string)$id);
-					$tags = (string)($fields['tags'] ?? '');
-					
-					$rules[] = [
-						(int)($id[0] ?? 0),
-						(int)($id[1] ?? 0),
-						(string)($fields['mode'] ?? ''),
-						$tags === '' ? [] : explode(',', $tags),
-					];
+					// holding nothing, wait for the leader's load instead
+					if($this->awaitSharedRules($shared))
+					{
+						return $this->rules;
+					}
 				}
 			}
 		}
-		catch(RedisException|RedisClusterException $exception)
+		
+		try
 		{
-			// fail safe: never report an item as fresh just because the
-			// rules could not be loaded. Reuse the last-known rules if we
-			// have them (still honouring the invalidations seen so far);
-			// otherwise let the error propagate so the read path treats the
-			// item as a miss and re-resolves, instead of serving stale data.
-			if($this->rules !== null)
+			if($this->getClient() === null)
 			{
-				$this->log($exception);
+				// no client to refresh from: reuse the last-known rules if we
+				// have them, otherwise fail safe (see the catch below) rather
+				// than report "no rules" and let stale items read as fresh
+				if($this->rules !== null)
+				{
+					return $this->rules;
+				}
 				
-				return $this->rules;
+				throw new RedisException('Cannot load invalidation rules: no Redis client.');
 			}
 			
-			throw $exception;
+			$rules = $this->rules ?? new Rules($this->rulesRetentionS * 1000);
+			
+			try
+			{
+				$entries = $this->fetchRuleEntries($rules->last());
+			}
+			catch(RedisException|RedisClusterException $exception)
+			{
+				// fail safe: never report an item as fresh just because the
+				// rules could not be loaded. Reuse the last-known rules if we
+				// have them (still honouring the invalidations seen so far);
+				// otherwise let the error propagate so the read path treats the
+				// item as a miss and re-resolves, instead of serving stale data.
+				if($this->rules !== null)
+				{
+					$this->log($exception);
+					
+					return $this->rules;
+				}
+				
+				throw $exception;
+			}
+			
+			$rules->absorb($entries);
+			
+			$this->rules = $rules;
+			$this->rulesFetchedAtMs = $nowMs;
+			$this->rulesDirty = false;
+			
+			$this->getSharedRules()
+				?->store($rules, $nowMs);
+			
+			return $rules;
 		}
-		
-		$this->rules = $rules;
-		$this->rulesFirstOpened = $firstOpened;
-		$this->rulesFetchedAtMs = $nowMs;
-		
-		return $rules;
+		finally
+		{
+			if($leading)
+			{
+				$shared->release();
+			}
+		}
 	}
 	
 	/**
-	 * PHP variant of the Lua rule evaluation (the cluster read path):
-	 * only the rules newer than the item's watermark are considered,
-	 * 'any' = tag intersection, 'all' = tag subset
-	 * (an 'all' rule with no tags matches every item = a logical clear)
+	 * Takes over the set another worker shared, unless what is held is newer.
+	 * True when a set was adopted - fresh or not - false when there was
+	 * nothing to adopt
+	 */
+	protected function adoptSharedRules(
+		SharedRules $shared,
+	): bool
+	{
+		if(($loaded = $shared->load($this->rulesRetentionS * 1000)) === null)
+		{
+			return false;
+		}
+		
+		[$rules, $fetchedAtMs] = $loaded;
+		
+		if($this->rules !== null
+			&& Rules::isNewerId($this->rules->last(), $rules->last()))
+		{
+			return false;
+		}
+		
+		$this->rules = $rules;
+		$this->rulesFetchedAtMs = $fetchedAtMs;
+		
+		return true;
+	}
+	
+	/**
+	 * Waits, briefly, for the worker elected to load the stream to share it:
+	 * looks every COLD_POLL_MS for at most COLD_WAIT_MS, and gives up early
+	 * when the leader has gone without leaving a set. True when a set was
+	 * adopted
+	 */
+	protected function awaitSharedRules(
+		SharedRules $shared,
+	): bool
+	{
+		$deadline = microtime(true) + static::COLD_WAIT_MS / 1000;
+		
+		do
+		{
+			usleep(static::COLD_POLL_MS * 1000);
+			
+			if($this->adoptSharedRules($shared))
+			{
+				return true;
+			}
+		}
+		while($shared->isRefreshing() && microtime(true) < $deadline);
+		
+		return false;
+	}
+	
+	/**
+	 * The one call to the server the rule set makes: the entries from $from
+	 * (inclusively; the beginning for Rules::NONE) to the head, oldest first
+	 *
+	 * @return array id => fields
+	 */
+	protected function fetchRuleEntries(
+		string $from,
+	): array
+	{
+		$entries = $this->getClient()
+			->xRange(
+				$this->getRulesKey(),
+				$from === Rules::NONE ? '-' : $from,
+				'+',
+			);
+		
+		// anything but a list of entries reads as an empty stream, which the
+		// set treats as a loss - a miss, never a stale hit
+		return is_array($entries)
+			? $entries
+			: [];
+	}
+	
+	protected function rulesAreFresh(
+		float $nowMs,
+	): bool
+	{
+		return $this->rulesFetchedAtMs !== null
+			&& $nowMs - $this->rulesFetchedAtMs < $this->rulesCacheMs;
+	}
+	
+	/**
+	 * The set shared with the other workers of this server; null when the
+	 * option is off, or APCu is not there to hold it
+	 */
+	protected function getSharedRules(): ?SharedRules
+	{
+		if($this->rulesSharedCache === false)
+		{
+			return null;
+		}
+		
+		if($this->sharedRules === null)
+		{
+			if(SharedRules::isAvailable() === false)
+			{
+				$this->rulesSharedCache = false;
+				
+				return null;
+			}
+			
+			$this->sharedRules = $this->newSharedRules();
+		}
+		
+		return $this->sharedRules;
+	}
+	
+	protected function newSharedRules(): SharedRules
+	{
+		return new SharedRules(
+			$this->getRulesKey(),
+			$this->sharedRulesIdentity(),
+		);
+	}
+	
+	/**
+	 * What tells this store's Redis from another one on the same server -
+	 * two environments sharing an FPM pool and a prefix must not share rules
+	 */
+	protected function sharedRulesIdentity(): string
+	{
+		$config = $this->connection
+			->getConfig();
+		
+		return (string)json_encode([
+			$config->host ?? null,
+			$config->port ?? null,
+			$config->database ?? null,
+			$config->seeds ?? null,
+		]);
+	}
+	
+	/**
+	 * Is the item stale under the rules it has not seen? (see Rules::isStale())
+	 *
+	 * @param string $tags the item's tags, comma separated as stored
+	 * @param string $mark the item's watermark
 	 */
 	protected function isStale(
 		string $tags,
 		string $mark,
 	): bool
 	{
-		// an item without a watermark predates every rule
-		$mark = explode('-', $mark);
-		$markMs = (int)($mark[0] ?? 0);
-		$markSequence = (int)($mark[1] ?? 0);
-		
-		$rules = $this->getRules();
-		
-		// an item stamped with a real id has seen the stream hold at least
-		// that rule: if the stream lost it, the rules in between may have
-		// invalidated the item, and the only safe verdict is that they did
-		if($this->rulesLostSince($markMs, $markSequence, $rules))
-		{
-			return true;
-		}
-		
-		$itemTags = [];
-		if($tags !== '')
-		{
-			foreach(explode(',', $tags) as $tag)
-			{
-				$itemTags[$tag] = true;
-			}
-		}
-		
-		foreach($rules as [$ms, $sequence, $mode, $ruleTags])
-		{
-			// only the rules the item has not seen can invalidate it
-			if($ms < $markMs
-				|| ($ms === $markMs && $sequence <= $markSequence))
-			{
-				continue;
-			}
-			
-			if($mode === static::MATCHING_ALL)
-			{
-				$matched = true;
-				foreach($ruleTags as $tag)
-				{
-					if(isset($itemTags[$tag]) === false)
-					{
-						$matched = false;
-						
-						break;
-					}
-				}
-				
-				if($matched)
-				{
-					return true;
-				}
-			}
-			else
-			{
-				foreach($ruleTags as $tag)
-				{
-					if(isset($itemTags[$tag]))
-					{
-						return true;
-					}
-				}
-			}
-		}
-		
-		return false;
-	}
-	
-	/**
-	 * Has the rules stream lost rules an item stamped with this watermark
-	 * has seen?
-	 *
-	 * If nothing is held now, or the oldest rule held opened the stream and
-	 * is newer than the stamp, whatever stood between is gone - evicted,
-	 * deleted, or lost with a cluster slot. An item stamped 0-0 saw no rule,
-	 * so nothing lost can concern it; and the first rule a group ever gets
-	 * opens the stream without being a rebuild, which is what makes that
-	 * exemption exact.
-	 *
-	 * The comparison is an ordering, so it cannot see a rebuild that opened
-	 * on an id the item already carries: ids come from the server clock, and
-	 * a stream lost and reborn inside the millisecond its items were stamped
-	 * in starts again at that same id. An item stamped on the opening rule of
-	 * a stream that still holds it is the common case and must stay fresh, so
-	 * equality cannot be read as loss. Telling the two apart needs identity
-	 * rather than order - a token on the opening rule, carried by the stamp
-	 */
-	protected function rulesLostSince(
-		int $markMs,
-		int $markSequence,
-		array $rules,
-	): bool
-	{
-		if($markMs === 0 && $markSequence === 0)
-		{
-			return false;
-		}
-		
-		if(count($rules) === 0)
-		{
-			return true;
-		}
-		
-		if($this->rulesFirstOpened !== true)
-		{
-			return false;
-		}
-		
-		[$firstMs, $firstSequence] = $rules[0];
-		
-		return $firstMs > $markMs
-			|| ($firstMs === $markMs && $firstSequence > $markSequence);
+		return $this->getRules()
+			->isStale(
+				$tags === '' ? [] : explode(',', $tags),
+				$mark,
+			);
 	}
 }

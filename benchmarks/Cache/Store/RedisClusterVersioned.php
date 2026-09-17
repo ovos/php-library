@@ -48,6 +48,8 @@ class RedisClusterVersioned extends Benchmark
 	
 	public const int CHURN_HOT = 100;
 	
+	public const int FRESH_INSTANCE_EVERY = 10;
+	
 	protected ?Store $store = null;
 	
 	public function __construct()
@@ -69,5 +71,33 @@ class RedisClusterVersioned extends Benchmark
 	protected function resetStore(): void
 	{
 		$this->store?->clearPhysical();
+	}
+	
+	/**
+	 * The cluster store is built from its own two connections, not through
+	 * getStore()
+	 */
+	protected function freshStore(): KeyValue
+	{
+		return $this->getClusterStore($this->freshStoreOptions)
+			?? $this->store;
+	}
+	
+	/**
+	 * The FPM model with the shared rules cache off (see the standalone
+	 * benchmark for the comparison this row is for)
+	 */
+	public function readHitsFreshInstanceAfterLargeBacklogNoSharedRules(): void
+	{
+		$this->freshStoreOptions = ['rules_shared_cache' => false];
+		
+		try
+		{
+			$this->readHitsFreshInstanceAfterLargeBacklog();
+		}
+		finally
+		{
+			$this->freshStoreOptions = [];
+		}
 	}
 }

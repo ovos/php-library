@@ -44,6 +44,8 @@ class Redisearch extends Benchmark
 	
 	public const int CHURN_HOT = 100;
 	
+	public const int FRESH_INSTANCE_EVERY = 10;
+	
 	protected ?Store $store = null;
 	
 	public function __construct()
