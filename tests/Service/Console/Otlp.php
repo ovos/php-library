@@ -35,6 +35,8 @@ class Otlp extends Test
 			&& $resource['service.name'] === ['stringValue' => 'shop.example.at']
 			&& $resource['service.version'] === ['stringValue' => 'r-2026']
 			&& $resource['deployment.environment.name'] === ['stringValue' => 'staging']
+			// the console's own resource attribute for the installation's tags
+			&& $resource['tags'] === ['arrayValue' => ['values' => [['stringValue' => 'shop'], ['stringValue' => 'eu']]]]
 			&& $record['severityNumber'] === 17
 			&& $record['severityText'] === 'ERROR'
 			&& $record['body'] === ['stringValue' => 'boom']
@@ -150,6 +152,7 @@ class Otlp extends Test
 			'timestamp' => date('c'),
 			'release' => 'r-2026',
 			'environment' => 'staging',
+			'tags' => ['shop', 'eu'],
 			'message' => 'boom',
 			'events' => [[
 				'message' => 'boom',
