@@ -235,6 +235,34 @@ class Sender extends Test
 			&& $cappedIsSilent
 			&& $disabled->queueCount() === 0;
 	}
+
+	/**
+	 * RULE: the cap counts per INSTALL, not per pool. APCu belongs to the
+	 * whole FPM pool and a pool can serve several installs, so one key for
+	 * all of them means an attack wave against one spends the others'
+	 * allowance — and their security events go unreported for as long as it
+	 * lasts, which is exactly when they are worth having.
+	 *
+	 * An install that configures no cache prefix keeps the key it had.
+	 */
+	public function theSecurityCapCountsPerInstall(): bool
+	{
+		$minute = 29248320;
+
+		return ConsoleSender::securityKey('shop', $minute)
+				=== 'shop:' . ConsoleSender::SECURITY_PREFIX . $minute
+			&& ConsoleSender::securityKey('shop', $minute)
+				!== ConsoleSender::securityKey('tenant-b', $minute)
+			// the same install still shares one counter across its workers
+			&& ConsoleSender::securityKey('shop', $minute)
+				=== ConsoleSender::securityKey('shop', $minute)
+			&& ConsoleSender::securityKey('shop', $minute)
+				!== ConsoleSender::securityKey('shop', $minute + 1)
+			&& ConsoleSender::securityKey(null, $minute)
+				=== ConsoleSender::SECURITY_PREFIX . $minute
+			&& ConsoleSender::securityKey('', $minute)
+				=== ConsoleSender::SECURITY_PREFIX . $minute;
+	}
 	
 	/**
 	 * The identity known at the call site rides the event: a login that just
