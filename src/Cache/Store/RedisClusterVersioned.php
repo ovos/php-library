@@ -10,7 +10,6 @@ use Override;
 use RedisClusterException;
 use RedisException;
 
-use function count;
 use function implode;
 
 /**
@@ -79,26 +78,17 @@ class RedisClusterVersioned extends RedisVersioned
 	
 	/**
 	 * The rules stream's last entry id ("<ms>-<seq>", "0-0" when empty),
-	 * read from the locally cached rules (rules_cache_ms) instead of a
-	 * dedicated XREVRANGE - the read path already keeps them cached, so a
-	 * write batch skips a round trip per write. A rule appended within the
-	 * cache window leaves the watermark slightly behind: at worst this item
-	 * is marked one or two rules too old - over-invalidation of a racing
-	 * write, never stale data (the same trade the read cache already makes).
+	 * read from the held rules (rules_cache_ms) instead of a dedicated
+	 * XREVRANGE - the read path already keeps them, so a write batch skips a
+	 * round trip per write. A rule appended within the cache window leaves
+	 * the watermark slightly behind: at worst this item is marked one or two
+	 * rules too old - over-invalidation of a racing write, never stale data
+	 * (the same trade the read cache already makes).
 	 */
 	protected function watermark(): string
 	{
-		$rules = $this->getRules();
-		$count = count($rules);
-		
-		if($count === 0)
-		{
-			return '0-0';
-		}
-		
-		[$ms, $sequence] = $rules[$count - 1];
-		
-		return $ms . '-' . $sequence;
+		return $this->getRules()
+			->last();
 	}
 	
 	/**

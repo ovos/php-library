@@ -30,7 +30,12 @@ trait TraitRedisCluster
 	 */
 	protected ?string $clusterUnavailableReason = null;
 	
-	protected function getClusterStore(): ?RedisClusterVersioned
+	/**
+	 * @param array $storeOptions overrides of single "store_options" entries (see TraitRedis::storeConfig())
+	 */
+	protected function getClusterStore(
+		array $storeOptions = [],
+	): ?RedisClusterVersioned
 	{
 		$connections = $this->container
 			->getClass(Connections::class);
@@ -64,7 +69,7 @@ trait TraitRedisCluster
 			$connection,
 			$connections->get('redis_cluster_queue', 'queue'),
 			$this->cacheConfig->prefix,
-			$this->cacheConfig->persistent,
+			$this->storeConfig($storeOptions),
 			$this->group,
 		);
 	}

@@ -44,6 +44,8 @@ class RedisVersioned extends Benchmark
 	
 	public const int CHURN_HOT = 100;
 	
+	public const int FRESH_INSTANCE_EVERY = 10;
+	
 	protected ?Store $store = null;
 	
 	public function __construct()
@@ -59,5 +61,25 @@ class RedisVersioned extends Benchmark
 	protected function resetStore(): void
 	{
 		$this->store->clearPhysical();
+	}
+	
+	/**
+	 * The FPM model with the shared rules cache off: what a cold instance
+	 * pays when nothing survives the request - the rules of the whole
+	 * retention window, loaded per "request". Compare with
+	 * readHitsFreshInstanceAfterLargeBacklog, where the instances share them
+	 */
+	public function readHitsFreshInstanceAfterLargeBacklogNoSharedRules(): void
+	{
+		$this->freshStoreOptions = ['rules_shared_cache' => false];
+		
+		try
+		{
+			$this->readHitsFreshInstanceAfterLargeBacklog();
+		}
+		finally
+		{
+			$this->freshStoreOptions = [];
+		}
 	}
 }
