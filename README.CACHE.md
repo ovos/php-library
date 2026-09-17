@@ -90,9 +90,18 @@ is constant no matter how many items match.
 - Distributed cache with **rule based (logical) tag invalidation**:
   `invalidateTags()` appends one rule to a stream instead of deleting the
   matched items - **O(1) whether 10 or 700000 items match**. Reads fetch the
-  item in one `HMGET` and evaluate the rules in PHP over a short-lived local
-  rule cache (`rules_cache_ms`); stale items are lazily unlinked and
+  item in one `HMGET` and evaluate it in PHP against a held rule set - the
+  newest rule per tag, refreshed at most once per `rules_cache_ms` by fetching
+  only what was appended since; stale items are lazily unlinked and
   physically expire by their TTL.
+- The rule set is **shared by the workers of a server through APCu**
+  (`rules_shared_cache`, on wherever APCu is enabled): a fresh process - every
+  request, under PHP-FPM - adopts it instead of loading the whole stream. When
+  the set turns stale, one worker is elected to refresh it and the others keep
+  it for that read; on a server whose APCu was just emptied, one worker loads
+  the stream and the others wait for it, briefly, instead of loading it too.
+  Switched off, each process loads the rules of the whole retention window
+  once, before its first hit.
 - `clear()` is logical as well (one rule matching everything);
   `clearPhysical()` wipes the whole group for maintenance.
 - `rules_retention_s` (default 30 days) is the default **and maximum** item
@@ -159,9 +168,11 @@ same O(N) eager delete, with a smaller constant.
   degrade as invalidations pile up.
 - **Round trips, not big-O, set the floor.** Each persistent op above is one
   server round trip (Lua / pipeline); the versioned read refreshes its rule set
-  at most once per `rules_cache_ms`, shared across every read in that window. A
-  round trip is ~0.1-1 ms on a LAN; an in-process APCu hit is ~1 µs &mdash; big-O
-  only starts to bite once N or R is large.
+  at most once per `rules_cache_ms`, incrementally, and shares it with the
+  other workers of the server through APCu, so a fresh process starts from the
+  shared set rather than from the whole stream. A round trip is ~0.1-1 ms on a
+  LAN; an in-process APCu hit is ~1 µs &mdash; big-O only starts to bite once N
+  or R is large.
 
 Bottom line: reads are O(1)-ish on every backend, so the choice comes down to
 **invalidation** &mdash; pick a versioned store when tags match many items or you
@@ -532,7 +543,8 @@ cache:
     store_options:
       clean_tags: no                   # Redis store: remove ids from tags on invalidation
       rules_retention_s: 2592000       # Versioned stores: rules + maximum item lifetime (s)
-      rules_cache_ms: 1000             # RedisClusterVersioned: local rules cache staleness budget (ms)
+      rules_cache_ms: 1000             # Versioned stores: how long a held rule set is reused (ms)
+      rules_shared_cache: yes          # Versioned stores: share the rule set across the server's workers (APCu; default: on when available)
     compression:
       enabled: yes
       threshold: 2048
@@ -573,6 +585,10 @@ cache:
 
 - The persistent stores require **Redis 8+** (Lua functions with flags; the
   query engine for Redisearch is bundled since Redis 8).
+- The versioned stores share their rule set through **APCu** where it is
+  enabled; under PHP-FPM that is what keeps a request from loading the whole
+  rules stream before its first hit. `rules_shared_cache: no` switches it off,
+  and is the rollback switch should the shared set ever misbehave.
 - All Redis stores require two connections when queueing is enabled:
   one for data operations and one for MemoLock Pub/Sub. On a cluster, the
   pub/sub connection must be a standalone connection to a cluster node.
