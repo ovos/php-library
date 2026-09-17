@@ -78,14 +78,19 @@ trait TraitRedis
 		return $config;
 	}
 	
-	protected function getMemoLock(): RedisMemoLock
+	/**
+	 * @param class-string<RedisMemoLock> $class a subclass, when a test needs one
+	 */
+	protected function getMemoLock(
+		string $class = RedisMemoLock::class,
+	): RedisMemoLock
 	{
 		$persistent = $this->container
 			->getClass(Persistent::class, parameters: [
 				'config' => $this->cacheConfig,
 			]);
 		
-		return new RedisMemoLock(
+		return new $class(
 			$persistent->getConnection(),
 			$persistent->getQueueConnection(),
 			$this->cacheConfig->prefix,
