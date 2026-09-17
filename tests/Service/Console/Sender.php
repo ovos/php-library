@@ -607,6 +607,46 @@ class Sender extends Test
 	}
 	
 	/**
+	 * console.tags stamps a deployment's tags on every event of the batch
+	 * (ovos/console docs/plans/event-tags.md): a yml list (an ArrayObject by
+	 * the time it is config), a plain array or ONE comma string — trimmed,
+	 * empties dropped, at most ten; nothing configured means no field at all,
+	 * not an empty list
+	 */
+	public function theBatchCarriesTheConfiguredTags(): bool
+	{
+		$make = static function(mixed $tags): ConsoleSender
+		{
+			$config = new ArrayObject([
+				'enabled' => true,
+				'url' => 'https://console.invalid',
+				'key' => 'test-key',
+			] + ($tags === null ? [] : ['tags' => $tags]));
+			
+			$sender = container()->injectMissing(new class($config) extends ConsoleSender
+			{
+				public function batch(): array
+				{
+					return $this->buildBatch();
+				}
+			});
+			$sender->captureException(new Exception('boom'));
+			
+			return $sender;
+		};
+		
+		$yml = $make(new ArrayObject(['shop', 'eu']));
+		$list = $make(['shop', ' eu ', '', 7]);
+		$string = $make(' shop, eu;tenant:acme ');
+		$none = $make(null);
+		
+		return ($yml->batch()[0]['tags'] ?? null) === ['shop', 'eu']
+			&& ($list->batch()[0]['tags'] ?? null) === ['shop', 'eu', '7']
+			&& ($string->batch()[0]['tags'] ?? null) === ['shop', 'eu', 'tenant:acme']
+			&& isset($none->batch()[0]['tags']) === false;
+	}
+	
+	/**
 	 * The untracked pass (SENDER.md §7 "Files"): from the CLI, the report the
 	 * working copy answers goes to /api/v1/ingest/files with the console's
 	 * own shape and the labels the events carry, and the answer is the
