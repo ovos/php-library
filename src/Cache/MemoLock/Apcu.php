@@ -13,9 +13,7 @@ use function array_key_exists;
 use function apcu_entry;
 use function apcu_exists;
 use function bin2hex;
-use function max;
 use function microtime;
-use function min;
 use function random_bytes;
 use function random_int;
 use function usleep;
@@ -125,25 +123,15 @@ class Apcu extends MemoLock
 			);
 		}
 		
-		// lock was not acquired: wait for the holder, but never past the
-		// request's own deadline (see MemoLock::deadline())
+		// lock was not acquired
 		$startTime = microtime(true);
-		$until = static::deadline();
-		while((microtime(true) - $startTime) < $this->queueWaitTimeoutS
-			&& ($until === null || microtime(true) < $until)
-		)
+		while((microtime(true) - $startTime) < $this->queueWaitTimeoutS)
 		{
  			// wait with a short, randomized backoff
-			$backoffMs = random_int(
+			usleep(random_int(
 				$this->queueBackoffMinMs,
 				$this->queueBackoffMaxMs,
-			);
-			if($until !== null)
-			{
-				// the last nap ends at the deadline, not after it
-				$backoffMs = max(1, min($backoffMs, (int)(($until - microtime(true)) * 1000)));
-			}
-			usleep($backoffMs * 1000);
+			) * 1000);
 			
 			// check if the result was produced while we were waiting
 			if(($result = $this->invoker
