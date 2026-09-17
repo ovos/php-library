@@ -17,6 +17,7 @@ use RedisClusterException;
 
 use function bin2hex;
 use function random_bytes;
+use function microtime;
 use function min;
 use function random_int;
 use function array_key_exists;
@@ -186,10 +187,23 @@ class Redis extends MemoLock
 				->invoke($resolver);
 		}
 		
-		// lock was not acquired, wait for a publication result from another request
+		// lock was not acquired, wait for a publication result from another
+		// request - but never past the request's own deadline (MemoLock::deadline())
 		$waitTimeMs = $waitTimeJitterMs = $queueLockTtlMs;
+		$until = static::deadline();
 		for($attempt = 0; $attempt < $this->queueWaitAttempts; $attempt++)
 		{
+			// out of time: produce the value ourselves, as after the attempts
+			$budgetMs = $until !== null
+				? (int)(($until - microtime(true)) * 1000)
+				: null;
+			if($budgetMs !== null && $budgetMs <= 0)
+			{
+				$this->debug('deadline reached, no more waiting: ' . $id, timeout: true);
+				
+				break;
+			}
+			
 			// a crashed producer never publishes - never wait (much) longer
 			// than its lock can live (mirrors waitForRelease)
 			$remainingMs = 0;
@@ -210,11 +224,15 @@ class Redis extends MemoLock
 			}
 			else
 			{
-				$success = $this->waitForMessage($channelName,
-					$remainingMs > 0
-						? min($waitTimeJitterMs, $remainingMs + 25)
-						: $waitTimeJitterMs,
-				);
+				$waitMs = $remainingMs > 0
+					? min($waitTimeJitterMs, $remainingMs + 25)
+					: $waitTimeJitterMs;
+				if($budgetMs !== null)
+				{
+					$waitMs = min($waitMs, $budgetMs);
+				}
+				
+				$success = $this->waitForMessage($channelName, $waitMs);
 			}
 			if($success === false)
 			{
@@ -373,6 +391,7 @@ class Redis extends MemoLock
 		$queueLockTtlMs = $queueLockTtlMs ?? $this->queueLockTtlMs;
 		
 		$waitTimeMs = $waitTimeJitterMs = $queueLockTtlMs;
+		$until = static::deadline();
 		for($attempt = 0; $attempt <= $this->queueWaitAttempts; $attempt++)
 		{
 			// a redis failure while checking must not block the host application
@@ -399,13 +418,26 @@ class Redis extends MemoLock
 				break;
 			}
 			
+			// out of time: the lock is still held, and the caller decides
+			$budgetMs = $until !== null
+				? (int)(($until - microtime(true)) * 1000)
+				: null;
+			if($budgetMs !== null && $budgetMs <= 0)
+			{
+				break;
+			}
+			
 			$this->debug('wait for release: ' . $id);
 			
 			// a crashed holder never publishes - never wait (much) longer
-			// than the lock itself can live
+			// than the lock itself can live, nor past the request's deadline
 			$waitMs = $remainingMs > 0
 				? min($waitTimeJitterMs, $remainingMs + 25)
 				: $waitTimeJitterMs;
+			if($budgetMs !== null)
+			{
+				$waitMs = min($waitMs, $budgetMs);
+			}
 			
 			$success = $this->waitForMessage($channelName, $waitMs);
 			if($success === false)
