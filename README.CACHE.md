@@ -120,16 +120,19 @@ is constant no matter how many items match.
 
 A closer look at the read path - how a `get()` fetches the item in one
 `HMGET` and uses its `mark` (the version it was stamped with) to evaluate,
-in PHP over a short-lived local rule cache (`rules_cache_ms`), only the
-invalidation rules it has not seen yet (id > mark), matches them against the
-item's tags, and serves a fresh hit or lazily unlinks a stale item:
+in PHP against the held rule set - the newest rule per tag, shared by the
+server's workers through APCu and refreshed incrementally at most once per
+`rules_cache_ms` - only the invalidation rules it has not seen yet
+(id > mark), matches them against the item's tags, and serves a fresh hit or
+lazily unlinks a stale item:
 
 ![RedisVersioned cache GET - tags, versions and XRANGE](docs/cache/redis-versioned-get.png)
 
 ### RedisClusterVersioned (`Ovos\Cache\Store\RedisClusterVersioned`)
 - The RedisVersioned store on a **Redis Cluster**: same data model and
-  semantics; reads evaluate the invalidation rules on the PHP side behind a
-  short-lived local cache (`rules_cache_ms`).
+  semantics; reads evaluate the invalidation rules on the PHP side against
+  the same held, shared rule set (`rules_cache_ms`, `rules_shared_cache`),
+  and writes take their watermark from it instead of a round trip.
 - Requires a `redis_cluster` connection (a `seeds` list) plus a standalone
   queue connection **pointed at a node of the same cluster** for MemoLock
   pub/sub (see the configuration reference below).
@@ -140,16 +143,21 @@ item's tags, and serves a fresh hit or lazily unlinks a stale item:
 ### Cost at a glance
 
 Theoretical per-operation cost, where **N** = items carrying the invalidated
-tag, **T** = tags on the item being written, and **R** = invalidation rules
-newer than a read's item that still have to be evaluated:
+tag and **T** = tags on the item being written or read:
 
 | Backend | `get()` hit | `set()` | `invalidateTags()` | `clear()` |
 |---------|-------------|---------|--------------------|-----------|
 | **APCu** | O(1) | O(1) | &mdash; *(no tags)* | O(n) |
 | **Redis** (tag-hash) | O(1) | O(T) | **O(N)** | O(n) |
 | **Redisearch** | O(1) | O(1) ‡ | **O(N)** ‡ | O(n) |
-| **RedisVersioned** | O(1 + R) | O(1) | **O(1)** | **O(1)** |
-| **RedisClusterVersioned** | O(1 + R) | O(1) | **O(1)** | **O(1)** † |
+| **RedisVersioned** | O(T) § | O(1) | **O(1)** | **O(1)** |
+| **RedisClusterVersioned** | O(T) § | O(1) | **O(1)** | **O(1)** † |
+
+§ One `HMGET`, then the item's tags looked up in the held rule set (the
+newest rule per tag), plus the `all`-matching rules newer than the item, which
+are few; the rule set itself is refreshed at most once per `rules_cache_ms`
+and shared by the server's workers, so its size and the length of the
+invalidation backlog do not enter a read.
 
 ‡ RediSearch maintains the tag index itself: `set()` is a single write (no
 per-tag bookkeeping like the tag-hash store's O(T)), and `invalidateTags()`
@@ -162,10 +170,12 @@ same O(N) eager delete, with a smaller constant.
   items, a latency spike when a tag fans out to thousands. The versioned stores
   append one rule and return in O(1) no matter how many items match; staleness is
   resolved later, lazily, on read.
-- **Versioned reads stay ~O(1).** R counts only the rules written *after* the
-  item was last stamped; rules age out by `rules_retention_s`, and a rebuilt item
-  is re-stamped to the newest version, so R falls back toward 0. Reads do not
-  degrade as invalidations pile up.
+- **Versioned reads do not see the backlog.** The held set keeps only the
+  newest rule per tag, so a read costs the item's tag count however many rules
+  were appended since it was stamped; rules age out by `rules_retention_s`, and
+  a clear subsumes everything older than itself. What a fresh process used to
+  pay - loading the whole stream before its first hit - is what the shared set
+  removes.
 - **Round trips, not big-O, set the floor.** Each persistent op above is one
   server round trip (Lua / pipeline); the versioned read refreshes its rule set
   at most once per `rules_cache_ms`, incrementally, and shares it with the
@@ -186,7 +196,15 @@ One local run of `php cli.php benchmarks run` (loopback Redis, single machine).
 Absolute seconds depend on the benchmark's iteration constants, so read them as
 **cross-store ratios**, not wall-clock truth; on loopback the round trips are
 near-free, so these mostly expose CPU/algorithmic cost. Time in seconds, lower
-is faster:
+is faster.
+
+*This run predates the compacted, shared rule set (September 2026): the
+backlog column below shows the old per-read walk over every unseen rule, which
+the compaction removes, and the two FPM rows the matrix has since gained -
+`readHitsFreshInstanceAfterLargeBacklog` and its `NoSharedRules` twin, a store
+re-created every `FRESH_INSTANCE_EVERY` reads - are not in it yet. A re-run is
+pending; until then the table stands as the record of the eager-versus-lazy
+comparison it was made for.*
 
 | Backend | `readHits` | `readHits` + large backlog | `invalidateMatchingAll` | `invalidateRepeated` | `writeOverwrite` | `churn` |
 |---------|-----------|----------------------------|--------------------------|----------------------|------------------|---------|
@@ -204,11 +222,13 @@ What the run confirms:
   ~1.7-1.9× the single-write stores (3.2-3.6 s): that is the per-tag
   `HSET`/`HEXPIRE` bookkeeping. Redisearch and the versioned stores write once and
   pay nothing per tag.
-- **Reads stay ~O(1) until R grows.** Steady `readHits` are within ~6 % across
-  Redis, Redisearch and RedisVersioned (3.1-3.2 s). After a large invalidation
-  backlog the versioned read climbs to 4.72 s (~20 % over Redisearch) as more
-  unseen rules are evaluated and held client-side &mdash; it shows up in the
-  memory column (~460 KB of cached rules), not as a cliff.
+- **Reads were flat until the backlog grew - and that is what changed.**
+  Steady `readHits` are within ~6 % across Redis, Redisearch and RedisVersioned
+  (3.1-3.2 s). After a large invalidation backlog the versioned read climbed to
+  4.72 s (~20 % over Redisearch) because every unseen rule was walked on every
+  read and the whole backlog was held client-side (~460 KB). The held set is
+  now the newest rule per tag, so a read looks its tags up instead of walking
+  the backlog; the re-run should bring that column back to the flat line.
 - **`churn` (wide fan-out, sparse re-reads) separates them.** When each round
   invalidates a wide slice but only a hot subset is re-read, the tag-hash Redis is
   slowest (3.66 s) &mdash; it eagerly deletes the whole slice every round and pays
