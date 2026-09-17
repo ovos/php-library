@@ -99,6 +99,13 @@ final class Otlp
 				(string)$first['environment']);
 		}
 		
+		// OTEL has no tags concept; the console reads its own resource
+		// attribute `tags` (a string array) for the installation's tags
+		if(is_array($first['tags'] ?? null) && $first['tags'] !== [])
+		{
+			$resource[] = self::attr('tags', $first['tags']);
+		}
+		
 		if(is_array($context['args'] ?? null) && $context['args'] !== [])
 		{
 			$resource[] = self::attr('process.command_args', $context['args']);

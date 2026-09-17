@@ -18,10 +18,12 @@ use Ovos\Service\Logger;
 use ErrorException;
 use SplObjectStorage;
 use Throwable;
+use Traversable;
 
 use function apcu_enabled;
 use function apcu_inc;
 use function array_replace;
+use function array_slice;
 use function array_values;
 use function count;
 use function curl_exec;
@@ -41,12 +43,14 @@ use function is_int;
 use function is_readable;
 use function is_scalar;
 use function is_string;
+use function iterator_to_array;
 use function json_encode;
 use function max;
 use function mb_strlen;
 use function mb_substr;
 use function min;
 use function preg_match;
+use function preg_split;
 use function rtrim;
 use function str_replace;
 use function str_starts_with;
@@ -69,6 +73,7 @@ use const CURLOPT_TIMEOUT_MS;
 use const DIRECTORY_SEPARATOR;
 use const JSON_INVALID_UTF8_SUBSTITUTE;
 use const JSON_PARTIAL_OUTPUT_ON_ERROR;
+use const PREG_SPLIT_NO_EMPTY;
 
 /**
  * Reports collected errors to a central ovos/console instance.
@@ -92,6 +97,10 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *     environment: staging              # optional deployment stage, sent verbatim. UNSET, the
  *                                       # app's own .env ENV is sent (production included — the
  *                                       # console badges only non-production values)
+ *     tags: [shop, eu]                  # optional tags on every event (a list, or one comma string
+ *                                       # such as !ENV CONSOLE[TAGS]) — a tenant, a region, a team;
+ *                                       # the console's TAGS column, one filter per tag. Per-event
+ *                                       # tags go into a capture's extra bag as `tags`
  *     rollups: no                       # OPT-IN: per-minute traffic counters (requests,
  *                                       # status/method/route/authed) accumulated in APCu and
  *                                       # POSTed to /api/v1/ingest/rollup once per minute —
@@ -743,6 +752,9 @@ class Sender extends Service
 		// the app's own env name — production included (the console stores
 		// and filters it, but only badges anything else)
 		$environment = $this->environment();
+		// the tags a deployment stamps on every event (console.tags): a
+		// tenant, a region, a team — constant across the batch
+		$tags = $this->tags();
 		
 		$errors = [];
 		foreach($this->queue as $payload)
@@ -785,6 +797,11 @@ class Sender extends Service
 			if($environment !== '')
 			{
 				$payload['environment'] = $environment;
+			}
+			
+			if($tags !== [])
+			{
+				$payload['tags'] = $tags;
 			}
 			
 			$errors[] = $payload;
@@ -1324,6 +1341,45 @@ class Sender extends Service
 		}
 		
 		return mb_substr($environment, 0, 64);
+	}
+	
+	/**
+	 * The tags console.tags stamps on every event (ovos/console
+	 * docs/plans/event-tags.md): a yml list, or ONE string split on commas,
+	 * semicolons and whitespace (an .env line) — trimmed, empties dropped,
+	 * at most ten (the console's own cap per event). The console lowercases
+	 * and validates them; per-event tags ride the extra bag as `tags`.
+	 *
+	 * @return string[]
+	 */
+	protected function tags(): array
+	{
+		$raw = $this->config?->tags ?? null;
+		if($raw instanceof Traversable)
+		{
+			$raw = iterator_to_array($raw);
+		}
+		
+		if(is_string($raw))
+		{
+			$raw = preg_split('~[,;\s]+~', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+		}
+		
+		if(is_array($raw) === false)
+		{
+			return [];
+		}
+		
+		$tags = [];
+		foreach($raw as $tag)
+		{
+			if(is_scalar($tag) && trim((string)$tag) !== '')
+			{
+				$tags[] = trim((string)$tag);
+			}
+		}
+		
+		return array_slice($tags, 0, 10);
 	}
 	
 	/**
