@@ -257,4 +257,26 @@ class Rollup extends Test
 			&& ConsoleRollup::isStream(['Link: </sse>; rel="text/event-stream"']) === false
 			&& ConsoleRollup::isStream([]) === false;
 	}
+
+	/**
+	 * RULE: every APCu key carries the install's configured cache prefix.
+	 * APCu belongs to the whole FPM pool and a pool can serve several
+	 * installs; sharing the keys means they sum each other's counters,
+	 * share one flush watermark, and — the one that cannot be repaired
+	 * afterwards — ship as the same (instance, seq), which the console
+	 * dedups against each other.
+	 *
+	 * No prefix configured leaves the keys exactly as they were, so an
+	 * upgrade changes nothing for an install that names no namespace.
+	 */
+	public function keysCarryTheInstallNamespace(): bool
+	{
+		$prefix = static fn(?string $configured): string
+			=> (new ConsoleRollup(null, $configured))->getPrefix();
+
+		return $prefix('shop') === 'shop:' . ConsoleRollup::PREFIX
+			&& $prefix('shop') !== $prefix('tenant-b')
+			&& $prefix(null) === ConsoleRollup::PREFIX
+			&& $prefix('') === ConsoleRollup::PREFIX;
+	}
 }
