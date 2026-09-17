@@ -17,10 +17,6 @@ use function sprintf;
 use function substr;
 use function bin2hex;
 use function random_bytes;
-use function ini_get;
-use function is_float;
-use function is_int;
-use function microtime;
 
 use const LOGS_DIR;
 
@@ -130,42 +126,6 @@ abstract class MemoLock
 	public function getPrefixer(): Prefixer
 	{
 		return $this->prefixer;
-	}
-	
-	/**
-	 * Where max_execution_time ends, as far as a wait is concerned: a second
-	 * before the limit, so that a waiter still has time to produce the value
-	 * itself instead of being killed mid-wait with nothing to serve
-	 * Null when there is no limit, or when that moment is already past - the
-	 * timer then counts CPU time (Linux) or was restarted by set_time_limit()
-	 * and says nothing about the clock
-	 * The limit and the start default to max_execution_time and the request
-	 * time; tests pass their own
-	 */
-	public static function deadline(
-		?int $limitS = null,
-		?float $startedAt = null,
-	): ?float
-	{
-		$limitS ??= (int)ini_get('max_execution_time');
-		if($limitS <= 0)
-		{
-			return null;
-		}
-		
-		if($startedAt === null)
-		{
-			$started = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
-			$startedAt = is_float($started) || is_int($started)
-				? (float)$started
-				: microtime(true);
-		}
-		
-		$until = $startedAt + $limitS - 1.0;
-		
-		return microtime(true) < $until
-			? $until
-			: null;
 	}
 	
 	abstract public function lockAndQueue(
