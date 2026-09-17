@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Console;
 
+use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
@@ -662,7 +663,8 @@ class Sender extends Service
 		// the same silence contract, so it runs before anything can bail
 		try
 		{
-			(new Rollup($this->config))->observe($this->app);
+			(new Rollup($this->config, self::cachePrefix($this->app)))
+				->observe($this->app);
 		}
 		catch(Throwable)
 		{
@@ -1437,6 +1439,24 @@ class Sender extends Service
 		$value = self::firstLine(is_string($configured) ? $configured : '');
 		
 		return $value !== '' ? $value : self::firstLine($stamp ?? '');
+	}
+	
+	/**
+	 * The install's configured cache key namespace (cache.prefix, typically
+	 * !ENV CACHE[PREFIX]) — what the cache stores prefix their keys with.
+	 *
+	 * The rollup accumulator needs it for the same reason they do: APCu
+	 * belongs to the whole FPM pool, and a pool can serve several installs.
+	 * Absent or empty means the deployment named no namespace, which leaves
+	 * the rollup keys exactly as they were.
+	 */
+	public static function cachePrefix(
+		?Application $app,
+	): ?string
+	{
+		$prefix = $app?->getConfig()?->cache?->prefix;
+		
+		return is_string($prefix) && $prefix !== '' ? $prefix : null;
 	}
 	
 	/**

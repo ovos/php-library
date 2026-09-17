@@ -6,6 +6,7 @@ namespace Ovos\Service\Console;
 use APCUIterator;
 use Ovos\Application;
 use Ovos\ArrayObject;
+use Ovos\Cache\Prefixer;
 use Ovos\Controller;
 use Ovos\Request;
 use Ovos\Service\Auth;
@@ -20,6 +21,7 @@ use function apcu_fetch;
 use function apcu_inc;
 use function apcu_store;
 use function base_convert;
+use function crc32;
 use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
@@ -76,6 +78,13 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *   together on an APCu restart so a recycled pid can never collide with
  *   a seq history it does not own.
  *
+ * - ONE POOL, SEVERAL INSTALLS: a pool can serve more than one app, so
+ *   every key carries the install's configured cache prefix in front of
+ *   PREFIX — the namespace the cache stores key by. Without it the
+ *   installs sum each other's counters, share one flush watermark and,
+ *   worst, ship as the same (instance, seq) pair, which the console
+ *   dedups against each other.
+ *
  * THE CLOSED-VOCABULARY RULE (the console refuses violations wholesale):
  * every dimension comes from the app, never from the request. The route is
  * the RESOLVED controller/action — resolveActionMethod() re-proves it names
@@ -94,15 +103,23 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  */
 class Rollup
 {
+	/**
+	 * The SHARED part of every APCu key - never a key on its own: APCu
+	 * belongs to the whole FPM pool and a pool can serve several installs,
+	 * so the install's cache prefix goes in front of it (see $keyPrefix)
+	 */
 	public const string PREFIX = 'ovos:console:rollups:';
 	
-	protected const string LOCK_KEY = self::PREFIX . 'lock';
+	/**
+	 * Key suffixes, appended to $keyPrefix by key()
+	 */
+	protected const string LOCK_KEY = 'lock';
 	
-	protected const string SEQ_KEY = self::PREFIX . 'seq';
+	protected const string SEQ_KEY = 'seq';
 	
-	protected const string INSTANCE_KEY = self::PREFIX . 'instance';
+	protected const string INSTANCE_KEY = 'instance';
 	
-	protected const string FLUSHED_KEY = self::PREFIX . 'flushed';
+	protected const string FLUSHED_KEY = 'flushed';
 	
 	/**
 	 * Orphaned counters (a pool that stops receiving traffic mid-minute)
@@ -140,10 +157,55 @@ class Rollup
 	
 	public const int DURATION_BUCKETS = 12;
 	
+	/**
+	 * Every APCu key this install owns starts with it:
+	 * '<cache prefix>:ovos:console:rollups:'
+	 */
+	protected readonly string $keyPrefix;
+	
+	/**
+	 * $prefix is the install's configured cache prefix (cache.prefix), the
+	 * one the cache stores key by — the deployment's own answer to which of
+	 * the installs sharing this pool is writing. Sender passes it; a null
+	 * or empty one leaves the keys unnamespaced, as they were before.
+	 */
 	public function __construct(
 		protected ?ArrayObject $config,
+		?string $prefix = null,
 	)
 	{
+		$this->keyPrefix = self::keyPrefix($prefix);
+	}
+	
+	/**
+	 * The install's namespace in front of the shared PREFIX, joined by
+	 * Ovos\Cache\Prefixer — the same class, over the same configured
+	 * prefix, that the cache stores build their keys with
+	 */
+	public static function keyPrefix(
+		?string $prefix = null,
+	): string
+	{
+		return (new Prefixer($prefix !== '' ? $prefix : null))
+			->prefix(self::PREFIX);
+	}
+	
+	/**
+	 * This install's full APCu key prefix
+	 */
+	public function getPrefix(): string
+	{
+		return $this->keyPrefix;
+	}
+	
+	/**
+	 * One of this install's APCu keys, from its suffix
+	 */
+	protected function key(
+		string $suffix,
+	): string
+	{
+		return $this->keyPrefix . $suffix;
 	}
 	
 	/**
@@ -469,7 +531,7 @@ class Rollup
 		$ok = false;
 		foreach($fields as $field)
 		{
-			apcu_inc(self::PREFIX . $minute . ':' . $field, 1, $ok, self::COUNTER_TTL);
+			apcu_inc($this->key($minute . ':' . $field), 1, $ok, self::COUNTER_TTL);
 		}
 	}
 	
@@ -484,7 +546,7 @@ class Rollup
 		int $minute,
 	): void
 	{
-		$flushed = apcu_fetch(self::FLUSHED_KEY);
+		$flushed = apcu_fetch($this->key(self::FLUSHED_KEY));
 		if(is_int($flushed) && $flushed >= $minute - 1)
 		{
 			return;
@@ -492,12 +554,12 @@ class Rollup
 		
 		// fresh APCu epoch: nothing older than us exists — start the
 		// watermark, ship nothing
-		if($flushed === false && apcu_add(self::FLUSHED_KEY, $minute - 1))
+		if($flushed === false && apcu_add($this->key(self::FLUSHED_KEY), $minute - 1))
 		{
 			return;
 		}
 		
-		if(apcu_add(self::LOCK_KEY, 1, 30) === false)
+		if(apcu_add($this->key(self::LOCK_KEY), 1, 30) === false)
 		{
 			return; // someone else is flushing
 		}
@@ -508,7 +570,7 @@ class Rollup
 		}
 		finally
 		{
-			apcu_delete(self::LOCK_KEY);
+			apcu_delete($this->key(self::LOCK_KEY));
 		}
 	}
 	
@@ -523,7 +585,9 @@ class Rollup
 	{
 		$byMinute = [];
 		
-		$pattern = '~^' . preg_quote(self::PREFIX, '~') . '(\d+):(.+)$~';
+		// the install namespace is part of the pattern: another install sharing
+		// this pool is not even visible to the iterator
+		$pattern = '~^' . preg_quote($this->keyPrefix, '~') . '(\d+):(.+)$~';
 		foreach(new APCUIterator($pattern) as $entry)
 		{
 			if(preg_match($pattern, (string)$entry['key'], $match) !== 1)
@@ -556,7 +620,7 @@ class Rollup
 			
 			foreach($fields as $field => $count)
 			{
-				apcu_delete(self::PREFIX . $entryMinute . ':' . $field);
+				apcu_delete($this->key($entryMinute . ':' . $field));
 			}
 			
 			// too stale for the console's skew window — deleted, not shipped
@@ -571,7 +635,7 @@ class Rollup
 		
 		if($drained)
 		{
-			apcu_store(self::FLUSHED_KEY, $minute - 1);
+			apcu_store($this->key(self::FLUSHED_KEY), $minute - 1);
 		}
 	}
 	
@@ -590,21 +654,28 @@ class Rollup
 			'type' => 'rollup',
 			'host' => self::hostName((string)gethostname()),
 			'instance' => $this->instance(),
-			'seq' => (int)apcu_inc(self::SEQ_KEY),
+			'seq' => (int)apcu_inc($this->key(self::SEQ_KEY)),
 		] + self::assemble($minute, $fields);
 	}
 	
 	/**
-	 * The pool identity, minted once per APCu epoch: the first worker to
-	 * ask stores its pid plus the epoch time, so a recycled pid after an
-	 * APCu restart is still a NEW identity — the console's dedup set for
-	 * the old one must never answer for the new one's fresh seq counter.
+	 * The pool identity, minted once per APCu epoch and per install: the
+	 * first worker to ask stores its pid plus the epoch time, so a
+	 * recycled pid after an APCu restart is still a NEW identity — the
+	 * console's dedup set for the old one must never answer for the new
+	 * one's fresh seq counter.
+	 *
+	 * The key prefix is folded in as well, because the VALUE has to differ
+	 * between installs too: one pool means one worker serving both, so pid
+	 * and second can be identical — two installs would then ship as the
+	 * same (instance, seq) and the console would dedup one of them away.
 	 */
 	protected function instance(): string
 	{
-		$instance = apcu_entry(self::INSTANCE_KEY,
-			static fn(): string => 'p' . (int)getmypid()
-				. '-' . base_convert((string)time(), 10, 36));
+		$instance = apcu_entry($this->key(self::INSTANCE_KEY),
+			fn(): string => 'p' . (int)getmypid()
+				. '-' . base_convert((string)time(), 10, 36)
+				. '-' . base_convert((string)crc32($this->keyPrefix), 10, 36));
 		
 		return (string)$instance;
 	}
