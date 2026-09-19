@@ -324,14 +324,9 @@ class Rollup
 		Request $request,
 	): string
 	{
-		// the getter's return type is non-nullable, so a request that never
-		// dispatched answers with a TypeError rather than a null — either
-		// way, no constructed controller means the router matched nothing
-		try
-		{
-			$instance = $request->getControllerInstance();
-		}
-		catch(Throwable)
+		// no constructed controller means the router matched nothing
+		$instance = $request->getControllerInstance();
+		if($instance === null)
 		{
 			return '__unmatched';
 		}

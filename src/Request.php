@@ -130,7 +130,15 @@ class Request
 		return $this;
 	}
 	
-	public function getControllerInstance(): Controller
+	/**
+	 * The dispatched controller, or NULL when nothing was dispatched: a CLI
+	 * process that booted the application and ran its own code, a request the
+	 * router matched nothing for, a fatal before the dispatch. The property
+	 * has always been nullable — the getter promised otherwise, so those paths
+	 * answered with a TypeError instead of a null, and the shutdown handler's
+	 * profiled response (View → Helper\Redis) hit it every time.
+	 */
+	public function getControllerInstance(): ?Controller
 	{
 		return $this->controllerInstance;
 	}
