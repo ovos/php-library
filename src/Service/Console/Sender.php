@@ -22,6 +22,7 @@ use SplObjectStorage;
 use Throwable;
 use Traversable;
 
+use function strtoupper;
 use function apcu_enabled;
 use function apcu_inc;
 use function array_replace;
@@ -889,6 +890,18 @@ class Sender extends Service
 				$context['status'] = $status;
 			}
 			
+			// where the EDGE says the visitor is (console contract:
+			// context.country, docs/SENDER.md). A CDN in front of the
+			// application resolved the client's country to route the request at
+			// all, so its header is both free and better than a monthly table —
+			// and it describes the real client even where the app sees a proxy.
+			// Absent without a CDN, and the console falls back to its own table
+			$country = self::edgeCountry();
+			if($country !== '')
+			{
+				$context['country'] = $country;
+			}
+			
 			// handler-agnostic: the native session machinery (and its
 			// session_id()) never runs under the json handler
 			$session = $this->app->getServices()->session;
@@ -924,6 +937,30 @@ class Sender extends Service
 	 * under the CLI SAPI, or a value nothing would send) — its own method so
 	 * a test can script what the SAPI would answer
 	 */
+	/**
+	 * The country a CDN in front of this application put on the request:
+	 * Cloudflare's CF-IPCountry, CloudFront's CloudFront-Viewer-Country. An
+	 * ISO-3166 alpha-2 code, or '' where there is no edge or it could not say.
+	 *
+	 * Cloudflare's two non-countries are dropped rather than passed on: XX is
+	 * "could not tell", and T1 means the request came out of Tor — true and
+	 * interesting, but not a country, and a field called country must not
+	 * carry it.
+	 */
+	protected static function edgeCountry(): string
+	{
+		foreach(['HTTP_CF_IPCOUNTRY', 'HTTP_CLOUDFRONT_VIEWER_COUNTRY'] as $header)
+		{
+			$value = strtoupper(trim((string)($_SERVER[$header] ?? '')));
+			if(preg_match('~^[A-Z]{2}$~', $value) === 1 && $value !== 'XX' && $value !== 'T1')
+			{
+				return $value;
+			}
+		}
+		
+		return '';
+	}
+	
 	protected function responseStatus(): ?int
 	{
 		return self::statusOf(http_response_code());

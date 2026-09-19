@@ -457,6 +457,50 @@ class Sender extends Test
 	}
 	
 	/**
+	 * RULE: a CDN in front of the application already resolved the visitor's
+	 * country to route the request, so context.country carries what the EDGE
+	 * said — Cloudflare's CF-IPCountry or CloudFront's Viewer-Country, upper-
+	 * cased. Nothing where there is no edge: the console then answers from its
+	 * own table, and a missing key is how it knows to.
+	 *
+	 * Cloudflare's two non-countries never travel: XX is "could not tell" and
+	 * T1 means the request came out of Tor — true, and not a country.
+	 */
+	public function theEdgesCountryRidesAlongWhenThereIsAnEdge(): bool
+	{
+		$sender = $this->makeSender();
+		$of = function (array $headers) use ($sender): string
+		{
+			foreach(['HTTP_CF_IPCOUNTRY', 'HTTP_CLOUDFRONT_VIEWER_COUNTRY'] as $key)
+			{
+				unset($_SERVER[$key]);
+			}
+			foreach($headers as $key => $value)
+			{
+				$_SERVER[$key] = $value;
+			}
+			$answer = $sender->country();
+			foreach(array_keys($headers) as $key)
+			{
+				unset($_SERVER[$key]);
+			}
+			
+			return $answer;
+		};
+		
+		return $of([]) === ''
+			&& $of(['HTTP_CF_IPCOUNTRY' => 'AT']) === 'AT'
+			&& $of(['HTTP_CF_IPCOUNTRY' => 'at']) === 'AT'
+			&& $of(['HTTP_CLOUDFRONT_VIEWER_COUNTRY' => 'JP']) === 'JP'
+			// Cloudflare first where both are present: it is the nearer edge
+			&& $of(['HTTP_CF_IPCOUNTRY' => 'DE', 'HTTP_CLOUDFRONT_VIEWER_COUNTRY' => 'JP']) === 'DE'
+			&& $of(['HTTP_CF_IPCOUNTRY' => 'XX']) === ''
+			&& $of(['HTTP_CF_IPCOUNTRY' => 'T1']) === ''
+			&& $of(['HTTP_CF_IPCOUNTRY' => 'AUT']) === ''
+			&& $of(['HTTP_CF_IPCOUNTRY' => '<script>']) === '';
+	}
+	
+	/**
 	 * Under the CLI SAPI http_response_code() answers false — a CLI run has
 	 * no response, so the sender adds no status rather than a default one
 	 */
@@ -565,6 +609,14 @@ class Sender extends Test
 			public function status(): ?int
 			{
 				return $this->responseStatus();
+			}
+			
+			/**
+			 * …and what it would put under context.country
+			 */
+			public function country(): string
+			{
+				return self::edgeCountry();
 			}
 			
 			/**
