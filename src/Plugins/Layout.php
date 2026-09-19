@@ -64,13 +64,30 @@ class Layout extends Plugin
 	#[Override] 
 	public function postDispatch(): void
 	{
+		$response = $this->app->getResponse();
+		
+		// A response the ACTION already sent has no page to wrap: an SSE
+		// stream, a file, a body written by hand. Application::sendResponse()
+		// has always honoured isSent(); this ran before it and did not, so the
+		// library built a whole document — the layout, every partial, every
+		// placeholder — and threw it away, after the request was answered.
+		//
+		// That is not only waste. Anything the render touches on the way can
+		// throw, and it throws with the response long gone: a profiler stream
+		// that outlived a deploy reported `Class "Console\Brand" not found`
+		// from a page nobody was ever going to receive
+		// (docs/plans/layout-skips-a-sent-response.md).
+		if($response->isSent())
+		{
+			return;
+		}
+		
 		foreach($this->layout::placeholders()->toArray()
 			as $placeholder => $value)
 		{
 			$this->layout->$placeholder = $value;
 		}
 		
-		$response = $this->app->getResponse();
 		if(get_class($response) === Response\Html::class)
 		{
 			$this->layout->{self::CONTENT_PLACEHOLDER}.= $response->get();
