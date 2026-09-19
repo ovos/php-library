@@ -134,7 +134,12 @@ class Cli extends Controller
 	 */
 	public function usesColor(): bool
 	{
-		return ($response = $this->app->getResponse()) instanceof Response\Cli
+		// a controller built outside the container — a test, a reflection probe,
+		// a script that wanted one method — has no app, and asking a typed
+		// property that was never assigned is a fatal. Plain output is the
+		// honest answer there, not an Error from inside a log() call
+		return isset($this->app)
+			&& ($response = $this->app->getResponse()) instanceof Response\Cli
 			&& $response->getColoredOutput();
 	}
 	
