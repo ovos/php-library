@@ -341,8 +341,11 @@ class Router
 			
 			if(class_exists($controllerClassNs) === false)
 			{
-				throw new NotFoundException(
-				'Class %s does not exist', $controllerClassNs);
+				// the ROUTE, not the class the router hoped to find: this message is
+				// what a 404 row shows and what it groups by, and "Class
+				// Controllers\Api\ does not exist" tells a reader nothing about the
+				// address somebody asked for
+				throw new NotFoundException('No controller for "%s"', $request->getUrl());
 			}
 			
 			// public, declared below Ovos\Controller, canonically spelled —

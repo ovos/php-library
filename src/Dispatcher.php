@@ -60,7 +60,8 @@ class Dispatcher
 		if($action === null)
 		{
 			throw new NotFoundException(
-				'No method matching action name on controller "%s".', $controllerClass);
+				'No action "%s" on controller "%s"',
+				$request->getActionMethod(), $controllerClass);
 		}
 		
 		return $controller->dispatch($action, $request->getParams());

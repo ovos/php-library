@@ -5,8 +5,12 @@ namespace Ovos\Logger;
 
 use Ovos\Exception;
 use Ovos\Exception\Priority;
+use Ovos\Service\Events;
+use Ovos\Service\Logger;
 use Throwable;
 
+use function in_array;
+use function debug_backtrace;
 use function count;
 use function is_int;
 use function is_string;
@@ -40,6 +44,15 @@ use function sprintf;
 final class Normalizer
 {
 	/**
+	 * The logging plumbing between a caller and this class: Service\Logger::log()
+	 * and the Events fan-out that may precede it.
+	 */
+	protected const array PLUMBING = [self::class, Logger::class, Events::class];
+	
+	/** deep enough for Events → Logger → here, with room for a forwarder */
+	protected const int TRACE_DEPTH = 8;
+	
+	/**
 	 * @return array{0: Throwable, 1: array}|null null when nothing was passed
 	 */
 	public static function normalize(
@@ -66,7 +79,7 @@ final class Normalizer
 			$message = $count > 1 ? sprintf(...$event) : $event[0];
 			
 			return [
-				(new Exception($message))->withPriority($priority ?? Priority::NOTICE),
+				self::at(new Exception($message))->withPriority($priority ?? Priority::NOTICE),
 				[],
 			];
 		}
@@ -86,6 +99,43 @@ final class Normalizer
 		
 		// a defect at the call site, not an operational note — the null
 		// priority falls through to the ERROR mapping on purpose
-		return [new Exception('non-throwable event logged'), $extra];
+		return [self::at(new Exception('non-throwable event logged')), $extra];
+	}
+	
+	/**
+	 * A wrapped message reports the line somebody wrote $log->error(…) on, not
+	 * the line inside this class that built the Exception — the console groups,
+	 * links and reads source by that pair, and the wrapper's own file would be
+	 * the same for every logged message in every project.
+	 */
+	protected static function at(
+		Exception $exception,
+	): Exception
+	{
+		$site = self::callSite();
+		
+		return $site === [] ? $exception : $exception->raisedAt($site[0], $site[1]);
+	}
+	
+	/**
+	 * The call site: a backtrace frame carries the file and line its function
+	 * was called FROM, so the outermost plumbing frame is the caller's own line
+	 *
+	 * @return array{0: string, 1: int}|array{}
+	 */
+	protected static function callSite(): array
+	{
+		$site = [];
+		foreach(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, self::TRACE_DEPTH) as $frame)
+		{
+			if(in_array((string)($frame['class'] ?? ''), self::PLUMBING, true) === false)
+			{
+				break;
+			}
+			
+			$site = [(string)($frame['file'] ?? ''), (int)($frame['line'] ?? 0)];
+		}
+		
+		return $site;
 	}
 }
