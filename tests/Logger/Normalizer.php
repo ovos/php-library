@@ -93,6 +93,52 @@ class Normalizer extends Test
 		return LoggerNormalizer::normalize([$event, 'priority' => Priority::INFO]) === [$event, []];
 	}
 	
+	/**
+	 * RULE: a logged STRING reports the line that logged it. The Normalizer
+	 * wraps the message in an Exception, and a PHP exception remembers where it
+	 * was CONSTRUCTED — so without the call-site stamp every logged message in
+	 * every project reported this class's own file and line. An error console
+	 * groups by that pair, links to it and reads the source snippet from it.
+	 */
+	public function aLoggedStringPointsAtTheLineThatLoggedIt(): bool
+	{
+		$line = __LINE__ + 1;
+		[$throwable] = LoggerNormalizer::normalize(['the vendor answered 500']);
+		
+		return $throwable->getFile() === __FILE__
+			&& $throwable->getLine() === $line;
+	}
+	
+	/**
+	 * …and so does the defect the fallback reports: "non-throwable event
+	 * logged" is a complaint ABOUT a call site, so it had better name it
+	 */
+	public function theNonThrowableFallbackNamesTheCallSite(): bool
+	{
+		$line = __LINE__ + 1;
+		[$throwable] = LoggerNormalizer::normalize([['not', 'a', 'throwable']]);
+		
+		return $throwable->getMessage() === 'non-throwable event logged'
+			&& $throwable->getFile() === __FILE__
+			&& $throwable->getLine() === $line;
+	}
+	
+	/**
+	 * A throwable passed in keeps its OWN origin: it was raised somewhere real
+	 * and the logger is not entitled to move it
+	 */
+	public function aRealThrowableKeepsItsOwnOrigin(): bool
+	{
+		$thrown = new RuntimeException('the disk is full');
+		$file = $thrown->getFile();
+		$line = $thrown->getLine();
+		[$throwable] = LoggerNormalizer::normalize([$thrown]);
+		
+		return $throwable === $thrown
+			&& $throwable->getFile() === $file
+			&& $throwable->getLine() === $line;
+	}
+	
 	public function nothingToLogIsNull(): bool
 	{
 		return LoggerNormalizer::normalize([]) === null
