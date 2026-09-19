@@ -35,7 +35,14 @@ abstract class Plugin
 		$this->app = $this->container->get(Application::class);
 		
 		$this->request = $this->app->getRequest();
-		$this->controller = $this->app->getRequest()->getControllerInstance();
+		// a plugin exists only inside a dispatch, so the controller is there;
+		// the ?? keeps a boot without one from assigning null into a typed
+		// property and blaming the plugin for it
+		$controller = $this->app->getRequest()->getControllerInstance();
+		if($controller !== null)
+		{
+			$this->controller = $controller;
+		}
 	}
 	
 	public function getRequest(): Request
