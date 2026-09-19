@@ -54,6 +54,29 @@ class Exception extends \Exception implements HasPriority
 		return $this;
 	}
 	
+	/**
+	 * Move the throwable's origin to where it was RAISED rather than where it
+	 * was constructed. A string logged through the Logger is wrapped in an
+	 * Exception inside the library (Logger\Normalizer), so without this every
+	 * logged message reports the wrapper's file and line — the same two for
+	 * every message in every project, which is what an error console then
+	 * groups by, links to, and reads the source snippet from. The TRACE is
+	 * untouched: it always named the real caller.
+	 */
+	public function raisedAt(
+		string $file,
+		int $line,
+	): static
+	{
+		if($file !== '')
+		{
+			$this->file = $file;
+			$this->line = $line;
+		}
+		
+		return $this;
+	}
+	
 	public function getPriority(): ?int
 	{
 		return $this->priority;
