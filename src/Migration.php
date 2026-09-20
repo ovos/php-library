@@ -38,15 +38,25 @@ abstract class Migration
 	protected string $sourceName = 'mysql';
 	
 	/**
+	 * Where this migration's SQL halves live, without the `_up.sql` /
+	 * `_down.sql` tail. Null for a migration that has a class of its own:
+	 * the class's file name IS the base, which is how every migration
+	 * worked before a migration could be SQL alone.
+	 */
+	protected ?string $sqlBase = null;
+	
+	/**
 	 * A connection between PHP and a database server
 	 */
 	protected ?PDO $source = null;
 	
 	public function __construct(
 		ReflectionClass $class,
+		?string $sqlBase = null,
 	)
 	{
 		$this->class = $class;
+		$this->sqlBase = $sqlBase;
 	}
 	
 	public function getSource(): PDO
@@ -121,7 +131,9 @@ abstract class Migration
 		string $suffix,
 	): ?string
 	{
-		$sqlFile = substr($this->class->getFileName(), 0, -4)
+		// a SQL-only migration is told where its halves are; one with a
+		// class of its own is named after that class's file
+		$sqlFile = ($this->sqlBase ?? substr($this->class->getFileName(), 0, -4))
 			. sprintf('_%s.sql', $suffix);
 		
 		if(file_exists($sqlFile) === false)
