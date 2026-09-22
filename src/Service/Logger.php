@@ -114,6 +114,11 @@ class Logger extends Service implements Writer
 		'~authorization~i',
 		'~cookie~i',
 		'~api[_-]?key~i',
+		// promoted from the westbahn pipeline 2026-09-22, which redacted these
+		// while this list did not. Both are safe unanchored: no ordinary field
+		// name contains jwt or bearer.
+		'~jwt~i',
+		'~bearer~i',
 	];
 	
 	/**
@@ -144,6 +149,18 @@ class Logger extends Service implements Writer
 		'code',
 		'sig',
 		'signature',
+		// also promoted from westbahn, and query-only because that is what it
+		// had them as: its DENYLIST_EXACT matches a whole name, where its
+		// substring list is the one holding password/token/secret. As FIELD
+		// names these would over-redact - `hash` eats content_hash and
+		// filehash, the very content hashes the asset carve-out exists to
+		// keep, and `pin` eats shipping, mapping, spinner and pinned.
+		//
+		// `sess` is NOT here though westbahn redacts it: the console stores
+		// session_id as a first-class column and correlates by it.
+		'otp',
+		'pin',
+		'hash',
 	];
 	
 	/**
