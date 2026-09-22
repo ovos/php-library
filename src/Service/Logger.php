@@ -616,27 +616,101 @@ class Logger extends Service implements Writer
 		foreach($this->remove as $pattern)
 		{
 			// the configured patterns are whole regexes (~pass(word|wd)?~i);
-			// spliced into the search below they have to be bare fragments —
+			// spliced into the searches below they have to be bare fragments —
 			// and their groups have to stop CAPTURING, or every numbered
-			// backreference below shifts by one and the search matches nothing
+			// backreference shifts by one and the search matches nothing
 			if(preg_match('~^(.)(.*)\1[a-zA-Z]*$~s', $pattern, $parts) === 1)
 			{
 				$names[] = (string)preg_replace('~\((?!\?)~', '(?:', $parts[2]);
 			}
 		}
-		if($names !== [])
+		
+		if($names === [])
 		{
-			$text = (string)preg_replace_callback(
-				'~(["\']?)([A-Za-z0-9_.\-]{0,24}(?:' . implode('|', $names) . ')[A-Za-z0-9_.\-]{0,24})\1'
-					. '(\s*(?:=>|[:=])\s*)(["\']?)(?:(?:bearer|basic|token|digest)\s+)?'
-					. '([^"\'\s,;)&}]{1,512})\4~i',
-				static fn(array $match): string => $match[1] . $match[2] . $match[1]
-					. $match[3] . $match[4] . '[redacted]' . $match[4],
-				$text,
-			);
+			return $this->maskEmails($text);
 		}
 		
+		// the NAME half, shared by the three pair passes. The character class
+		// either side carries `[` and `]` since 2026-09-21: `opts[api_key]` is
+		// how a form posts a nested field, and it walked straight past a class
+		// that knew only dots and dashes.
+		$name = '(["\']?)([A-Za-z0-9_.\-\[\]]{0,24}(?:' . implode('|', $names)
+			. ')[A-Za-z0-9_.\-\[\]]{0,24})\1';
+		$separator = '(\s*(?:=>|[:=])\s*)';
+		$scheme = '(?:(?:bearer|basic|token|digest)\s+)?';
+		
+		// a QUOTED value, running to its own closing quote — whitespace and
+		// escapes included. The single pass this replaced excluded whitespace
+		// from the value class, so its closing backreference could never reach
+		// the quote: `"password": "correct horse battery staple"` did not
+		// redact PARTIALLY, it did not redact at all.
+		$text = $this->removePairs($text,
+			'~' . $name . $separator . '(["\'])' . $scheme
+				. '((?:\\\\.|(?!\4)[^\\\\])*)\4~i');
+		
+		// the same pair quoted with ESCAPED quotes — a string inside a JSON
+		// string, which is how a GraphQL query arrives. The old pass read the
+		// lone backslash as the whole value and wrote a malformed document
+		// with the credential still in it.
+		$text = $this->removePairs($text,
+			'~' . $name . $separator . '(\\\\["\'])' . $scheme
+				. '((?:(?!\4).)*)\4~i');
+		
+		// an UNQUOTED value, ending at the punctuation around it. Its class
+		// begins with neither a quote nor a backslash, so a pair either pass
+		// above answered is never matched twice; `>` is excluded because the
+		// separator would otherwise give up the `=>` and match it as a value.
+		$text = $this->removePairs($text,
+			'~' . $name . $separator . '()' . $scheme
+				. '([^"\'\s,;)&}>\\\\]{1,512})~i');
+		
+		// <password>x</password>. The separators above are `=>`, `:` and `=`;
+		// XML puts the name and the value either side of a `>`, so until
+		// 2026-09-21 no XML body was scrubbed at all — a SOAP envelope's
+		// <password>, a <token>, an <apiKey> all travelled whole.
+		$text = (string)preg_replace_callback(
+			'~<([A-Za-z0-9_.:\-]{0,24}(?:' . implode('|', $names)
+				. ')[A-Za-z0-9_.:\-]{0,24})((?:\s[^>]*)?)>([^<]*)</\1\s*>~i',
+			static fn(array $match): string
+				=> '<' . $match[1] . $match[2] . '>[redacted]</' . $match[1] . '>',
+			$text,
+		);
+		
+		// the username rule, which never ran on text at all: `user=marcin` in
+		// a body or a message survived while $_POST['user'] was masked. The
+		// value class excludes `@` so an address falls to maskEmails() below,
+		// which keeps the domain instead of chewing it.
+		$text = (string)preg_replace_callback(
+			'~(["\']?)(user(?:[_-]?(?:name|login))?|login)\1' . $separator
+				. '(["\']?)([^"\'\s,;)&}>@]{1,256})\4~i',
+			fn(array $match): string => $match[5] === '[redacted]'
+				? $match[0]
+				: $match[1] . $match[2] . $match[1]
+					. $match[3] . $match[4] . $this->maskName($match[5]) . $match[4],
+			$text,
+		);
+		
 		return $this->maskEmails($text);
+	}
+	
+	/**
+	 * One "<name> = <value>" pass: the shared callback for the three patterns,
+	 * which differ only in how the value ends. An EMPTY value says a field was
+	 * sent with nothing in it, which carries nothing.
+	 */
+	protected function removePairs(
+		string $text,
+		string $pattern,
+	): string
+	{
+		return (string)preg_replace_callback(
+			$pattern,
+			static fn(array $match): string => $match[5] === ''
+				? $match[0]
+				: $match[1] . $match[2] . $match[1]
+					. $match[3] . $match[4] . '[redacted]' . $match[4],
+			$text,
+		);
 	}
 	
 	/**

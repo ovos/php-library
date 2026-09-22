@@ -290,6 +290,20 @@ class Sender extends Service
 	}
 	
 	/**
+	 * How much of a request BODY leaves this application (console.request_body):
+	 * off | structure | full, defaulting to `structure`.
+	 *
+	 * There was no switch at all before 2026-09-21 — the body was read on every
+	 * non-GET report, 16 KB of it, at every log level, and nothing could turn it
+	 * off. Validated through Body::mode(), so a typo in the yml reads as the
+	 * default rather than silently disabling the reduction.
+	 */
+	public function requestBodyMode(): string
+	{
+		return Body::mode((string)($this->config?->request_body ?? Body::MODE_STRUCTURE));
+	}
+	
+	/**
 	 * Start building an arbitrary event bound to this sender. A thrown
 	 * exception is optional — set a message, extras and context overrides, then
 	 * call Event::capture(). Reachable through the container from anywhere:
@@ -1030,10 +1044,25 @@ class Sender extends Service
 				$request['contentType'] = mb_substr($contentType, 0, self::CONTENT_TYPE_MAX);
 			}
 			
+			// PARSED, not pattern-matched (Console\Body). The flat search this
+			// replaces had six holes, all from reading a structured document as
+			// free text. The URI decides first: an endpoint whose purpose is to
+			// receive a password sends no body whatever the mode says.
 			$body = $this->readBody($contentType);
 			if($body !== '')
 			{
-				$request['body'] = $logger->removeText($body);
+				$reduced = Body::redact(
+					$logger,
+					$body,
+					$contentType,
+					$this->requestBodyMode(),
+					(string)($_SERVER['REQUEST_URI'] ?? ''),
+				);
+				
+				if($reduced !== null)
+				{
+					$request['body'] = $reduced;
+				}
 			}
 			
 			$headers = $this->buildHeaders($logger);
