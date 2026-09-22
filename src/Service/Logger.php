@@ -119,6 +119,10 @@ class Logger extends Service implements Writer
 		// name contains jwt or bearer.
 		'~jwt~i',
 		'~bearer~i',
+		// also westbahn's, and safe unanchored for the same reason: no
+		// ordinary field name contains `signature`. It was already exact in
+		// the query list, which missed webhook_signature and x_signature.
+		'~signature~i',
 	];
 	
 	/**
@@ -161,6 +165,12 @@ class Logger extends Service implements Writer
 		'otp',
 		'pin',
 		'hash',
+		// `sess` is westbahn's too, and belongs here rather than in the list
+		// above: these names are matched against a QUERY PARAMETER only (see
+		// removeFromUrl), never against a field in a bag — so `?sess=` is
+		// redacted while the console's own session_id column, which it
+		// correlates by, is untouched.
+		'sess',
 	];
 	
 	/**
