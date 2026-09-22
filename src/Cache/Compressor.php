@@ -4,10 +4,11 @@ declare(strict_types=1);
 namespace Ovos\Cache;
 
 use Ovos\ArrayObject;
+use Ovos\Zstd;
+use Throwable;
 
 use function gzcompress;
 use function gzuncompress;
-use function function_exists;
 use function strlen;
 use function substr;
 use function zstd_compress;
@@ -85,7 +86,7 @@ class Compressor
 		}
 		
 		// use zstd if available, gzip otherwise
-		if(function_exists('zstd_compress'))
+		if(Zstd::isAvailable())
 		{
 			if(($compressed = zstd_compress($value, 4)) === false)
 			{
@@ -130,19 +131,30 @@ class Compressor
 		{
 			$method = substr($value, 0, 2);
 			$compressed = substr($value, 5);
-			switch($method)
+			
+			try
 			{
-				case 'zs':
-					if(function_exists('zstd_uncompress') === false)
-					{
-						return $value;
-					}
-					
-					$value = zstd_uncompress($compressed);
-					
-					break;
-				default:
-					$value = gzuncompress($compressed);
+				switch($method)
+				{
+					case 'zs':
+						if(Zstd::isAvailable() === false)
+						{
+							return $value;
+						}
+						
+						$value = zstd_uncompress($compressed);
+						
+						break;
+					default:
+						$value = gzuncompress($compressed);
+				}
+			}
+			catch(Throwable)
+			{
+				// a truncated or corrupt payload makes both extensions raise
+				// a warning before they answer false - under an E_ALL handler
+				// that throws out of the read instead of answering null
+				return null;
 			}
 			
 			// decompression failed
