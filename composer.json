@@ -29,7 +29,8 @@
     "ext-yaml": "YAML is required if you plan to use the Application class.",
     "ext-apcu": "APCu is required if you plan to use the Application class.",
     "ext-redis": "YAML is required if you plan to use the Application class.",
-    "ext-simplexml": "SimpleXML is required if you plan to load XML files."
+    "ext-simplexml": "SimpleXML is required if you plan to load XML files.",
+    "ext-zstd": "Zstd is required if you want Ovos\\Zstd or the cache to compress with zstd instead of gzip."
   },
   "minimum-stability": "dev",
   "prefer-stable": true,
