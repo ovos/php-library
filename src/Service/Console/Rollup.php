@@ -348,6 +348,7 @@ class Rollup
 	public static function routeName(
 		string $controller,
 		string $action,
+		string $module = '',
 	): string
 	{
 		if($controller === '' || $action === '')
@@ -355,7 +356,13 @@ class Rollup
 			return '__other';
 		}
 		
-		$route = '/' . strtolower($controller) . '/' . strtolower($action);
+		// the ZF1 CMS sites route on a module/controller/action TRIPLE, so
+		// their own copy of this method carried a third segment and with it a
+		// second copy of the validation below. Optional and last, so every
+		// existing caller is untouched; `default` is ZF1's unnamed module and
+		// names nothing here either.
+		$route = ($module === '' || $module === 'default' ? '' : '/' . strtolower($module))
+			. '/' . strtolower($controller) . '/' . strtolower($action);
 		
 		if(preg_match('~^/[!-\~]{1,199}$~', $route) !== 1
 			|| str_contains($route, '?')
