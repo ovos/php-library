@@ -13,6 +13,8 @@ use Throwable;
 use function array_merge;
 use function date;
 use function get_class;
+use function count;
+use function explode;
 use function implode;
 use function in_array;
 use function is_array;
@@ -460,12 +462,34 @@ class Logger extends Service implements Writer
 		string $path,
 	): string
 	{
+		// a credential that FOLLOWS its name, which the shape rule below cannot
+		// see: /token/abc, /api_key/xyz, /reset-password/<short id>. Promoted
+		// from westbahn's UrlScrubber 2026-09-22, narrowed on the way: it
+		// matched the segment against BOTH its lists, so a path segment called
+		// code, key, hash, pin, otp, sig or auth redacted whatever came next
+		// and /code/at lost its country. Those names are query-only here for
+		// that reason, so this reads the substring list alone — token,
+		// password, secret, jwt, bearer, signature, api_key — which a path
+		// segment only carries when it is naming a credential.
+		$segments = explode('/', $path);
+		$last = count($segments) - 1;
+
+		for($i = 0; $i < $last; $i++)
+		{
+			if($segments[$i] !== ''
+				&& $segments[$i + 1] !== ''
+				&& $this->matchesAny($this->remove, $segments[$i]))
+			{
+				$segments[++$i] = '[redacted]';
+			}
+		}
+
 		return (string)preg_replace_callback(
 			self::PATH_CANDIDATE,
 			fn(array $match): string => $this->looksSecret($match[2])
 				? $match[1] . '[redacted]'
 				: $match[0],
-			$path,
+			implode('/', $segments),
 		);
 	}
 	
