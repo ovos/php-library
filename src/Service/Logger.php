@@ -573,6 +573,19 @@ class Logger extends Service implements Writer
 	 *
 	 * @param string[] $patterns
 	 */
+	/**
+	 * Whether a NAME is one whose value never leaves — the same list remove()
+	 * drops by key, asked about a header name or any other bare name. One list,
+	 * one answer: a sender that has to ask this question was otherwise obliged
+	 * to keep its own copy of the list to ask it with.
+	 */
+	public function isSecretName(
+		string $name,
+	): bool
+	{
+		return $this->matchesAny($this->remove, $name);
+	}
+	
 	protected function matchesAny(
 		array $patterns,
 		string $key,
@@ -723,7 +736,7 @@ class Logger extends Service implements Writer
 	 * re-find a single revealed character before the @, which maskName maps
 	 * onto itself.
 	 */
-	protected function maskEmails(
+	public function maskEmails(
 		string $value,
 	): string
 	{
