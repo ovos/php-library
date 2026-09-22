@@ -165,12 +165,6 @@ class Logger extends Service implements Writer
 		'otp',
 		'pin',
 		'hash',
-		// `sess` is westbahn's too, and belongs here rather than in the list
-		// above: these names are matched against a QUERY PARAMETER only (see
-		// removeFromUrl), never against a field in a bag — so `?sess=` is
-		// redacted while the console's own session_id column, which it
-		// correlates by, is untouched.
-		'sess',
 	];
 	
 	/**
