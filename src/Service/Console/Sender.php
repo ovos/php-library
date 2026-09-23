@@ -125,6 +125,14 @@ use const PREG_SPLIT_NO_EMPTY;
  *                                       # `php cli.php console files` (ovos/php-module-system) or
  *                                       # $sender->reportUntracked() — CLI only, never a web request;
  *                                       # needs files_enabled on the console project (403 says so).
+ *     shield:                           # OPTIONAL: the Shield (Ovos\Service\Console\Shield + the controller
+ *       detect: no                      # plugin Ovos\Plugins\Console\Shield in plugins.default.http). detect =
+ *       enforce: no                     # pull this project's live rules from the console and OBSERVE every
+ *       kill: no                        # request (report a match as shield_observe, block nothing); enforce =
+ *       dir: ''                         # answer 403 to a request a PROVEN rule matches (inert without detect);
+ *                                       # kill = off entirely, no network — the switch that needs no console;
+ *                                       # dir = where shield.json (the durable tier) lives, '' = the system temp
+ *                                       # dir. Needs url+key; APCu is the fast tier, the file alone works without.
  *
  * plus "- Console\Sender" in system.services.http and .cli lists.
  *
@@ -175,6 +183,10 @@ class Sender extends Service
 		'rate_limited',
 		'validation_refused',
 		'privileged_action',
+		// the Shield's own two (Ovos\Service\Console\Shield): a request a rule
+		// matched and let through, and one it refused
+		'shield_observe',
+		'shield_block',
 	];
 	
 	/**
@@ -708,6 +720,21 @@ class Sender extends Service
 		{
 			(new Rollup($this->config, self::cachePrefix($this->app)))
 				->observe($this->app);
+		}
+		catch(Throwable)
+		{
+			// never break the host application
+		}
+		
+		// the Shield's pull rides the same tick: one APCu read per request,
+		// a conditional GET only when its interval is due and under its own
+		// lock — the same silence contract
+		try
+		{
+			if($this->app !== null && $this->app->isInterfaceCli() === false)
+			{
+				(new Shield($this->config, self::cachePrefix($this->app)))->pull();
+			}
 		}
 		catch(Throwable)
 		{
