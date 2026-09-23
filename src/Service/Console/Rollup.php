@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service\Console;
 
 use APCUIterator;
+use Closure;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
@@ -169,12 +170,22 @@ class Rollup
 	 * the installs sharing this pool is writing. Sender passes it; a null
 	 * or empty one leaves the keys unnamespaced, as they were before.
 	 */
+	/**
+	 * The Shield's per-minute hook (docs: ovos/console wave8-shield-build.md,
+	 * S1 part d): fn(int $minute): array<string, int> — `so:<rule>` / `sb:<rule>`
+	 * fields the flush merges into the minute's counters before the fragment
+	 * is assembled. Null = none; the Sender passes the Shield adapter's
+	 */
+	protected ?Closure $extra;
+	
 	public function __construct(
 		protected ?ArrayObject $config,
 		?string $prefix = null,
+		?callable $extra = null,
 	)
 	{
 		$this->keyPrefix = self::keyPrefix($prefix);
+		$this->extra = $extra === null ? null : Closure::fromCallable($extra);
 	}
 	
 	/**
@@ -401,6 +412,41 @@ class Rollup
 		return self::DURATION_BUCKETS - 1;
 	}
 	
+	/**
+	 * The minute's counters plus what the hook adds for it — the Shield's
+	 * hits; a hook that throws adds nothing (the rollup never breaks the host)
+	 *
+	 * @param array<string, int> $fields
+	 * @return array<string, int>
+	 */
+	public static function withExtra(
+		array $fields,
+		?Closure $extra,
+		int $minute,
+	): array
+	{
+		if($extra === null)
+		{
+			return $fields;
+		}
+		try
+		{
+			foreach($extra($minute) as $field => $count)
+			{
+				if((int)$count > 0)
+				{
+					$fields[(string)$field] = ($fields[(string)$field] ?? 0) + (int)$count;
+				}
+			}
+		}
+		catch(Throwable)
+		{
+			// never break the host application
+		}
+		
+		return $fields;
+	}
+	
 	public static function assemble(
 		int $minute,
 		array $fields,
@@ -458,6 +504,17 @@ class Rollup
 			elseif(substr($field, 0, 2) === 'a:')
 			{
 				$payload['authed'][substr($field, 2)] = $count;
+			}
+			// the Shield's per-rule hits (the kernel store's counters, merged in
+			// by the flush hook): two optional sections the console folds beside
+			// the request counters — absent when no rule fired
+			elseif(substr($field, 0, 3) === 'so:')
+			{
+				$payload['shield_observe'][substr($field, 3)] = $count;
+			}
+			elseif(substr($field, 0, 3) === 'sb:')
+			{
+				$payload['shield_block'][substr($field, 3)] = $count;
 			}
 		}
 		
@@ -631,7 +688,7 @@ class Rollup
 				continue;
 			}
 			
-			$this->send($this->payload($entryMinute, $fields));
+			$this->send($this->payload($entryMinute, self::withExtra($fields, $this->extra, $entryMinute)));
 			$shipped++;
 		}
 		

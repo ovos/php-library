@@ -14,8 +14,11 @@ use Ovos\Test;
 use Ovos\Test\Internal;
 
 use function class_exists;
+use function apcu_enabled;
 use function count;
+use function function_exists;
 use function is_file;
+use function ksort;
 use function str_contains;
 use function str_starts_with;
 use function sys_get_temp_dir;
@@ -158,6 +161,37 @@ class Shield extends Test
 			&& str_starts_with($a->file(), $this->dir()) && str_contains($a->file(), '/shield-')
 			&& str_starts_with($elsewhere->file(), $this->dir() . '/elsewhere/shield-')
 			&& str_contains((new Subject($this->config([])))->file(), Subject::DIR) === false;
+	}
+	
+	/**
+	 * RULE: hits() hands the Rollup's hook the kernel store's counters of one
+	 * minute as `so:<id>` / `sb:<id>` fields — taken once, zero outcomes left
+	 * out — and nothing while the shield is not enabled. Skipped without APCu
+	 * (the counters live there alone). Falsify: read without taking — every
+	 * minute's fragment re-ships the same hits and the overview doubles.
+	 */
+	public function theHitsLeaveTheStoreOnceAsRollupFields(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			return true;
+		}
+		$subject = $this->subject(['detect' => true], 'install-hits-' . uniqid());
+		$store = $subject->kernel()->store();
+		$minute = 29833333;
+		$store->hit($minute, 5, 'observe');
+		$store->hit($minute, 5, 'observe');
+		$store->hit($minute, 5, 'block');
+		$store->hit($minute, 6, 'observe');
+		$store->hit($minute + 1, 5, 'observe');
+		$taken = $subject->hits($minute);
+		ksort($taken);
+		$off = new Subject($this->config(['detect' => false]), 'install-hits-off');
+		
+		return $taken === ['sb:5' => 1, 'so:5' => 2, 'so:6' => 1]
+			&& $subject->hits($minute) === []
+			&& $subject->hits($minute + 1) === ['so:5' => 1]
+			&& $off->hits($minute) === [];
 	}
 	
 	/**

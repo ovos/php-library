@@ -718,7 +718,12 @@ class Sender extends Service
 		// the same silence contract, so it runs before anything can bail
 		try
 		{
-			(new Rollup($this->config, self::cachePrefix($this->app)))
+			// the Shield's per-rule hits ride the fragment (the kernel store's
+			// counters for the minute being shipped) — the hook costs nothing
+			// while the shield is off
+			$shield = new Shield($this->config, self::cachePrefix($this->app));
+			(new Rollup($this->config, self::cachePrefix($this->app),
+				static fn(int $minute): array => $shield->hits($minute)))
 				->observe($this->app);
 		}
 		catch(Throwable)

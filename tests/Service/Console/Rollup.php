@@ -30,6 +30,34 @@ use function str_repeat;
 class Rollup extends Test
 {
 	/**
+	 * RULE: the Shield's hits ride the fragment — the flush hook's `so:<id>` /
+	 * `sb:<id>` fields join the minute's counters (a throwing hook adds
+	 * nothing) and assemble() maps them into the shield_observe /
+	 * shield_block sections, absent when no rule fired. Falsify: assemble the
+	 * two prefixes as routes — `r:so:203` ships and the console refuses the
+	 * whole fragment as a route key outside the vocabulary.
+	 */
+	public function theShieldHitsRideTheFragment(): bool
+	{
+		$fields = ConsoleRollup::withExtra(['requests' => 3, 's:200' => 3],
+			static fn(int $minute): array => ['so:203' => 4, 'sb:203' => 1, 'so:7' => 0, 'minute' => $minute],
+			29833333);
+		$payload = ConsoleRollup::assemble(29833333, $fields);
+		$plain = ConsoleRollup::assemble(29833333, ['requests' => 3]);
+		$broken = ConsoleRollup::withExtra(['requests' => 3], static function(): array
+		{
+			throw new \RuntimeException('no apcu');
+		}, 29833333);
+		
+		return $fields === ['requests' => 3, 's:200' => 3, 'so:203' => 4, 'sb:203' => 1, 'minute' => 29833333]
+			&& $payload['shield_observe'] === ['203' => 4] && $payload['shield_block'] === ['203' => 1]
+			&& $payload['requests'] === 3 && $payload['routes'] === []
+			&& isset($plain['shield_observe']) === false && isset($plain['shield_block']) === false
+			&& $broken === ['requests' => 3]
+			&& ConsoleRollup::withExtra(['requests' => 1], null, 1) === ['requests' => 1];
+	}
+	
+	/**
 	 * Rollups are opt-in TWICE (here and on the console project) and need
 	 * the direct transport: an OTLP-only sender has no url/key and exports
 	 * console.rollup.requests through its collector instead.
@@ -257,7 +285,7 @@ class Rollup extends Test
 			&& ConsoleRollup::isStream(['Link: </sse>; rel="text/event-stream"']) === false
 			&& ConsoleRollup::isStream([]) === false;
 	}
-
+	
 	/**
 	 * RULE: every APCu key carries the install's configured cache prefix.
 	 * APCu belongs to the whole FPM pool and a pool can serve several
@@ -273,7 +301,7 @@ class Rollup extends Test
 	{
 		$prefix = static fn(?string $configured): string
 			=> (new ConsoleRollup(null, $configured))->getPrefix();
-
+		
 		return $prefix('shop') === 'shop:' . ConsoleRollup::PREFIX
 			&& $prefix('shop') !== $prefix('tenant-b')
 			&& $prefix(null) === ConsoleRollup::PREFIX

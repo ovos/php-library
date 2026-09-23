@@ -180,6 +180,37 @@ class Shield
 		return $this->kernel()->handle($facts, $this->consent());
 	}
 	
+	/**
+	 * The rules' hits of one minute as rollup fields — `so:<id>` observed,
+	 * `sb:<id>` blocked — taken from the kernel store (APCu; once), for the
+	 * Rollup's flush hook. Nothing while the shield is not enabled
+	 *
+	 * @return array<string, int>
+	 */
+	public function hits(
+		int $minute,
+	): array
+	{
+		if($this->isEnabled() === false)
+		{
+			return [];
+		}
+		$fields = [];
+		foreach($this->kernel()->store()->takeHits($minute) as $id => $counts)
+		{
+			if(($counts['observe'] ?? 0) > 0)
+			{
+				$fields['so:' . $id] = (int)$counts['observe'];
+			}
+			if(($counts['block'] ?? 0) > 0)
+			{
+				$fields['sb:' . $id] = (int)$counts['block'];
+			}
+		}
+		
+		return $fields;
+	}
+	
 	/** the conditional GET on the host's tick; `off` when the shield is not enabled */
 	public function pull(): string
 	{
