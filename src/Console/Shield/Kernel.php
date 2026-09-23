@@ -49,7 +49,8 @@ declare(strict_types=1);
  * value, ci}. Literal ops fold ASCII only; regex runs as `~…~D[i]`, never
  * `u` — the two semantics the console's conformance corpus pins.
  *
- * PHP 8.1 floor (the WordPress plugin's). The console's own suite tests this
+ * PHP 8.3 floor (the WordPress plugin's, since 0.7.0 — MG 2026-09-23: 8.1 need
+ * not be supported). The console's own suite tests this
  * file; consumers keep it byte-identical (sha1-compare after sync) and load
  * it with require_once — like any PHP class file, a second include is a
  * fatal error (the classes bind at compile time, so no guard can help).

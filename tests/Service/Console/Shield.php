@@ -110,6 +110,30 @@ class Shield extends Test
 	}
 	
 	/**
+	 * RULE: without an injected transport the adapter hands the kernel the
+	 * framework's stream client, in the kernel's contract — a host that does
+	 * not answer is `status 0` with nothing thrown (best-effort), and the
+	 * headers come back as the kernel reads them: lowercase names, the last
+	 * hop's values, the status lines dropped. Falsify: keep the kernel's
+	 * curl as the default — a host without ext-curl and with allow_url_fopen
+	 * off pulls nothing and nobody is told why.
+	 */
+	public function theFrameworksStreamClientIsTheDefaultTransport(): bool
+	{
+		$subject = new Subject($this->config(['detect' => true]), 'install-t');
+		$this->paths[] = $subject->file();
+		$unreachable = $subject->transport('https://console.invalid/api/v1/shield', ['X-Console-Key: k'], 300);
+		$headers = Subject::headersOf(['wrapper_data' => ['HTTP/1.1 302 Found', 'Location: /elsewhere', 'HTTP/1.1 200 OK',
+			'X-Shield-Sha256: abc123', 'Content-Type: application/json', 'not a header line']]);
+		
+		return $unreachable === ['status' => 0, 'headers' => [], 'body' => '']
+			&& $headers === ['x-shield-sha256' => 'abc123', 'content-type' => 'application/json']
+			&& Subject::headersOf(null) === []
+			// the pull through the default transport on an unreachable console: failed, nothing thrown, the rules kept
+			&& $subject->pull() === Kernel::PULL_FAILED;
+	}
+	
+	/**
 	 * RULE: the shield runs only with the Sender's direct transport (console
 	 * enabled, url, key) AND `shield.detect` on AND `shield.kill` off; an
 	 * absent `shield` block is off, so an upgrade never starts pulling on
