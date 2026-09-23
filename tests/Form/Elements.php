@@ -339,7 +339,7 @@ class Elements extends Test
 		$stored = static function(mixed $value): array
 		{
 			$form = new Json;
-			$form->period->asInteger('must be a whole number of minutes')
+			$form->period->asInteger('between 1 and 10080', 'must be a whole number of minutes')
 				->addValidator(new Validator\Range(1, 10080, message: 'between 1 and 10080'));
 			$form->setValues(['period' => $value]);
 			$valid = $form->isValid();
@@ -353,7 +353,26 @@ class Elements extends Test
 			&& $stored(null) === [true, null]
 			&& $stored(5.7) === [false, 'must be a whole number of minutes']
 			&& $stored(0.5) === [false, 'between 1 and 10080']
-			&& $stored('12abc') === [false, '"period" must be a number.'];
+			// the gate's text is the first argument, as asNumber() has it
+			&& $stored('12abc') === [false, 'between 1 and 10080'];
+	}
+	
+	/** one message for the field when the step needs no text of its own; the defaults without any */
+	public function asIntegerMessagesFallBack(): bool
+	{
+		$one = new Json;
+		$one->tier->asInteger('pick a tier from 1 to 4');
+		$one->setValues(['tier' => 2.5]);
+		$bare = new Json;
+		$bare->tier->asInteger();
+		$bare->setValues(['tier' => 2.5]);
+		$junk = new Json;
+		$junk->tier->asInteger();
+		$junk->setValues(['tier' => 'x']);
+		
+		return $one->isValid() === false && $one->getErrorMessages()['tier'] === 'pick a tier from 1 to 4'
+			&& $bare->isValid() === false && $bare->getErrorMessages()['tier'] === '"tier" must be a whole number.'
+			&& $junk->isValid() === false && $junk->getErrorMessages()['tier'] === '"tier" must be a number.';
 	}
 	
 	/** the number gate passes floats and stores them as floats */
