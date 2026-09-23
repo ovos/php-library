@@ -6,9 +6,14 @@ namespace Ovos\Form;
 use Ovos\Exception;
 use Ovos\Form;
 
+use function array_filter;
 use function count;
+use function implode;
+use function in_array;
 use function is_array;
 use function sprintf;
+use function strtolower;
+use function trim;
 
 /**
  * Element
@@ -427,6 +432,35 @@ class Element
 		
 		return $this->addCast(static fn(mixed $value): ?int
 			=> $value === null || $value === '' ? null : (int)$value);
+	}
+	
+	/**
+	 * Type the element as one of a closed list: the Text gate, then the value
+	 * trimmed and lowercased and refused unless it is one of $choices — a
+	 * select's value, so anything else is a tampered payload, not a typo to
+	 * repair. $message answers both the wrong shape and the wrong word, and
+	 * defaults to "must be one of …" naming the list. Put '' in $choices when
+	 * "none" is an answer; an explicit null is read as ''.
+	 *
+	 * @param list<string> $choices lowercase
+	 */
+	public function asChoice(
+		array $choices,
+		?string $message = null,
+	): static
+	{
+		$message ??= 'must be one of ' . implode(', ', array_filter($choices, static fn(string $choice): bool => $choice !== ''));
+		
+		return $this->asText($message)
+			->addNormalizer(
+				static function(mixed $value) use ($choices): ?string
+				{
+					$token = strtolower(trim((string)($value ?? '')));
+					
+					return in_array($token, $choices, true) ? $token : null;
+				},
+				$message,
+			);
 	}
 	
 	/**

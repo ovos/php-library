@@ -357,6 +357,35 @@ class Elements extends Test
 			&& $stored('12abc') === [false, 'between 1 and 10080'];
 	}
 	
+	/**
+	 * asChoice — a closed list: trimmed and lowercased onto a choice, refused
+	 * off the list with the message (both for a wrong word and a wrong
+	 * shape), '' an answer only when listed, and a default message naming the
+	 * choices
+	 */
+	public function asChoiceIsAClosedList(): bool
+	{
+		$stored = static function(mixed $value, array $choices, ?string $message = null): array
+		{
+			$form = new Json;
+			$form->format->asChoice($choices, $message);
+			$form->setValues(['format' => $value]);
+			$valid = $form->isValid();
+			
+			return [$valid, $valid ? $form->getPresentValues()['format'] : ($form->getErrorMessages()['format'] ?? null)];
+		};
+		$formats = ['slack', 'telegram'];
+		
+		return $stored(' Telegram ', $formats) === [true, 'telegram']
+			&& $stored('teams', $formats, 'unknown format') === [false, 'unknown format']
+			&& $stored(['slack'], $formats, 'unknown format') === [false, 'unknown format']
+			&& $stored('teams', $formats) === [false, 'must be one of slack, telegram']
+			&& $stored('', $formats) === [false, 'must be one of slack, telegram']
+			&& $stored('', ['', 'github']) === [true, '']
+			&& $stored(null, ['', 'github']) === [true, '']
+			&& $stored('x', ['', 'github']) === [false, 'must be one of github'];
+	}
+	
 	/** one message for the field when the step needs no text of its own; the defaults without any */
 	public function asIntegerMessagesFallBack(): bool
 	{
