@@ -13,15 +13,22 @@ use Ovos\Console\Shield\Kernel;
 use Ovos\Console\Shield\Store;
 use Ovos\Console\Shield\Verdict;
 use Ovos\Service\Auth;
+use Ovos\Stream\Request;
 use Throwable;
 
 use function class_exists;
+use function explode;
 use function file_get_contents;
 use function hash;
 use function is_array;
 use function is_dir;
+use function is_string;
+use function max;
 use function mkdir;
 use function rtrim;
+use function str_contains;
+use function str_starts_with;
+use function strtolower;
 use function substr;
 use function sys_get_temp_dir;
 use function trim;
@@ -46,6 +53,12 @@ if(class_exists(Kernel::class, false) === false)
  * on the Sender's shutdown tick. The controller plugin
  * Ovos\Plugins\Console\Shield turns `block` into the application's 403.
  *
+ * The pull travels over the framework's own HTTP client (Ovos\Stream\Request:
+ * the timeout on both phases, redirects off, a response cap, best-effort —
+ * a console that does not answer is a null response, never a warning in
+ * the host's log) unless a transport was injected; the kernel's own curl
+ * stays the default for a host with nothing better (MG 2026-09-23).
+ *
  *   console:
  *     shield:
  *       detect: no    # pull the rules and OBSERVE every request: a match is reported, nothing is blocked
@@ -67,6 +80,9 @@ class Shield
 	/** the temp-dir folder the durable tier falls back to */
 	public const string DIR = 'ovos-console-shield';
 	
+	/** the most a pull reads: the door caps a payload at 25 rules of 600 bytes — a megabyte is a wrong door */
+	public const int RESPONSE_LIMIT = 1_048_576;
+	
 	protected ?Kernel $kernel = null;
 	
 	protected ?Closure $http;
@@ -76,7 +92,7 @@ class Shield
 	/**
 	 * @param ?ArrayObject $config the `console` config block
 	 * @param ?string $prefix the install's cache prefix (Sender::cachePrefix)
-	 * @param ?callable $http a transport for tests; null = the kernel's own
+	 * @param ?callable $http a transport for tests; null = the framework's stream client (transport())
 	 * @param ?callable $report where a match goes — the Sender's reportRefusal; null = counted, not reported
 	 */
 	public function __construct(
@@ -149,9 +165,89 @@ class Shield
 			(string)$this->config?->url,
 			(string)$this->config?->key,
 			new Store($this->file(), $this->keyPrefix()),
-			$this->http,
+			$this->http ?? $this->transport(...),
 			$this->report,
 		);
+	}
+	
+	/**
+	 * The kernel's transport contract over Ovos\Stream\Request — GET, the
+	 * kernel's headers and user agent, the timeout on the connection and the
+	 * read alike, no redirect (the door answers where it is asked), the body
+	 * capped, best-effort: a failure of any kind is `status 0`, which the
+	 * kernel reads as `failed` and keeps the rules it has. Never throws
+	 *
+	 * @param list<string> $headers `Name: value` lines
+	 * @return array{status: int, headers: array<string, string>, body: string}
+	 */
+	public function transport(
+		string $url,
+		array $headers,
+		int $timeoutMs,
+	): array
+	{
+		try
+		{
+			$request = (new Request($url))
+				->setMethod(Request::METHOD_GET)
+				->setTimeout(max(1, $timeoutMs) / 1000)
+				->setIgnoreErrors()
+				->setFollowRedirects(0)
+				->setBestEffort()
+				->setResponseLimit(self::RESPONSE_LIMIT)
+				->setUserAgent(Kernel::USER_AGENT);
+			foreach($headers as $header)
+			{
+				$request->addHeader((string)$header);
+			}
+			$request->invoke();
+			$status = $request->getResponseStatusCode();
+			if($status === null)
+			{
+				return ['status' => 0, 'headers' => [], 'body' => ''];
+			}
+			
+			return ['status' => $status, 'headers' => self::headersOf($request->getResponseMetaData()), 'body' => (string)$request->getResponse()];
+		}
+		catch(Throwable)
+		{
+			return ['status' => 0, 'headers' => [], 'body' => ''];
+		}
+	}
+	
+	/**
+	 * The response headers as the kernel reads them — lowercase names, the
+	 * last hop's values — off the stream's meta data (`wrapper_data`: one
+	 * status line per hop, then the headers)
+	 *
+	 * @return array<string, string>
+	 */
+	public static function headersOf(
+		?array $meta,
+	): array
+	{
+		$headers = [];
+		foreach((array)($meta['wrapper_data'] ?? []) as $line)
+		{
+			if(is_string($line) === false)
+			{
+				continue;
+			}
+			if(str_starts_with($line, 'HTTP/'))
+			{
+				// a new hop: what the hop before said no longer applies
+				$headers = [];
+				
+				continue;
+			}
+			if(str_contains($line, ':'))
+			{
+				[$name, $value] = explode(':', $line, 2);
+				$headers[strtolower(trim($name))] = trim($value);
+			}
+		}
+		
+		return $headers;
 	}
 	
 	/** the request as the kernel reads it — the adapter reads the superglobals, the kernel never does */
