@@ -65,6 +65,13 @@ class Element
 	protected ?Validator\Gate $gate = null;
 	
 	/**
+	 * asInteger()'s whole-number check — kept apart from the validators so it
+	 * runs AFTER them: a Range on the field answers 0.5 with its bounds, the
+	 * more useful message, and the step error comes only when the bounds hold
+	 */
+	protected ?Validator\WholeNumber $whole = null;
+	
+	/**
 	 * @var Error[]
 	 */
 	protected array $errors = [];
@@ -393,6 +400,26 @@ class Element
 	}
 	
 	/**
+	 * Type the element as a whole number, the storage form an INT column
+	 * wants: the Number gate (the type — "12abc" is a field error), a
+	 * whole-number check (the step — 5.7 is refused, 60.0 is fine), and the
+	 * cast to int. NULL and '' pass as "unset" and store as NULL; pair with
+	 * Range(nullable: false) for a NOT NULL column. $message is the step's
+	 * text ("must be a whole number of minutes"); the check runs after the
+	 * element's own validators, so a Range's bounds are reported first.
+	 */
+	public function asInteger(
+		?string $message = null,
+	): static
+	{
+		$this->gate = new Validator\Number;
+		$this->whole = new Validator\WholeNumber($message);
+		
+		return $this->addCast(static fn(mixed $value): ?int
+			=> $value === null || $value === '' ? null : (int)$value);
+	}
+	
+	/**
 	 * Type the element as an on/off switch. No gate and no rules: anything
 	 * truthy counts as on — a JSON true, an HTML checkbox's "on", a 1 — and
 	 * the storage form is 1/0, which is what a TINYINT column wants. A sent
@@ -487,6 +514,19 @@ class Element
 			{
 				$isValid = false;
 				$this->addErrors($validator->getErrors());
+			}
+		}
+		
+		// asInteger()'s step, last — only once the other rules held, so the
+		// field carries one error and it is the most useful one
+		if($isValid && $this->whole !== null)
+		{
+			$this->whole->setElement($this);
+			$this->whole->clearErrors();
+			if($this->whole->isValid($value) === false)
+			{
+				$isValid = false;
+				$this->addErrors($this->whole->getErrors());
 			}
 		}
 		

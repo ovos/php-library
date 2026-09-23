@@ -328,6 +328,34 @@ class Elements extends Test
 			&& $form->getValues()['installation'] === '0';
 	}
 	
+	/**
+	 * asInteger — the INT column's field: '15' stores as 15, 60.0 as 60, ''
+	 * and null as NULL; 5.7 is refused with the step's message; junk is the
+	 * gate's error; a Range on the field reports its bounds first — 0.5 is
+	 * "between", not "whole"
+	 */
+	public function asIntegerIsTheIntColumnsField(): bool
+	{
+		$stored = static function(mixed $value): array
+		{
+			$form = new Json;
+			$form->period->asInteger('must be a whole number of minutes')
+				->addValidator(new Validator\Range(1, 10080, message: 'between 1 and 10080'));
+			$form->setValues(['period' => $value]);
+			$valid = $form->isValid();
+			
+			return [$valid, $valid ? $form->getPresentValues()['period'] : ($form->getErrorMessages()['period'] ?? null)];
+		};
+		
+		return $stored('15') === [true, 15]
+			&& $stored(60.0) === [true, 60]
+			&& $stored('') === [true, null]
+			&& $stored(null) === [true, null]
+			&& $stored(5.7) === [false, 'must be a whole number of minutes']
+			&& $stored(0.5) === [false, 'between 1 and 10080']
+			&& $stored('12abc') === [false, '"period" must be a number.'];
+	}
+	
 	/** the number gate passes floats and stores them as floats */
 	public function numberStoresFloats(): bool
 	{
