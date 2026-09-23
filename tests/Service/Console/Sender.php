@@ -235,7 +235,7 @@ class Sender extends Test
 			&& $cappedIsSilent
 			&& $disabled->queueCount() === 0;
 	}
-
+	
 	/**
 	 * RULE: the cap counts per INSTALL, not per pool. APCu belongs to the
 	 * whole FPM pool and a pool can serve several installs, so one key for
@@ -248,7 +248,7 @@ class Sender extends Test
 	public function theSecurityCapCountsPerInstall(): bool
 	{
 		$minute = 29248320;
-
+		
 		return ConsoleSender::securityKey('shop', $minute)
 				=== 'shop:' . ConsoleSender::SECURITY_PREFIX . $minute
 			&& ConsoleSender::securityKey('shop', $minute)
@@ -570,6 +570,35 @@ class Sender extends Test
 			&& $multipart === '' && $read === ''
 			&& ConsoleSender::BODY_MAX === 16384
 			&& in_array('accept-language', ConsoleSender::REQUEST_HEADERS, true);
+	}
+	
+	/**
+	 * The request data keeps its people and loses its secrets (console
+	 * docs/plans/reveal-everything.md): an e-mail and a username in $_GET and
+	 * $_POST travel as sent — the console masks them and keeps the original
+	 * encrypted — while a password is dropped here as always
+	 */
+	public function theRequestDataKeepsItsPeopleAndLosesItsSecrets(): bool
+	{
+		$sender = $this->makeSender();
+		$get = $_GET;
+		$post = $_POST;
+		$_GET = ['ref' => 'mail', 'email' => 'anna@example.at'];
+		$_POST = ['billing_email' => 'anna.berger@example.com', 'username' => 'annab', 'password' => 'hunter22'];
+		try
+		{
+			$request = $sender->request(new Logger);
+		}
+		finally
+		{
+			$_GET = $get;
+			$_POST = $post;
+		}
+		
+		return ($request['get']['email'] ?? '') === 'anna@example.at'
+			&& ($request['post']['billing_email'] ?? '') === 'anna.berger@example.com'
+			&& ($request['post']['username'] ?? '') === 'annab'
+			&& ($request['post']['password'] ?? '') === '[redacted]';
 	}
 	
 	protected function makeSender(

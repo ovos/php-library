@@ -1059,15 +1059,21 @@ class Sender extends Service
 	{
 		$request = [];
 		
+		// the request data keeps its e-mail addresses and usernames: the
+		// console masks them on arrival and keeps the original encrypted for
+		// an audited reveal and a replay (console docs/plans/reveal-everything.md).
+		// Secrets are dropped here exactly as always
+		$bags = $logger->keepingIdentities();
+		
 		try
 		{
 			if(!empty($_GET))
 			{
-				$request['get'] = $logger->remove($_GET);
+				$request['get'] = $bags->remove($_GET);
 			}
 			if(!empty($_POST))
 			{
-				$request['post'] = $logger->remove($_POST);
+				$request['post'] = $bags->remove($_POST);
 			}
 			
 			$contentType = trim((string)($_SERVER['CONTENT_TYPE'] ?? ''));
@@ -1084,7 +1090,7 @@ class Sender extends Service
 			if($body !== '')
 			{
 				$reduced = Body::redact(
-					$logger,
+					$bags,
 					$body,
 					$contentType,
 					$this->requestBodyMode(),
