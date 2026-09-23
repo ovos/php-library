@@ -138,6 +138,36 @@ class Logger extends Test
 			&& $out['contact'] === 's***o**@gmail.com';
 	}
 	
+	/**
+	 * keepingIdentities() — the copy the console's request data goes through
+	 * (console docs/plans/reveal-everything.md): every secret is dropped as
+	 * always, in the walk and in free text, while e-mail addresses and
+	 * usernames travel as sent; the logger it was made from still masks
+	 */
+	public function keepingIdentitiesDropsSecretsAndKeepsPeople(): bool
+	{
+		$logger = new Subject;
+		$data = [
+			'email' => 'john.doe@example.com',
+			'username' => 'marcin',
+			'password' => 'hunter22',
+			'opts' => ['api_key' => 'k-1', 'contact' => 'bob@x.co'],
+			'note' => 'user=marcin password=hunter22 mail bob@x.co',
+		];
+		$kept = $logger->keepingIdentities()->remove($data);
+		$text = $logger->keepingIdentities()->removeText('user=marcin password=hunter22 mail bob@x.co');
+		$masked = $logger->remove($data);
+		
+		return $kept['email'] === 'john.doe@example.com'
+			&& $kept['username'] === 'marcin'
+			&& $kept['password'] === '[redacted]'
+			&& $kept['opts'] === ['api_key' => '[redacted]', 'contact' => 'bob@x.co']
+			&& $text === 'user=marcin password=[redacted] mail bob@x.co'
+			// the original logger is untouched
+			&& $masked['email'] === 'j***.***@example.com'
+			&& $masked['username'] !== 'marcin';
+	}
+	
 	public function masksEveryEmailInFreeText(): bool
 	{
 		$out = (new Subject)->remove([

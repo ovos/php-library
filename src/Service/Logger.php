@@ -181,6 +181,29 @@ class Logger extends Service implements Writer
 		'~^login$~i',
 	];
 	
+	/**
+	 * Whether remove() and removeText() mask identities — e-mail addresses
+	 * and username fields — beside dropping secrets. Off only on the copy
+	 * keepingIdentities() makes for the console's REQUEST data
+	 */
+	protected bool $maskIdentities = true;
+	
+	/**
+	 * This logger for the request data a console report carries (its get and
+	 * post bags and its body): secrets are dropped exactly as always, but
+	 * e-mail addresses and usernames travel as sent — the console masks them
+	 * on arrival and keeps the original encrypted for an audited reveal and a
+	 * replay (console docs/plans/reveal-everything.md). A copy, so every
+	 * other caller — messages, URLs, arguments, extras — still masks.
+	 */
+	public function keepingIdentities(): static
+	{
+		$copy = clone $this;
+		$copy->maskIdentities = false;
+		
+		return $copy;
+	}
+	
 	public function addRemove(
 		array $remove,
 	): static
@@ -333,8 +356,9 @@ class Logger extends Service implements Writer
 	
 	/**
 	 * Scrubs request-style data: secret fields are dropped, username fields
-	 * and e-mail addresses (in any field) are anonymized. The console scrubs
-	 * again server-side as a backstop.
+	 * and e-mail addresses (in any field) are anonymized — unless this is the
+	 * keepingIdentities() copy, which drops the secrets alone. The console
+	 * scrubs again server-side as a backstop.
 	 */
 	public function remove(
 		array $data,
@@ -358,7 +382,7 @@ class Logger extends Service implements Writer
 				continue;
 			}
 			
-			if(is_string($value) === false)
+			if(is_string($value) === false || $this->maskIdentities === false)
 			{
 				continue;
 			}
@@ -473,7 +497,7 @@ class Logger extends Service implements Writer
 		// segment only carries when it is naming a credential.
 		$segments = explode('/', $path);
 		$last = count($segments) - 1;
-
+		
 		for($i = 0; $i < $last; $i++)
 		{
 			if($segments[$i] !== ''
@@ -483,7 +507,7 @@ class Logger extends Service implements Writer
 				$segments[++$i] = '[redacted]';
 			}
 		}
-
+		
 		return (string)preg_replace_callback(
 			self::PATH_CANDIDATE,
 			fn(array $match): string => $this->looksSecret($match[2])
@@ -685,7 +709,7 @@ class Logger extends Service implements Writer
 		
 		if($names === [])
 		{
-			return $this->maskEmails($text);
+			return $this->maskIdentities ? $this->maskEmails($text) : $text;
 		}
 		
 		// the NAME half, shared by the three pair passes. The character class
@@ -733,6 +757,11 @@ class Logger extends Service implements Writer
 				=> '<' . $match[1] . $match[2] . '>[redacted]</' . $match[1] . '>',
 			$text,
 		);
+		
+		if($this->maskIdentities === false)
+		{
+			return $text;
+		}
 		
 		// the username rule, which never ran on text at all: `user=marcin` in
 		// a body or a message survived while $_POST['user'] was masked. The
