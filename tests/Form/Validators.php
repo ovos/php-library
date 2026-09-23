@@ -192,6 +192,29 @@ class Validators extends Test
 			&& $validator->isValid(7.5) === true;
 	}
 	
+	/**
+	 * WholeNumber — the step an INT column needs: 5.7 is refused, a JSON 60.0
+	 * is whole, unset passes, junk is not whole (and not this validator's to
+	 * report — the Number gate is)
+	 */
+	public function wholeNumberRefusesAFractionAndKeepsUnset(): bool
+	{
+		$validator = new Validator\WholeNumber('must be a whole number of minutes');
+		$this->element($validator, 'period');
+		
+		return $validator->isValid(5) === true
+			&& $validator->isValid('15') === true
+			&& $validator->isValid(60.0) === true
+			&& $validator->isValid(-3) === true
+			&& $validator->isValid(null) === true
+			&& $validator->isValid('') === true
+			&& $validator->isValid(5.7) === false
+			&& $validator->isValid('0.5') === false
+			&& Validator\WholeNumber::isWhole('12abc') === false
+			&& Validator\WholeNumber::isWhole(60.0) === true
+			&& Validator\WholeNumber::isWhole(null) === false;
+	}
+	
 	public function rangeBoundsAreOptional(): bool
 	{
 		$min = new Validator\Range(min: 0);
