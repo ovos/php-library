@@ -404,16 +404,26 @@ class Element
 	 * wants: the Number gate (the type — "12abc" is a field error), a
 	 * whole-number check (the step — 5.7 is refused, 60.0 is fine), and the
 	 * cast to int. NULL and '' pass as "unset" and store as NULL; pair with
-	 * Range(nullable: false) for a NOT NULL column. $message is the step's
-	 * text ("must be a whole number of minutes"); the check runs after the
-	 * element's own validators, so a Range's bounds are reported first.
+	 * Range(nullable: false) for a NOT NULL column.
+	 *
+	 * $message is the gate's text, exactly as asNumber() takes it, so a field
+	 * moving from asNumber() keeps its answer to junk; $wholeMessage is the
+	 * step's ("must be a whole number of minutes") and falls back to
+	 * $message — one field, one message, unless the two need to differ. The
+	 * step runs after the element's own validators, so a Range's bounds are
+	 * reported first.
 	 */
 	public function asInteger(
 		?string $message = null,
+		?string $wholeMessage = null,
 	): static
 	{
 		$this->gate = new Validator\Number;
-		$this->whole = new Validator\WholeNumber($message);
+		if($message !== null)
+		{
+			$this->gate->withMessage($message);
+		}
+		$this->whole = new Validator\WholeNumber($wholeMessage ?? $message);
 		
 		return $this->addCast(static fn(mixed $value): ?int
 			=> $value === null || $value === '' ? null : (int)$value);
