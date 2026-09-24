@@ -22,6 +22,7 @@ use function file_get_contents;
 use function hash;
 use function is_array;
 use function is_dir;
+use function is_scalar;
 use function is_string;
 use function max;
 use function mkdir;
@@ -260,6 +261,7 @@ class Shield
 			$_POST,
 			static fn(): string => (string)file_get_contents('php://input'),
 			self::isAuthed($app) === true,
+			user: self::identity($app),
 		);
 	}
 	
@@ -345,6 +347,38 @@ class Shield
 		catch(Throwable)
 		{
 			return null;
+		}
+	}
+	
+	/**
+	 * Who a `user`-keyed rate rule counts: the signed-in user's id, '' when
+	 * nobody is signed in or the app has no Auth — the rule is then skipped
+	 * for the request, never charged to one shared anonymous bucket
+	 */
+	public static function identity(
+		?Application $app,
+	): string
+	{
+		if($app === null)
+		{
+			return '';
+		}
+		try
+		{
+			$container = $app->getContainer();
+			if($container->isResolved(Auth::SYMBOL) === false)
+			{
+				return '';
+			}
+			$auth = $container->resolve(Auth::SYMBOL);
+			$user = $auth instanceof Auth ? $auth->getUser() : null;
+			$id = $user?->id;
+			
+			return is_scalar($id) ? (string)$id : '';
+		}
+		catch(Throwable)
+		{
+			return '';
 		}
 	}
 	

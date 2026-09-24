@@ -18,6 +18,7 @@ use function apcu_enabled;
 use function count;
 use function function_exists;
 use function is_file;
+use function in_array;
 use function ksort;
 use function str_contains;
 use function str_starts_with;
@@ -266,5 +267,46 @@ class Shield extends Test
 			&& $response->getHttpCode() === 403
 			&& ($response->getHeaders()[Plugin::HEADER_RULE]['value'] ?? null) === '2'
 			&& Subject::isAuthed(null) === null;
+	}
+	
+	/**
+	 * RULE: a proven rate rule under enforce is a 429 past its limit — the
+	 * plugin's response carries the status, `Retry-After` (at least 1) and
+	 * the rule, "Too Many Requests" — reported once as shield_rate; a match
+	 * block stays a 403 with no Retry-After; the service passes no user when
+	 * the app has none. Falsify: answer every block with 403 — a rate rule on
+	 * the search turns a busy minute into "Forbidden", and every client that
+	 * would have backed off and retried gives up instead.
+	 */
+	public function aProvenRateRuleUnderEnforceIsA429WithRetryAfter(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			return true;
+		}
+		$this->reports = [];
+		$rate = ['kind' => 'rate', 'rate' => ['key' => 'ip', 'limit' => 1, 'window' => 60]] + $this->rule(7, 'uri', 'prefix', '/search', Ruleset::MODE_PROVEN);
+		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => [$rate]];
+		$enforcing = $this->subject(['detect' => true, 'enforce' => true], 'install-rate-' . uniqid());
+		$enforcing->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord());
+		$search = Facts::fromServer(['REQUEST_URI' => '/search?q=x', 'HTTP_USER_AGENT' => 'Mozilla/5.0', 'REMOTE_ADDR' => '203.0.113.9']);
+		
+		$first = $enforcing->judge($search);
+		$second = $enforcing->judge($search);
+		$third = $enforcing->judge($search);
+		$limited = Plugin::response(7, $second->status(), $second->retryAfter);
+		$refused = Plugin::response(2);
+		
+		return $first->isPass()
+			&& $second->isBlock() && $second->status() === 429 && $second->retryAfter >= 1 && $second->retryAfter <= 60
+			&& $third->status() === 429
+			&& count($this->reports) === 1 && $this->reports[0][0] === Verdict::KIND_RATE && ($this->reports[0][2]['rule'] ?? 0) === 7
+			&& $limited->getHttpCode() === 429
+			&& ($limited->getHeaders()['Retry-After']['value'] ?? null) === (string)$second->retryAfter
+			&& ($limited->getHeaders()[Plugin::HEADER_RULE]['value'] ?? null) === '7'
+			&& $refused->getHttpCode() === 403 && isset($refused->getHeaders()['Retry-After']) === false
+			&& Plugin::response(7, 429, 0)->getHeaders()['Retry-After']['value'] === '1'
+			&& Subject::identity(null) === ''
+			&& in_array('shield_rate', \Ovos\Service\Console\Sender::SECURITY_KINDS, true);
 	}
 }
