@@ -183,10 +183,12 @@ class Sender extends Service
 		'rate_limited',
 		'validation_refused',
 		'privileged_action',
-		// the Shield's own two (Ovos\Service\Console\Shield): a request a rule
-		// matched and let through, and one it refused
+		// the Shield's own (Ovos\Service\Console\Shield): a request a rule
+		// matched and let through, one it refused, and a rate rule past its
+		// limit — observed, or answered with 429
 		'shield_observe',
 		'shield_block',
+		'shield_rate',
 	];
 	
 	/**

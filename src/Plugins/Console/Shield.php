@@ -11,6 +11,8 @@ use Ovos\Service\Console\Shield as Service;
 use Override;
 use Throwable;
 
+use function max;
+
 /**
  * The Shield's controller plugin: the request is judged before the action
  * runs (Ovos\Service\Console\Shield over the console's kernel), a match is
@@ -61,7 +63,7 @@ class Shield extends Plugin
 			$verdict = $shield->judge($shield->facts($this->app));
 			if($verdict->isBlock() && $verdict->rule !== null)
 			{
-				$this->app->setResponse(self::response((int)$verdict->rule['id']));
+				$this->app->setResponse(self::response((int)$verdict->rule['id'], $verdict->status(), $verdict->retryAfter));
 				$this->getController()->setDispatched(true);
 			}
 		}
@@ -71,15 +73,27 @@ class Shield extends Plugin
 		}
 	}
 	
-	/** the refusal — plain text, the rule named for the person who reads the response */
+	/**
+	 * The refusal — plain text, the rule named for the person who reads the
+	 * response: 403 for a match rule, 429 with Retry-After for a rate rule
+	 * past its limit (the verdict's status() and retryAfter)
+	 */
 	public static function response(
 		int $ruleId,
+		int $status = 403,
+		int $retryAfter = 0,
 	): Html
 	{
-		return (new Html("Forbidden\n"))
-			->setHttpCode(403)
+		$response = (new Html($status === 429 ? "Too Many Requests\n" : "Forbidden\n"))
+			->setHttpCode($status === 429 ? 429 : 403)
 			->setHeader('Content-Type', 'text/plain; charset=utf-8')
 			->setHeader(self::HEADER_RULE, (string)$ruleId);
+		if($status === 429)
+		{
+			$response->setHeader('Retry-After', (string)max(1, $retryAfter));
+		}
+		
+		return $response;
 	}
 	
 	/** where a match goes: the console Sender's security channel, when the app runs one */

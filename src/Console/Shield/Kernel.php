@@ -49,6 +49,18 @@ declare(strict_types=1);
  * value, ci}. Literal ops fold ASCII only; regex runs as `~…~D[i]`, never
  * `u` — the two semantics the console's conformance corpus pins.
  *
+ * Two kinds. A match rule (no `kind` key) decides on its own: observe or a
+ * 403. A rate rule (`kind: rate`, `rate: {key: ip|user|route, limit,
+ * window}`) is the same predicate plus a counter — over `limit` requests per
+ * `window` seconds for one address, one user or the route itself, it
+ * observes or answers 429 with Retry-After. The match rules are judged
+ * first; a rate rule counts only a request no match rule decided. Counting
+ * needs APCu (the file tier cannot count): without it rate rules are
+ * skipped, and the limit is per POOL — one server's APCu, not the site's.
+ * The pull names `X-Shield-Kinds: match,rate`, and the door serves rate
+ * rules only to a kernel that does, so a kernel older than them never reads
+ * a rate rule as a match rule.
+ *
  * PHP 8.3 floor (the WordPress plugin's, since 0.7.0 — MG 2026-09-23: 8.1 need
  * not be supported). The console's own suite tests this
  * file; consumers keep it byte-identical (sha1-compare after sync) and load
@@ -70,7 +82,9 @@ use function apcu_enabled;
 use function apcu_fetch;
 use function apcu_inc;
 use function apcu_store;
+use function ceil;
 use function class_exists;
+use function crc32;
 use function curl_close;
 use function curl_exec;
 use function curl_getinfo;
@@ -92,6 +106,7 @@ use function is_int;
 use function is_string;
 use function json_decode;
 use function json_encode;
+use function max;
 use function ord;
 use function preg_match;
 use function preg_quote;
@@ -152,6 +167,7 @@ final class Facts
 		public readonly string $ip,
 		public readonly bool $authed = false,
 		protected ?Closure $bodyReader = null,
+		public readonly string $user = '',
 	)
 	{
 	}
@@ -160,6 +176,7 @@ final class Facts
 	 * @param array<string, mixed> $server the request's server parameters ($_SERVER or a PSR-7 equivalent)
 	 * @param array<string, mixed> $post the parsed form fields ($_POST) — files never
 	 * @param ?callable(): string $input the raw body reader (fn() => file_get_contents('php://input'))
+	 * @param string $user who a `user`-keyed rate rule counts: the signed-in identity, or the name a login POST tries ('' = none, the rule is skipped)
 	 */
 	public static function fromServer(
 		array $server,
@@ -167,6 +184,7 @@ final class Facts
 		?callable $input = null,
 		bool $authed = false,
 		?string $ip = null,
+		string $user = '',
 	): self
 	{
 		$uri = is_string($server['REQUEST_URI'] ?? null) ? $server['REQUEST_URI'] : '/';
@@ -178,6 +196,7 @@ final class Facts
 			$ip ?? (is_string($server['REMOTE_ADDR'] ?? null) ? $server['REMOTE_ADDR'] : ''),
 			$authed,
 			self::bodyReader(is_string($server['CONTENT_TYPE'] ?? null) ? $server['CONTENT_TYPE'] : '', $post, $input),
+			$user,
 		);
 	}
 	
@@ -328,7 +347,7 @@ final class Consent
 	}
 }
 
-/** pass | observe | block — and why, for the log; never a response */
+/** pass | observe | block — and why, for the log; never a response (status() says which one the adapter sends) */
 final class Verdict
 {
 	public const PASS = 'pass';
@@ -341,15 +360,22 @@ final class Verdict
 	
 	public const KIND_BLOCK = 'shield_block';
 	
+	/** a rate rule's verdict, observed or answered — `mode` in the report says which */
+	public const KIND_RATE = 'shield_rate';
+	
 	/**
 	 * @param ?array<string, mixed> $rule the rule that matched, as served
 	 * @param string $matched the fragment that matched, capped by the kernel
+	 * @param int $count a rate rule's count in its window (the sliding estimate, rounded up)
+	 * @param int $retryAfter a rate rule's seconds to the window's end — the 429's Retry-After
 	 */
 	public function __construct(
 		public readonly string $outcome,
 		public readonly ?array $rule = null,
 		public readonly string $matched = '',
 		public readonly string $reason = '',
+		public readonly int $count = 0,
+		public readonly int $retryAfter = 0,
 	)
 	{
 	}
@@ -371,10 +397,31 @@ final class Verdict
 		return $this->outcome === self::BLOCK;
 	}
 	
+	public function isRate(): bool
+	{
+		return $this->rule !== null && Ruleset::isRate($this->rule);
+	}
+	
 	/** the security kind the report carries */
 	public function kind(): string
 	{
+		if($this->isRate())
+		{
+			return self::KIND_RATE;
+		}
+		
 		return $this->outcome === self::BLOCK ? self::KIND_BLOCK : self::KIND_OBSERVE;
+	}
+	
+	/** what the adapter answers: 403 for a match block, 429 (with Retry-After) for a rate block, 200 = carry on */
+	public function status(): int
+	{
+		if($this->isBlock() === false)
+		{
+			return 200;
+		}
+		
+		return $this->isRate() ? 429 : 403;
 	}
 }
 
@@ -418,6 +465,25 @@ final class Ruleset
 	public const MODE_PROVEN = 'proven';
 	
 	public const VALUE_MAX = 600;
+	
+	public const KIND_MATCH = 'match';
+	
+	public const KIND_RATE = 'rate';
+	
+	public const KINDS = [self::KIND_MATCH, self::KIND_RATE];
+	
+	/** one address · one user (Facts::$user) · the route itself, whoever asks */
+	public const RATE_KEY_IP = 'ip';
+	
+	public const RATE_KEY_USER = 'user';
+	
+	public const RATE_KEY_ROUTE = 'route';
+	
+	public const RATE_KEYS = [self::RATE_KEY_IP, self::RATE_KEY_USER, self::RATE_KEY_ROUTE];
+	
+	public const RATE_LIMIT_MAX = 1000000;
+	
+	public const RATE_WINDOW_MAX = 3600;
 	
 	/**
 	 * @param list<array<string, mixed>> $rules
@@ -542,7 +608,27 @@ final class Ruleset
 			&& in_array($rule['op'] ?? null, self::OPS, true)
 			&& is_string($rule['value'] ?? null) && trim($rule['value']) !== '' && strlen($rule['value']) <= self::VALUE_MAX
 			&& (isset($rule['ci']) === false || is_bool($rule['ci']))
-			&& is_string($rule['mode'] ?? null);
+			&& is_string($rule['mode'] ?? null)
+			&& (isset($rule['kind']) === false || in_array($rule['kind'], self::KINDS, true))
+			&& (self::isRate($rule) === false || self::rateWellFormed($rule['rate'] ?? null));
+	}
+	
+	/** no `kind` key is a match rule — every rule a kernel older than rate rules ever saw */
+	public static function isRate(
+		array $rule,
+	): bool
+	{
+		return ($rule['kind'] ?? self::KIND_MATCH) === self::KIND_RATE;
+	}
+	
+	public static function rateWellFormed(
+		mixed $rate,
+	): bool
+	{
+		return is_array($rate)
+			&& in_array($rate['key'] ?? null, self::RATE_KEYS, true)
+			&& is_int($rate['limit'] ?? null) && $rate['limit'] >= 1 && $rate['limit'] <= self::RATE_LIMIT_MAX
+			&& is_int($rate['window'] ?? null) && $rate['window'] >= 1 && $rate['window'] <= self::RATE_WINDOW_MAX;
 	}
 }
 
@@ -730,6 +816,48 @@ final class Store
 	}
 	
 	/**
+	 * One more request for a rate rule's key, and the count in its window: fixed
+	 * windows, two adjacent buckets — the current bucket's count plus the
+	 * previous one's weighted by how much of it the sliding window still
+	 * covers. Null without APCu: the file tier cannot count, and the rule is
+	 * skipped
+	 */
+	public function rate(
+		int $ruleId,
+		string $key,
+		int $window,
+		int $now,
+	): ?float
+	{
+		if($this->apcu === false || $window < 1)
+		{
+			return null;
+		}
+		$bucket = intdiv($now, $window);
+		$head = 'rate:' . $ruleId . ':' . crc32($key) . ':';
+		$ttl = 2 * $window + 1;
+		$name = $this->key($head . $bucket);
+		$current = apcu_inc($name, 1, $success, $ttl);
+		if($current === false || $success === false)
+		{
+			$current = apcu_add($name, 1, $ttl) ? 1 : (int)apcu_inc($name, 1, $success, $ttl);
+		}
+		$previous = apcu_fetch($this->key($head . ($bucket - 1)));
+		$covered = 1 - ($now - $bucket * $window) / $window;
+		
+		return (float)$current + (is_int($previous) ? $previous * $covered : 0.0);
+	}
+	
+	/** true the first time a name is claimed within its ttl — the report-once gate; false without APCu */
+	public function once(
+		string $name,
+		int $ttl,
+	): bool
+	{
+		return $this->apcu && apcu_add($this->key('once:' . $name), 1, max(1, $ttl));
+	}
+	
+	/**
 	 * A minute's counters, taken (fetched and deleted) for the fragment that
 	 * ships them: [rule id => ['observe' => n, 'block' => n]]
 	 *
@@ -788,6 +916,11 @@ final class Kernel
 	public const DOOR = '/api/v1/shield';
 	
 	public const USER_AGENT = 'ovos-console-shield/1';
+	
+	/** what this kernel reads — the door serves rate rules only to a pull that names them */
+	public const HEADER_KINDS = 'X-Shield-Kinds';
+	
+	public const KINDS = 'match,rate';
 	
 	public const PULL_OFF = 'off';
 	
@@ -863,11 +996,14 @@ final class Kernel
 	}
 	
 	/**
-	 * Pure over the cached ruleset. pass when consent says so, when there is
-	 * no store (and the next tick will pull), when the contract is unknown,
-	 * when the ruleset is past the ceiling; else the first rule that matches
+	 * Over the cached ruleset. pass when consent says so, when there is no
+	 * store (and the next tick will pull), when the contract is unknown, when
+	 * the ruleset is past the ceiling; else the first MATCH rule that matches
 	 * — in the door's order, proven first — as block (proven AND enforce) or
-	 * observe. A rule the engine cannot run matches nothing
+	 * observe; else the first RATE rule whose predicate matches and whose key
+	 * is over its limit, the same way. A rule the engine cannot run matches
+	 * nothing. The one side effect: a rate rule's predicate that matches
+	 * counts the request
 	 */
 	public function judge(
 		Facts $facts,
@@ -902,14 +1038,16 @@ final class Kernel
 				
 				return Verdict::pass('ceiling');
 			}
+			$rates = [];
 			foreach($ruleset->rules as $rule)
 			{
-				$subject = $facts->field((string)$rule['field']);
-				if($subject === null)
+				if(Ruleset::isRate($rule))
 				{
+					$rates[] = $rule;
+					
 					continue;
 				}
-				$matched = self::match($rule, $subject);
+				$matched = $this->matched($rule, $facts);
 				if($matched === null)
 				{
 					continue;
@@ -917,6 +1055,15 @@ final class Kernel
 				$blocks = ($rule['mode'] ?? '') === Ruleset::MODE_PROVEN && $consent->blocks();
 				
 				return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $rule, substr($matched, 0, self::MATCHED_MAX));
+			}
+			$now ??= time();
+			foreach($rates as $rule)
+			{
+				$verdict = $this->rated($rule, $facts, $consent, $now);
+				if($verdict !== null)
+				{
+					return $verdict;
+				}
 			}
 			
 			return Verdict::pass('no match');
@@ -929,7 +1076,58 @@ final class Kernel
 		}
 	}
 	
-	/** judge, count, report — the adapter turns block into its own 403 */
+	/** a rule's predicate over the request: the fragment, or null */
+	protected function matched(
+		array $rule,
+		Facts $facts,
+	): ?string
+	{
+		$subject = $facts->field((string)$rule['field']);
+		
+		return $subject === null ? null : self::match($rule, $subject);
+	}
+	
+	/**
+	 * A rate rule: its predicate, its key, one more in its window — a verdict
+	 * past the limit, else null. A `user` rule on a request with no user and a
+	 * store without APCu count nothing
+	 */
+	protected function rated(
+		array $rule,
+		Facts $facts,
+		Consent $consent,
+		int $now,
+	): ?Verdict
+	{
+		$matched = $this->matched($rule, $facts);
+		if($matched === null)
+		{
+			return null;
+		}
+		$rate = (array)$rule['rate'];
+		$key = match($rate['key'])
+		{
+			Ruleset::RATE_KEY_IP => $facts->ip,
+			Ruleset::RATE_KEY_USER => $facts->user,
+			default => '*',
+		};
+		if($key === '')
+		{
+			return null;
+		}
+		$window = (int)$rate['window'];
+		$count = $this->store->rate((int)$rule['id'], $key, $window, $now);
+		if($count === null || $count <= (int)$rate['limit'])
+		{
+			return null;
+		}
+		$blocks = ($rule['mode'] ?? '') === Ruleset::MODE_PROVEN && $consent->blocks();
+		
+		return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $rule, substr($matched, 0, self::MATCHED_MAX),
+			'over limit', (int)ceil($count), $window - ($now % $window));
+	}
+	
+	/** judge, count, report — the adapter turns block into its own 403, or a rate block into its 429 */
 	public function handle(
 		Facts $facts,
 		Consent $consent,
@@ -959,6 +1157,12 @@ final class Kernel
 		try
 		{
 			$rule = $verdict->rule;
+			if($verdict->isRate())
+			{
+				$this->reportRate($verdict, $facts);
+				
+				return;
+			}
 			($this->report)($verdict->kind(), sprintf('shield rule %d %s %s %s', (int)$rule['id'],
 				$verdict->isBlock() ? 'refused' : 'observed', $facts->method, substr($facts->path(), 0, 200)), [
 				'rule' => (int)$rule['id'],
@@ -977,6 +1181,50 @@ final class Kernel
 		{
 			$this->log('report failed: ' . $e->getMessage());
 		}
+	}
+	
+	/**
+	 * A rate verdict, ONCE per rule, key and window — the hits count every
+	 * request past the limit, the event says it started. Never "refused": the
+	 * console's alarm reads `shield rule N refused` as a match rule turning
+	 * people away, and a route ceiling doing its job is not that
+	 */
+	protected function reportRate(
+		Verdict $verdict,
+		Facts $facts,
+	): void
+	{
+		$rule = (array)$verdict->rule;
+		$rate = (array)$rule['rate'];
+		$window = (int)$rate['window'];
+		$key = match($rate['key'])
+		{
+			Ruleset::RATE_KEY_IP => $facts->ip,
+			Ruleset::RATE_KEY_USER => $facts->user,
+			default => '*',
+		};
+		// claimed until the window ends: the next window's first request past the limit reports again
+		if($this->store->once('rate:' . (int)$rule['id'] . ':' . crc32($key), max(1, $verdict->retryAfter)) === false)
+		{
+			return;
+		}
+		($this->report)(Verdict::KIND_RATE, sprintf('shield rule %d %s %s %s (%d/%d per %ds)', (int)$rule['id'],
+			$verdict->isBlock() ? 'limited' : 'over-limit', $facts->method, substr($facts->path(), 0, 200),
+			$verdict->count, (int)$rate['limit'], $window), [
+			'rule' => (int)$rule['id'],
+			'finding' => is_string($rule['finding'] ?? null) ? $rule['finding'] : '',
+			'cve' => is_string($rule['cve'] ?? null) ? $rule['cve'] : '',
+			'origin' => is_string($rule['origin'] ?? null) ? $rule['origin'] : '',
+			'field' => (string)$rule['field'],
+			'op' => (string)$rule['op'],
+			'mode' => (string)$rule['mode'],
+			'matched' => $verdict->matched,
+			'key' => (string)$rate['key'],
+			'limit' => (int)$rate['limit'],
+			'window' => $window,
+			'count' => $verdict->count,
+			'authed' => $facts->authed,
+		]);
 	}
 	
 	/** the uncapped per-rule counter for this minute */
@@ -1050,7 +1298,7 @@ final class Kernel
 		int $now,
 	): string
 	{
-		$headers = ['X-Console-Key: ' . $this->key, 'Accept: application/json'];
+		$headers = ['X-Console-Key: ' . $this->key, 'Accept: application/json', self::HEADER_KINDS . ': ' . self::KINDS];
 		if($current !== null && $current->digest !== '')
 		{
 			$headers[] = 'If-None-Match: "' . $current->digest . '"';
