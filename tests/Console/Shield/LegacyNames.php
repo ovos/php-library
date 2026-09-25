@@ -30,11 +30,18 @@ class LegacyNames extends Test
 	 */
 	public function theOldNamesAreTheNewClasses(): bool
 	{
+		// the old Kernel through the autoloader, as a caller reaches it — the
+		// other five were never autoloadable on their own, before or after
+		if(class_exists('Ovos\\Console\\Shield\\Kernel') === false)
+		{
+			return false;
+		}
+
 		foreach(['Facts', 'Consent', 'Verdict', 'Ruleset', 'Store', 'Kernel'] as $name)
 		{
 			$old = 'Ovos\\Console\\Shield\\' . $name;
 			$new = 'Ovos\\Codesafe\\Shield\\' . $name;
-			if(class_exists($old) === false || (new ReflectionClass($old))->getName() !== $new)
+			if(class_exists($old, false) === false || (new ReflectionClass($old))->getName() !== $new)
 			{
 				return false;
 			}
