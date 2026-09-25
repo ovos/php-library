@@ -8,6 +8,9 @@ use Ovos\Exception\Priority;
 use Ovos\Exception\RuntimeException;
 use Ovos\Logger\Traits\LogsEvents;
 use ReflectionMethod;
+use ReflectionNamedType;
+use ReflectionType;
+use ReflectionUnionType;
 use Throwable;
 
 use function array_column;
@@ -16,7 +19,14 @@ use function array_shift;
 use function class_exists;
 use function count;
 use function in_array;
+use function is_bool;
+use function is_float;
+use function is_int;
+use function is_numeric;
+use function is_scalar;
+use function is_string;
 use function method_exists;
+use function preg_match;
 use function str_starts_with;
 use function strpos;
 use function substr;
@@ -150,27 +160,94 @@ class Controller
 		foreach($methodParams as $key => $methodParam)
 		{
 			$valueKey = $named ? $methodParam->name : $key;
-			if(isset($requestParams[$valueKey])
-				&& ($type = $methodParam->getType()))
+			if(isset($requestParams[$valueKey]))
 			{
-				$typeName = $type->getName();
-				
-				if($typeName === 'int')
-				{
-					$requestParams[$valueKey] = (int)$requestParams[$valueKey];
-				}
-				else if($typeName === 'float')
-				{
-					$requestParams[$valueKey] = (float)$requestParams[$valueKey];
-				}
-				else if($typeName === 'bool')
-				{
-					$requestParams[$valueKey] = (bool)$requestParams[$valueKey];
-				}
+				$requestParams[$valueKey] = static::castParam($methodParam->getType(), $requestParams[$valueKey]);
 			}
 		}
 		
 		return $requestParams;
+	}
+	
+	/**
+	 * A request value (a string, or the true/false/null the router makes of
+	 * `yes`/`true`, `no`/`false` and `null`) cast for the action's parameter.
+	 *
+	 * A single type keeps the casts it always had: int, float and bool are
+	 * cast, anything else is handed over as it is. A union type (int|string,
+	 * string|bool, …) follows PHP's own coercion for unions: a value whose type
+	 * is already in the union stays as it is; otherwise the first of int (an
+	 * integer string, or a bool), float (a numeric string), string and bool
+	 * that the union holds and the value can become. A type it cannot read —
+	 * an intersection, a class — leaves the value alone, as before; the call
+	 * then fails or succeeds on PHP's own terms.
+	 */
+	public static function castParam(
+		?ReflectionType $type,
+		mixed $value,
+	): mixed
+	{
+		if($type instanceof ReflectionNamedType)
+		{
+			return match($type->getName())
+			{
+				'int' => (int)$value,
+				'float' => (float)$value,
+				'bool' => (bool)$value,
+				default => $value,
+			};
+		}
+		
+		if(($type instanceof ReflectionUnionType) === false || $value === null)
+		{
+			return $value;
+		}
+		
+		$names = [];
+		foreach($type->getTypes() as $member)
+		{
+			if($member instanceof ReflectionNamedType)
+			{
+				$names[$member->getName()] = true;
+			}
+		}
+		
+		$own = match(true)
+		{
+			is_int($value) => 'int',
+			is_float($value) => 'float',
+			is_string($value) => 'string',
+			is_bool($value) => 'bool',
+			default => null,
+		};
+		if($own === null
+			|| isset($names[$own])
+			|| isset($names['mixed'])
+			|| ($value === true && isset($names['true']))
+			|| ($value === false && isset($names['false'])))
+		{
+			return $value;
+		}
+		
+		$numeric = is_string($value) && is_numeric($value);
+		if(isset($names['int']) && (is_bool($value) || ($numeric && preg_match('/^\s*[+-]?\d+\s*$/', $value) === 1)))
+		{
+			return (int)$value;
+		}
+		if(isset($names['float']) && (is_bool($value) || is_int($value) || $numeric))
+		{
+			return (float)$value;
+		}
+		if(isset($names['string']) && is_scalar($value))
+		{
+			return is_bool($value) ? ($value ? '1' : '') : (string)$value;
+		}
+		if(isset($names['bool']))
+		{
+			return (bool)$value;
+		}
+		
+		return $value;
 	}
 	
 	public function setDispatchedAction(
