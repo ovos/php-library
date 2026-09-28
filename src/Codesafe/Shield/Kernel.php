@@ -85,7 +85,6 @@ use function apcu_store;
 use function ceil;
 use function class_exists;
 use function crc32;
-use function curl_close;
 use function curl_exec;
 use function curl_getinfo;
 use function curl_init;
@@ -95,6 +94,7 @@ use function file_get_contents;
 use function file_put_contents;
 use function function_exists;
 use function hash;
+use function http_get_last_response_headers;
 use function implode;
 use function in_array;
 use function inet_pton;
@@ -1444,8 +1444,9 @@ final class Kernel
 					CURLOPT_NOSIGNAL => true,
 				]);
 				$raw = curl_exec($curl);
+				// no curl_close(): a no-op since PHP 8.0 and deprecated from 8.5, where
+				// a host that throws on deprecations turned every pull into status 0
 				$status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-				curl_close($curl);
 				if(is_string($raw) === false)
 				{
 					return ['status' => 0, 'headers' => [], 'body' => ''];
@@ -1462,7 +1463,12 @@ final class Kernel
 			$body = @file_get_contents($url, false, $context);
 			$status = 0;
 			$parsed = [];
-			foreach($http_response_header ?? [] as $line)
+			// http_get_last_response_headers() from 8.4; the predefined
+			// $http_response_header, deprecated from 8.5 and gone in 9, before it
+			$lines = function_exists('http_get_last_response_headers')
+				? (http_get_last_response_headers() ?? [])
+				: ($http_response_header ?? []);
+			foreach($lines as $line)
 			{
 				if(preg_match('~^HTTP/\S+\s+(\d{3})~', $line, $m) === 1)
 				{
