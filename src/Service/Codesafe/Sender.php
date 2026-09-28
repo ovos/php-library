@@ -7,7 +7,7 @@ use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
 use Ovos\Client;
-use Ovos\Container\ArrayObject as InjectArrayObject;
+use Ovos\Container\FirstOf;
 use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
@@ -79,64 +79,64 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
 use const PREG_SPLIT_NO_EMPTY;
 
 /**
- * Reports collected errors to a central ovos/console instance.
+ * Reports collected errors to a central ovos/codesafe instance.
  *
  * Fire-and-forget by contract: every public method swallows all
  * failures and the single HTTP call happens once per request from
- * Application::handleShutdown() with a hard timeout — the console
+ * Application::handleShutdown() with a hard timeout — codesafe
  * must never break or noticeably slow the host application.
  *
  * Project setup (environments.yml):
  *
- *   console:
+ *   codesafe:                         # `console:` is still read when there is no `codesafe:`
  *     enabled: yes
- *     url: https://console.example      # instance base URL
- *     key: !ENV CONSOLE[KEY]            # project api_key
+ *     url: https://codesafe.example     # instance base URL
+ *     key: !ENV CODESAFE[KEY]           # project api_key
  *     log_level: 5                      # send priority <= this (0-7)
  *     timeout_ms: 1000
- *     release: !ENV CONSOLE[RELEASE]    # optional deploy label (git sha, svn rev, …); EMPTY =
+ *     release: !ENV CODESAFE[RELEASE]   # optional deploy label (git sha, svn rev, …); EMPTY =
  *                                       # the .release stamp beside .env is reported (php cli.php
  *                                       # release stamp, ovos/php-module-system) — a value here wins
  *     environment: staging              # optional deployment stage, sent verbatim. UNSET, the
  *                                       # app's own .env ENV is sent (production included — the
- *                                       # console badges only non-production values)
+ *                                       # codesafe badges only non-production values)
  *     tags: [shop, eu]                  # optional tags on every event (a list, or one comma string
- *                                       # such as !ENV CONSOLE[TAGS]) — a tenant, a region, a team;
- *                                       # the console's TAGS column, one filter per tag. Per-event
+ *                                       # such as !ENV CODESAFE[TAGS]) — a tenant, a region, a team;
+ *                                       # codesafe's TAGS column, one filter per tag. Per-event
  *                                       # tags go into a capture's extra bag as `tags`
  *     rollups: no                       # OPT-IN: per-minute traffic counters (requests,
  *                                       # status/method/route/authed) accumulated in APCu and
  *                                       # POSTed to /api/v1/ingest/rollup once per minute —
- *                                       # the console's denominator layer (see Rollup). Needs
- *                                       # url+key AND rollups_enabled on the console project;
+ *                                       # codesafe's denominator layer (see Rollup). Needs
+ *                                       # url+key AND rollups_enabled on the project;
  *                                       # no APCu means a silent no-op. A text/event-stream
  *                                       # response counts as a request but carries no duration.
  *     otlp_url: ''                      # OPTIONAL: an OpenTelemetry Collector's OTLP/HTTP
  *                                       # logs endpoint VERBATIM (http://collector:4318/v1/logs).
  *                                       # Set -> the batch goes there as OTLP/JSON instead of the
- *                                       # direct ingest; the collector holds the console key in
+ *                                       # direct ingest; the collector holds the key in
  *                                       # its own exporter, so url/key become optional here. Never
  *                                       # combine with url+key when the collector exports back to
- *                                       # the console — errors would double-report.
+ *                                       # codesafe — errors would double-report.
  *     files:                            # OPTIONAL: the working-copy pass (Untracked; SENDER.md §7 "Files")
  *       web: [public]                   # the web-reachable directories, relative to the working copy
  *                                       # root ('.' = the root itself is the docroot). An untracked or
  *                                       # modified PHP file there is URGENT, elsewhere HIGH. Run from a cron line —
- *                                       # `php cli.php console files` (ovos/php-module-system) or
+ *                                       # `php cli.php codesafe files` (ovos/php-module-system) or
  *                                       # $sender->reportUntracked() — CLI only, never a web request;
- *                                       # needs files_enabled on the console project (403 says so).
+ *                                       # needs files_enabled on the project (403 says so).
  *     shield:                           # OPTIONAL: the Shield (Ovos\Service\Codesafe\Shield + the controller
  *       detect: no                      # plugin Ovos\Plugins\Codesafe\Shield in plugins.default.http). detect =
- *       enforce: no                     # pull this project's live rules from the console and OBSERVE every
+ *       enforce: no                     # pull this project's live rules from codesafe and OBSERVE every
  *       kill: no                        # request (report a match as shield_observe, block nothing); enforce =
  *       dir: ''                         # answer 403 to a request a PROVEN rule matches (inert without detect);
- *                                       # kill = off entirely, no network — the switch that needs no console;
+ *                                       # kill = off entirely, no network — the switch that needs no instance;
  *                                       # dir = where shield.json (the durable tier) lives, '' = the system temp
  *                                       # dir. Needs url+key; APCu is the fast tier, the file alone works without.
  *
  * plus "- Codesafe\Sender" in system.services.http and .cli lists.
  *
- * The deploy step tells the console a release shipped the minute it does:
+ * The deploy step tells codesafe a release shipped the minute it does:
  * `$sender->announceRelease()` (SENDER.md §7) — the label the events carry,
  * or the one the caller names, with an optional moment, ref and source. A
  * cron line asks the working copy what nobody committed — untracked files,
@@ -149,19 +149,28 @@ class Sender extends Service
 {
 	/**
 	 * The deploy stamp beside .env — per deployment, machine-written, never
-	 * committed (`php cli.php release stamp`); read when console.release is empty
+	 * committed (`php cli.php release stamp`); read when codesafe.release is empty
 	 */
 	public const string RELEASE_FILE = '.release';
 	
-	/** the label's cap — the console's column and its own mb_substr agree on it */
+	/** the label's cap — codesafe's column and its own mb_substr agree on it */
 	public const int RELEASE_MAX = 64;
 	
+	/**
+	 * The container key — the name from before the rename (2026-09-24) stays:
+	 * `services()->consoleSender` is how applications reach the Sender
+	 */
 	public const string SYMBOL = 'consoleSender';
+	
+	/** the config section, and the one it had before the rename, read when it is absent */
+	public const string CONFIG = 'codesafe';
+	
+	public const string CONFIG_LEGACY = 'console';
 	
 	/**
 	 * Cap on explicitly captured payloads per flush cycle — an error loop
 	 * in a long-running CLI process must not grow the queue without bound
-	 * (the console ingest caps batches server-side anyway). The flush-time
+	 * (codesafe's ingest caps batches server-side anyway). The flush-time
 	 * Events merge gets its own headroom up to twice this, so uncaught
 	 * errors are never starved by a queue already filled with captures.
 	 */
@@ -169,7 +178,7 @@ class Sender extends Service
 	
 	/**
 	 * The closed kind vocabulary for type=security events (reportRefusal) —
-	 * mirrors the console's App::SECURITY_KINDS. A kind outside this list is
+	 * mirrors codesafe's App::SECURITY_KINDS. A kind outside this list is
 	 * a no-op here and refused server-side; the list only ever grows in a
 	 * deliberate two-sided change. auth_success is for exactly one case: a
 	 * login that SUCCEEDED after recent failures for the same account or
@@ -211,10 +220,10 @@ class Sender extends Service
 	public const string SECURITY_PREFIX = 'ovos:console:security:';
 	
 	/**
-	 * What the console's REPLAY needs to re-issue the request that failed
+	 * What codesafe's REPLAY needs to re-issue the request that failed
 	 * (docs/SENDER.md §context.request): the raw body, its content type and
 	 * the headers that change what the application answers. The caps are the
-	 * console's own — a body past this is cut, not dropped, since the head of
+	 * codesafe's own — a body past this is cut, not dropped, since the head of
 	 * a body is still a body.
 	 */
 	public const int BODY_MAX = 16384;
@@ -258,11 +267,37 @@ class Sender extends Service
 	
 	public function __construct(
 		#[Inject('config')]
-		#[InjectArrayObject('console')]
+		#[FirstOf(self::CONFIG, self::CONFIG_LEGACY)]
 		?ArrayObject $config,
 	)
 	{
 		$this->config = $config;
+	}
+	
+	/**
+	 * The sender's config section out of the application's config — for a
+	 * class the container does not build (the Shield plugin)
+	 */
+	public static function configOf(
+		ArrayObject $config,
+	): ?ArrayObject
+	{
+		$section = (new FirstOf(self::CONFIG, self::CONFIG_LEGACY))->process($config);
+		
+		return $section instanceof ArrayObject ? $section : null;
+	}
+	
+	/**
+	 * The project key under both header names: X-Codesafe-Key, which every
+	 * instance since the rename (2026-09-24) reads, and X-Console-Key, which
+	 * one from before it reads alone — a sender cannot know which one it
+	 * reports to, so neither goes until every instance has been upgraded
+	 */
+	public static function keyHeaders(
+		string $key,
+	): array
+	{
+		return ['X-Codesafe-Key: ' . $key, 'X-Console-Key: ' . $key];
 	}
 	
 	public function isEnabled(): bool
@@ -273,7 +308,7 @@ class Sender extends Service
 		}
 		
 		// either transport suffices: the direct ingest (url + key) or an
-		// OTLP collector endpoint (which holds the console key itself)
+		// OTLP collector endpoint (which holds the project key itself)
 		return ((string)$this->config->url !== '' && (string)$this->config->key !== '')
 			|| $this->getOtlpUrl() !== '';
 	}
@@ -294,7 +329,7 @@ class Sender extends Service
 	
 	/**
 	 * Whether to attach a few source lines around each throw location
-	 * (console.source_context, default on). Off means the source files
+	 * (codesafe.source_context, default on). Off means the source files
 	 * are never even read — for projects that must not ship code lines
 	 * off-box.
 	 */
@@ -304,7 +339,7 @@ class Sender extends Service
 	}
 	
 	/**
-	 * How much of a request BODY leaves this application (console.request_body):
+	 * How much of a request BODY leaves this application (codesafe.request_body):
 	 * off | structure | full, defaulting to `structure`.
 	 *
 	 * There was no switch at all before 2026-09-21 — the body was read on every
@@ -383,9 +418,9 @@ class Sender extends Service
 	
 	/**
 	 * Reports a not-found access event as a type=404 report (priority 6, INFO).
-	 * The console groups these apart from application errors, never turns them
+	 * codesafe groups these apart from application errors, never turns them
 	 * into issues, and its per-project report_404 switch decides acceptance.
-	 * No-op unless console.report_404 is enabled here. The path defaults to the
+	 * No-op unless codesafe.report_404 is enabled here. The path defaults to the
 	 * current request URI and the query string is dropped so distinct probes
 	 * stay distinct while one hammered path folds together.
 	 */
@@ -424,7 +459,7 @@ class Sender extends Service
 	
 	/**
 	 * Reports a refusal or audit line as a type=security event (priority 6,
-	 * INFO — the console pins it there regardless). The console groups these
+	 * INFO — codesafe pins it there regardless). codesafe groups these
 	 * apart from application errors, never turns them into issues or alerts
 	 * by default, and gates them by its per-project security_events switch —
 	 * NOT by accept_priority, so a project tuned stricter than INFO still
@@ -432,7 +467,7 @@ class Sender extends Service
 	 * config switch here on purpose.
 	 *
 	 * $kind must come from SECURITY_KINDS (anything else is a silent no-op —
-	 * the console refuses unknown kinds wholesale, so sending one would only
+	 * codesafe refuses unknown kinds wholesale, so sending one would only
 	 * waste the request). $message is the human line and travels into an
 	 * INDEXED, displayed field: mask identifiers yourself — maskName() for
 	 * usernames — and never include a credential; the server scrub is a
@@ -446,7 +481,7 @@ class Sender extends Service
 	 * the ACCOUNT: name it as `userId` (the internal id, never the login
 	 * name) wherever the application knows who — the login that just
 	 * succeeded is reported before the session holds the user, so the Auth
-	 * service cannot supply it there. The console groups a security event by
+	 * service cannot supply it there. codesafe groups a security event by
 	 * kind and account, never by its masked line.
 	 *
 	 *   $sender->reportRefusal('auth_success',
@@ -514,7 +549,7 @@ class Sender extends Service
 	
 	/**
 	 * A type=security payload: the KIND as the event's className (the field
-	 * the console indexes, filters and fingerprints by), the human line as
+	 * codesafe indexes, filters and fingerprints by), the human line as
 	 * the message — falling back to the kind itself, so a call without a
 	 * message still names its event — and the caller's context overrides
 	 * (the account), which the flush merges over the base it builds
@@ -824,14 +859,14 @@ class Sender extends Service
 		// the shared scrub patterns live in the Logger service
 		$logger = $this->getLogger();
 		
-		// the deploy label (git sha, svn revision, any string): console.release,
+		// the deploy label (git sha, svn revision, any string): codesafe.release,
 		// else the .release stamp — constant across the batch, read once
 		$release = self::currentRelease($this->config?->release ?? null);
-		// deployment stage: an explicit console.environment wins, otherwise
-		// the app's own env name — production included (the console stores
+		// deployment stage: an explicit codesafe.environment wins, otherwise
+		// the app's own env name — production included (codesafe stores
 		// and filters it, but only badges anything else)
 		$environment = $this->environment();
-		// the tags a deployment stamps on every event (console.tags): a
+		// the tags a deployment stamps on every event (codesafe.tags): a
 		// tenant, a region, a team — constant across the batch
 		$tags = $this->tags();
 		
@@ -850,10 +885,10 @@ class Sender extends Service
 			
 			$context ??= $this->buildContext($logger);
 			
-			// the console's three axes (ovos/console 2026-09): what ran the
+			// codesafe's three axes (ovos/codesafe 2026-09): what ran the
 			// code, how it was entered, what the record IS. `type` is the
-			// legacy slot older consoles read (http/cli/404/security) and
-			// stays beside them until every console has updated
+			// legacy slot older instances read (http/cli/404/security) and
+			// stays beside them until every instance has updated
 			$payload['runtime'] = 'php';
 			$payload['entry'] = $context['entry'];
 			$payload['kind'] ??= 'error';
@@ -899,11 +934,11 @@ class Sender extends Service
 		$isCli = $this->app->isInterfaceCli();
 		
 		$context = [
-			// dir is a TAG on the console side — the rtrim keeps the value
+			// dir is a TAG on codesafe's side — the rtrim keeps the value
 			// separator-free at the end so every sender agrees on one form;
 			// BASE_DIR itself always ends with DIRECTORY_SEPARATOR
 			'dir' => rtrim(BASE_DIR, DIRECTORY_SEPARATOR),
-			// correlates every error of this request/run in the console —
+			// correlates every error of this request/run in codesafe —
 			// across services when an inbound traceparent is propagated
 			'traceId' => Trace::id(),
 		];
@@ -926,24 +961,24 @@ class Sender extends Service
 			$context['ip'] = (string)Client::getIp();
 			$context['ua'] = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
 			
-			// the status the response ENDED with (console contract: context.status,
+			// the status the response ENDED with (codesafe contract: context.status,
 			// docs/SENDER.md). This runs at the shutdown flush, after the response
 			// went out, so the SAPI has the final word: 500 for an uncaught
 			// exception's error page, 404 for a not-found route, 200 for an
 			// exception caught and answered. Where nothing answers — the CLI SAPI —
-			// no key: the console never guesses one, and neither does the sender
+			// no key: codesafe never guesses one, and neither does the sender
 			$status = $this->responseStatus();
 			if($status !== null)
 			{
 				$context['status'] = $status;
 			}
 			
-			// where the EDGE says the visitor is (console contract:
+			// where the EDGE says the visitor is (codesafe contract:
 			// context.country, docs/SENDER.md). A CDN in front of the
 			// application resolved the client's country to route the request at
 			// all, so its header is both free and better than a monthly table —
 			// and it describes the real client even where the app sees a proxy.
-			// Absent without a CDN, and the console falls back to its own table
+			// Absent without a CDN, and codesafe falls back to its own table
 			$country = self::edgeCountry();
 			if($country !== '')
 			{
@@ -960,9 +995,9 @@ class Sender extends Service
 			}
 			
 			// the signed-in account, when the application put its user into
-			// the Auth service: context.userId, the console's indexed user_id
+			// the Auth service: context.userId, codesafe's indexed user_id
 			// — who an error happened to, and for a security event the
-			// account that IS the case (ovos/console docs/plans/security-
+			// account that IS the case (ovos/codesafe docs/plans/security-
 			// event-identity.md). The internal id, never the login name
 			$auth = $this->app->getServices()->auth;
 			if($auth instanceof Auth && $auth->hasUser() && isset($auth->getUser()->id))
@@ -1045,9 +1080,9 @@ class Sender extends Service
 	
 	/**
 	 * Request variables, redacted with the Logger patterns
-	 * (the console scrubs again server-side as a backstop).
+	 * (codesafe scrubs again server-side as a backstop).
 	 *
-	 * Beside get/post this logs what the console's REPLAY needs to re-issue
+	 * Beside get/post this logs what codesafe's REPLAY needs to re-issue
 	 * the request that failed (docs/SENDER.md §context.request): the raw
 	 * BODY with its content type, and the request headers that change what
 	 * the application answers. A JSON API call's $_POST is EMPTY — the body
@@ -1062,8 +1097,8 @@ class Sender extends Service
 		$request = [];
 		
 		// the request data keeps its e-mail addresses and usernames: the
-		// console masks them on arrival and keeps the original encrypted for
-		// an audited reveal and a replay (console docs/plans/reveal-everything.md).
+		// codesafe masks them on arrival and keeps the original encrypted for
+		// an audited reveal and a replay (codesafe docs/plans/reveal-everything.md).
 		// Secrets are dropped here exactly as always
 		$bags = $logger->keepingIdentities();
 		
@@ -1155,7 +1190,7 @@ class Sender extends Service
 	 * The request headers worth sending: the ones that change what the
 	 * application ANSWERS, plus the project's own X- names — never a cookie,
 	 * an authorization or anything else the Logger calls secret by name. The
-	 * console applies the same allow list again on write.
+	 * codesafe applies the same allow list again on write.
 	 *
 	 * @return array<string, string>
 	 */
@@ -1222,7 +1257,7 @@ class Sender extends Service
 		$otlp = $this->getOtlpUrl();
 		
 		// OTLP mode posts to the collector endpoint verbatim, without the
-		// console key — the collector authenticates via its own exporters
+		// project key — the collector authenticates via its own exporters
 		$handle = curl_init($otlp !== ''
 			? $otlp
 			: rtrim((string)$this->config->url, '/') . '/api/v1/ingest');
@@ -1230,7 +1265,7 @@ class Sender extends Service
 		$headers = ['Content-Type: application/json'];
 		if($otlp === '')
 		{
-			$headers[] = 'X-Console-Key: ' . (string)$this->config->key;
+			$headers = [...$headers, ...self::keyHeaders((string)$this->config->key)];
 		}
 		
 		curl_setopt_array($handle, [
@@ -1253,17 +1288,17 @@ class Sender extends Service
 	}
 	
 	/**
-	 * Tell the console a release shipped — the deploy step (SENDER.md §7):
+	 * Tell codesafe a release shipped — the deploy step (SENDER.md §7):
 	 * `POST /api/v1/ingest/release` with the project key. The label is the
-	 * one the events carry (console.release, else the .release stamp) unless
+	 * one the events carry (codesafe.release, else the .release stamp) unless
 	 * the caller names one; `at` (epoch seconds, ms or ISO 8601), `ref`,
 	 * `source` and `environment` are optional. Synchronous — a deploy step
 	 * wants the answer — and still best-effort: false, never an exception,
-	 * when the sender is off, nothing is stamped or the console is out of
+	 * when the sender is off, nothing is stamped or codesafe is out of
 	 * reach. Direct ingest only: the OTLP collector has no release endpoint.
 	 *
 	 * @param array{at?: int|string, ref?: string, source?: string, environment?: string} $options
-	 * @return bool whether the console accepted the announce (202)
+	 * @return bool whether codesafe accepted the announce (202)
 	 */
 	public function announceRelease(
 		string $release = '',
@@ -1309,12 +1344,12 @@ class Sender extends Service
 	 * and reads the tree). Synchronous and best-effort like the announce:
 	 * false when the sender is off, when this is not a CLI run, when nothing
 	 * can be known (no .git/.svn, proc_open closed, a non-zero exit — never a
-	 * guess) or when the console refuses (403 = files_enabled is off for the
+	 * guess) or when codesafe refuses (403 = files_enabled is off for the
 	 * project). An EMPTY answer is still posted: that is how a finding the
-	 * console holds goes GONE.
+	 * codesafe holds goes GONE.
 	 *
 	 * @param array{web?: list<string>, mode?: string, timeout_ms?: int} $options
-	 * @return bool whether the console accepted the report (202)
+	 * @return bool whether codesafe accepted the report (202)
 	 */
 	public function reportUntracked(
 		array $options = [],
@@ -1326,10 +1361,10 @@ class Sender extends Service
 	}
 	
 	/**
-	 * The pass alone — the report the console would get, or null when
+	 * The pass alone — the report codesafe would get, or null when
 	 * nothing can be known (or this is not a CLI run); the CLI command prints
 	 * from it before posting. The web-reachable directories come from the
-	 * options, else console.files.web, else Untracked::WEB_DEFAULT; the
+	 * options, else codesafe.files.web, else Untracked::WEB_DEFAULT; the
 	 * release and environment are the ones the events carry.
 	 *
 	 * @param array{web?: list<string>, mode?: string, timeout_ms?: int} $options
@@ -1375,8 +1410,8 @@ class Sender extends Service
 	}
 	
 	/**
-	 * One integrity-scan report to the console (the shape Untracked builds;
-	 * ovos/console docs/API.V1.md "Files"), the response code back — 202
+	 * One integrity-scan report to codesafe (the shape Untracked builds;
+	 * ovos/codesafe docs/API.V1.md "Files"), the response code back — 202
 	 * accepted, 403 file reports off for the project, 0 no answer. Direct
 	 * ingest only: the OTLP collector has no files endpoint.
 	 */
@@ -1466,7 +1501,7 @@ class Sender extends Service
 	
 	/**
 	 * The deployment stage the batch and the announce carry: an explicit
-	 * console.environment wins, otherwise the app's own env name
+	 * codesafe.environment wins, otherwise the app's own env name
 	 */
 	protected function environment(): string
 	{
@@ -1480,10 +1515,10 @@ class Sender extends Service
 	}
 	
 	/**
-	 * The tags console.tags stamps on every event (ovos/console
+	 * The tags codesafe.tags stamps on every event (ovos/codesafe
 	 * docs/plans/event-tags.md): a yml list, or ONE string split on commas,
 	 * semicolons and whitespace (an .env line) — trimmed, empties dropped,
-	 * at most ten (the console's own cap per event). The console lowercases
+	 * at most ten (codesafe's own cap per event). codesafe lowercases
 	 * and validates them; per-event tags ride the extra bag as `tags`.
 	 *
 	 * @return string[]
@@ -1519,7 +1554,7 @@ class Sender extends Service
 	}
 	
 	/**
-	 * One synchronous JSON POST to the console with the project key, the
+	 * One synchronous JSON POST to codesafe with the project key, the
 	 * response code back (0 = no answer) — the announce's transport; the
 	 * batch keeps send() and its fire-and-forget timing
 	 */
@@ -1532,7 +1567,7 @@ class Sender extends Service
 		curl_setopt_array($handle, [
 			CURLOPT_POST => true,
 			CURLOPT_POSTFIELDS => $json,
-			CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'X-Console-Key: ' . (string)$this->config->key],
+			CURLOPT_HTTPHEADER => ['Content-Type: application/json', ...self::keyHeaders((string)$this->config->key)],
 			CURLOPT_RETURNTRANSFER => true,
 			CURLOPT_NOSIGNAL => true,
 			CURLOPT_CONNECTTIMEOUT_MS => 1000,
@@ -1545,13 +1580,13 @@ class Sender extends Service
 	}
 	
 	/**
-	 * The deploy label the batch carries: the configured console.release when
+	 * The deploy label the batch carries: the configured codesafe.release when
 	 * it is non-empty, else the first line of BASE_DIR/.release — the stamp
 	 * `php cli.php release stamp` (ovos/php-module-system) writes on deploy.
 	 * CONFIGURED WINS: a deployment that supplies a value knows something a
 	 * generated stamp cannot, so the stamp is a fallback, never an override —
 	 * which also means a placeholder like "dev" outranks it. Leave
-	 * console.release EMPTY to let the stamp speak. Nothing anywhere is '',
+	 * codesafe.release EMPTY to let the stamp speak. Nothing anywhere is '',
 	 * the behaviour every project had before the stamp existed.
 	 */
 	public static function currentRelease(

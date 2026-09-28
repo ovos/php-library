@@ -9,7 +9,7 @@ use Throwable;
 use function array_merge;
 
 /**
- * A mutable console event: build it up — message, an optional exception,
+ * A mutable codesafe event: build it up — message, an optional exception,
  * priority, extras and per-event context overrides — then capture() it onto
  * the bound Sender's queue. A thrown exception is optional; anything with a
  * message can be reported. The single HTTP flush still happens once per

@@ -41,7 +41,8 @@
       "Tests\\": "tests"
     },
     "files": [
-      "src/Container.php"
+      "src/Container.php",
+      "src/Codesafe/aliases.php"
     ]
   },
   "scripts": {

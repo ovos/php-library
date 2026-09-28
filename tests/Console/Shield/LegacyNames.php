@@ -26,22 +26,17 @@ class LegacyNames extends Test
 	 * through the autoloader, and is the new class, not a copy.
 	 *
 	 * Prevents: an upgrade of php-library breaking every caller of the old
-	 * names at the first request.
+	 * names at the first request — on an install with an authoritative
+	 * classmap too, which is how CI installs (Ovos\Codesafe\Legacy).
 	 */
 	public function theOldNamesAreTheNewClasses(): bool
 	{
-		// the old Kernel through the autoloader, as a caller reaches it — the
-		// other five were never autoloadable on their own, before or after
-		if(class_exists('Ovos\\Console\\Shield\\Kernel') === false)
-		{
-			return false;
-		}
-
+		// each old name through the autoloader, as a caller reaches it
 		foreach(['Facts', 'Consent', 'Verdict', 'Ruleset', 'Store', 'Kernel'] as $name)
 		{
 			$old = 'Ovos\\Console\\Shield\\' . $name;
 			$new = 'Ovos\\Codesafe\\Shield\\' . $name;
-			if(class_exists($old, false) === false || (new ReflectionClass($old))->getName() !== $new)
+			if(class_exists($old) === false || (new ReflectionClass($old))->getName() !== $new)
 			{
 				return false;
 			}

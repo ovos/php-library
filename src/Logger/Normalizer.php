@@ -36,7 +36,7 @@ use function sprintf;
  * sprintf arguments are allowed to be integers themselves.
  *
  * A logged string is an operational note, not a failure — hence NOTICE, the
- * lowest severity the console sender ships under its default log_level gate.
+ * lowest severity the codesafe sender ships under its default log_level gate.
  * Throwables carry their own severity (HasPriority or the type mapping).
  *
  * @author Marcin Gil <mg@ovos.at>

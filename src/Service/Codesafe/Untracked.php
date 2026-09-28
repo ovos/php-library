@@ -65,12 +65,12 @@ use const PHP_VERSION;
 
 /**
  * The working-copy pass — what the deployed tree holds that the repository
- * did not ship (ovos/console docs/plans/file-appearance-sensor.md, detector
+ * did not ship (ovos/codesafe docs/plans/file-appearance-sensor.md, detector
  * 5, and its modified half): a file the repository does not track, a tracked
  * file whose content differs from the commit, a tracked file that is gone.
  * The first is the one detector that sees a dropped file BEFORE anything runs
  * it; the second is where a payload written INTO an existing file shows. Asks
- * git or svn, read-only, and builds the integrity-scan report the console's
+ * git or svn, read-only, and builds the integrity-scan report codesafe's
  * `POST /api/v1/ingest/files` takes from every sender (the same shape the
  * WordPress plugin's tree walk sends), so the ledger, the cases, the alert
  * and the attack-wave correlation apply unchanged.
@@ -88,7 +88,7 @@ use const PHP_VERSION;
  * leaves a stale stat cache, and then every pass re-hashes those files — run
  * `git update-index --refresh` once in such a deploy step. core.fileMode=false
  * so a mode change alone is not a modification. Ignored files stay out
- * (.gitignore / svn:ignore): measured on the console repo, 3 untracked
+ * (.gitignore / svn:ignore): measured on the codesafe repo, 3 untracked
  * against 793 ignored — the ignored pass would drown the signal.
  *
  * What gets a path in the report, and what only a count: an untracked
@@ -98,7 +98,7 @@ use const PHP_VERSION;
  * because `uploads/offer-acme-gmbh.pdf` names a customer. A modified or
  * missing TRACKED file is always listed by path — its name is repository
  * content, not customer data. Under a web-reachable directory (config
- * `console.files.web`, default `public`) an untracked or modified PHP file is
+ * `codesafe.files.web`, default `public`) an untracked or modified PHP file is
  * URGENT, elsewhere HIGH; a config file there is HIGH, elsewhere info; a
  * modified script the browser runs (.js, .html, .svg) there is HIGH — a card
  * skimmer is exactly that; a missing tracked file is info.
@@ -115,7 +115,7 @@ use const PHP_VERSION;
  */
 final class Untracked
 {
-	/** the report's platform word — the console's closed vocabulary (Console\Ingest\FilesPayload::PLATFORMS) */
+	/** the report's platform word — codesafe's closed vocabulary (Codesafe\Ingest\FilesPayload::PLATFORMS) */
 	public const string PLATFORM = 'php';
 	
 	/** the one area a working copy has: its root */
@@ -161,12 +161,12 @@ final class Untracked
 	/** an unversioned SVN directory is opened up to this many files */
 	public const int MAX_EXPANDED = 10000;
 	
-	/** the console's cap on a finding's detail */
+	/** codesafe's cap on a finding's detail */
 	public const int MAX_DETAIL = 160;
 	
 	public const int TIMEOUT_MS = 30000;
 	
-	/** how far above the start directory the working copy root may sit (the console keeps .git one level above project/) */
+	/** how far above the start directory the working copy root may sit (codesafe keeps .git one level above project/) */
 	public const int LEVELS_UP = 3;
 	
 	public const string EXECUTABLE = '~\.(?:php[3-8]?|phtml|phar|inc|pht|phps)$~i';
@@ -267,7 +267,7 @@ final class Untracked
 	
 	/**
 	 * The pass: ask the working copy, classify what it answers, build the
-	 * console's report — or null when nothing can be known
+	 * codesafe's report — or null when nothing can be known
 	 *
 	 * @param array{vcs?: string, web?: list<string>, mode?: string, release?: string,
 	 *   environment?: string, timeout_ms?: int} $options
@@ -709,9 +709,9 @@ final class Untracked
 	}
 	
 	/**
-	 * The sender's name and version as the console's `client` word:
+	 * The sender's name and version as codesafe's `client` word:
 	 * `php-library/<version>` — the installed package's version when composer
-	 * knows it, `dev` otherwise, in the console's character set
+	 * knows it, `dev` otherwise, in codesafe's character set
 	 */
 	public static function client(): string
 	{
@@ -733,7 +733,7 @@ final class Untracked
 	}
 	
 	/**
-	 * A version-like word in the console's character set: anything else
+	 * A version-like word in codesafe's character set: anything else
 	 * becomes a dash, capped at 32 — `dev-release/8.5` reads `dev-release-8.5`
 	 */
 	public static function word(
@@ -868,7 +868,7 @@ final class Untracked
 	}
 	
 	/**
-	 * One finding in the console's shape
+	 * One finding in codesafe's shape
 	 *
 	 * @param array{size: ?int, mtime: ?int} $stat
 	 */
@@ -892,7 +892,7 @@ final class Untracked
 	}
 	
 	/**
-	 * A relative path the console will take: trimmed, no `./` prefix, not
+	 * A relative path codesafe will take: trimmed, no `./` prefix, not
 	 * absolute, no control characters, no `..` segment — null otherwise
 	 */
 	protected static function cleanPath(
@@ -944,7 +944,7 @@ final class Untracked
 	
 	/**
 	 * The VCS directory's name when it sits inside a web-reachable directory
-	 * (the root itself being the docroot is the common case) — the console
+	 * (the root itself being the docroot is the common case) — codesafe
 	 * prints it as ".git in the document root"
 	 *
 	 * @param list<string> $web
@@ -1027,7 +1027,7 @@ final class Untracked
 	
 	/**
 	 * "3 files · .pdf ×2 · .log ×1" — the directory row's detail, most
-	 * frequent extension first, capped like the console's column
+	 * frequent extension first, capped like codesafe's column
 	 *
 	 * @param array{files: int, ext: array<string, int>} $sum
 	 */

@@ -17,7 +17,7 @@ use function trim;
  * One id per request (or CLI process run): the trace id of an inbound
  * W3C traceparent header when the caller is instrumented (OTEL SDKs,
  * service meshes), a generated 32-hex id otherwise. Everything that
- * reports with it — the console sender, logs, sub-requests — becomes
+ * reports with it — the codesafe sender, logs, sub-requests — becomes
  * correlatable as one transaction, across services when the header
  * propagates.
  *
