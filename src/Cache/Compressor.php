@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Cache;
 
 use Ovos\ArrayObject;
-use Ovos\Zstd;
+use Ovos\Compression\Zstd;
 use Throwable;
 
 use function gzcompress;

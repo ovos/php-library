@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos;
+namespace Ovos\Compression;
 
 use Throwable;
 
@@ -26,7 +26,8 @@ use function zstd_uncompress;
  *
  * House rule: zstd over gzip wherever the server controls both sides; gzip
  * stays only where the peer dictates it (browser CompressionStream uploads,
- * inbound bodies whose encoding the client chose).
+ * inbound bodies whose encoding the client chose) - and is read there
+ * through Gzip, never written.
  *
  * Without ext-zstd every value stays raw and every read still answers, so a
  * host that lacks the extension degrades instead of failing.
