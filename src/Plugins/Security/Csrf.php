@@ -8,7 +8,7 @@ use Ovos\Console;
 use Ovos\Controller\Plugin;
 use Ovos\Request;
 use Ovos\Response\Html;
-use Ovos\Service\Console\Sender;
+use Ovos\Service\Codesafe\Sender;
 use Ovos\Service\Logger;
 use Override;
 use Throwable;

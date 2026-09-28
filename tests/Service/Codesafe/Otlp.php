@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Service\Console;
+namespace Tests\Service\Codesafe;
 
-use Ovos\Service\Console\Otlp as ConsoleOtlp;
+use Ovos\Service\Codesafe\Otlp as CodesafeOtlp;
 use Ovos\Test;
 
 use function array_column;
@@ -24,7 +24,7 @@ class Otlp extends Test
 {
 	public function mapsPayloadOntoLogRecord(): bool
 	{
-		$request = ConsoleOtlp::request([$this->payload()]);
+		$request = CodesafeOtlp::request([$this->payload()]);
 		
 		$log = $request['resourceLogs'][0];
 		$resource = $this->attributes($log['resource']['attributes']);
@@ -62,7 +62,7 @@ class Otlp extends Test
 			'previous' => true,
 		];
 		
-		$record = ConsoleOtlp::request([$payload])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
+		$record = CodesafeOtlp::request([$payload])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
 		$stacktrace = $this->attributes($record['attributes'])['exception.stacktrace']['stringValue'];
 		
 		return str_contains($stacktrace, '#0 /app/src/Db.php(42)')
@@ -79,7 +79,7 @@ class Otlp extends Test
 			$payload = $this->payload();
 			$payload['priority'] = $priority;
 			
-			$record = ConsoleOtlp::request([$payload])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
+			$record = CodesafeOtlp::request([$payload])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
 			if($record['severityNumber'] !== $severity)
 			{
 				return false;
@@ -91,7 +91,7 @@ class Otlp extends Test
 	
 	public function spillsRequestAndExtrasAsAttributes(): bool
 	{
-		$record = ConsoleOtlp::request([$this->payload()])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
+		$record = CodesafeOtlp::request([$this->payload()])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
 		$attributes = $this->attributes($record['attributes']);
 		
 		return $attributes['request']['kvlistValue']['values'][0]['key'] === 'post'
@@ -106,7 +106,7 @@ class Otlp extends Test
 		$payload['context']['args'] = ['cli.php', 'import', 'run'];
 		
 		$resource = $this->attributes(
-			ConsoleOtlp::request([$payload])['resourceLogs'][0]['resource']['attributes']);
+			CodesafeOtlp::request([$payload])['resourceLogs'][0]['resource']['attributes']);
 		
 		return $resource['process.command_args']['arrayValue']['values'][1]
 			=== ['stringValue' => 'import'];
@@ -117,11 +117,11 @@ class Otlp extends Test
 		$payload = $this->payload();
 		$payload['timestamp'] = date('c', 1720000000);
 		
-		$record = ConsoleOtlp::request([$payload])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
+		$record = CodesafeOtlp::request([$payload])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
 		
 		$missing = $this->payload();
 		unset($missing['timestamp']);
-		$bare = ConsoleOtlp::request([$missing])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
+		$bare = CodesafeOtlp::request([$missing])['resourceLogs'][0]['scopeLogs'][0]['logRecords'][0];
 		
 		return $record['timeUnixNano'] === '1720000000000000000'
 			&& isset($bare['timeUnixNano']) === false;
@@ -129,8 +129,8 @@ class Otlp extends Test
 	
 	public function survivesGarbage(): bool
 	{
-		$empty = ConsoleOtlp::request([]);
-		$junk = ConsoleOtlp::request([['message' => 'bare'], 'not a payload']);
+		$empty = CodesafeOtlp::request([]);
+		$junk = CodesafeOtlp::request([['message' => 'bare'], 'not a payload']);
 		
 		$records = $junk['resourceLogs'][0]['scopeLogs'][0]['logRecords'];
 		

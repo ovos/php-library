@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Service\Console;
+namespace Ovos\Service\Codesafe;
 
 use Ovos\Exception\HasPriority;
 use Ovos\Exception\Priority;
@@ -27,8 +27,8 @@ use const E_USER_WARNING;
 use const E_WARNING;
 
 /**
- * Maps throwables onto the error console v1 payload
- * (see ovos/console docs/API.V1.md)
+ * Maps throwables onto the codesafe v1 payload
+ * (see ovos/codesafe docs/API.V1.md)
  *
  * @author Marcin Gil <mg@ovos.at>
  */

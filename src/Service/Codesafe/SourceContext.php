@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Service\Console;
+namespace Ovos\Service\Codesafe;
 
 use function count;
 use function file;
@@ -19,7 +19,7 @@ use const FILE_IGNORE_NEW_LINES;
 
 /**
  * Reads a window of source lines around an error location for the
- * console detail panel (and the AI explain prompt).
+ * codesafe detail panel (and the AI explain prompt).
  *
  * Best-effort by the sender contract: any unreadable, generated, or
  * oversized file yields null rather than throwing. Line strings are
