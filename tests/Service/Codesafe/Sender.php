@@ -1,15 +1,15 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Service\Console;
+namespace Tests\Service\Codesafe;
 
 use ErrorException;
 use Exception;
 use Ovos\ArrayObject;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
-use Ovos\Service\Console\Sender as ConsoleSender;
-use Ovos\Service\Console\Untracked;
+use Ovos\Service\Codesafe\Sender as CodesafeSender;
+use Ovos\Service\Codesafe\Untracked;
 use Ovos\Service\Logger;
 use Ovos\Test;
 use Throwable;
@@ -46,10 +46,10 @@ class Sender extends Test
 	 */
 	public function releasePayloadIsTheAnnounceBodyOrNothing(): bool
 	{
-		$plain = ConsoleSender::releasePayload('42800', [], 'production');
-		$full = ConsoleSender::releasePayload("r42800\nnoise", [
+		$plain = CodesafeSender::releasePayload('42800', [], 'production');
+		$full = CodesafeSender::releasePayload("r42800\nnoise", [
 			'at' => 1788700000, 'ref' => ' r42800 ', 'source' => 'deploy.sh', 'environment' => 'staging'], 'production');
-		$long = ConsoleSender::releasePayload(str_repeat('a', 80), [
+		$long = CodesafeSender::releasePayload(str_repeat('a', 80), [
 			'ref' => str_repeat('b', 200), 'source' => str_repeat('c', 40)], '');
 		
 		return $plain === ['release' => '42800', 'source' => 'php-library', 'environment' => 'production']
@@ -58,11 +58,11 @@ class Sender extends Test
 			&& mb_strlen($long['ref']) === 128
 			&& mb_strlen($long['source']) === 32
 			&& isset($long['environment']) === false
-			&& ConsoleSender::releasePayload('', ['ref' => 'x'], 'production') === []
-			&& ConsoleSender::releasePayload("  \n", [], 'production') === []
+			&& CodesafeSender::releasePayload('', ['ref' => 'x'], 'production') === []
+			&& CodesafeSender::releasePayload("  \n", [], 'production') === []
 			// an ISO moment travels as given, a blank one not at all
-			&& ConsoleSender::releasePayload('1.0', ['at' => ' 2026-09-07T10:00:00+02:00 '], '')['at'] === '2026-09-07T10:00:00+02:00'
-			&& isset(ConsoleSender::releasePayload('1.0', ['at' => ''], '')['at']) === false;
+			&& CodesafeSender::releasePayload('1.0', ['at' => ' 2026-09-07T10:00:00+02:00 '], '')['at'] === '2026-09-07T10:00:00+02:00'
+			&& isset(CodesafeSender::releasePayload('1.0', ['at' => ''], '')['at']) === false;
 	}
 	
 	public function capturesDistinctThrowables(): bool
@@ -112,12 +112,12 @@ class Sender extends Test
 	{
 		$sender = $this->makeSender();
 		
-		for($i = 0; $i < ConsoleSender::QUEUE_MAX + 5; $i++)
+		for($i = 0; $i < CodesafeSender::QUEUE_MAX + 5; $i++)
 		{
 			$sender->captureMessage('message ' . $i);
 		}
 		
-		return $sender->queueCount() === ConsoleSender::QUEUE_MAX;
+		return $sender->queueCount() === CodesafeSender::QUEUE_MAX;
 	}
 	
 	/**
@@ -129,18 +129,18 @@ class Sender extends Test
 	{
 		$sender = $this->makeSender();
 		
-		for($i = 0; $i < ConsoleSender::QUEUE_MAX; $i++)
+		for($i = 0; $i < CodesafeSender::QUEUE_MAX; $i++)
 		{
 			$sender->captureMessage('message ' . $i);
 		}
 		
 		$sender->captureException(new Exception('explicit — capped'));
-		$cappedForCaptures = $sender->queueCount() === ConsoleSender::QUEUE_MAX;
+		$cappedForCaptures = $sender->queueCount() === CodesafeSender::QUEUE_MAX;
 		
 		$sender->mergeEvent(new Exception('uncaught — must still queue'));
 		
 		return $cappedForCaptures
-			&& $sender->queueCount() === ConsoleSender::QUEUE_MAX + 1;
+			&& $sender->queueCount() === CodesafeSender::QUEUE_MAX + 1;
 	}
 	
 	public function disabledSenderCapturesNothing(): bool
@@ -249,19 +249,19 @@ class Sender extends Test
 	{
 		$minute = 29248320;
 		
-		return ConsoleSender::securityKey('shop', $minute)
-				=== 'shop:' . ConsoleSender::SECURITY_PREFIX . $minute
-			&& ConsoleSender::securityKey('shop', $minute)
-				!== ConsoleSender::securityKey('tenant-b', $minute)
+		return CodesafeSender::securityKey('shop', $minute)
+				=== 'shop:' . CodesafeSender::SECURITY_PREFIX . $minute
+			&& CodesafeSender::securityKey('shop', $minute)
+				!== CodesafeSender::securityKey('tenant-b', $minute)
 			// the same install still shares one counter across its workers
-			&& ConsoleSender::securityKey('shop', $minute)
-				=== ConsoleSender::securityKey('shop', $minute)
-			&& ConsoleSender::securityKey('shop', $minute)
-				!== ConsoleSender::securityKey('shop', $minute + 1)
-			&& ConsoleSender::securityKey(null, $minute)
-				=== ConsoleSender::SECURITY_PREFIX . $minute
-			&& ConsoleSender::securityKey('', $minute)
-				=== ConsoleSender::SECURITY_PREFIX . $minute;
+			&& CodesafeSender::securityKey('shop', $minute)
+				=== CodesafeSender::securityKey('shop', $minute)
+			&& CodesafeSender::securityKey('shop', $minute)
+				!== CodesafeSender::securityKey('shop', $minute + 1)
+			&& CodesafeSender::securityKey(null, $minute)
+				=== CodesafeSender::SECURITY_PREFIX . $minute
+			&& CodesafeSender::securityKey('', $minute)
+				=== CodesafeSender::SECURITY_PREFIX . $minute;
 	}
 	
 	/**
@@ -308,14 +308,14 @@ class Sender extends Test
 	 */
 	public function maskNameKeepsEveryFourthCharacter(): bool
 	{
-		return ConsoleSender::maskName('bob') === 'b**'
-			&& ConsoleSender::maskName('erin') === 'e***'
-			&& ConsoleSender::maskName('marcin') === 'm***i*'
-			&& ConsoleSender::maskName('marcinmarcin') === 'm***i***r***'
-			&& ConsoleSender::maskName('Ökonom') === 'Ö***o*'
+		return CodesafeSender::maskName('bob') === 'b**'
+			&& CodesafeSender::maskName('erin') === 'e***'
+			&& CodesafeSender::maskName('marcin') === 'm***i*'
+			&& CodesafeSender::maskName('marcinmarcin') === 'm***i***r***'
+			&& CodesafeSender::maskName('Ökonom') === 'Ö***o*'
 			// a single character has nothing to hide behind and no length to state
-			&& ConsoleSender::maskName('a') === 'a'
-			&& ConsoleSender::maskName('') === '';
+			&& CodesafeSender::maskName('a') === 'a'
+			&& CodesafeSender::maskName('') === '';
 	}
 	
 	/**
@@ -328,12 +328,12 @@ class Sender extends Test
 	{
 		$full = str_repeat('x***', Logger::MASK_MAX / Logger::MASK_GROUP);
 		
-		return ConsoleSender::maskName(str_repeat('x', Logger::MASK_MAX)) === $full
-			&& ConsoleSender::maskName(str_repeat('x', Logger::MASK_MAX + 1))
+		return CodesafeSender::maskName(str_repeat('x', Logger::MASK_MAX)) === $full
+			&& CodesafeSender::maskName(str_repeat('x', Logger::MASK_MAX + 1))
 				=== $full . '[' . (Logger::MASK_MAX + 1) . ']'
-			&& ConsoleSender::maskName(str_repeat('x', 200)) === $full . '[200]'
+			&& CodesafeSender::maskName(str_repeat('x', 200)) === $full . '[200]'
 			// counted in characters, not bytes
-			&& ConsoleSender::maskName(str_repeat('ä', 200))
+			&& CodesafeSender::maskName(str_repeat('ä', 200))
 				=== str_repeat('ä***', Logger::MASK_MAX / Logger::MASK_GROUP) . '[200]';
 	}
 	
@@ -351,8 +351,8 @@ class Sender extends Test
 			// a value that only LOOKS like a cut mask is still a name
 			'admin[5]x'] as $value)
 		{
-			$masked = ConsoleSender::maskName($value);
-			if(ConsoleSender::maskName($masked) !== $masked)
+			$masked = CodesafeSender::maskName($value);
+			if(CodesafeSender::maskName($masked) !== $masked)
 			{
 				return false;
 			}
@@ -445,15 +445,15 @@ class Sender extends Test
 	 */
 	public function responseStatusIsTheSapiStatusInTheHttpRange(): bool
 	{
-		return ConsoleSender::statusOf(500) === 500
-			&& ConsoleSender::statusOf(200) === 200
-			&& ConsoleSender::statusOf(100) === 100
-			&& ConsoleSender::statusOf(599) === 599
-			&& ConsoleSender::statusOf(false) === null
-			&& ConsoleSender::statusOf(null) === null
-			&& ConsoleSender::statusOf(99) === null
-			&& ConsoleSender::statusOf(600) === null
-			&& ConsoleSender::statusOf('500') === null;
+		return CodesafeSender::statusOf(500) === 500
+			&& CodesafeSender::statusOf(200) === 200
+			&& CodesafeSender::statusOf(100) === 100
+			&& CodesafeSender::statusOf(599) === 599
+			&& CodesafeSender::statusOf(false) === null
+			&& CodesafeSender::statusOf(null) === null
+			&& CodesafeSender::statusOf(99) === null
+			&& CodesafeSender::statusOf(600) === null
+			&& CodesafeSender::statusOf('500') === null;
 	}
 	
 	/**
@@ -510,7 +510,7 @@ class Sender extends Test
 	}
 	
 	/**
-	 * @return ConsoleSender&object{queueCount: callable(): int}
+	 * @return CodesafeSender&object{queueCount: callable(): int}
 	 */
 	/**
 	 * The replay keys (docs/SENDER.md §context.request): the raw BODY with its
@@ -568,8 +568,8 @@ class Sender extends Test
 			// php://input is empty in a CLI test run, so the key stays out
 			&& array_key_exists('body', $request) === false
 			&& $multipart === '' && $read === ''
-			&& ConsoleSender::BODY_MAX === 16384
-			&& in_array('accept-language', ConsoleSender::REQUEST_HEADERS, true);
+			&& CodesafeSender::BODY_MAX === 16384
+			&& in_array('accept-language', CodesafeSender::REQUEST_HEADERS, true);
 	}
 	
 	/**
@@ -604,7 +604,7 @@ class Sender extends Test
 	protected function makeSender(
 		bool $enabled = true,
 		bool $report404 = false,
-	): ConsoleSender
+	): CodesafeSender
 	{
 		$config = new ArrayObject([
 			'enabled' => $enabled,
@@ -613,7 +613,7 @@ class Sender extends Test
 			'report_404' => $report404,
 		]);
 		
-		return new class($config) extends ConsoleSender
+		return new class($config) extends CodesafeSender
 		{
 			/**
 			 * The rolling APCu cap, scripted: the real allowSecurity() reads a
@@ -701,18 +701,18 @@ class Sender extends Test
 	 */
 	public function theReleaseIsTheConfiguredValueElseTheStamp(): bool
 	{
-		return ConsoleSender::releaseLabel('v1.2', "abc123\n") === 'v1.2'
-			&& ConsoleSender::releaseLabel('dev', "abc123\n") === 'dev'
-			&& ConsoleSender::releaseLabel('', "abc123\n") === 'abc123'
-			&& ConsoleSender::releaseLabel(null, "abc123\nsecond line\n") === 'abc123'
-			&& ConsoleSender::releaseLabel('  ', "  7f3e9  \n") === '7f3e9'
-			&& ConsoleSender::releaseLabel('', null) === ''
+		return CodesafeSender::releaseLabel('v1.2', "abc123\n") === 'v1.2'
+			&& CodesafeSender::releaseLabel('dev', "abc123\n") === 'dev'
+			&& CodesafeSender::releaseLabel('', "abc123\n") === 'abc123'
+			&& CodesafeSender::releaseLabel(null, "abc123\nsecond line\n") === 'abc123'
+			&& CodesafeSender::releaseLabel('  ', "  7f3e9  \n") === '7f3e9'
+			&& CodesafeSender::releaseLabel('', null) === ''
 			// a non-string configured value is no value: the stamp speaks, or nothing does
-			&& ConsoleSender::releaseLabel(42, "abc123\n") === 'abc123'
-			&& ConsoleSender::releaseLabel(42, '') === ''
-			&& mb_strlen(ConsoleSender::releaseLabel(str_repeat('x', 80), null)) === ConsoleSender::RELEASE_MAX
-			&& ConsoleSender::stamp(__DIR__ . '/no-such-file.release') === null
-			&& ConsoleSender::RELEASE_FILE === '.release';
+			&& CodesafeSender::releaseLabel(42, "abc123\n") === 'abc123'
+			&& CodesafeSender::releaseLabel(42, '') === ''
+			&& mb_strlen(CodesafeSender::releaseLabel(str_repeat('x', 80), null)) === CodesafeSender::RELEASE_MAX
+			&& CodesafeSender::stamp(__DIR__ . '/no-such-file.release') === null
+			&& CodesafeSender::RELEASE_FILE === '.release';
 	}
 	
 	/**
@@ -724,7 +724,7 @@ class Sender extends Test
 	 */
 	public function theBatchCarriesTheConfiguredTags(): bool
 	{
-		$make = static function(mixed $tags): ConsoleSender
+		$make = static function(mixed $tags): CodesafeSender
 		{
 			$config = new ArrayObject([
 				'enabled' => true,
@@ -732,7 +732,7 @@ class Sender extends Test
 				'key' => 'test-key',
 			] + ($tags === null ? [] : ['tags' => $tags]));
 			
-			$sender = container()->injectMissing(new class($config) extends ConsoleSender
+			$sender = container()->injectMissing(new class($config) extends CodesafeSender
 			{
 				public function batch(): array
 				{
@@ -765,7 +765,7 @@ class Sender extends Test
 	 */
 	public function reportUntrackedPostsTheWorkingCopysAnswerFromTheCli(): bool
 	{
-		$make = static function(bool $enabled, ?string $output): ConsoleSender
+		$make = static function(bool $enabled, ?string $output): CodesafeSender
 		{
 			$config = new ArrayObject([
 				'enabled' => $enabled,
@@ -776,7 +776,7 @@ class Sender extends Test
 				'files' => ['web' => ['www']],
 			]);
 			
-			return container()->injectMissing(new class($config, $output) extends ConsoleSender
+			return container()->injectMissing(new class($config, $output) extends CodesafeSender
 			{
 				public array $posts = [];
 				

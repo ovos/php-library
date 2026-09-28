@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Service\Console;
+namespace Ovos\Service\Codesafe;
 
 use Ovos\Exception\Priority;
 use Throwable;

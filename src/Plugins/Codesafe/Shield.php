@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Plugins\Console;
+namespace Ovos\Plugins\Codesafe;
 
 use Ovos\ArrayObject;
 use Ovos\Controller\Plugin;
 use Ovos\Response\Html;
-use Ovos\Service\Console\Sender;
-use Ovos\Service\Console\Shield as Service;
+use Ovos\Service\Codesafe\Sender;
+use Ovos\Service\Codesafe\Shield as Service;
 use Override;
 use Throwable;
 
@@ -15,7 +15,7 @@ use function max;
 
 /**
  * The Shield's controller plugin: the request is judged before the action
- * runs (Ovos\Service\Console\Shield over the console's kernel), a match is
+ * runs (Ovos\Service\Codesafe\Shield over the console's kernel), a match is
  * reported through the console Sender, and a `block` — a PROVEN rule under
  * `console.shield.enforce` — becomes the application's own 403, the way the
  * Csrf plugin refuses: the response is set and the controller is marked
@@ -25,7 +25,7 @@ use function max;
  *     default:
  *       http:
  *         - Security\Csrf
- *         - Console\Shield   # after Csrf, before anything that acts on the request
+ *         - Codesafe\Shield   # after Csrf, before anything that acts on the request
  *
  * and switch it on per project under `console.shield` (see the Service).
  * Inert on the CLI and whenever the Service says it is not enabled; fails

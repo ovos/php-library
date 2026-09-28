@@ -156,10 +156,10 @@ class Events
 		}
 		
 		// console writer — only when the error console sender is registered
-		if($this->container->isRegistered(Console\Sender::SYMBOL))
+		if($this->container->isRegistered(Codesafe\Sender::SYMBOL))
 		{
-			$this->writers[] = new Console\Writer(
-				$this->container->get(Console\Sender::SYMBOL),
+			$this->writers[] = new Codesafe\Writer(
+				$this->container->get(Codesafe\Sender::SYMBOL),
 			);
 		}
 		

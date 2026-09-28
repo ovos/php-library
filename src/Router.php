@@ -236,7 +236,7 @@ class Router
 		$this->url->setComponents([]);
 		
 		// static-file 404 — reported as info: mostly crawlers hitting stale
-		// links, nothing actionable (see Console\Payload::priorityFor)
+		// links, nothing actionable (see Codesafe\Payload::priorityFor)
 		throw (new FileNotFoundException('File not found: %s', implode('/', $params)))
 			->withPriority(Priority::INFO);
 	}
