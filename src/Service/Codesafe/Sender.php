@@ -7,8 +7,7 @@ use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
 use Ovos\Client;
-use Ovos\Container;
-use Ovos\Container\FirstOf;
+use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
@@ -19,7 +18,6 @@ use Ovos\Service\Events;
 use Ovos\Service\Session;
 use Ovos\Service\Logger;
 use ErrorException;
-use Override;
 use SplObjectStorage;
 use Throwable;
 use Traversable;
@@ -90,7 +88,7 @@ use const PREG_SPLIT_NO_EMPTY;
  *
  * Project setup (environments.yml):
  *
- *   codesafe:                         # `console:` is still read when there is no `codesafe:`
+ *   codesafe:
  *     enabled: yes
  *     url: https://codesafe.example     # instance base URL
  *     key: !ENV CODESAFE[KEY]           # project api_key
@@ -161,17 +159,8 @@ class Sender extends Service
 	/** the container key: services()->codesafeSender */
 	public const string SYMBOL = 'codesafeSender';
 	
-	/**
-	 * The key from before the rename (2026-09-24), registered beside SYMBOL as
-	 * the same instance — `services()->consoleSender` in an application keeps
-	 * reaching the Sender instead of a Disabled service
-	 */
-	public const string SYMBOL_LEGACY = 'consoleSender';
-	
-	/** the config section, and the one it had before the rename, read when it is absent */
+	/** the config section */
 	public const string CONFIG = 'codesafe';
-	
-	public const string CONFIG_LEGACY = 'console';
 	
 	/**
 	 * Cap on explicitly captured payloads per flush cycle — an error loop
@@ -223,7 +212,7 @@ class Sender extends Service
 	/**
 	 * The security limiter's key namespace, beneath the install's own
 	 */
-	public const string SECURITY_PREFIX = 'ovos:console:security:';
+	public const string SECURITY_PREFIX = 'ovos:codesafe:security:';
 	
 	/**
 	 * What codesafe's REPLAY needs to re-issue the request that failed
@@ -273,29 +262,11 @@ class Sender extends Service
 	
 	public function __construct(
 		#[Inject('config')]
-		#[FirstOf(self::CONFIG, self::CONFIG_LEGACY)]
+		#[InjectArrayObject(self::CONFIG)]
 		?ArrayObject $config,
 	)
 	{
 		$this->config = $config;
-	}
-	
-	/**
-	 * Registered under SYMBOL, the Sender answers SYMBOL_LEGACY too: one
-	 * instance, one queue, whichever key an application asks for
-	 */
-	#[Override]
-	public static function register(
-		string $key,
-		Container $container,
-	): void
-	{
-		parent::register($key, $container);
-		if($key === self::SYMBOL)
-		{
-			$container->registerCallable(self::SYMBOL_LEGACY,
-				static fn(Container $container): object => $container->get(self::SYMBOL));
-		}
 	}
 	
 	/**
@@ -306,7 +277,7 @@ class Sender extends Service
 		ArrayObject $config,
 	): ?ArrayObject
 	{
-		$section = (new FirstOf(self::CONFIG, self::CONFIG_LEGACY))->process($config);
+		$section = $config->getPath([self::CONFIG]);
 		
 		return $section instanceof ArrayObject ? $section : null;
 	}

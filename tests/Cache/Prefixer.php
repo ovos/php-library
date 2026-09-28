@@ -18,25 +18,25 @@ class Prefixer extends Test
 {
 	public function internalPrefixApplies(): bool
 	{
-		$prefixer = new Subject('console');
+		$prefixer = new Subject('codesafe');
 		
-		return $prefixer->prefix('items') === 'console:items'
-			&& $prefixer->getPrefix() === 'console';
+		return $prefixer->prefix('items') === 'codesafe:items'
+			&& $prefixer->getPrefix() === 'codesafe';
 	}
 	
 	public function passedPrefixWinsOverInternal(): bool
 	{
-		$prefixer = new Subject('console');
+		$prefixer = new Subject('codesafe');
 		
-		return $prefixer->prefix('key', 'console:tests') === 'console:tests:key';
+		return $prefixer->prefix('key', 'codesafe:tests') === 'codesafe:tests:key';
 	}
 	
 	public function nullPassedPrefixFallsBackToInternal(): bool
 	{
 		// the PR #27 semantics: null means "use mine", not "use nothing"
-		$prefixer = new Subject('console');
+		$prefixer = new Subject('codesafe');
 		
-		return $prefixer->prefix('tags', null) === 'console:tags';
+		return $prefixer->prefix('tags', null) === 'codesafe:tags';
 	}
 	
 	public function noPrefixAtAllLeavesTheKeyBare(): bool
