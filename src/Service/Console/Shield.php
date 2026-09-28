@@ -7,11 +7,11 @@ use Closure;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
-use Ovos\Console\Shield\Consent;
-use Ovos\Console\Shield\Facts;
-use Ovos\Console\Shield\Kernel;
-use Ovos\Console\Shield\Store;
-use Ovos\Console\Shield\Verdict;
+use Ovos\Codesafe\Shield\Consent;
+use Ovos\Codesafe\Shield\Facts;
+use Ovos\Codesafe\Shield\Kernel;
+use Ovos\Codesafe\Shield\Store;
+use Ovos\Codesafe\Shield\Verdict;
 use Ovos\Service\Auth;
 use Ovos\Stream\Request;
 use Throwable;
@@ -39,13 +39,13 @@ use function trim;
 // to sit at the require, never inside the file
 if(class_exists(Kernel::class, false) === false)
 {
-	require_once __DIR__ . '/../../Console/Shield/Kernel.php';
+	require_once __DIR__ . '/../../Codesafe/Shield/Kernel.php';
 }
 
 /**
  * The Shield in a php-library application — the adapter around the
- * console's request-side kernel (Ovos\Console\Shield\Kernel, vendored as
- * src/Console/Shield/Kernel.php; ovos/console docs/SENDER.md §10). The
+ * console's request-side kernel (Ovos\Codesafe\Shield\Kernel, vendored as
+ * src/Codesafe/Shield/Kernel.php; ovos/console docs/SENDER.md §10). The
  * kernel pulls this project's LIVE rules from the console it already
  * reports to, judges every request against them and reports a match as a
  * `shield_observe` / `shield_block` security event; this class reads the

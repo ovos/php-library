@@ -91,7 +91,7 @@ $jobs = $store->withRelations($jobs);   // one IN query per relation
 
 Every request carries a live profiler: the SQL it ran, the Redis commands it
 issued and where the time went — streamed as it happens. Uncaught errors report
-to [ovos/console](https://github.com/ovos/console) out of the box, with the same
+to [ovos/codesafe](https://github.com/ovos/codesafe) out of the box, with the same
 per-request timeline attached. → [Configuration](#configuration-environmentsyml)
 
 ### 🧩 A container that wires itself
