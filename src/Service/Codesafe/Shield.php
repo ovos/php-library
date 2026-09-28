@@ -76,10 +76,10 @@ if(class_exists(Kernel::class, false) === false)
 class Shield
 {
 	/** the install's APCu namespace, beneath the configured cache prefix like the rollups */
-	public const string PREFIX = 'ovos:console:shield:';
+	public const string PREFIX = 'ovos:codesafe:shield:';
 	
 	/** the temp-dir folder the durable tier falls back to */
-	public const string DIR = 'ovos-console-shield';
+	public const string DIR = 'ovos-codesafe-shield';
 	
 	/** the most a pull reads: the door caps a payload at 25 rules of 600 bytes — a megabyte is a wrong door */
 	public const int RESPONSE_LIMIT = 1_048_576;

@@ -147,10 +147,10 @@ class Request extends Test
 	public function userAgentSetsContextOption(): bool
 	{
 		$options = (new HttpRequest('http://localhost'))
-			->setUserAgent('ovos-console-uptime/1.0')
+			->setUserAgent('ovos-codesafe-uptime/1.0')
 			->getContextOptions();
 		
-		return ($options['http']['user_agent'] ?? null) === 'ovos-console-uptime/1.0';
+		return ($options['http']['user_agent'] ?? null) === 'ovos-codesafe-uptime/1.0';
 	}
 	
 	/**

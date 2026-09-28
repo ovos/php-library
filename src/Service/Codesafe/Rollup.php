@@ -109,7 +109,7 @@ class Rollup
 	 * belongs to the whole FPM pool and a pool can serve several installs,
 	 * so the install's cache prefix goes in front of it (see $keyPrefix)
 	 */
-	public const string PREFIX = 'ovos:console:rollups:';
+	public const string PREFIX = 'ovos:codesafe:rollups:';
 	
 	/**
 	 * Key suffixes, appended to $keyPrefix by key()
@@ -160,7 +160,7 @@ class Rollup
 	
 	/**
 	 * Every APCu key this install owns starts with it:
-	 * '<cache prefix>:ovos:console:rollups:'
+	 * '<cache prefix>:ovos:codesafe:rollups:'
 	 */
 	protected readonly string $keyPrefix;
 	
