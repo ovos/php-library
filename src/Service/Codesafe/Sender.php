@@ -7,6 +7,7 @@ use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
 use Ovos\Client;
+use Ovos\Container;
 use Ovos\Container\FirstOf;
 use Ovos\Container\Inject;
 use Ovos\Exception\NotFoundException;
@@ -18,6 +19,7 @@ use Ovos\Service\Events;
 use Ovos\Service\Session;
 use Ovos\Service\Logger;
 use ErrorException;
+use Override;
 use SplObjectStorage;
 use Throwable;
 use Traversable;
@@ -156,11 +158,15 @@ class Sender extends Service
 	/** the label's cap — codesafe's column and its own mb_substr agree on it */
 	public const int RELEASE_MAX = 64;
 	
+	/** the container key: services()->codesafeSender */
+	public const string SYMBOL = 'codesafeSender';
+	
 	/**
-	 * The container key — the name from before the rename (2026-09-24) stays:
-	 * `services()->consoleSender` is how applications reach the Sender
+	 * The key from before the rename (2026-09-24), registered beside SYMBOL as
+	 * the same instance — `services()->consoleSender` in an application keeps
+	 * reaching the Sender instead of a Disabled service
 	 */
-	public const string SYMBOL = 'consoleSender';
+	public const string SYMBOL_LEGACY = 'consoleSender';
 	
 	/** the config section, and the one it had before the rename, read when it is absent */
 	public const string CONFIG = 'codesafe';
@@ -275,6 +281,24 @@ class Sender extends Service
 	}
 	
 	/**
+	 * Registered under SYMBOL, the Sender answers SYMBOL_LEGACY too: one
+	 * instance, one queue, whichever key an application asks for
+	 */
+	#[Override]
+	public static function register(
+		string $key,
+		Container $container,
+	): void
+	{
+		parent::register($key, $container);
+		if($key === self::SYMBOL)
+		{
+			$container->registerCallable(self::SYMBOL_LEGACY,
+				static fn(Container $container): object => $container->get(self::SYMBOL));
+		}
+	}
+	
+	/**
 	 * The sender's config section out of the application's config — for a
 	 * class the container does not build (the Shield plugin)
 	 */
@@ -356,7 +380,7 @@ class Sender extends Service
 	 * Start building an arbitrary event bound to this sender. A thrown
 	 * exception is optional — set a message, extras and context overrides, then
 	 * call Event::capture(). Reachable through the container from anywhere:
-	 * container()->get(Sender::SYMBOL)->event() (or services()->consoleSender).
+	 * container()->get(Sender::SYMBOL)->event() (or services()->codesafeSender).
 	 */
 	public function event(): Event
 	{

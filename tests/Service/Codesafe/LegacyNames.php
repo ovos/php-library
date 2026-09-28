@@ -5,8 +5,10 @@ namespace Tests\Service\Codesafe;
 
 use Ovos\Application;
 use Ovos\ArrayObject;
+use Ovos\Container;
 use Ovos\Controller;
 use Ovos\Service\Codesafe\Sender;
+use Ovos\Services;
 use Ovos\Test;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -67,8 +69,27 @@ class LegacyNames extends Test
 	{
 		$old = Application::resolveServiceClass('Console\\Sender');
 		
-		return (new ReflectionClass($old))->getName() === Application::resolveServiceClass('Codesafe\\Sender')
-			&& $old::SYMBOL === 'consoleSender';
+		return (new ReflectionClass($old))->getName() === Application::resolveServiceClass('Codesafe\\Sender');
+	}
+	
+	/**
+	 * RULE: the Sender is services()->codesafeSender, and services()->consoleSender
+	 * is the same instance — not a Disabled service, not a second Sender.
+	 * Falsify: drop the registerCallable in Sender::register.
+	 */
+	public function theOldServiceKeyIsTheSameSender(): bool
+	{
+		$container = new Container();
+		(new Services($container))->register(Sender::SYMBOL, Sender::class);
+		// a real Sender autowires an Application into a bare container — the
+		// instance under the new key is stood in for; the alias is what is tested
+		$sender = (new ReflectionClass(Sender::class))->newInstanceWithoutConstructor();
+		$container->registerCallable(Sender::SYMBOL, static fn(): Sender => $sender, overwrite: true);
+		$services = new Services($container);
+		
+		return Sender::SYMBOL === 'codesafeSender'
+			&& $services->codesafeSender === $sender
+			&& $services->consoleSender === $sender;
 	}
 	
 	/**
