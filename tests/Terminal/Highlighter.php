@@ -124,10 +124,10 @@ class Highlighter extends Test
 	
 	public function redisColorsTheVerbAndTheKeys(): bool
 	{
-		$highlighted = Subject::redis('hGet console:projects 12');
+		$highlighted = Subject::redis('hGet codesafe:projects 12');
 		
 		return str_contains($highlighted, '<cyan>HGET<reset>')
-			&& str_contains($highlighted, '<green>console:projects<reset>')
+			&& str_contains($highlighted, '<green>codesafe:projects<reset>')
 			&& str_contains($highlighted, '<gray>12<reset>');
 	}
 	
@@ -135,11 +135,11 @@ class Highlighter extends Test
 	{
 		// FCALL reports the function name before the key, so position cannot
 		// decide which token is a key — the shape has to
-		$highlighted = Subject::redis('FCALL console_cache_clear console:*');
+		$highlighted = Subject::redis('FCALL codesafe_cache_clear codesafe:*');
 		
 		return str_contains($highlighted, '<cyan>FCALL<reset>')
-			&& str_contains($highlighted, '<gray>console_cache_clear<reset>')
-			&& str_contains($highlighted, '<green>console:*<reset>');
+			&& str_contains($highlighted, '<gray>codesafe_cache_clear<reset>')
+			&& str_contains($highlighted, '<green>codesafe:*<reset>');
 	}
 	
 	public function redisKeepsItsSpacingAndFindsAWrappedKey(): bool
@@ -147,9 +147,9 @@ class Highlighter extends Test
 		// the view wraps at 150 columns BEFORE highlighting, so a key can arrive
 		// split across a line break — it used to fail isRedisKey() and both halves
 		// went grey
-		$wrapped = Subject::redis("HGET console:issues:abc\nproject");
+		$wrapped = Subject::redis("HGET codesafe:issues:abc\nproject");
 		
-		return str_contains($wrapped, '<green>console:issues:abc<reset>')
+		return str_contains($wrapped, '<green>codesafe:issues:abc<reset>')
 			// a run of spaces is content, not a delimiter: splitting on a single
 			// space made an empty coloured token out of the gap
 			&& Subject::redis('GET  foo') === '<cyan>GET<reset>  <gray>foo<reset>'

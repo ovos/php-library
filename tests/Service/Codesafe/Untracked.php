@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Service\Console;
+namespace Tests\Service\Codesafe;
 
-use Ovos\Service\Console\Untracked as Pass;
+use Ovos\Service\Codesafe\Untracked as Pass;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use FilesystemIterator;
@@ -34,7 +34,7 @@ use function unlink;
 use const PHP_BINARY;
 
 /**
- * Service\Console\Untracked — the working-copy pass (ovos/console
+ * Service\Codesafe\Untracked — the working-copy pass (ovos/console
  * docs/plans/file-appearance-sensor.md, detector 5 and its modified half):
  * the working copy found at or above a directory, git's and svn's answers
  * parsed into clean relative paths of three kinds (untracked, modified,

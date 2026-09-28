@@ -457,7 +457,7 @@ class Highlighter
 	
 	/**
 	 * A redis key in these projects is namespaced with colons and carries no
-	 * whitespace — see the console:* layout
+	 * whitespace — see the codesafe:* layout
 	 */
 	protected static function isRedisKey(
 		string $part,

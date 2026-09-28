@@ -1,15 +1,15 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Service\Console;
+namespace Tests\Service\Codesafe;
 
 use Ovos\ArrayObject;
 use Ovos\Codesafe\Shield\Facts;
 use Ovos\Codesafe\Shield\Kernel;
 use Ovos\Codesafe\Shield\Ruleset;
 use Ovos\Codesafe\Shield\Verdict;
-use Ovos\Plugins\Console\Shield as Plugin;
-use Ovos\Service\Console\Shield as Subject;
+use Ovos\Plugins\Codesafe\Shield as Plugin;
+use Ovos\Service\Codesafe\Shield as Subject;
 use Ovos\Test;
 use Ovos\Test\Internal;
 
@@ -35,7 +35,7 @@ if(class_exists(Kernel::class, false) === false)
 }
 
 /**
- * The Shield adapter (Ovos\Service\Console\Shield) and its controller
+ * The Shield adapter (Ovos\Service\Codesafe\Shield) and its controller
  * plugin: what switches it on, how the three consent keys read, where the
  * store lives per install, and the verdict path from a request to the
  * Sender's security channel and to the 403 — over an injected transport
@@ -307,6 +307,6 @@ class Shield extends Test
 			&& $refused->getHttpCode() === 403 && isset($refused->getHeaders()['Retry-After']) === false
 			&& Plugin::response(7, 429, 0)->getHeaders()['Retry-After']['value'] === '1'
 			&& Subject::identity(null) === ''
-			&& in_array('shield_rate', \Ovos\Service\Console\Sender::SECURITY_KINDS, true);
+			&& in_array('shield_rate', \Ovos\Service\Codesafe\Sender::SECURITY_KINDS, true);
 	}
 }

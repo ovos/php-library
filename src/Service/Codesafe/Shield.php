@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Service\Console;
+namespace Ovos\Service\Codesafe;
 
 use Closure;
 use Ovos\Application;
@@ -34,7 +34,7 @@ use function substr;
 use function sys_get_temp_dir;
 use function trim;
 
-// the kernel is one vendored multi-class file (ovos/console client-php/Shield.php,
+// the kernel is one vendored multi-class file (ovos/codesafe client-php/Shield.php,
 // byte-identical here); a plain class binds at compile time, so the guard has
 // to sit at the require, never inside the file
 if(class_exists(Kernel::class, false) === false)
@@ -44,42 +44,42 @@ if(class_exists(Kernel::class, false) === false)
 
 /**
  * The Shield in a php-library application — the adapter around the
- * console's request-side kernel (Ovos\Codesafe\Shield\Kernel, vendored as
- * src/Codesafe/Shield/Kernel.php; ovos/console docs/SENDER.md §10). The
- * kernel pulls this project's LIVE rules from the console it already
+ * codesafe's request-side kernel (Ovos\Codesafe\Shield\Kernel, vendored as
+ * src/Codesafe/Shield/Kernel.php; ovos/codesafe docs/SENDER.md §10). The
+ * kernel pulls this project's LIVE rules from the codesafe instance it already
  * reports to, judges every request against them and reports a match as a
  * `shield_observe` / `shield_block` security event; this class reads the
- * three consent switches and the store's place from `console.shield.*`,
+ * three consent switches and the store's place from `codesafe.shield.*`,
  * builds the Facts off the request, hands a match to the Sender and pulls
  * on the Sender's shutdown tick. The controller plugin
- * Ovos\Plugins\Console\Shield turns `block` into the application's 403.
+ * Ovos\Plugins\Codesafe\Shield turns `block` into the application's 403.
  *
  * The pull travels over the framework's own HTTP client (Ovos\Stream\Request:
  * the timeout on both phases, redirects off, a response cap, best-effort —
- * a console that does not answer is a null response, never a warning in
+ * a codesafe instance that does not answer is a null response, never a warning in
  * the host's log) unless a transport was injected; the kernel's own curl
  * stays the default for a host with nothing better (MG 2026-09-23).
  *
- *   console:
+ *   codesafe:
  *     shield:
  *       detect: no    # pull the rules and OBSERVE every request: a match is reported, nothing is blocked
  *       enforce: no   # answer 403 to a request a PROVEN rule matches — inert without detect
- *       kill: no      # off entirely, no network — the switch that needs no console
+ *       kill: no      # off entirely, no network — the switch that needs no instance
  *       dir: ''       # where shield.json (the durable tier) lives; '' = the system temp dir
  *
  * Fails open on everything, like the kernel. A rule exists only while a
  * live CVE finding on this project justifies it, or a person wrote it with
- * an expiry or a name — the console lifts the rest by itself.
+ * an expiry or a name — codesafe lifts the rest by itself.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
 class Shield
 {
 	/** the install's APCu namespace, beneath the configured cache prefix like the rollups */
-	public const string PREFIX = 'ovos:console:shield:';
+	public const string PREFIX = 'ovos:codesafe:shield:';
 	
 	/** the temp-dir folder the durable tier falls back to */
-	public const string DIR = 'ovos-console-shield';
+	public const string DIR = 'ovos-codesafe-shield';
 	
 	/** the most a pull reads: the door caps a payload at 25 rules of 600 bytes — a megabyte is a wrong door */
 	public const int RESPONSE_LIMIT = 1_048_576;
@@ -91,7 +91,7 @@ class Shield
 	protected ?Closure $report;
 	
 	/**
-	 * @param ?ArrayObject $config the `console` config block
+	 * @param ?ArrayObject $config the `codesafe` config block (Sender::configOf)
 	 * @param ?string $prefix the install's cache prefix (Sender::cachePrefix)
 	 * @param ?callable $http a transport for tests; null = the framework's stream client (transport())
 	 * @param ?callable $report where a match goes — the Sender's reportRefusal; null = counted, not reported
@@ -108,7 +108,7 @@ class Shield
 	}
 	
 	/**
-	 * The Rollup's transport contract — console enabled, url and key — plus
+	 * The Rollup's transport contract — enabled, url and key — plus
 	 * detect on and kill off. Without it nothing runs and nothing is pulled
 	 */
 	public function isEnabled(): bool
@@ -141,7 +141,7 @@ class Shield
 	}
 	
 	/**
-	 * The durable tier: `console.shield.dir`, or the system temp dir's own
+	 * The durable tier: `codesafe.shield.dir`, or the system temp dir's own
 	 * folder; the file is named by the install prefix and the key, so two
 	 * installs on one box never read each other's rules
 	 */

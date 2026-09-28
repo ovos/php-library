@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Service\Console;
+namespace Ovos\Service\Codesafe;
 
 use Ovos\Exception\Priority;
 
@@ -22,7 +22,7 @@ use function strtotime;
 /**
  * Maps the Sender's finished v1 payload batch onto an OTLP/JSON
  * ExportLogsServiceRequest — for posting to an OpenTelemetry Collector
- * (console.otlp_url), which forwards to the console's OTLP intake (the
+ * (codesafe.otlp_url), which forwards to codesafe's OTLP intake (the
  * records land as type otel) and to whatever else its pipelines feed.
  *
  * Pure mapping, no transport: the Sender decides where the encoded
@@ -34,7 +34,7 @@ use function strtotime;
  * Sibling implementations kept shape-compatible with this one: the CMS
  * projects' CMS\Log\Writer\Otel (byte-identical between the two CMS
  * clients) and the browser client's otlp mode — all three converge
- * on the console's OTLP intake with the same attribute vocabulary.
+ * on codesafe's OTLP intake with the same attribute vocabulary.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -42,7 +42,7 @@ final class Otlp
 {
 	/**
 	 * syslog priority -> OTLP severityNumber band (higher = more severe
-	 * there); the console maps the bands back onto 2/3/4/6/7 — 0/1
+	 * there); codesafe maps the bands back onto 2/3/4/6/7 — 0/1
 	 * collapse into critical and 5 into info on the round trip
 	 */
 	protected const array SEVERITY = [
@@ -99,7 +99,7 @@ final class Otlp
 				(string)$first['environment']);
 		}
 		
-		// OTEL has no tags concept; the console reads its own resource
+		// OTEL has no tags concept; codesafe reads its own resource
 		// attribute `tags` (a string array) for the installation's tags
 		if(is_array($first['tags'] ?? null) && $first['tags'] !== [])
 		{
@@ -131,7 +131,7 @@ final class Otlp
 	
 	/**
 	 * One v1 payload -> one OTLP LogRecord, using the semconv attributes
-	 * the console's OTLP intake maps back onto row fields
+	 * codesafe's OTLP intake maps back onto row fields
 	 */
 	protected static function record(
 		array $payload,
@@ -202,7 +202,7 @@ final class Otlp
 		}
 		
 		// caller extras — one attribute each; unmapped attributes spill
-		// back into the console's context.extra verbatim
+		// back into codesafe's context.extra verbatim
 		if(is_array($context['extra'] ?? null))
 		{
 			foreach($context['extra'] as $key => $value)
@@ -223,7 +223,7 @@ final class Otlp
 		$timestamp = strtotime((string)($payload['timestamp'] ?? ''));
 		if($timestamp > 0)
 		{
-			// string math — the console reads the int64 nanosecond string
+			// string math — codesafe reads the int64 nanosecond string
 			$record['timeUnixNano'] = $timestamp . '000000000';
 		}
 		

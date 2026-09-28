@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Service\Console;
+namespace Ovos\Service\Codesafe;
 
 use Ovos\Logger\Writer as WriterInterface;
 use Throwable;
 
 /**
- * Log writer that forwards throwables to the error console via the Sender.
+ * Log writer that forwards throwables to codesafe via the Sender.
  * Silent by contract: forwarding failures are swallowed so logging can never
  * recurse into itself (logging while logging) or slow the host application —
  * the file writer has already recorded the event.
