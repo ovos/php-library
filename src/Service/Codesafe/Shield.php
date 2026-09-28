@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Service\Console;
+namespace Ovos\Service\Codesafe;
 
 use Closure;
 use Ovos\Application;
@@ -52,7 +52,7 @@ if(class_exists(Kernel::class, false) === false)
  * three consent switches and the store's place from `console.shield.*`,
  * builds the Facts off the request, hands a match to the Sender and pulls
  * on the Sender's shutdown tick. The controller plugin
- * Ovos\Plugins\Console\Shield turns `block` into the application's 403.
+ * Ovos\Plugins\Codesafe\Shield turns `block` into the application's 403.
  *
  * The pull travels over the framework's own HTTP client (Ovos\Stream\Request:
  * the timeout on both phases, redirects off, a response cap, best-effort —

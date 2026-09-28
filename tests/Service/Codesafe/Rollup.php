@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Service\Console;
+namespace Tests\Service\Codesafe;
 
 use Ovos\ArrayObject;
 use Ovos\Controller;
 use Ovos\Request;
-use Ovos\Service\Console\Rollup as ConsoleRollup;
+use Ovos\Service\Codesafe\Rollup as CodesafeRollup;
 use Ovos\Test;
 
 use function array_fill;
@@ -39,12 +39,12 @@ class Rollup extends Test
 	 */
 	public function theShieldHitsRideTheFragment(): bool
 	{
-		$fields = ConsoleRollup::withExtra(['requests' => 3, 's:200' => 3],
+		$fields = CodesafeRollup::withExtra(['requests' => 3, 's:200' => 3],
 			static fn(int $minute): array => ['so:203' => 4, 'sb:203' => 1, 'so:7' => 0, 'minute' => $minute],
 			29833333);
-		$payload = ConsoleRollup::assemble(29833333, $fields);
-		$plain = ConsoleRollup::assemble(29833333, ['requests' => 3]);
-		$broken = ConsoleRollup::withExtra(['requests' => 3], static function(): array
+		$payload = CodesafeRollup::assemble(29833333, $fields);
+		$plain = CodesafeRollup::assemble(29833333, ['requests' => 3]);
+		$broken = CodesafeRollup::withExtra(['requests' => 3], static function(): array
 		{
 			throw new \RuntimeException('no apcu');
 		}, 29833333);
@@ -54,7 +54,7 @@ class Rollup extends Test
 			&& $payload['requests'] === 3 && $payload['routes'] === []
 			&& isset($plain['shield_observe']) === false && isset($plain['shield_block']) === false
 			&& $broken === ['requests' => 3]
-			&& ConsoleRollup::withExtra(['requests' => 1], null, 1) === ['requests' => 1];
+			&& CodesafeRollup::withExtra(['requests' => 1], null, 1) === ['requests' => 1];
 	}
 	
 	/**
@@ -65,7 +65,7 @@ class Rollup extends Test
 	public function rollupsNeedTheOptInAndTheDirectTransport(): bool
 	{
 		$enabled = static fn(array $config): bool
-			=> (new ConsoleRollup(new ArrayObject($config)))->isEnabled();
+			=> (new CodesafeRollup(new ArrayObject($config)))->isEnabled();
 		
 		$base = [
 			'enabled' => true,
@@ -82,7 +82,7 @@ class Rollup extends Test
 			&& $enabled(['enabled' => false] + $base) === false
 			&& $enabled(['url' => ''] + $base) === false
 			&& $enabled(['key' => ''] + $base) === false
-			&& (new ConsoleRollup(null))->isEnabled() === false;
+			&& (new CodesafeRollup(null))->isEnabled() === false;
 	}
 	
 	/**
@@ -97,7 +97,7 @@ class Rollup extends Test
 		$request->setController('wp-admin');
 		$request->setAction('setup-config.php');
 		
-		return ConsoleRollup::routeOf($request) === '__unmatched';
+		return CodesafeRollup::routeOf($request) === '__unmatched';
 	}
 	
 	/**
@@ -129,11 +129,11 @@ class Rollup extends Test
 		$request->setController('index');
 		$request->setAction('index');
 		
-		return ConsoleRollup::routeOf($request) === '/index/index'
-			&& ConsoleRollup::routeFor(404, $request) === '__unmatched'
-			&& ConsoleRollup::routeFor(200, $request) === '/index/index'
+		return CodesafeRollup::routeOf($request) === '/index/index'
+			&& CodesafeRollup::routeFor(404, $request) === '__unmatched'
+			&& CodesafeRollup::routeFor(200, $request) === '/index/index'
 			// a CLI-ish false status trusts the route too — only 404 overrides
-			&& ConsoleRollup::routeFor(false, $request) === '/index/index';
+			&& CodesafeRollup::routeFor(false, $request) === '/index/index';
 	}
 	
 	/**
@@ -143,13 +143,13 @@ class Rollup extends Test
 	 */
 	public function routeNamesHoldTheConsoleShape(): bool
 	{
-		return ConsoleRollup::routeName('Errors', 'index') === '/errors/index'
-			&& ConsoleRollup::routeName('Api\V1\Ingest', 'rollup') === '/api\v1\ingest/rollup'
-			&& ConsoleRollup::routeName('with space', 'index') === '__other'
-			&& ConsoleRollup::routeName('query?x', 'index') === '__other'
-			&& ConsoleRollup::routeName('escape%2e', 'index') === '__other'
-			&& ConsoleRollup::routeName(str_repeat('a', 220), 'index') === '__other'
-			&& ConsoleRollup::routeName('', '') === '__other';
+		return CodesafeRollup::routeName('Errors', 'index') === '/errors/index'
+			&& CodesafeRollup::routeName('Api\V1\Ingest', 'rollup') === '/api\v1\ingest/rollup'
+			&& CodesafeRollup::routeName('with space', 'index') === '__other'
+			&& CodesafeRollup::routeName('query?x', 'index') === '__other'
+			&& CodesafeRollup::routeName('escape%2e', 'index') === '__other'
+			&& CodesafeRollup::routeName(str_repeat('a', 220), 'index') === '__other'
+			&& CodesafeRollup::routeName('', '') === '__other';
 	}
 	
 	/**
@@ -159,10 +159,10 @@ class Rollup extends Test
 	 */
 	public function theHostNameIsReducedToTheIdentityShape(): bool
 	{
-		return ConsoleRollup::hostName('web-03.example.at') === 'web-03.example.at'
-			&& ConsoleRollup::hostName('bad host|name') === 'bad-host-name'
-			&& ConsoleRollup::hostName(str_repeat('h', 80)) === str_repeat('h', 64)
-			&& ConsoleRollup::hostName('') === '';
+		return CodesafeRollup::hostName('web-03.example.at') === 'web-03.example.at'
+			&& CodesafeRollup::hostName('bad host|name') === 'bad-host-name'
+			&& CodesafeRollup::hostName(str_repeat('h', 80)) === str_repeat('h', 64)
+			&& CodesafeRollup::hostName('') === '';
 	}
 	
 	/**
@@ -172,7 +172,7 @@ class Rollup extends Test
 	 */
 	public function counterFieldsAssembleIntoTheFragmentBody(): bool
 	{
-		$payload = ConsoleRollup::assemble(29248320, [
+		$payload = CodesafeRollup::assemble(29248320, [
 			'requests' => 431,
 			's:200' => 52,
 			's:404' => 379,
@@ -191,7 +191,7 @@ class Rollup extends Test
 				'authed' => ['no' => 431],
 			]
 			// an empty minute still has the shape, so the caller can rely on it
-			&& ConsoleRollup::assemble(1, []) === [
+			&& CodesafeRollup::assemble(1, []) === [
 				'minute' => 1,
 				'requests' => 0,
 				'status' => [],
@@ -210,13 +210,13 @@ class Rollup extends Test
 	 */
 	public function durationBucketsClassifyAtTheirBoundaries(): bool
 	{
-		return ConsoleRollup::DURATION_BOUNDS === [25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 30000]
-			&& ConsoleRollup::DURATION_BUCKETS === 12
-			&& ConsoleRollup::bucketFor(0.0) === 0
-			&& ConsoleRollup::bucketFor(25.0) === 0
-			&& ConsoleRollup::bucketFor(25.1) === 1
-			&& ConsoleRollup::bucketFor(30000.0) === 10
-			&& ConsoleRollup::bucketFor(30000.1) === 11;
+		return CodesafeRollup::DURATION_BOUNDS === [25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 30000]
+			&& CodesafeRollup::DURATION_BUCKETS === 12
+			&& CodesafeRollup::bucketFor(0.0) === 0
+			&& CodesafeRollup::bucketFor(25.0) === 0
+			&& CodesafeRollup::bucketFor(25.1) === 1
+			&& CodesafeRollup::bucketFor(30000.0) === 10
+			&& CodesafeRollup::bucketFor(30000.1) === 11;
 	}
 	
 	/**
@@ -230,7 +230,7 @@ class Rollup extends Test
 	 */
 	public function durationFieldsAssembleIntoVectorsOrNotAtAll(): bool
 	{
-		$payload = ConsoleRollup::assemble(29248320, [
+		$payload = CodesafeRollup::assemble(29248320, [
 			'requests' => 3,
 			'r:/user/:id' => 2,
 			'r:/orders' => 1,
@@ -243,7 +243,7 @@ class Rollup extends Test
 		
 		$vector = static function(array $counts): array
 		{
-			$vector = array_fill(0, ConsoleRollup::DURATION_BUCKETS, 0);
+			$vector = array_fill(0, CodesafeRollup::DURATION_BUCKETS, 0);
 			foreach($counts as $bucket => $count)
 			{
 				$vector[$bucket] = $count;
@@ -252,7 +252,7 @@ class Rollup extends Test
 			return $vector;
 		};
 		
-		$evicted = ConsoleRollup::assemble(29248320, [
+		$evicted = CodesafeRollup::assemble(29248320, [
 			'requests' => 2,
 			'd:/orders:3' => 2,
 		]);
@@ -278,12 +278,12 @@ class Rollup extends Test
 	 */
 	public function aStreamIsRecognisedByItsDeclaredContentType(): bool
 	{
-		return ConsoleRollup::isStream(['Content-Type: text/event-stream']) === true
-			&& ConsoleRollup::isStream(['X-Accel-Buffering: no', 'content-type: TEXT/EVENT-STREAM; charset=utf-8']) === true
-			&& ConsoleRollup::isStream(['Content-Type: text/html; charset=utf-8']) === false
-			&& ConsoleRollup::isStream(['Content-Type: application/json']) === false
-			&& ConsoleRollup::isStream(['Link: </sse>; rel="text/event-stream"']) === false
-			&& ConsoleRollup::isStream([]) === false;
+		return CodesafeRollup::isStream(['Content-Type: text/event-stream']) === true
+			&& CodesafeRollup::isStream(['X-Accel-Buffering: no', 'content-type: TEXT/EVENT-STREAM; charset=utf-8']) === true
+			&& CodesafeRollup::isStream(['Content-Type: text/html; charset=utf-8']) === false
+			&& CodesafeRollup::isStream(['Content-Type: application/json']) === false
+			&& CodesafeRollup::isStream(['Link: </sse>; rel="text/event-stream"']) === false
+			&& CodesafeRollup::isStream([]) === false;
 	}
 	
 	/**
@@ -300,11 +300,11 @@ class Rollup extends Test
 	public function keysCarryTheInstallNamespace(): bool
 	{
 		$prefix = static fn(?string $configured): string
-			=> (new ConsoleRollup(null, $configured))->getPrefix();
+			=> (new CodesafeRollup(null, $configured))->getPrefix();
 		
-		return $prefix('shop') === 'shop:' . ConsoleRollup::PREFIX
+		return $prefix('shop') === 'shop:' . CodesafeRollup::PREFIX
 			&& $prefix('shop') !== $prefix('tenant-b')
-			&& $prefix(null) === ConsoleRollup::PREFIX
-			&& $prefix('') === ConsoleRollup::PREFIX;
+			&& $prefix(null) === CodesafeRollup::PREFIX
+			&& $prefix('') === CodesafeRollup::PREFIX;
 	}
 }

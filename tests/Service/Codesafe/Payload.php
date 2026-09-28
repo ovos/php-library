@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests\Service\Console;
+namespace Tests\Service\Codesafe;
 
 use ErrorException;
 use LogicException;
 use Ovos\Exception as OvosException;
-use Ovos\Service\Console\Payload as ConsolePayload;
+use Ovos\Service\Codesafe\Payload as CodesafePayload;
 use Ovos\Test;
 use RuntimeException;
 
@@ -19,23 +19,23 @@ class Payload extends Test
 {
 	public function throwablePriorityIsError(): bool
 	{
-		return ConsolePayload::priorityFor(new RuntimeException('x')) === 3;
+		return CodesafePayload::priorityFor(new RuntimeException('x')) === 3;
 	}
 	
 	public function errorSeverityMapsToSyslog(): bool
 	{
-		return ConsolePayload::priorityFor(new ErrorException('x', 0, E_USER_ERROR)) === 2
-			&& ConsolePayload::priorityFor(new ErrorException('x', 0, E_WARNING)) === 4
-			&& ConsolePayload::priorityFor(new ErrorException('x', 0, E_NOTICE)) === 5
-			&& ConsolePayload::priorityFor(new ErrorException('x', 0, E_DEPRECATED)) === 6;
+		return CodesafePayload::priorityFor(new ErrorException('x', 0, E_USER_ERROR)) === 2
+			&& CodesafePayload::priorityFor(new ErrorException('x', 0, E_WARNING)) === 4
+			&& CodesafePayload::priorityFor(new ErrorException('x', 0, E_NOTICE)) === 5
+			&& CodesafePayload::priorityFor(new ErrorException('x', 0, E_DEPRECATED)) === 6;
 	}
 	
 	public function declaredPriorityOverridesMapping(): bool
 	{
 		// an Ovos exception may carry its own priority (e.g. a router 404 as
 		// info); a null priority defers to the default type-based mapping
-		return ConsolePayload::priorityFor((new OvosException('x'))->withPriority(6)) === 6
-			&& ConsolePayload::priorityFor(new OvosException('x')) === 3;
+		return CodesafePayload::priorityFor((new OvosException('x'))->withPriority(6)) === 6
+			&& CodesafePayload::priorityFor(new OvosException('x')) === 3;
 	}
 
 	public function eventsChainOutermostFirst(): bool
@@ -43,7 +43,7 @@ class Payload extends Test
 		$inner = new LogicException('inner cause');
 		$outer = new RuntimeException('outer message', 0, $inner);
 		
-		$events = ConsolePayload::events($outer);
+		$events = CodesafePayload::events($outer);
 		
 		return count($events) === 2
 			&& $events[0]['className'] === RuntimeException::class
@@ -55,7 +55,7 @@ class Payload extends Test
 	
 	public function fromThrowableShape(): bool
 	{
-		$payload = ConsolePayload::fromThrowable(
+		$payload = CodesafePayload::fromThrowable(
 			new RuntimeException('boom'), null, ['orderId' => 7]);
 		
 		return $payload['v'] === 1
@@ -68,14 +68,14 @@ class Payload extends Test
 	
 	public function fromThrowableHonorsPriorityOverride(): bool
 	{
-		$payload = ConsolePayload::fromThrowable(new RuntimeException('boom'), 6);
+		$payload = CodesafePayload::fromThrowable(new RuntimeException('boom'), 6);
 		
 		return $payload['priority'] === 6;
 	}
 	
 	public function fromMessageShape(): bool
 	{
-		$payload = ConsolePayload::fromMessage('deploy done', 6, ['tag' => 'v2']);
+		$payload = CodesafePayload::fromMessage('deploy done', 6, ['tag' => 'v2']);
 		
 		return $payload['v'] === 1
 			&& $payload['priority'] === 6

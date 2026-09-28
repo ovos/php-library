@@ -6,7 +6,7 @@ namespace Ovos\Exception;
 /**
  * Marks a throwable that carries its own console/report priority
  * (syslog 0-7), overriding the type-based mapping in
- * Ovos\Service\Console\Payload::priorityFor().
+ * Ovos\Service\Codesafe\Payload::priorityFor().
  *
  * @author Marcin Gil <mg@ovos.at>
  */

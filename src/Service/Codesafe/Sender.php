@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ovos\Service\Console;
+namespace Ovos\Service\Codesafe;
 
 use Ovos\Application;
 use Ovos\ArrayObject;
@@ -125,8 +125,8 @@ use const PREG_SPLIT_NO_EMPTY;
  *                                       # `php cli.php console files` (ovos/php-module-system) or
  *                                       # $sender->reportUntracked() — CLI only, never a web request;
  *                                       # needs files_enabled on the console project (403 says so).
- *     shield:                           # OPTIONAL: the Shield (Ovos\Service\Console\Shield + the controller
- *       detect: no                      # plugin Ovos\Plugins\Console\Shield in plugins.default.http). detect =
+ *     shield:                           # OPTIONAL: the Shield (Ovos\Service\Codesafe\Shield + the controller
+ *       detect: no                      # plugin Ovos\Plugins\Codesafe\Shield in plugins.default.http). detect =
  *       enforce: no                     # pull this project's live rules from the console and OBSERVE every
  *       kill: no                        # request (report a match as shield_observe, block nothing); enforce =
  *       dir: ''                         # answer 403 to a request a PROVEN rule matches (inert without detect);
@@ -134,7 +134,7 @@ use const PREG_SPLIT_NO_EMPTY;
  *                                       # dir = where shield.json (the durable tier) lives, '' = the system temp
  *                                       # dir. Needs url+key; APCu is the fast tier, the file alone works without.
  *
- * plus "- Console\Sender" in system.services.http and .cli lists.
+ * plus "- Codesafe\Sender" in system.services.http and .cli lists.
  *
  * The deploy step tells the console a release shipped the minute it does:
  * `$sender->announceRelease()` (SENDER.md §7) — the label the events carry,
@@ -183,7 +183,7 @@ class Sender extends Service
 		'rate_limited',
 		'validation_refused',
 		'privileged_action',
-		// the Shield's own (Ovos\Service\Console\Shield): a request a rule
+		// the Shield's own (Ovos\Service\Codesafe\Shield): a request a rule
 		// matched and let through, one it refused, and a rate rule past its
 		// limit — observed, or answered with 429
 		'shield_observe',
@@ -1084,7 +1084,7 @@ class Sender extends Service
 				$request['contentType'] = mb_substr($contentType, 0, self::CONTENT_TYPE_MAX);
 			}
 			
-			// PARSED, not pattern-matched (Console\Body). The flat search this
+			// PARSED, not pattern-matched (Codesafe\Body). The flat search this
 			// replaces had six holes, all from reading a structured document as
 			// free text. The URI decides first: an endpoint whose purpose is to
 			// receive a password sends no body whatever the mode says.

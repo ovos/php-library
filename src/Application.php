@@ -7,7 +7,7 @@ use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Exception\RuntimeException;
 use Ovos\Config\Loader as ConfigLoader;
 use Ovos\Response\Redirect;
-use Ovos\Service\Console\Sender;
+use Ovos\Service\Codesafe\Sender;
 use Ovos\Service\Memory;
 use Throwable;
 
