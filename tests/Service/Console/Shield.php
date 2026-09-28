@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace Tests\Service\Console;
 
 use Ovos\ArrayObject;
-use Ovos\Console\Shield\Facts;
-use Ovos\Console\Shield\Kernel;
-use Ovos\Console\Shield\Ruleset;
-use Ovos\Console\Shield\Verdict;
+use Ovos\Codesafe\Shield\Facts;
+use Ovos\Codesafe\Shield\Kernel;
+use Ovos\Codesafe\Shield\Ruleset;
+use Ovos\Codesafe\Shield\Verdict;
 use Ovos\Plugins\Console\Shield as Plugin;
 use Ovos\Service\Console\Shield as Subject;
 use Ovos\Test;
@@ -31,7 +31,7 @@ use function unlink;
 // already holds a copy (the console's own) does not declare it twice
 if(class_exists(Kernel::class, false) === false)
 {
-	require_once __DIR__ . '/../../../src/Console/Shield/Kernel.php';
+	require_once __DIR__ . '/../../../src/Codesafe/Shield/Kernel.php';
 }
 
 /**
