@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace Tests;
+namespace Tests\Compression;
 
+use Ovos\Compression\Zstd as BaseZstd;
 use Ovos\Test;
-use Ovos\Zstd as BaseZstd;
 
 use function random_bytes;
 use function str_repeat;
