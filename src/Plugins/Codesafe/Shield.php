@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Plugins\Codesafe;
 
-use Ovos\ArrayObject;
 use Ovos\Controller\Plugin;
 use Ovos\Response\Html;
 use Ovos\Service\Codesafe\Sender;
@@ -15,9 +14,9 @@ use function max;
 
 /**
  * The Shield's controller plugin: the request is judged before the action
- * runs (Ovos\Service\Codesafe\Shield over the console's kernel), a match is
- * reported through the console Sender, and a `block` — a PROVEN rule under
- * `console.shield.enforce` — becomes the application's own 403, the way the
+ * runs (Ovos\Service\Codesafe\Shield over codesafe's kernel), a match is
+ * reported through the codesafe Sender, and a `block` — a PROVEN rule under
+ * `codesafe.shield.enforce` — becomes the application's own 403, the way the
  * Csrf plugin refuses: the response is set and the controller is marked
  * dispatched. Register it in the http plugin list beside `Security\Csrf`:
  *
@@ -27,7 +26,7 @@ use function max;
  *         - Security\Csrf
  *         - Codesafe\Shield   # after Csrf, before anything that acts on the request
  *
- * and switch it on per project under `console.shield` (see the Service).
+ * and switch it on per project under `codesafe.shield` (see the Service).
  * Inert on the CLI and whenever the Service says it is not enabled; fails
  * open on anything thrown — the shield may never be why a page does not
  * load.
@@ -49,9 +48,8 @@ class Shield extends Plugin
 		}
 		try
 		{
-			$config = $this->app->getConfig()->getPath(['console']);
 			$shield = new Service(
-				$config instanceof ArrayObject ? $config : null,
+				Sender::configOf($this->app->getConfig()),
 				Sender::cachePrefix($this->app),
 				null,
 				$this->reporter(),
@@ -96,7 +94,7 @@ class Shield extends Plugin
 		return $response;
 	}
 	
-	/** where a match goes: the console Sender's security channel, when the app runs one */
+	/** where a match goes: the codesafe Sender's security channel, when the app runs one */
 	protected function reporter(): ?callable
 	{
 		try
@@ -109,7 +107,7 @@ class Shield extends Plugin
 		}
 		catch(Throwable)
 		{
-			// no console sender in this app: the match is counted, not reported
+			// no codesafe sender in this app: the match is counted, not reported
 		}
 		
 		return null;

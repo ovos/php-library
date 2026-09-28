@@ -6,7 +6,7 @@ namespace Ovos\Exception;
 /**
  * Syslog severities (RFC 5424 / BSD syslog), lowest number = most severe —
  * the framework-wide severity scale: Exception::withPriority()/HasPriority,
- * the Logger/Events message default and the error console v1 payload all
+ * the Logger/Events message default and the codesafe v1 payload all
  * speak it (see Ovos\Service\Codesafe\Payload::priorityFor).
  *
  * These are our own constants on purpose: PHP's built-in LOG_* constants are

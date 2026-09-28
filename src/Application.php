@@ -843,7 +843,7 @@ class Application
 		}
 		
 		// the response is sent — release the client, then run the deferred
-		// post-response callbacks (e.g. the error-console flush), so the
+		// post-response callbacks (e.g. the codesafe flush), so the
 		// user never waits for them (best effort)
 		if(function_exists('fastcgi_finish_request') && $this->isInterfaceHttp())
 		{
@@ -863,7 +863,7 @@ class Application
 		}
 		$this->afterResponse = [];
 		
-		// the console sender flushes here, explicitly, as the last consumer:
+		// the codesafe sender flushes here, explicitly, as the last consumer:
 		// a cached sender on a warm worker cannot re-register an afterResponse
 		// hook on every new Application instance, and a request whose only
 		// errors arrive via events->add() (e.g. dispatch()) would otherwise
@@ -879,10 +879,10 @@ class Application
 		}
 		catch(Throwable)
 		{
-			// no console sender — the events still drain below
+			// no codesafe sender — the events still drain below
 		}
 		
-		// every post-response consumer (profiler stream, console sender) has
+		// every post-response consumer (profiler stream, codesafe sender) has
 		// read the collected events by now — drain them here, once, so a
 		// reused worker does not re-report them on its next request; no
 		// single consumer may clear() and starve the ones after it

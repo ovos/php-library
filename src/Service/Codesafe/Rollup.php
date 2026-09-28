@@ -60,8 +60,8 @@ use const JSON_INVALID_UTF8_SUBSTITUTE;
 use const JSON_PARTIAL_OUTPUT_ON_ERROR;
 
 /**
- * Per-minute traffic rollup accumulator — the console's DENOMINATOR layer,
- * client side. The error stream tells the console what broke; this tells it
+ * Per-minute traffic rollup accumulator — codesafe's DENOMINATOR layer,
+ * client side. The error stream tells codesafe what broke; this tells it
  * how much traffic there was, so "379 requests for nothing we serve" can be
  * read as a rate instead of a raw count.
  *
@@ -74,7 +74,7 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  * - NO APCu, NO ROLLUPS. A missing or disabled extension degrades to a
  *   silent no-op — this must never be the reason an app errors or slows.
  * - APCu is per FPM POOL, not per host. Several pools on one box each
- *   flush their own fragment for the same minute; the console SUMS them,
+ *   flush their own fragment for the same minute; codesafe SUMS them,
  *   and dedups retries by (instance, seq) — both APCu-held, regenerated
  *   together on an APCu restart so a recycled pid can never collide with
  *   a seq history it does not own.
@@ -83,18 +83,18 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *   every key carries the install's configured cache prefix in front of
  *   PREFIX — the namespace the cache stores key by. Without it the
  *   installs sum each other's counters, share one flush watermark and,
- *   worst, ship as the same (instance, seq) pair, which the console
+ *   worst, ship as the same (instance, seq) pair, which codesafe
  *   dedups against each other.
  *
- * THE CLOSED-VOCABULARY RULE (the console refuses violations wholesale):
+ * THE CLOSED-VOCABULARY RULE (codesafe refuses violations wholesale):
  * every dimension comes from the app, never from the request. The route is
  * the RESOLVED controller/action — resolveActionMethod() re-proves it names
  * real code — and a request the router did not match increments only
- * __unmatched, which is exactly the probe signal the console wants. A raw
+ * __unmatched, which is exactly the probe signal codesafe wants. A raw
  * URI must never reach a field name.
  *
- * Opt-in twice: console.rollups here (default off), rollups_enabled on the
- * console project there. A sender deployed before the server switch is
+ * Opt-in twice: codesafe.rollups here (default off), rollups_enabled on the
+ * codesafe project there. A sender deployed before the server switch is
  * flipped is refused at the endpoint and writes nothing — inert, not wrong.
  *
  * Wired from Sender::flush(), so it rides the same shutdown hook as error
@@ -124,7 +124,7 @@ class Rollup
 	
 	/**
 	 * Orphaned counters (a pool that stops receiving traffic mid-minute)
-	 * age out on their own — well past the console's ±90min skew window,
+	 * age out on their own — well past codesafe's ±90min skew window,
 	 * inside which they could still have shipped
 	 */
 	protected const int COUNTER_TTL = 3600;
@@ -136,20 +136,20 @@ class Rollup
 	protected const int FLUSH_MAX = 5;
 	
 	/**
-	 * The console rejects fragments older than its skew window — a minute
+	 * codesafe rejects fragments older than its skew window — a minute
 	 * this stale is deleted instead of shipped
 	 */
 	protected const int SKEW_MINUTES = 90;
 	
 	/**
-	 * The verbs worth a per-method counter (the console's vocabulary);
+	 * The verbs worth a per-method counter (codesafe's vocabulary);
 	 * anything else still counts into requests
 	 */
 	public const array METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 	
 	/**
 	 * Duration histogram bounds, MILLISECONDS — a WIRE CONTRACT shared
-	 * verbatim with every sender and the console's Console\Stats\Durations:
+	 * verbatim with every sender and codesafe's Codesafe\Stats\Durations:
 	 * bucket i counts durations > bounds[i-1] and <= bounds[i]; the 12th
 	 * bucket is everything past the last bound. Fixed for the life of the
 	 * feature — changing it breaks additivity across time.
@@ -171,7 +171,7 @@ class Rollup
 	 * or empty one leaves the keys unnamespaced, as they were before.
 	 */
 	/**
-	 * The Shield's per-minute hook (docs: ovos/console wave8-shield-build.md,
+	 * The Shield's per-minute hook (docs: ovos/codesafe wave8-shield-build.md,
 	 * S1 part d): fn(int $minute): array<string, int> — `so:<rule>` / `sb:<rule>`
 	 * fields the flush merges into the minute's counters before the fragment
 	 * is assembled. Null = none; the Sender passes the Shield adapter's
@@ -220,9 +220,9 @@ class Rollup
 	}
 	
 	/**
-	 * Rollups need the console's direct transport (url + key) AND the
-	 * explicit console.rollups opt-in. An OTLP-only sender exports
-	 * console.rollup.requests through its collector instead — this class
+	 * Rollups need codesafe's direct transport (url + key) AND the
+	 * explicit codesafe.rollups opt-in. An OTLP-only sender exports
+	 * codesafe.rollup.requests through its collector instead — this class
 	 * never speaks OTLP.
 	 */
 	public function isEnabled(): bool
@@ -352,7 +352,7 @@ class Rollup
 	}
 	
 	/**
-	 * '/controller/action', lowercased, held to the console's route shape —
+	 * '/controller/action', lowercased, held to codesafe's route shape —
 	 * a name the shape refuses collapses to __other rather than shipping
 	 * anything doubtful into a field name
 	 */
@@ -386,7 +386,7 @@ class Rollup
 	}
 	
 	/**
-	 * A minute's collected counters as the fragment body the console
+	 * A minute's collected counters as the fragment body codesafe
 	 * expects — requests plus the status/methods/routes/authed breakdowns.
 	 * Pure, so the mapping is testable without APCu.
 	 *
@@ -506,7 +506,7 @@ class Rollup
 				$payload['authed'][substr($field, 2)] = $count;
 			}
 			// the Shield's per-rule hits (the kernel store's counters, merged in
-			// by the flush hook): two optional sections the console folds beside
+			// by the flush hook): two optional sections codesafe folds beside
 			// the request counters — absent when no rule fired
 			elseif(substr($field, 0, 3) === 'so:')
 			{
@@ -518,7 +518,7 @@ class Rollup
 			}
 		}
 		
-		// the console requires the __total headline whenever the map is
+		// codesafe requires the __total headline whenever the map is
 		// non-empty; a partial eviction that lost the dt:* keys ships NO
 		// histograms rather than a fragment the endpoint would refuse whole
 		if(isset($durations['__total']))
@@ -530,7 +530,7 @@ class Rollup
 	}
 	
 	/**
-	 * A hostname reduced to the console's identity shape ([A-Za-z0-9._-],
+	 * A hostname reduced to codesafe's identity shape ([A-Za-z0-9._-],
 	 * max 64) — '' when nothing usable remains
 	 */
 	public static function hostName(
@@ -578,7 +578,7 @@ class Rollup
 		
 		// the duration histogram (perf-lite): one increment into the fixed
 		// bucket vocabulary — the __total headline and the route's own
-		// vector, always together, so the console's counts and percentiles
+		// vector, always together, so codesafe's counts and percentiles
 		// can never describe different route sets
 		if($durationMs !== null)
 		{
@@ -635,7 +635,7 @@ class Rollup
 	
 	/**
 	 * Collect every complete minute's counters, ship the fresh ones (up to
-	 * FLUSH_MAX per pass), drop the ones the console would refuse as stale,
+	 * FLUSH_MAX per pass), drop the ones codesafe would refuse as stale,
 	 * and advance the watermark when the backlog is drained.
 	 */
 	protected function flush(
@@ -682,7 +682,7 @@ class Rollup
 				apcu_delete($this->key($entryMinute . ':' . $field));
 			}
 			
-			// too stale for the console's skew window — deleted, not shipped
+			// too stale for codesafe's skew window — deleted, not shipped
 			if($entryMinute < $minute - self::SKEW_MINUTES)
 			{
 				continue;
@@ -700,7 +700,7 @@ class Rollup
 	
 	/**
 	 * The finished fragment: the assembled counters plus the APCu-held
-	 * identity — host, the pool marker, and the monotonic seq the console
+	 * identity — host, the pool marker, and the monotonic seq codesafe
 	 * dedups retries by
 	 */
 	protected function payload(
@@ -721,13 +721,13 @@ class Rollup
 	 * The pool identity, minted once per APCu epoch and per install: the
 	 * first worker to ask stores its pid plus the epoch time, so a
 	 * recycled pid after an APCu restart is still a NEW identity — the
-	 * console's dedup set for the old one must never answer for the new
+	 * codesafe's dedup set for the old one must never answer for the new
 	 * one's fresh seq counter.
 	 *
 	 * The key prefix is folded in as well, because the VALUE has to differ
 	 * between installs too: one pool means one worker serving both, so pid
 	 * and second can be identical — two installs would then ship as the
-	 * same (instance, seq) and the console would dedup one of them away.
+	 * same (instance, seq) and codesafe would dedup one of them away.
 	 */
 	protected function instance(): string
 	{
@@ -783,7 +783,7 @@ class Rollup
 	/**
 	 * Fire-and-forget POST, the Sender's transport contract: NOSIGNAL for
 	 * poll-based sub-second timeouts, hard bounds, no reading the answer —
-	 * the console answers duplicates with a 2xx anyway
+	 * codesafe answers duplicates with a 2xx anyway
 	 */
 	protected function send(
 		array $payload,
@@ -798,7 +798,7 @@ class Rollup
 				JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR),
 			CURLOPT_HTTPHEADER => [
 				'Content-Type: application/json',
-				'X-Console-Key: ' . (string)$this->config?->key,
+				...Sender::keyHeaders((string)$this->config?->key),
 			],
 			CURLOPT_RETURNTRANSFER => true,
 			CURLOPT_NOSIGNAL => true,

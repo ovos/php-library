@@ -32,7 +32,7 @@ use const JSON_UNESCAPED_UNICODE;
 /**
  * The raw request body, reduced before it leaves the application.
  *
- * The body is logged so the console can REPLAY the request that failed
+ * The body is logged so codesafe can REPLAY the request that failed
  * (docs/SENDER.md §context.request): a JSON API call's $_POST is EMPTY,
  * because the body is a stream PHP never populates, so without it a replay is
  * a bare method and URL — a different request wearing the same name.
@@ -83,7 +83,7 @@ final class Body
 	 * Endpoints that exist to RECEIVE credentials. Their body never leaves the
 	 * application, whatever it parses as and whatever mode is configured.
 	 *
-	 * Applied here so the body never leaves, AND again at the console on
+	 * Applied here so the body never leaves, AND again at codesafe on
 	 * write — because a deployment that never updates this library is the one
 	 * case a client-side fix cannot reach.
 	 */
