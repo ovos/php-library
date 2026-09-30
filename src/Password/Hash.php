@@ -18,11 +18,14 @@ class Hash
 	{
 		if(defined('PASSWORD_ARGON2ID'))
 		{
+			// PHP's argon2id defaults (64 MiB, 4 passes, ~150 ms): every login attempt pays this cost, so higher values
+			// (the former 128 MiB / 40 passes took ~3 s) make the login a cheap denial of service. Hashes made with other
+			// parameters keep verifying - they are part of the hash - and needsRehash() flags them.
 			$this->algorithm = PASSWORD_ARGON2ID;
 			$this->options = [
-				'memory_cost' => PASSWORD_ARGON2_DEFAULT_MEMORY_COST * 2,
-				'time_cost' => PASSWORD_ARGON2_DEFAULT_TIME_COST * 10,
-				'threads' => PASSWORD_ARGON2_DEFAULT_THREADS * 1,
+				'memory_cost' => PASSWORD_ARGON2_DEFAULT_MEMORY_COST,
+				'time_cost' => PASSWORD_ARGON2_DEFAULT_TIME_COST,
+				'threads' => PASSWORD_ARGON2_DEFAULT_THREADS,
 			];
 		}
 		else
