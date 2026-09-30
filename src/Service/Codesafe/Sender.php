@@ -453,13 +453,23 @@ class Sender extends Service
 	}
 	
 	/**
-	 * Reports a refusal or audit line as a type=security event (priority 6,
-	 * INFO — codesafe pins it there regardless). codesafe groups these
-	 * apart from application errors, never turns them into issues or alerts
-	 * by default, and gates them by its per-project security_events switch —
-	 * NOT by accept_priority, so a project tuned stricter than INFO still
-	 * receives them. Placing this call is the app-side opt-in; there is no
-	 * config switch here on purpose.
+	 * Reports a refusal or audit line as a type=security event. codesafe
+	 * groups these apart from application errors, stores each at its kind's
+	 * default severity (a refusal INFO, auth_success WARNING) and gates them
+	 * by its per-project security_events switch — NOT by accept_priority, so a
+	 * project tuned stricter than INFO still receives them. Placing this call
+	 * is the app-side opt-in; there is no config switch here on purpose.
+	 *
+	 * $priority is the application's word that THIS one matters — a failed
+	 * login on an admin account, a magic link whose account is gone: a more
+	 * severe value (0-7, Priority::*) is stored as given, so it becomes an
+	 * issue under the project's issue threshold and an alert under its alert
+	 * threshold; a less severe one is ignored, a kind never drops below its
+	 * default. null leaves the kind's default (codesafe
+	 * docs/plans/sender-security-priority.md).
+	 *
+	 *   $sender->reportRefusal('auth_failure', 'login failed for ' . Sender::maskName($username),
+	 *       [], ['userId' => (string)$user->id], Priority::ERROR);
 	 *
 	 * $kind must come from SECURITY_KINDS (anything else is a silent no-op —
 	 * codesafe refuses unknown kinds wholesale, so sending one would only
@@ -488,6 +498,7 @@ class Sender extends Service
 		string $message = '',
 		array $extra = [],
 		array $context = [],
+		?int $priority = null,
 	): static
 	{
 		if($this->isEnabled() === false
@@ -501,7 +512,7 @@ class Sender extends Service
 		{
 			if(count($this->queue) < self::QUEUE_MAX)
 			{
-				$this->queue[] = $this->payloadSecurity($kind, $message, $extra, $context);
+				$this->queue[] = $this->payloadSecurity($kind, $message, $extra, $context, $priority);
 			}
 		}
 		catch(Throwable)
@@ -546,19 +557,23 @@ class Sender extends Service
 	 * A type=security payload: the KIND as the event's className (the field
 	 * codesafe indexes, filters and fingerprints by), the human line as
 	 * the message — falling back to the kind itself, so a call without a
-	 * message still names its event — and the caller's context overrides
-	 * (the account), which the flush merges over the base it builds
+	 * message still names its event — the caller's context overrides (the
+	 * account), which the flush merges over the base it builds, and the
+	 * caller's priority clamped to 0-7, INFO without one (below every kind's
+	 * default, so codesafe applies the default)
 	 */
 	protected function payloadSecurity(
 		string $kind,
 		string $message,
 		array $extra,
 		array $context = [],
+		?int $priority = null,
 	): array
 	{
 		$message = $message === '' ? $kind : mb_substr($message, 0, 512);
 		
-		$payload = Payload::fromMessage($message, Priority::INFO, $extra);
+		$payload = Payload::fromMessage($message,
+			$priority === null ? Priority::INFO : max(Priority::EMERGENCY, min(Priority::DEBUG, $priority)), $extra);
 		$payload['type'] = 'security';
 		$payload['kind'] = 'security';
 		$payload['events'] = [[

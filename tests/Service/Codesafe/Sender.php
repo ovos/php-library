@@ -191,8 +191,9 @@ class Sender extends Test
 	 * reportRefusal — the security-event channel's sender half. The KIND
 	 * travels as the event's className (what the console indexes, filters
 	 * and fingerprints by), the human line as the message, and the priority
-	 * is INFO by definition (the console pins it there anyway). Placing the
-	 * call is the app-side opt-in; there is deliberately no config switch.
+	 * is INFO without the caller's word (below every kind's default, so the
+	 * console applies the default). Placing the call is the app-side opt-in;
+	 * there is deliberately no config switch.
 	 */
 	public function reportRefusalQueuesASecurityTypedPayload(): bool
 	{
@@ -208,6 +209,28 @@ class Sender extends Test
 			&& ($payload['message'] ?? '') === 'login failed for m***'
 			&& ($payload['events'][0]['className'] ?? null) === 'auth_failure'
 			&& ($payload['events'][0]['message'] ?? null) === 'login failed for m***';
+	}
+	
+	/**
+	 * The application's word that one matters (codesafe
+	 * docs/plans/sender-security-priority.md): a priority it names travels,
+	 * clamped to 0-7 — the console keeps it when it is more severe than the
+	 * kind's default — and none named is INFO, as before.
+	 */
+	public function reportRefusalCarriesThePriorityTheAppNames(): bool
+	{
+		$sender = $this->makeSender();
+		
+		$sender->reportRefusal('auth_failure', 'admin login failed', [], [], Priority::ERROR);
+		$raised = $sender->lastPayload();
+		$sender->reportRefusal('auth_failure', 'out of range', [], [], -3);
+		$clamped = $sender->lastPayload();
+		$sender->reportRefusal('csrf_reject');
+		$plain = $sender->lastPayload();
+		
+		return ($raised['priority'] ?? null) === Priority::ERROR
+			&& ($clamped['priority'] ?? null) === Priority::EMERGENCY
+			&& ($plain['priority'] ?? null) === Priority::INFO;
 	}
 	
 	/**
