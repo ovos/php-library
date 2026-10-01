@@ -4,12 +4,13 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Password\Hash;
+use Random\Randomizer;
 
-use function array_rand;
+use function array_unique;
 use function count;
 use function floor;
+use function implode;
 use function password_verify;
-use function str_shuffle;
 use function str_split;
 use function strlen;
 use function substr;
@@ -80,6 +81,9 @@ class Password
 	 * Note: the $add_dashes option will increase the length of the password by
 	 * floor(sqrt(N)) characters.
 	 *
+	 * The characters are drawn by Random\Randomizer with its default engine,
+	 * Random\Engine\Secure - cryptographically secure, like random_int().
+	 *
 	 * Based on
 	 * @see https://gist.github.com/tylerhall/521810
 	 */
@@ -114,21 +118,31 @@ class Password
 			$sets[] = '!@#%*()_?'; // $ AND & are not accepted by ftp_pwd
 		}
 		
+		// Random\Engine\Secure (the default engine): cryptographically secure,
+		// unlike array_rand() and str_shuffle(), which drew from Mt19937 - whose
+		// output can be predicted from enough of it
+		$randomizer = new Randomizer;
+		
 		$all = '';
 		$password = '';
 		foreach($sets as $set)
 		{
-			$password.= $set[array_rand(str_split($set))];
+			// one of each set, so every chosen set is represented
+			$password.= $randomizer->getBytesFromString($set, 1);
 			$all.= $set;
 		}
-		$all = str_split($all);
 		
-		for($i = 0; $i < $length - count($sets); $i++)
+		// SET_SPECIAL and SET_SPECIAL_FTP share seven characters: listed twice,
+		// those would come up twice as often
+		$all = implode('', array_unique(str_split($all)));
+		
+		$rest = $length - count($sets);
+		if($rest > 0) // getBytesFromString() refuses a length of 0
 		{
-			$password.= $all[array_rand($all)];
+			$password.= $randomizer->getBytesFromString($all, $rest);
 		}
 		
-		$password = str_shuffle($password);
+		$password = $randomizer->shuffleBytes($password);
 		
 		if($dashes === false)
 		{
