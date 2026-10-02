@@ -65,6 +65,47 @@ class Sender extends Test
 			&& isset(CodesafeSender::releasePayload('1.0', ['at' => ''], '')['at']) === false;
 	}
 	
+	/**
+	 * The hello (codesafe SENDER.md §7, docs/plans/project-features-live.md):
+	 * the switches this library has, in codesafe's words — security left out,
+	 * since the app calling reportRefusal() is its only opt-in — the Shield's
+	 * two only where the kernel runs, and nothing at all from a sender that is
+	 * off
+	 */
+	public function helloPayloadNamesOnlyTheSwitchesThisLibraryHas(): bool
+	{
+		$on = CodesafeSender::helloPayload(new ArrayObject([
+			'enabled' => true,
+			'report_404' => true,
+			'rollups' => false,
+			'files' => ['web' => ['public']],
+			'shield' => ['detect' => true, 'enforce' => true, 'kill' => false],
+		]), 'php-library/8.5.41');
+		$killed = CodesafeSender::helloPayload(new ArrayObject([
+			'enabled' => true,
+			'shield' => ['detect' => true, 'enforce' => true, 'kill' => true],
+		]), 'php-library/dev');
+
+		return $on === [
+				'v' => 1,
+				'client' => 'php-library/8.5.41',
+				'features' => [
+					'errors' => true,
+					'not_found' => true,
+					'rollups' => false,
+					'files' => true,
+					'shield_detect' => true,
+					'shield_enforce' => true,
+				],
+			]
+			&& array_key_exists('security', $on['features']) === false
+			&& $killed['features']['shield_detect'] === false
+			&& $killed['features']['shield_enforce'] === false
+			&& $killed['features']['files'] === false
+			&& CodesafeSender::helloPayload(new ArrayObject(['enabled' => false]), 'php-library/dev') === []
+			&& CodesafeSender::helloPayload(null, 'php-library/dev') === [];
+	}
+
 	public function capturesDistinctThrowables(): bool
 	{
 		$sender = $this->makeSender();
