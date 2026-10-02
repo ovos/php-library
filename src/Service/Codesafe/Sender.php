@@ -23,8 +23,10 @@ use Throwable;
 use Traversable;
 
 use function strtoupper;
+use function apcu_add;
 use function apcu_enabled;
 use function apcu_inc;
+use function apcu_store;
 use function array_replace;
 use function array_slice;
 use function array_values;
@@ -49,6 +51,7 @@ use function is_string;
 use function iterator_to_array;
 use function json_encode;
 use function max;
+use function md5;
 use function mb_strlen;
 use function mb_substr;
 use function min;
@@ -213,6 +216,17 @@ class Sender extends Service
 	 * The security limiter's key namespace, beneath the install's own
 	 */
 	public const string SECURITY_PREFIX = 'ovos:codesafe:security:';
+	
+	/**
+	 * The hello's key namespace, beneath the install's own: one key per
+	 * signature of the switches, claimed for a day by the worker that says it
+	 */
+	public const string HELLO_PREFIX = 'ovos:codesafe:hello:';
+	
+	/** how long a said hello stands, and how long a refused one waits */
+	public const int HELLO_DAY = 86400;
+	
+	public const int HELLO_RETRY = 3600;
 	
 	/**
 	 * What codesafe's REPLAY needs to re-issue the request that failed
@@ -786,6 +800,21 @@ class Sender extends Service
 			if($this->app !== null && $this->app->isInterfaceCli() === false)
 			{
 				(new Shield($this->config, self::cachePrefix($this->app)))->pull();
+			}
+		}
+		catch(Throwable)
+		{
+			// never break the host application
+		}
+		
+		// the hello rides the same tick (codesafe docs/plans/project-features-live.md):
+		// one apcu_add per request, a POST once a day per pool and at once when
+		// a switch changed — the same silence contract
+		try
+		{
+			if($this->app !== null && $this->app->isInterfaceCli() === false)
+			{
+				$this->maybeHello();
 			}
 		}
 		catch(Throwable)
@@ -1462,6 +1491,76 @@ class Sender extends Service
 	protected function untracked(): Untracked
 	{
 		return new Untracked;
+	}
+	
+	/**
+	 * The hello (codesafe SENDER.md §7 "Hello", docs/plans/project-features-live.md):
+	 * which of this sender's own switches are on, in codesafe's words, so its
+	 * project list stops showing a feature codesafe accepts but this app never
+	 * sends. Only the switches this library HAS — security events have none
+	 * (the app calling reportRefusal() is the opt-in), so `security` is left
+	 * out and codesafe judges it by what arrives. The Shield's two count only
+	 * where the kernel really runs: detect without kill, enforce on top of it.
+	 *
+	 * @return array<string, mixed> the body; [] when the sender is off
+	 */
+	public static function helloPayload(
+		?ArrayObject $config,
+		string $client,
+	): array
+	{
+		if($config === null || $config->enabled !== true)
+		{
+			return [];
+		}
+		
+		$shield = $config->shield;
+		$shield = $shield instanceof ArrayObject ? $shield->getArrayCopy() : (is_array($shield) ? $shield : []);
+		$detect = ($shield['detect'] ?? null) === true && ($shield['kill'] ?? null) !== true;
+		
+		return [
+			'v' => 1,
+			'client' => $client,
+			'features' => [
+				'errors' => true,
+				'not_found' => $config->report_404 === true,
+				'rollups' => $config->rollups === true,
+				// the working-copy pass runs from a cron line wherever its web dirs are set
+				'files' => ($config->files?->web ?? null) !== null,
+				'shield_detect' => $detect,
+				'shield_enforce' => $detect && ($shield['enforce'] ?? null) === true,
+			],
+		];
+	}
+	
+	/**
+	 * Says the hello when it is due: one worker of the pool claims a day for
+	 * this signature of the switches (apcu_add), so a deploy that changes one
+	 * says it on its first request; a refused codesafe is asked again an hour
+	 * later, one without the endpoint (404) a day later. Needs APCu and the
+	 * direct transport — without them codesafe judges by what arrives.
+	 */
+	protected function maybeHello(): void
+	{
+		if($this->isEnabled() === false
+			|| (string)$this->config->url === '' || (string)$this->config->key === ''
+			|| function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			return;
+		}
+		
+		$json = (string)json_encode(self::helloPayload($this->config, Untracked::client()));
+		$key = (new Prefixer(self::cachePrefix($this->app)))->prefix(self::HELLO_PREFIX . md5($json));
+		if(apcu_add($key, 1, self::HELLO_DAY) === false)
+		{
+			return;
+		}
+		
+		$code = $this->post('/api/v1/ingest/hello', $json);
+		if($code < 200 || $code >= 300)
+		{
+			apcu_store($key, 1, $code === 404 ? self::HELLO_DAY : self::HELLO_RETRY);
+		}
 	}
 	
 	/**
