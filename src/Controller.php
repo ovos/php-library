@@ -443,6 +443,24 @@ class Controller
 			strpos(static::class, '\\') + 1);
 	}
 	
+	/**
+	 * Whether a configured controller entry covers a controller: the entry
+	 * names the controller itself, or a whole namespace above it — "System"
+	 * covers System\Events, "Api\V1\Shield" covers Api\V1\Shield and never
+	 * Api\V1\ShieldRules. A plain prefix match let an entry cover every
+	 * sibling that merely begins with the same letters, which made a group
+	 * that skips Auth publish an admin-only controller added next to a
+	 * public one.
+	 */
+	public static function matchesController(
+		string $controller,
+		string $entry,
+	): bool
+	{
+		return $controller === $entry
+			|| str_starts_with($controller, $entry . '\\');
+	}
+	
 	public function getGroupPlugins(
 		ArrayObject $plugins,
 		ArrayObject $group,
@@ -457,8 +475,7 @@ class Controller
 		
 		foreach($group->controllers as $controller)
 		{
-			// if the controller matches (begins with the same name)
-			if(str_starts_with($currentController, $controller) === false)
+			if(self::matchesController($currentController, (string)$controller) === false)
 			{
 				continue;
 			}

@@ -9,7 +9,6 @@ use Collator;
 use function array_reverse;
 use function array_key_exists;
 use function is_numeric;
-use function str_starts_with;
 
 /**
  * Locale
@@ -223,8 +222,9 @@ class Locale
 		$locked = true;
 		foreach($controllers as $controller)
 		{
-			// if controller matches (begins with the same name)
-			if(str_starts_with($currentController, $controller))
+			// the controller itself or a namespace above it (never a sibling
+			// that merely begins with the same letters)
+			if(Controller::matchesController($currentController, (string)$controller))
 			{
 				$locked = false;
 				break;
