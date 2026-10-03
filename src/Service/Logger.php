@@ -170,31 +170,46 @@ class Logger extends Service implements Writer
 	];
 	
 	/**
+	 * The username field names codesafe itself recognises — its
+	 * Scrubber::USERNAME_PATTERNS, which this mirrors and must stay equal to.
+	 * A value under one of these names is masked AND vaulted on arrival, so
+	 * the keepingIdentities() copy can send it raw; a name a project adds with
+	 * addUsernames() is one codesafe cannot know, and would store in clear —
+	 * that copy keeps masking those.
+	 */
+	public const array CODESAFE_USERNAMES = [
+		'~^user([_-]?(name|login))?$~i',
+		'~^login$~i',
+	];
+	
+	/**
 	 * Field names whose value is masked to every MASK_GROUP-th character, the
 	 * rest starred (e.g. "bob" -> "b**", "marcin" -> "m***i*"). Anchored so
 	 * identifier fields like userId or userAgent are left intact; extend per
 	 * project with addUsernames() (a custom login field like "nick"). E-mails
 	 * are handled separately, by value.
 	 */
-	protected array $usernames = [
-		'~^user([_-]?(name|login))?$~i',
-		'~^login$~i',
-	];
+	protected array $usernames = self::CODESAFE_USERNAMES;
 	
 	/**
-	 * Whether remove() and removeText() mask identities — e-mail addresses
-	 * and username fields — beside dropping secrets. Off only on the copy
-	 * keepingIdentities() makes for the console's REQUEST data
+	 * Whether remove(), removeText(), removeFromUrl() and removeFromArgs()
+	 * mask identities — e-mail addresses and username fields — beside
+	 * dropping secrets. Off only on the copy keepingIdentities() makes for
+	 * what the codesafe Sender sends
 	 */
 	protected bool $maskIdentities = true;
 	
 	/**
-	 * This logger for the request data a console report carries (its get and
-	 * post bags and its body): secrets are dropped exactly as always, but
-	 * e-mail addresses and usernames travel as sent — the console masks them
-	 * on arrival and keeps the original encrypted for an audited reveal and a
-	 * replay (console docs/plans/reveal-everything.md). A copy, so every
-	 * other caller — messages, URLs, arguments, extras — still masks.
+	 * This logger for everything a codesafe report carries — the get and post
+	 * bags and the body, the uri and the referer, the CLI arguments and the
+	 * extras: secrets are dropped exactly as always, but e-mail addresses and
+	 * usernames travel as sent — codesafe masks them on arrival and keeps the
+	 * original encrypted for an audited reveal and a replay (codesafe
+	 * docs/plans/reveal-everything.md, docs/plans/identity-round-2026-10.md).
+	 * The one exception is a username field a project added with
+	 * addUsernames(): codesafe does not know that name, so it would store the
+	 * value in clear, and the copy keeps masking it. A copy, so the file
+	 * writer and every other caller of this service still masks.
 	 */
 	public function keepingIdentities(): static
 	{
@@ -382,7 +397,7 @@ class Logger extends Service implements Writer
 				continue;
 			}
 			
-			if(is_string($value) === false || $this->maskIdentities === false)
+			if(is_string($value) === false)
 			{
 				continue;
 			}
@@ -392,18 +407,22 @@ class Logger extends Service implements Writer
 			// one-character local part masks to ITSELF and an already-masked
 			// address no longer looks like one: both still belong to this
 			// rule, or the username mask below would chew them and drop the
-			// domain kept on purpose.
+			// domain kept on purpose. The keepingIdentities() copy sends it as
+			// it is: codesafe masks an address in any field on arrival
 			$masked = $this->maskEmails($value);
 			if($masked !== $value
 				|| preg_match(self::EMAIL_PATTERN, $value) === 1
 				|| preg_match(self::MASKED_EMAIL_PATTERN, $value) === 1)
 			{
-				$data[$key] = $masked;
+				if($this->maskIdentities)
+				{
+					$data[$key] = $masked;
+				}
 				
 				continue;
 			}
 			
-			if(is_string($key) && $this->matchesAny($this->usernames, $key))
+			if(is_string($key) && $this->masksUsername($key))
 			{
 				$data[$key] = $this->maskName($value);
 			}
@@ -416,7 +435,8 @@ class Logger extends Service implements Writer
 	 * Scrubs a URL the way remove() scrubs request arrays: secret-named
 	 * query parameters are dropped, e-mail values (in any parameter) are
 	 * masked with the domain kept and username-named parameters are
-	 * anonymized. The same data already leaves through request.get — this
+	 * anonymized — on the keepingIdentities() copy the secrets alone go, as
+	 * in remove(). The same data already leaves through request.get — this
 	 * closes the uri/referer copy of it. Untouched parameters stay
 	 * byte-for-byte identical; values are only re-encoded when changed.
 	 */
@@ -446,14 +466,14 @@ class Logger extends Service implements Writer
 					}
 					
 					$value = rawurldecode($match[3]);
-					$masked = $this->maskEmails($value);
+					$masked = $this->maskIdentities ? $this->maskEmails($value) : $value;
 					if($masked === $value
 						// not an address in any form — raw (a one-character
 						// local part masks to itself) or already masked — or
 						// the username mask would drop the domain
 						&& preg_match(self::EMAIL_PATTERN, $value) !== 1
 						&& preg_match(self::MASKED_EMAIL_PATTERN, $value) !== 1
-						&& $this->matchesAny($this->usernames, rawurldecode($match[2])))
+						&& $this->masksUsername($name))
 					{
 						$masked = $this->maskName($value);
 					}
@@ -476,7 +496,7 @@ class Logger extends Service implements Writer
 		}
 		
 		// a plain e-mail in the path (unsubscribe links and the like)
-		return $this->maskEmails($url);
+		return $this->maskIdentities ? $this->maskEmails($url) : $url;
 	}
 	
 	/**
@@ -591,7 +611,7 @@ class Logger extends Service implements Writer
 	 * styles are covered: --password=x / password=x get the value dropped,
 	 * and a bare secret-named token drops the FOLLOWING argument (the
 	 * framework CLI passes "name value" pairs). E-mails in any argument are
-	 * masked with the domain kept.
+	 * masked with the domain kept — except on the keepingIdentities() copy.
 	 */
 	public function removeFromArgs(
 		array $args,
@@ -618,7 +638,7 @@ class Logger extends Service implements Writer
 			{
 				$args[$key] = $this->matchesAny($this->remove, $match[2])
 					? $match[1] . $match[2] . '=[redacted]'
-					: $this->maskEmails($arg);
+					: $this->maskIdentitiesIn($arg);
 				
 				continue;
 			}
@@ -631,7 +651,7 @@ class Logger extends Service implements Writer
 				continue;
 			}
 			
-			$args[$key] = $this->maskEmails($arg);
+			$args[$key] = $this->maskIdentitiesIn($arg);
 		}
 		
 		return $args;
@@ -653,6 +673,33 @@ class Logger extends Service implements Writer
 	): bool
 	{
 		return $this->matchesAny($this->remove, $name);
+	}
+	
+	/**
+	 * Whether a value under this field name is masked as a username: any
+	 * username name on this logger, only a project's own (addUsernames())
+	 * on the keepingIdentities() copy — codesafe masks and vaults the names
+	 * it knows (CODESAFE_USERNAMES) itself, and would keep the others clear
+	 */
+	protected function masksUsername(
+		string $key,
+	): bool
+	{
+		if($this->matchesAny($this->usernames, $key) === false)
+		{
+			return false;
+		}
+		
+		return $this->maskIdentities
+			|| $this->matchesAny(self::CODESAFE_USERNAMES, $key) === false;
+	}
+	
+	/** the e-mail addresses in a string masked — unless this is the keepingIdentities() copy */
+	protected function maskIdentitiesIn(
+		string $value,
+	): string
+	{
+		return $this->maskIdentities ? $this->maskEmails($value) : $value;
 	}
 	
 	protected function matchesAny(
