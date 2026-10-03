@@ -6,6 +6,8 @@ namespace Tests\Plugins\Security;
 use Ovos\Plugins\Security\Csrf as Subject;
 use Ovos\Test;
 
+use function str_contains;
+
 /**
  * Csrf - the pure first-party verdict (the plugin's dispatch behaviour
  * is exercised by a live request, not the unit runner)
@@ -41,6 +43,26 @@ class Csrf extends Test
 			self::OWN,
 			['https://partner.example.org'],
 		)[0] === true;
+	}
+	
+	/**
+	 * trust_same_site: no - a sibling host (any *.example.com) is not
+	 * first-party: refused unless allowlisted; same-origin and a direct
+	 * navigation still pass
+	 */
+	public function aSiblingHostIsRefusedWhenSameSiteIsNotTrusted(): bool
+	{
+		[$allowed, $reason] = Subject::evaluate(
+			'same-site', 'https://customer.example.com', self::OWN, [], false);
+		
+		return $allowed === false
+			&& str_contains($reason, 'same-site')
+			&& Subject::evaluate('same-site', 'https://www.example.com', self::OWN,
+				['https://www.example.com'], false)[0] === true
+			&& Subject::evaluate('same-origin', self::OWN, self::OWN, [], false)[0] === true
+			&& Subject::evaluate('none', null, self::OWN, [], false)[0] === true
+			// the default keeps trusting it, as before
+			&& Subject::evaluate('same-site', 'https://customer.example.com', self::OWN)[0] === true;
 	}
 	
 	public function noBrowserMetadataPasses(): bool
