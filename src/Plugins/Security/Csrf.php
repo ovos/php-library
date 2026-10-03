@@ -47,6 +47,13 @@ use function trim;
  *       mode: report        # report = log only; enforce = 403
  *       allow_origins:      # cross-site origins allowed to POST
  *         - https://partner.example.com
+ *       trust_same_site: no # a sibling subdomain is NOT first-party
+ *
+ * `trust_same_site` (default yes) decides whether `Sec-Fetch-Site:
+ * same-site` passes. same-site means any host under the same registrable
+ * domain - every *.example.com - so where siblings are run by others
+ * (customer sites, demos) one XSS there can post here with the user's
+ * cookies. Set it to no and a sibling passes only when allowlisted.
  *
  * Start in REPORT mode: violations are logged (Logger + dev console)
  * but nothing is blocked - collect legitimate cross-site origins from
@@ -82,9 +89,14 @@ class Csrf extends Plugin
 	 */
 	protected const array TRUSTED_SITES = [
 		'same-origin',
-		'same-site',
 		'none',
 	];
+	
+	/**
+	 * A sibling host under the same registrable domain - trusted unless the
+	 * application says otherwise (security.csrf.trust_same_site)
+	 */
+	protected const string SAME_SITE = 'same-site';
 	
 	#[Override]
 	public function preDispatch(): void
@@ -108,6 +120,7 @@ class Csrf extends Plugin
 			$this->request->getServer('HTTP_ORIGIN'),
 			$this->ownOrigin(),
 			$this->allowedOrigins($config),
+			$config->get('trust_same_site') !== false,
 		);
 		
 		if($allowed === true)
@@ -132,6 +145,7 @@ class Csrf extends Plugin
 	 * explicitly allowlisted)?
 	 *
 	 * @param string[] $allowOrigins normalized lowercase origins
+	 * @param bool $trustSameSite whether a sibling host (same-site) passes
 	 * @return array{0: bool, 1: string} [allowed, reason]
 	 */
 	public static function evaluate(
@@ -139,6 +153,7 @@ class Csrf extends Plugin
 		?string $origin,
 		string $ownOrigin,
 		array $allowOrigins = [],
+		bool $trustSameSite = true,
 	): array
 	{
 		$origin = $origin === null
@@ -148,7 +163,8 @@ class Csrf extends Plugin
 		$secFetchSite = strtolower(trim((string)$secFetchSite));
 		if($secFetchSite !== '')
 		{
-			if(in_array($secFetchSite, self::TRUSTED_SITES, true) === true)
+			if(in_array($secFetchSite, self::TRUSTED_SITES, true) === true
+				|| ($secFetchSite === self::SAME_SITE && $trustSameSite === true))
 			{
 				return [true, 'sec-fetch-site: ' . $secFetchSite];
 			}
