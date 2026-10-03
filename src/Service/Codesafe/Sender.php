@@ -493,7 +493,11 @@ class Sender extends Service
 	 * waste the request). $message is the human line and travels into an
 	 * INDEXED, displayed field: mask identifiers yourself — maskName() for
 	 * usernames — and never include a credential; the server scrub is a
-	 * backstop, not permission.
+	 * backstop, not permission. The sender's own masking stops at secrets
+	 * (codesafe docs/plans/identity-round-2026-10.md): an e-mail address is
+	 * found by its shape in any text and masked and vaulted on arrival, but
+	 * a bare username in prose is not recognisable as one there, so it
+	 * would be stored in clear — that one stays this call site's to mask.
 	 *
 	 *   $sender->reportRefusal('auth_failure',
 	 *       'login failed for ' . Sender::maskName($username));
@@ -898,8 +902,14 @@ class Sender extends Service
 		
 		$logLevel = $this->getLogLevel();
 		$context = null;
-		// the shared scrub patterns live in the Logger service
-		$logger = $this->getLogger();
+		// the shared scrub patterns live in the Logger service — its
+		// keepingIdentities() copy: every secret is dropped here as always,
+		// while e-mail addresses and usernames in the extras, the uri, the
+		// referer and the CLI arguments travel as sent — codesafe masks them
+		// on arrival and keeps the original encrypted for an audited REVEAL
+		// (codesafe docs/plans/identity-round-2026-10.md). The local log file
+		// never sees this copy and keeps masking
+		$logger = $this->getLogger()->keepingIdentities();
 		
 		// the deploy label (git sha, svn revision, any string): codesafe.release,
 		// else the .release stamp — constant across the batch, read once
@@ -938,8 +948,9 @@ class Sender extends Service
 			// otherwise take the request-derived type (http/cli)
 			$payload['type'] ??= $context['type'];
 			// per-event context overrides win over the auto-built base;
-			// extras are scrubbed like request variables (secrets, e-mails,
-			// usernames) — the WP sender and the JS clients do the same
+			// extras are scrubbed like request variables (secrets dropped,
+			// identities kept for codesafe's vault) — the WP sender and the
+			// JS clients do the same
 			$payload['context'] = array_replace($context['context'],
 					$payload['context'] ?? [])
 				+ ['extra' => $logger->remove($payload['extra'])];
@@ -995,8 +1006,8 @@ class Sender extends Service
 		else
 		{
 			$context['host'] = (string)($_SERVER['HTTP_HOST'] ?? '');
-			// secrets and e-mails travel in query strings too — scrub the
-			// url copies the same way request.get is scrubbed
+			// secrets travel in query strings and paths too — scrub the url
+			// copies the same way request.get is scrubbed (identities kept)
 			$context['uri'] = $logger->removeFromUrl((string)($_SERVER['REQUEST_URI'] ?? ''));
 			$context['method'] = (string)($_SERVER['REQUEST_METHOD'] ?? '');
 			$context['referer'] = $logger->removeFromUrl((string)($_SERVER['HTTP_REFERER'] ?? ''));
@@ -1029,7 +1040,8 @@ class Sender extends Service
 			
 			// handler-agnostic: the native session machinery (and its
 			// session_id()) never runs under the json handler
-			$session = $this->app->getServices()->session;
+			// resolved, never asked of Services (see the Auth lookup below)
+			$session = $this->container->resolve(Session::SYMBOL);
 			if($session instanceof Session
 				&& ($sessionId = $session->getId()) !== null)
 			{
@@ -1040,8 +1052,12 @@ class Sender extends Service
 			// the Auth service: context.userId, codesafe's indexed user_id
 			// — who an error happened to, and for a security event the
 			// account that IS the case (ovos/codesafe docs/plans/security-
-			// event-identity.md). The internal id, never the login name
-			$auth = $this->app->getServices()->auth;
+			// event-identity.md). The internal id, never the login name.
+			// Resolved, never asked of Services: Services::get() registers a
+			// Disabled placeholder under a key nobody registered, and in an
+			// application without an Auth service that placeholder then stood
+			// where a later injection of the real one expected an Auth
+			$auth = $this->container->resolve(Auth::SYMBOL);
 			if($auth instanceof Auth && $auth->hasUser() && isset($auth->getUser()->id))
 			{
 				$context['userId'] = (string)$auth->getUser()->id;

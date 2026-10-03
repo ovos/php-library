@@ -5,13 +5,16 @@ namespace Tests\Service\Codesafe;
 
 use ErrorException;
 use Exception;
+use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
+use Ovos\Service\Codesafe\Otlp;
 use Ovos\Service\Codesafe\Sender as CodesafeSender;
 use Ovos\Service\Codesafe\Untracked;
 use Ovos\Service\Logger;
+use Ovos\Services;
 use Ovos\Test;
 use Ovos\Test\Exception\SkipException;
 use Throwable;
@@ -27,13 +30,17 @@ use function array_push;
 use function count;
 use function function_exists;
 use function json_decode;
+use function json_encode;
 use function gc_collect_cycles;
 use function in_array;
 use function mb_strlen;
+use function str_contains;
 use function str_repeat;
 use function str_starts_with;
 
 use const E_WARNING;
+use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_SLASHES;
 
 /**
  * Sender — capture-side queue semantics (no HTTP: the test double
@@ -991,5 +998,143 @@ class Sender extends Test
 			&& $silent->reportUntracked() === false && $silent->posts === []
 			&& $off->reportUntracked() === false && $off->posts === []
 			&& $off->untrackedReport() === null;
+	}
+	
+	/**
+	 * The identity round (codesafe docs/plans/identity-round-2026-10.md): a
+	 * CLI batch sends its people raw and its secrets never. The extras keep
+	 * an e-mail and a username, the arguments an e-mail, and the message its
+	 * address — codesafe masks them on arrival and keeps the originals in the
+	 * vault for an audited REVEAL — while a secret extra, `--password=x` and
+	 * the value after a bare secret name are dropped here as always; the
+	 * OTLP form of the same batch carries the same values
+	 */
+	public function theBatchSendsPeopleRawAndSecretsNever(): bool
+	{
+		$argv = $_SERVER['argv'] ?? null;
+		$_SERVER['argv'] = ['cli.php', 'mail', '--to=anna@example.at', '--password=hunter2',
+			'api_key', 'k-1', 'bob@x.co'];
+		try
+		{
+			$sender = $this->makeBatchSender();
+			$sender->captureException(new Exception('mail to anna@example.at failed'), [
+				'email' => 'anna.berger@example.com',
+				'username' => 'annab',
+				'password' => 'hunter22',
+				'note' => 'cc bob@x.co',
+			]);
+			$batch = $sender->batch();
+		}
+		finally
+		{
+			if($argv === null)
+			{
+				unset($_SERVER['argv']);
+			}
+			else
+			{
+				$_SERVER['argv'] = $argv;
+			}
+		}
+		
+		$context = $batch[0]['context'] ?? [];
+		$otlp = json_encode(Otlp::request($batch), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+		
+		return ($context['extra'] ?? null) === [
+				'email' => 'anna.berger@example.com',
+				'username' => 'annab',
+				'password' => '[redacted]',
+				'note' => 'cc bob@x.co',
+			]
+			&& ($context['args'] ?? null) === ['cli.php', 'mail', '--to=anna@example.at',
+				'--password=[redacted]', 'api_key', '[redacted]', 'bob@x.co']
+			&& ($batch[0]['message'] ?? '') === 'mail to anna@example.at failed'
+			&& str_contains($otlp, 'anna.berger@example.com')
+			&& str_contains($otlp, '--to=anna@example.at')
+			&& str_contains($otlp, 'hunter2') === false;
+	}
+	
+	/**
+	 * …and a web batch its uri and referer: the e-mail in the path and in
+	 * the query and a `login` param travel as sent, a token in the query and
+	 * a token-shaped path segment never; the request bags keep their people
+	 * beside them
+	 */
+	public function theUriAndRefererKeepTheirPeopleAndLoseTheirSecrets(): bool
+	{
+		$server = $_SERVER;
+		$get = $_GET;
+		$_GET = ['email' => 'anna@example.at'];
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_SERVER['REQUEST_URI'] = '/unsubscribe/john@x.com?email=anna%40example.at&login=marcin&token=abc123';
+		$_SERVER['HTTP_REFERER'] = 'https://shop.example/reset/eyJhbGciOiJIUzI1NiJ9.payloadpayload.sigsig'
+			. '?user=annab&key=k1';
+		try
+		{
+			$sender = $this->makeBatchSender();
+			$sender->useApp(new class extends Application
+			{
+				/** a web request, without booting a second application */
+				public function __construct()
+				{
+				}
+				
+				public function getServices(): Services
+				{
+					return Application::$instance->getServices();
+				}
+				
+				public function getEnv(): string
+				{
+					return Application::$instance->getEnv();
+				}
+			});
+			$sender->captureException(new Exception('boom'));
+			$batch = $sender->batch();
+		}
+		finally
+		{
+			$_SERVER = $server;
+			$_GET = $get;
+		}
+		
+		$context = $batch[0]['context'] ?? [];
+		
+		return ($batch[0]['entry'] ?? '') === 'web'
+			&& ($context['uri'] ?? '')
+				=== '/unsubscribe/john@x.com?email=anna%40example.at&login=marcin&token=[redacted]'
+			&& ($context['referer'] ?? '')
+				=== 'https://shop.example/reset/[redacted]?user=annab&key=[redacted]'
+			&& ($context['request']['get'] ?? null) === ['email' => 'anna@example.at'];
+	}
+	
+	/**
+	 * A sender whose finished batch a test can read, its application
+	 * swappable for a web one
+	 *
+	 * @return CodesafeSender&object{batch: callable(): array, useApp: callable(Application): void}
+	 */
+	protected function makeBatchSender(): CodesafeSender
+	{
+		$config = new ArrayObject([
+			'enabled' => true,
+			'url' => 'https://console.invalid',
+			'key' => 'test-key',
+		]);
+		
+		return container()->injectMissing(new class($config) extends CodesafeSender
+		{
+			public function batch(): array
+			{
+				return $this->buildBatch();
+			}
+			
+			public function useApp(
+				Application $app,
+			): void
+			{
+				$this->app = $app;
+			}
+		});
 	}
 }

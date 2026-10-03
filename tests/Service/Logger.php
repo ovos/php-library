@@ -431,4 +431,86 @@ class Logger extends Test
 			'b**@x.co',
 		];
 	}
+	
+	/**
+	 * keepingIdentities() reaches the url and argv copies too (codesafe
+	 * docs/plans/identity-round-2026-10.md): the uri, the referer and the
+	 * CLI arguments the codesafe Sender sends keep their e-mail addresses and
+	 * username params — codesafe masks and vaults them on arrival — while
+	 * every secret rule still holds: a secret-named or query-only param, a
+	 * token-shaped path segment, `--password=x` and the value after a bare
+	 * secret name. The logger it was made from masks all of it as before
+	 */
+	public function keepingIdentitiesKeepsPeopleInUrlsAndArgs(): bool
+	{
+		$logger = new Subject;
+		$kept = $logger->keepingIdentities();
+		$url = '/unsubscribe/john@x.com/reset/eyJhbGciOiJIUzI1NiJ9.payloadpayload.sigsig'
+			. '?email=anna%40example.at&login=marcin&token=abc123&key=k1&page=2';
+		$args = ['cli.php', 'mail', '--to=anna@example.at', '--password=hunter2',
+			'api_key', 'k-1', 'bob@x.co'];
+		
+		return $kept->removeFromUrl($url)
+				=== '/unsubscribe/john@x.com/reset/[redacted]'
+					. '?email=anna%40example.at&login=marcin&token=[redacted]&key=[redacted]&page=2'
+			&& $kept->removeFromArgs($args)
+				=== ['cli.php', 'mail', '--to=anna@example.at', '--password=[redacted]',
+					'api_key', '[redacted]', 'bob@x.co']
+			// the original logger is untouched
+			&& $logger->removeFromUrl($url)
+				=== '/unsubscribe/j***@x.com/reset/[redacted]'
+					. '?email=a***@example.at&login=m***i*&token=[redacted]&key=[redacted]&page=2'
+			&& $logger->removeFromArgs($args)
+				=== ['cli.php', 'mail', '--to=a***@example.at', '--password=[redacted]',
+					'api_key', '[redacted]', 'b**@x.co'];
+	}
+	
+	/**
+	 * The one name the copy still masks: a username field a project added
+	 * with addUsernames(). codesafe recognises only its own username names
+	 * (CODESAFE_USERNAMES, its Scrubber::USERNAME_PATTERNS), so a value under
+	 * `nick` would be stored there in clear — in the bags and in a url alike.
+	 * The names codesafe knows travel raw beside it
+	 */
+	public function keepingIdentitiesStillMasksAUsernameCodesafeCannotKnow(): bool
+	{
+		$kept = (new Subject)->addUsernames(['~^nick$~i'])->keepingIdentities();
+		
+		return $kept->remove(['nick' => 'marcin', 'username' => 'annab', 'nick_mail' => 'x'])
+				=== ['nick' => 'm***i*', 'username' => 'annab', 'nick_mail' => 'x']
+			&& $kept->removeFromUrl('/p?nick=marcin&user=annab')
+				=== '/p?nick=m***i*&user=annab'
+			// an address under the project's name is still an address: raw
+			&& $kept->remove(['nick' => 'anna@example.at']) === ['nick' => 'anna@example.at']
+			&& Subject::CODESAFE_USERNAMES === ['~^user([_-]?(name|login))?$~i', '~^login$~i'];
+	}
+	
+	/**
+	 * The LOCAL log file never reaches codesafe's vault, so it keeps masking:
+	 * the request variables appended under a logged event read as masks
+	 * whatever the Sender sends
+	 */
+	public function theLogFileStillMasksPeople(): bool
+	{
+		$get = $_GET;
+		$post = $_POST;
+		$_GET = ['email' => 'john.doe@example.com'];
+		$_POST = ['username' => 'marcin', 'password' => 'hunter22'];
+		try
+		{
+			$append = (new Subject)->getAppend();
+		}
+		finally
+		{
+			$_GET = $get;
+			$_POST = $post;
+		}
+		
+		return str_contains($append, 'j***.***@example.com')
+			&& str_contains($append, '"m***i*"')
+			&& str_contains($append, '[redacted]')
+			&& str_contains($append, 'john.doe') === false
+			&& str_contains($append, 'marcin') === false
+			&& str_contains($append, 'hunter22') === false;
+	}
 }
