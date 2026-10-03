@@ -24,7 +24,9 @@ use Traversable;
 
 use function strtoupper;
 use function apcu_add;
+use function apcu_delete;
 use function apcu_enabled;
+use function apcu_fetch;
 use function apcu_inc;
 use function apcu_store;
 use function array_replace;
@@ -218,8 +220,9 @@ class Sender extends Service
 	public const string SECURITY_PREFIX = 'ovos:codesafe:security:';
 	
 	/**
-	 * The hello's key namespace, beneath the install's own: one key per
-	 * signature of the switches, claimed for a day by the worker that says it
+	 * The hello's key namespace, beneath the install's own: `told` holds the
+	 * signature last said (a day, or a refused one's back-off), `lock` the
+	 * worker saying it now
 	 */
 	public const string HELLO_PREFIX = 'ovos:codesafe:hello:';
 	
@@ -1534,11 +1537,15 @@ class Sender extends Service
 	}
 	
 	/**
-	 * Says the hello when it is due: one worker of the pool claims a day for
-	 * this signature of the switches (apcu_add), so a deploy that changes one
-	 * says it on its first request; a refused codesafe is asked again an hour
-	 * later, one without the endpoint (404) a day later. Needs APCu and the
-	 * direct transport — without them codesafe judges by what arrives.
+	 * Says the hello when it is due: when the switches' signature is not the
+	 * one last said, or the day it stands for is over. ONE key holds what was
+	 * said — a key per signature let a switch flipped and flipped back within
+	 * a day find its first signature still claimed and say nothing, so
+	 * codesafe kept the middle state for up to a day. One worker of the pool
+	 * says it (the lock); a refused codesafe is asked again an hour later, one
+	 * without the endpoint (404) a day later — a changed switch at once. Needs
+	 * APCu and the direct transport — without them codesafe judges by what
+	 * arrives.
 	 */
 	protected function maybeHello(): void
 	{
@@ -1550,17 +1557,29 @@ class Sender extends Service
 		}
 		
 		$json = (string)json_encode(self::helloPayload($this->config, Untracked::client()));
-		$key = (new Prefixer(self::cachePrefix($this->app)))->prefix(self::HELLO_PREFIX . md5($json));
-		if(apcu_add($key, 1, self::HELLO_DAY) === false)
+		$signature = md5($json);
+		// read with ??: a Sender built outside the container has no app
+		$prefixer = new Prefixer(self::cachePrefix($this->app ?? null));
+		$told = $prefixer->prefix(self::HELLO_PREFIX . 'told');
+		if(apcu_fetch($told) === $signature)
+		{
+			return;
+		}
+		
+		$lock = $prefixer->prefix(self::HELLO_PREFIX . 'lock');
+		if(apcu_add($lock, 1, 60) === false)
 		{
 			return;
 		}
 		
 		$code = $this->post('/api/v1/ingest/hello', $json);
-		if($code < 200 || $code >= 300)
+		// said: it stands a day; refused: the same signature waits out its back-off
+		apcu_store($told, $signature, match(true)
 		{
-			apcu_store($key, 1, $code === 404 ? self::HELLO_DAY : self::HELLO_RETRY);
-		}
+			$code >= 200 && $code < 300, $code === 404 => self::HELLO_DAY,
+			default => self::HELLO_RETRY,
+		});
+		apcu_delete($lock);
 	}
 	
 	/**

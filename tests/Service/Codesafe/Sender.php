@@ -6,20 +6,26 @@ namespace Tests\Service\Codesafe;
 use ErrorException;
 use Exception;
 use Ovos\ArrayObject;
+use Ovos\Cache\Prefixer;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Service\Codesafe\Sender as CodesafeSender;
 use Ovos\Service\Codesafe\Untracked;
 use Ovos\Service\Logger;
 use Ovos\Test;
+use Ovos\Test\Exception\SkipException;
 use Throwable;
 use WeakReference;
 
 use function Ovos\container;
 
+use function apcu_delete;
+use function apcu_enabled;
 use function array_filter;
 use function array_key_exists;
+use function array_push;
 use function count;
+use function function_exists;
 use function json_decode;
 use function gc_collect_cycles;
 use function in_array;
@@ -105,7 +111,80 @@ class Sender extends Test
 			&& CodesafeSender::helloPayload(new ArrayObject(['enabled' => false]), 'php-library/dev') === []
 			&& CodesafeSender::helloPayload(null, 'php-library/dev') === [];
 	}
-
+	
+	/**
+	 * The hello is said when the switches' signature is not the one last said:
+	 * once for a state, again for a change — and again for a change BACK within
+	 * the day, which a key per signature missed (the first signature was still
+	 * claimed, so codesafe kept the middle state for up to a day). A refused
+	 * hello waits out its back-off rather than retrying every request.
+	 */
+	public function helloIsSaidOncePerStateAndAgainOnEveryChange(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			throw new SkipException('APCu is not enabled on this CLI');
+		}
+		
+		$told = (new Prefixer())->prefix(CodesafeSender::HELLO_PREFIX . 'told');
+		$lock = (new Prefixer())->prefix(CodesafeSender::HELLO_PREFIX . 'lock');
+		apcu_delete([$told, $lock]);
+		
+		try
+		{
+			$posted = [];
+			$say = function(bool $rollups, int $code = 202) use (&$posted): void
+			{
+				$sender = new class(new ArrayObject([
+					'enabled' => true,
+					'url' => 'https://console.invalid',
+					'key' => 'test-key',
+					'rollups' => $rollups,
+				])) extends CodesafeSender
+				{
+					public int $code = 202;
+					
+					public array $posted = [];
+					
+					public function sayHello(): void
+					{
+						$this->maybeHello();
+					}
+					
+					protected function post(
+						string $path,
+						string $json,
+					): int
+					{
+						$this->posted[] = json_decode($json, true)['features']['rollups'];
+						
+						return $this->code;
+					}
+				};
+				$sender->code = $code;
+				$sender->sayHello();
+				array_push($posted, ...$sender->posted);
+			};
+			
+			$say(false);
+			$say(false);
+			$say(true);
+			// the change back — the case a key per signature never said
+			$say(false);
+			$afterFlips = $posted;
+			
+			$say(true, 503);
+			$say(true, 503);
+			
+			return $afterFlips === [false, true, false]
+				&& $posted === [false, true, false, true];
+		}
+		finally
+		{
+			apcu_delete([$told, $lock]);
+		}
+	}
+	
 	public function capturesDistinctThrowables(): bool
 	{
 		$sender = $this->makeSender();
