@@ -5,6 +5,7 @@ namespace Ovos;
 
 use Ovos\Environment\Loader as EnvLoader;
 use Ovos\Exception\RuntimeException;
+use Ovos\Exception\UnavailableException;
 use Ovos\Config\Loader as ConfigLoader;
 use Ovos\Response\Redirect;
 use Ovos\Service\Codesafe\Sender;
@@ -21,6 +22,7 @@ use function array_merge;
 use function array_unshift;
 use function is_array;
 use function count;
+use function end;
 use function implode;
 use function set_include_path;
 use function get_include_path;
@@ -782,6 +784,14 @@ class Application
 		{
 			// set a default error code that can be overwritten by the events controller
 			$response->setHttpCode(500);
+			
+			// an unreachable dependency is a 503: the code did not fail, and the
+			// caller may come back (the events controller says the same for HTML)
+			$events = $this->getServices()->events->toArray();
+			if(end($events) instanceof UnavailableException)
+			{
+				$response->setHttpCode(503);
+			}
 			
 			/// JSON
 			if($this->getResponse() instanceof Response\Json)

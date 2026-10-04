@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Store;
 
 use Ovos\Exception;
+use Ovos\Exception\UnavailableException;
 use Ovos\Connections;
 use Ovos\Model\Mysql as Model;
 use Ovos\Model\Relation\Many as RelationMany;
@@ -59,6 +60,14 @@ abstract class Mysql extends Store
 	 */
 	protected ?PDO $_source = null;
 	
+	/**
+	 * The database connection. Never null: a connection that cannot be
+	 * established throws UnavailableException — it used to answer null, and
+	 * a read then reported "no rows" for an outage. The nullable return type
+	 * stays for the subclasses that override it.
+	 *
+	 * @throws UnavailableException
+	 */
 	public function getSource(): ?PDO
 	{
 		if($this->_source === null)
@@ -67,7 +76,7 @@ abstract class Mysql extends Store
 			$this->_source = $this->container
 				->getClass(Connections::class)
 				->get($this->sourceName)
-				->getClient();
+				->requireClient();
 		}
 		
 		return $this->_source;
@@ -170,13 +179,7 @@ abstract class Mysql extends Store
 		Query $query,
 	): ?PDOStatement
 	{
-		$source = $this->getSource();
-		if($source === null)
-		{
-			return null;
-		}
-		
-		$statement = $source->prepare($query->getSql());
+		$statement = $this->getSource()->prepare($query->getSql());
 		$values = $query->getValues();
 		if($values !== [])
 		{

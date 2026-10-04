@@ -94,6 +94,10 @@ class Redis extends RedisCommon
 				=> self::BACKOFF_BASE,
 			RedisClient::OPT_BACKOFF_CAP
 				=> self::BACKOFF_CAP,
+			// a server that vanished without closing the socket (a frozen VM,
+			// a dropped NAT entry) is noticed instead of waited on forever
+			RedisClient::OPT_TCP_KEEPALIVE
+				=> 1,
 		];
 		
 		// set options

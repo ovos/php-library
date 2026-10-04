@@ -12,6 +12,7 @@ use Override;
 use PDO;
 use PDOException;
 
+use function ini_set;
 use function sprintf;
 
 /**
@@ -21,6 +22,12 @@ use function sprintf;
  */
 class Mysql extends Connection
 {
+	/**
+	 * Seconds to wait for the server to accept a connection (config
+	 * `connect_timeout` overrides it) — PDO's own default is 30
+	 */
+	protected const int CONNECT_TIMEOUT = 5;
+	
 	protected ArrayObject $config;
 	
 	protected ?PDO $client = null;
@@ -41,12 +48,26 @@ class Mysql extends Connection
 			$this->config->database,
 			$this->config->host,
 		);
+		if(isset($this->config->port))
+		{
+			$dsn.= ';port=' . (int)$this->config->port;
+		}
 		
 		$options = [
 			PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_OBJ,
 			PDO::ATTR_EMULATE_PREPARES => false,
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+			PDO::ATTR_TIMEOUT => (int)($this->config->connect_timeout ?? static::CONNECT_TIMEOUT),
 		];
+		
+		// opt-in: how long one read may wait for the server. mysqlnd reads it
+		// when a connection opens, so it is set right before; unset, the
+		// process default stands (a long report or migration is not cut by a
+		// new default)
+		if(isset($this->config->read_timeout))
+		{
+			ini_set('mysqlnd.net_read_timeout', (string)(int)$this->config->read_timeout);
+		}
 		
 		try
 		{
@@ -78,10 +99,7 @@ class Mysql extends Connection
 		catch(PDOException $exception)
 		{
 			$this->client = null;
-			$this->logger->log
-			(
-				$exception,
-			);
+			$this->log($exception);
 			
 			return false;
 		}
