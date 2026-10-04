@@ -3,21 +3,26 @@ declare(strict_types=1);
 
 namespace Ovos\Environment;
 
+use Ovos\ArrayObject;
 use Ovos\Environment;
 use Ovos\Service\Memory;
 use Ovos\Container\Inject;
 use Ovos\Cache\Key\Normalizer;
 
 use function basename;
+use function filemtime;
+use function is_file;
 
 /**
  * Loader
  *
  * Reads a .env file into an Environment. The parsed object is NOT cached by
  * load() itself: the caller decides, via remember(), once the environment has
- * proven usable (its section exists in environments.yml). A .env naming an
- * unknown environment would otherwise be cached with no way to drop it - the
- * entry carries no mtime, and the cache clear needs a boot that works.
+ * proven usable (its section exists in environments.yml). The remembered entry
+ * carries the file's mtime, as Config\Loader's does: an edited .env is read on
+ * the next request. It used to wait for an APCu clear — and the clear is a
+ * self-call signed with a key FROM .env, so a new key could not arrive by the
+ * one path that would have delivered it.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -44,9 +49,13 @@ class Loader
 		$store = $this->memoryService->getStore();
 		
 		$cacheId ??= static::cacheId($file);
-		if(($value = $store->get($cacheId)))
+		$item = $store->get($cacheId);
+		// an entry from before the mtime (a bare Environment) is no hit either
+		if($item instanceof ArrayObject
+			&& $item->environment instanceof Environment
+			&& $item->mtime === static::mtime($file))
 		{
-			return $value;
+			return $item->environment;
 		}
 		
 		$config = Parser::parse($file);
@@ -67,9 +76,13 @@ class Loader
 		?string $cacheId = null,
 	): void
 	{
+		$item = new ArrayObject;
+		$item->mtime = static::mtime($file);
+		$item->environment = $environment;
+		
 		$this->memoryService
 			->getStore()
-			->set($cacheId ?? static::cacheId($file), $environment);
+			->set($cacheId ?? static::cacheId($file), $item);
 	}
 	
 	/**
@@ -90,5 +103,17 @@ class Loader
 	): string
 	{
 		return Normalizer::fromPath(basename($file));
+	}
+	
+	/**
+	 * The file's mtime, false while it does not exist — never a warning
+	 */
+	protected static function mtime(
+		string $file,
+	): int|false
+	{
+		return is_file($file)
+			? filemtime($file)
+			: false;
 	}
 }

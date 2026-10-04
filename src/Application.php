@@ -234,11 +234,10 @@ class Application
 			? constant('CONFIGS_DIR')
 			: self::CONFIGS_DIR;
 		
-		// the .env Environment is remembered (APCu) only once environments.yml
-		// has a section for it. Remembered first, a .env naming a retired
-		// environment would outlive its own fix: the entry has no mtime, and
-		// the cache clear needs a boot that works. A failed resolution also
-		// drops what an earlier boot remembered, so the corrected .env is
+		// the .env Environment is remembered (APCu, keyed by the file's mtime)
+		// only once environments.yml has a section for it — a .env naming a
+		// retired environment is never remembered at all. A failed resolution
+		// also drops what an earlier boot remembered, so the corrected .env is
 		// read on the very next request
 		try
 		{
