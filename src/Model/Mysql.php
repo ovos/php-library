@@ -9,6 +9,7 @@ use Ovos\Cache\Store\KeyValue\Tags as TagsStore;
 use Ovos\Connections;
 use Ovos\Console;
 use Ovos\Exception;
+use Ovos\Exception\UnavailableException;
 use Ovos\Service\Cache as CacheService;
 use Ovos\Model;
 use Ovos\Model\Relation;
@@ -123,6 +124,14 @@ abstract class Mysql
 		$this->triggerEvents('setUp');
 	}
 	
+	/**
+	 * The database connection. Never null: a connection that cannot be
+	 * established throws UnavailableException — it used to answer null, and
+	 * a read then reported "no rows" for an outage. The nullable return type
+	 * stays for the subclasses that override it.
+	 *
+	 * @throws UnavailableException
+	 */
 	public function getSource(): ?PDO
 	{
 		if($this->_source === null)
@@ -131,7 +140,7 @@ abstract class Mysql
 			$this->_source = $this->container
 				->getClass(Connections::class)
 				->get($this->sourceName)
-				->getClient();
+				->requireClient();
 		}
 		
 		return $this->_source;
