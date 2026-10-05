@@ -268,6 +268,69 @@ class Rollup extends Test
 	}
 	
 	/**
+	 * RULE: a duration in bucket 0 also counts into its part of the split —
+	 * at most 5, at most 10, at most 25 ms, pinned AT the bounds — in the
+	 * __total headline and in the route's own split, beside the coarse
+	 * bucket; past bucket 0 there is no split. codesafe's
+	 * Codesafe\Stats\Durations reads the same three parts.
+	 */
+	public function bucketZeroSplitsIntoThreeParts(): bool
+	{
+		return CodesafeRollup::DURATION_SPLIT === [5, 10]
+			&& CodesafeRollup::DURATION_FINE_PARTS === 3
+			&& CodesafeRollup::splitFor(0.0) === 0
+			&& CodesafeRollup::splitFor(5.0) === 0
+			&& CodesafeRollup::splitFor(5.1) === 1
+			&& CodesafeRollup::splitFor(10.0) === 1
+			&& CodesafeRollup::splitFor(10.1) === 2
+			&& CodesafeRollup::splitFor(25.0) === 2
+			&& CodesafeRollup::splitFor(25.1) === null
+			&& CodesafeRollup::durationFields('/user/:id', 7.0) === ['dt:0', 'd:/user/:id:0', 'dtf:1', 'df:/user/:id:1']
+			&& CodesafeRollup::durationFields('/orders', 30.0) === ['dt:1', 'd:/orders:1'];
+	}
+	
+	/**
+	 * RULE: dtf:/df: counters assemble into three-int splits under
+	 * durations_fine — the route split on the LAST colon — and only beside
+	 * the vector they split: no __total headline, no durations and no
+	 * split; a route whose vector was evicted ships no split of its own.
+	 * Falsify: drop the intersection — `/gone` ships a split of a vector the
+	 * fragment does not carry.
+	 */
+	public function theSplitAssemblesBesideTheVectorItSplits(): bool
+	{
+		$payload = CodesafeRollup::assemble(29248320, [
+			'requests' => 4,
+			'dt:0' => 3,
+			'dt:2' => 1,
+			'd:/user/:id:0' => 2,
+			'd:/orders:0' => 1,
+			'd:/orders:2' => 1,
+			'dtf:0' => 2,
+			'dtf:2' => 1,
+			'df:/user/:id:0' => 1,
+			'df:/user/:id:2' => 1,
+			'df:/orders:0' => 1,
+			'df:/gone:1' => 1,
+		]);
+		
+		$evicted = CodesafeRollup::assemble(29248320, [
+			'requests' => 1,
+			'd:/orders:0' => 1,
+			'dtf:0' => 1,
+			'df:/orders:0' => 1,
+		]);
+		
+		return ($payload['durations_fine'] ?? null) === [
+				'/orders' => [1, 0, 0],
+				'/user/:id' => [1, 0, 1],
+				'__total' => [2, 0, 1],
+			]
+			&& isset($evicted['durations']) === false
+			&& isset($evicted['durations_fine']) === false;
+	}
+	
+	/**
 	 * RULE: a streaming response (text/event-stream) is held open for as
 	 * long as the client listens — its wall time measures the subscription,
 	 * not the work — so observe() counts it as a request and gives it no
