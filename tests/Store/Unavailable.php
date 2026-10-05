@@ -5,6 +5,7 @@ namespace Tests\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Connection\Mysql as MysqlConnection;
+use Ovos\Connection\Redis as RedisConnection;
 use Ovos\Container\Inject;
 use Ovos\Exception\UnavailableException;
 use Ovos\Model\Mysql as Model;
@@ -13,6 +14,8 @@ use Ovos\Test;
 use Ovos\Test\Internal;
 use Override;
 use Throwable;
+
+use function str_contains;
 
 /**
  * A database that cannot be reached is UnavailableException, everywhere —
@@ -119,6 +122,56 @@ class Unavailable extends Test
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * RULE: a redis connection whose configuration sets no host — null, empty,
+	 * blank — is a server that cannot be reached: getClient() null,
+	 * requireClient() UnavailableException, the reason logged. Never the
+	 * ValueError ("Invalid host") phpredis throws for a null one — an .env
+	 * that lost REDIS[CODESAFE_HOST] answered every request of console.ovos.at
+	 * with a 500 naming nothing (2026-10-05) — and never the default server
+	 * phpredis takes an empty one for.
+	 */
+	public function aRedisConnectionWithoutAHostIsUnavailable(): bool
+	{
+		foreach([null, '', '   '] as $host)
+		{
+			$connection = new class(new ArrayObject(['type' => 'redis', 'host' => $host, 'port' => 6379, 'database' => 7])) extends RedisConnection
+			{
+				/** @var list<mixed> */
+				public array $logged = [];
+				
+				#[Override]
+				public function log(
+					...$event,
+				): static
+				{
+					$this->logged[] = $event[0] ?? null;
+					
+					return $this;
+				}
+			};
+			
+			try
+			{
+				$client = $connection->getClient();
+			}
+			catch(Throwable)
+			{
+				return false;
+			}
+			$message = $connection->logged === [] ? '' : (string)$connection->logged[0]->getMessage();
+			
+			if($client !== null
+				|| self::throwsUnavailable(static fn() => $connection->requireClient()) === false
+				|| str_contains($message, 'has no host') === false)
+			{
+				return false;
+			}
+		}
+		
+		return true;
 	}
 	
 	#[Internal]
