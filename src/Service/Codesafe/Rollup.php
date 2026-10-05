@@ -14,21 +14,22 @@ use Ovos\Service\Auth;
 use Throwable;
 
 use function apcu_add;
-use function array_fill;
 use function apcu_delete;
 use function apcu_enabled;
 use function apcu_entry;
 use function apcu_fetch;
 use function apcu_inc;
 use function apcu_store;
+use function array_fill;
+use function array_intersect_key;
 use function base_convert;
 use function crc32;
 use function curl_exec;
 use function curl_init;
 use function curl_setopt_array;
 use function function_exists;
-use function getmypid;
 use function gethostname;
+use function getmypid;
 use function headers_list;
 use function http_response_code;
 use function in_array;
@@ -36,9 +37,9 @@ use function intdiv;
 use function is_float;
 use function is_int;
 use function is_string;
-use function microtime;
 use function json_encode;
 use function ksort;
+use function microtime;
 use function preg_match;
 use function preg_quote;
 use function preg_replace;
@@ -157,6 +158,18 @@ class Rollup
 	public const array DURATION_BOUNDS = [25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 30000];
 	
 	public const int DURATION_BUCKETS = 12;
+	
+	/**
+	 * Bucket 0's split (codesafe's D5): nearly every request lands in bucket
+	 * 0, where a percentile reads 12.5 / 23.8 ms whatever the site does, so
+	 * a duration there also counts into one of three parts — at most 5, at
+	 * most 10, at most 25 ms — shipped as the optional durations_fine
+	 * beside the coarse vectors. The coarse contract above stays as it is;
+	 * a codesafe that predates the key ignores it.
+	 */
+	public const array DURATION_SPLIT = [5, 10];
+	
+	public const int DURATION_FINE_PARTS = 3;
 	
 	/**
 	 * Every APCu key this install owns starts with it:
@@ -413,6 +426,55 @@ class Rollup
 	}
 	
 	/**
+	 * The part of bucket 0's split one duration falls into — at most 5, at
+	 * most 10, at most 25 ms — or null past bucket 0
+	 */
+	public static function splitFor(
+		float $ms,
+	): ?int
+	{
+		if($ms > self::DURATION_BOUNDS[0])
+		{
+			return null;
+		}
+		
+		foreach(self::DURATION_SPLIT as $i => $bound)
+		{
+			if($ms <= $bound)
+			{
+				return $i;
+			}
+		}
+		
+		return self::DURATION_FINE_PARTS - 1;
+	}
+	
+	/**
+	 * The histogram fields one duration increments: the coarse bucket in the
+	 * __total headline and in the route's own vector, always together, and
+	 * within bucket 0 its part of the split, the same two ways
+	 *
+	 * @return list<string>
+	 */
+	public static function durationFields(
+		string $route,
+		float $ms,
+	): array
+	{
+		$bucket = self::bucketFor($ms);
+		$fields = ['dt:' . $bucket, 'd:' . $route . ':' . $bucket];
+		
+		$part = self::splitFor($ms);
+		if($part !== null)
+		{
+			$fields[] = 'dtf:' . $part;
+			$fields[] = 'df:' . $route . ':' . $part;
+		}
+		
+		return $fields;
+	}
+	
+	/**
 	 * The minute's counters plus what the hook adds for it — the Shield's
 	 * hits; a hook that throws adds nothing (the rollup never breaks the host)
 	 *
@@ -464,6 +526,7 @@ class Rollup
 		ksort($fields);
 		
 		$durations = [];
+		$fine = [];
 		
 		foreach($fields as $field => $count)
 		{
@@ -497,6 +560,18 @@ class Rollup
 				$durations[$route] ??= array_fill(0, self::DURATION_BUCKETS, 0);
 				$durations[$route][(int)substr($field, $cut + 1)] = $count;
 			}
+			elseif(substr($field, 0, 4) === 'dtf:')
+			{
+				$fine['__total'] ??= array_fill(0, self::DURATION_FINE_PARTS, 0);
+				$fine['__total'][(int)substr($field, 4)] = $count;
+			}
+			elseif(substr($field, 0, 3) === 'df:')
+			{
+				$cut = strrpos($field, ':');
+				$route = substr($field, 3, $cut - 3);
+				$fine[$route] ??= array_fill(0, self::DURATION_FINE_PARTS, 0);
+				$fine[$route][(int)substr($field, $cut + 1)] = $count;
+			}
 			elseif(substr($field, 0, 2) === 'r:')
 			{
 				$payload['routes'][substr($field, 2)] = $count;
@@ -524,6 +599,15 @@ class Rollup
 		if(isset($durations['__total']))
 		{
 			$payload['durations'] = $durations;
+			
+			// the split rides only beside the vector it splits; codesafe
+			// drops one that does not add up to that bucket 0, so a counter
+			// evicted between the two costs the split, never the fragment
+			$fine = array_intersect_key($fine, $durations);
+			if($fine !== [])
+			{
+				$payload['durations_fine'] = $fine;
+			}
 		}
 		
 		return $payload;
@@ -579,12 +663,10 @@ class Rollup
 		// the duration histogram (perf-lite): one increment into the fixed
 		// bucket vocabulary — the __total headline and the route's own
 		// vector, always together, so codesafe's counts and percentiles
-		// can never describe different route sets
+		// can never describe different route sets — and bucket 0's split
 		if($durationMs !== null)
 		{
-			$bucket = self::bucketFor($durationMs);
-			$fields[] = 'dt:' . $bucket;
-			$fields[] = 'd:' . $route . ':' . $bucket;
+			$fields = [...$fields, ...self::durationFields($route, $durationMs)];
 		}
 		
 		$ok = false;
