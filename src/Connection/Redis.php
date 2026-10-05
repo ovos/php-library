@@ -9,7 +9,9 @@ use Ovos\Redis\Profiler\Collector;
 use Redis as RedisClient;
 use RedisException;
 
+use function is_string;
 use function sprintf;
+use function trim;
 
 /**
  * Redis
@@ -57,10 +59,27 @@ class Redis extends RedisCommon
 	
 	public function connect(): bool
 	{
+		$host = $this->config->host;
 		$port = (int)($this->config->port ?? 6379);
 		
+		// a host the configuration does not set is a server that cannot be
+		// reached, said as such: phpredis refuses a null one with a ValueError
+		// ("Invalid host" — not the RedisException handled below), which took
+		// every request of console.ovos.at down when its .env lost the key
+		// (2026-10-05), and takes an EMPTY one as a default server — the wrong
+		// one, silently
+		if(is_string($host) === false || trim($host) === '')
+		{
+			$this->log(new RedisException(sprintf(
+				'Redis connection to database "%s" has no host: the configuration does not set one (a missing or misnamed .env key?).',
+				static::getId($this->config),
+			)));
+			
+			return false;
+		}
+		
 		$connectionOptions = [
-			'host' => $this->config->host,
+			'host' => $host,
 			'port' => $port,
 			'connectTimeout' => $this->connectTimeout,
 		];
@@ -113,14 +132,14 @@ class Redis extends RedisCommon
 		catch(RedisException $exception)
 		{
 			$this->client = null;
-			$this->logger->log
+			$this->log
 			(
 				new RedisException
 				(
 					sprintf(
 						'Could not connect to redis server "%s" on port "%s".',
-						$this->config->host,
-						$this->config->port,
+						$host,
+						$port,
 					),
 					0,
 					$exception, // previous
