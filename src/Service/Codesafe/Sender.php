@@ -661,26 +661,39 @@ class Sender extends Service
 	}
 	
 	/**
+	 * A routing miss — the router's FileNotFoundException, a controller or an
+	 * action nobody has, an app's own NotFoundException — is a 404 whatever
+	 * the switch says: the type=404 payload where the app opted into 404
+	 * reporting (report_404), nothing at all where it did not. Never an
+	 * application error. It used to fall through to the error payload when
+	 * the switch was off, and codesafe's FLEET read a site FAILING at 52% on
+	 * an hour of a scanner's probes (bo2go, 2026-10-05): a 404 is the attack
+	 * layer's row, not the site failing a request, and an app that said "no
+	 * 404 reports" meant none — not "as errors". Covers the Events-service
+	 * merge (where framework 404s arrive) and an explicit capture alike.
+	 */
+	protected function payloadNotFound(
+		NotFoundException $throwable,
+	): ?array
+	{
+		return $this->reports404() ? $this->payload404('', [], $throwable) : null;
+	}
+	
+	/**
 	 * Whether the throwable records an access event — request noise caused by
-	 * the client, not an application error. A routing miss (unknown
-	 * controller/action) counts when the app opted into 404 reporting; covers
-	 * the Events-service merge (where framework 404s arrive) and an explicit
-	 * NotFoundException capture alike. A request-startup refusal — PHP dropping
-	 * a malformed multipart body before any userland code ran, the signature of
-	 * upload-exploit scanners — always counts: the application never had a say,
-	 * so it must not be blamed. PHP emits the "PHP Request Startup: " prefix
-	 * only for errors raised during that phase; handleShutdown() delivers them
-	 * here as the ErrorException built from error_get_last().
+	 * the client, not an application error — that counts whatever the app
+	 * opted into (a routing miss is payloadNotFound()'s, behind report_404). A
+	 * request-startup refusal — PHP dropping a malformed multipart body before
+	 * any userland code ran, the signature of upload-exploit scanners — always
+	 * counts: the application never had a say, so it must not be blamed. PHP
+	 * emits the "PHP Request Startup: " prefix only for errors raised during
+	 * that phase; handleShutdown() delivers them here as the ErrorException
+	 * built from error_get_last().
 	 */
 	protected function isAccessEvent(
 		?Throwable $throwable,
 	): bool
 	{
-		if($throwable instanceof NotFoundException)
-		{
-			return $this->reports404();
-		}
-		
 		return $throwable instanceof ErrorException
 			&& str_starts_with($throwable->getMessage(), 'PHP Request Startup: ');
 	}
@@ -768,6 +781,7 @@ class Sender extends Service
 		// rest of the request and never get another chance
 		$payload = match(true)
 		{
+			$throwable instanceof NotFoundException => $this->payloadNotFound($throwable),
 			$this->isAccessEvent($throwable) => $this->payload404('', [], $throwable),
 			$throwable instanceof ForbiddenException => $this->payloadRefusal($throwable),
 			default => $event->toPayload(),

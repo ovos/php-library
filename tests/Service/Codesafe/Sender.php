@@ -10,6 +10,7 @@ use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
 use Ovos\Exception\ForbiddenException;
 use Ovos\Exception\NotFoundException;
+use Ovos\Exception\NotFoundException\FileNotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Service\Codesafe\Otlp;
 use Ovos\Service\Codesafe\Sender as CodesafeSender;
@@ -18,6 +19,7 @@ use Ovos\Service\Logger;
 use Ovos\Services;
 use Ovos\Test;
 use Ovos\Test\Exception\SkipException;
+use RuntimeException;
 use Throwable;
 use WeakReference;
 
@@ -560,18 +562,43 @@ class Sender extends Test
 			&& $capped->queueCount() === 0;
 	}
 	
-	public function notFoundExceptionStaysAnErrorWhenDisabled(): bool
+	/**
+	 * With 404 reporting off a routing miss is not reported at all — never as
+	 * an application error, which is what it used to become: codesafe's FLEET
+	 * read bo2go FAILING at 52% on an hour of a scanner's probes filed as
+	 * errors (2026-10-05). The router's own FileNotFoundException, INFO as the
+	 * router throws it, and a plain NotFoundException alike; an application
+	 * error beside them still goes
+	 */
+	public function notFoundExceptionIsNotReportedAtAllWhenDisabled(): bool
 	{
 		$sender = $this->makeSender(report404: false);
 		
 		$sender->mergeEvent(new NotFoundException('No route'));
+		$sender->mergeEvent((new FileNotFoundException('File not found: %s', 'wp-login.php'))->withPriority(Priority::INFO));
+		$quiet = $sender->queueCount();
+		$sender->mergeEvent(new RuntimeException('a real failure'));
+		
+		return $quiet === 0
+			&& $sender->queueCount() === 1
+			&& ($sender->lastPayload()['message'] ?? '') === 'a real failure';
+	}
+	
+	/**
+	 * …and with it on, the router's FileNotFoundException is a 404 like any
+	 * routing miss — the kind, INFO, the router's own message kept
+	 */
+	public function theRoutersFileNotFoundIsA404WhenEnabled(): bool
+	{
+		$sender = $this->makeSender(report404: true);
+		
+		$sender->mergeEvent((new FileNotFoundException('File not found: %s', 'wp-login.php'))->withPriority(Priority::INFO));
 		$payload = $sender->lastPayload();
 		
-		// a normal exception payload: no 404 type override, no kind yet (flush
-		// stamps `error` beside runtime/entry), error priority
-		return ($payload['type'] ?? null) === null
-			&& ($payload['kind'] ?? null) === null
-			&& ($payload['priority'] ?? null) === Priority::ERROR;
+		return ($payload['kind'] ?? null) === 'not_found'
+			&& ($payload['type'] ?? null) === '404'
+			&& ($payload['priority'] ?? null) === Priority::INFO
+			&& ($payload['message'] ?? '') === 'File not found: wp-login.php';
 	}
 	
 	/**
