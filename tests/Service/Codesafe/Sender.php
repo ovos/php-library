@@ -8,6 +8,7 @@ use Exception;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
+use Ovos\Exception\ForbiddenException;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Service\Codesafe\Otlp;
@@ -98,7 +99,7 @@ class Sender extends Test
 			'enabled' => true,
 			'shield' => ['detect' => true, 'enforce' => true, 'kill' => true],
 		]), 'php-library/dev');
-
+		
 		return $on === [
 				'v' => 1,
 				'client' => 'php-library/8.5.41',
@@ -525,6 +526,38 @@ class Sender extends Test
 			&& ($payload['kind'] ?? null) === 'not_found'
 			&& ($payload['priority'] ?? null) === Priority::INFO
 			&& ($payload['message'] ?? '') === 'File not found: themes/x/favicon.png';
+	}
+	
+	/**
+	 * A 403 is a refusal (codesafe's failure-mode audit, D2): a
+	 * ForbiddenException — the CLI-only gate a scanner hits over HTTP, an
+	 * app's own refusal — is queued as the permission_denied security event at
+	 * INFO, from the Events merge and from captureException() alike, once per
+	 * throwable; past the security cap it is dropped, never sent as an error
+	 */
+	public function forbiddenExceptionIsAPermissionDeniedRefusal(): bool
+	{
+		$sender = $this->makeSender();
+		$refusal = new ForbiddenException('Forbidden.');
+		$sender->mergeEvent($refusal);
+		$sender->captureException($refusal);
+		$payload = $sender->lastPayload();
+		
+		$captured = $this->makeSender();
+		$captured->captureException(new ForbiddenException('not yours'));
+		
+		$capped = $this->makeSender();
+		$capped->securityAllowed = false;
+		$capped->mergeEvent(new ForbiddenException('Forbidden.'));
+		
+		return $sender->queueCount() === 1
+			&& ($payload['type'] ?? null) === 'security'
+			&& ($payload['kind'] ?? null) === 'security'
+			&& ($payload['priority'] ?? null) === Priority::INFO
+			&& ($payload['events'][0]['className'] ?? null) === 'permission_denied'
+			&& ($payload['message'] ?? '') === 'Forbidden.'
+			&& ($captured->lastPayload()['events'][0]['className'] ?? null) === 'permission_denied'
+			&& $capped->queueCount() === 0;
 	}
 	
 	public function notFoundExceptionStaysAnErrorWhenDisabled(): bool

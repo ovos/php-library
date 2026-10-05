@@ -9,6 +9,7 @@ use Ovos\Cache\Prefixer;
 use Ovos\Client;
 use Ovos\Container\ArrayObject as InjectArrayObject;
 use Ovos\Container\Inject;
+use Ovos\Exception\ForbiddenException;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Http\Trace;
@@ -755,16 +756,40 @@ class Sender extends Service
 		// build the payload BEFORE marking the event as seen: if construction
 		// throws, a pre-marked event would count as already queued for the
 		// rest of the request and never get another chance
-		$payload = $this->isAccessEvent($throwable)
-			? $this->payload404('', [], $throwable)
-			: $event->toPayload();
+		$payload = match(true)
+		{
+			$this->isAccessEvent($throwable) => $this->payload404('', [], $throwable),
+			$throwable instanceof ForbiddenException => $this->payloadRefusal($throwable),
+			default => $event->toPayload(),
+		};
 		
 		if($throwable !== null)
 		{
 			$this->seen->offsetSet($throwable);
 		}
 		
-		$this->queue[] = $payload;
+		if($payload !== null)
+		{
+			$this->queue[] = $payload;
+		}
+	}
+	
+	/**
+	 * A ForbiddenException is a refusal, never an application error (codesafe's
+	 * failure-mode audit, D2): the request was told no — the CLI-only gate
+	 * (Controller\Cli::preDispatch) answering a scanner's `GET /stats/summary`,
+	 * an app's own 403 — and reported as an ERROR it opened an issue per path.
+	 * It goes as the `permission_denied` security event, INFO, within the same
+	 * per-minute cap as reportRefusal(); past the cap, or where codesafe takes no
+	 * security events, it is not reported at all — and still not as an error.
+	 */
+	protected function payloadRefusal(
+		ForbiddenException $refusal,
+	): ?array
+	{
+		return $this->allowSecurity()
+			? $this->payloadSecurity('permission_denied', $refusal->getMessage(), [])
+			: null;
 	}
 	
 	/**
