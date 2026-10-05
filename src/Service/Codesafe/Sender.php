@@ -65,13 +65,16 @@ use function str_replace;
 use function str_starts_with;
 use function stream_get_contents;
 use function stripos;
+use function strlen;
 use function strpos;
 use function strtolower;
 use function substr;
 use function time;
 use function trim;
+use function usleep;
 
 use const CURLINFO_RESPONSE_CODE;
+use const CURLINFO_SIZE_UPLOAD_T;
 use const CURLOPT_CONNECTTIMEOUT_MS;
 use const CURLOPT_HTTPHEADER;
 use const CURLOPT_NOSIGNAL;
@@ -176,6 +179,13 @@ class Sender extends Service
 	 * errors are never starved by a queue already filled with captures.
 	 */
 	public const int QUEUE_MAX = 100;
+	
+	/**
+	 * How long a batch codesafe did not take waits before its one retry, ms —
+	 * after fastcgi_finish_request() only, so the visitor never waits for it;
+	 * long enough for a codesafe restart's blip to pass
+	 */
+	public const int RETRY_DELAY_MS = 1000;
 	
 	/**
 	 * The closed kind vocabulary for type=security events (reportRefusal) —
@@ -1337,6 +1347,108 @@ class Sender extends Service
 		string $json,
 	): void
 	{
+		// the batches codesafe did not take wait in APCu for a later request
+		// (Spool) — posted once and dropped, a codesafe deploy or outage lost
+		// every error of those seconds (codesafe's failure-mode audit)
+		$spool = $this->spool();
+		
+		// held back after a failure: kept, never a connect timeout per request
+		if($spool?->backingOff() === true)
+		{
+			$spool->keep($json);
+			
+			return;
+		}
+		
+		[$status, $sent] = $this->transmit($json);
+		
+		// once more, a moment later, where the client already has its
+		// response — never blocking, but a retry after the response is free
+		// (MG 2026-10-05): a codesafe restart's blip passes here, only a
+		// longer outage reaches the spool
+		if(self::retryable($status, $sent) && $this->released())
+		{
+			$this->pause();
+			[$status, $sent] = $this->transmit($json);
+		}
+		if(self::retryable($status, $sent))
+		{
+			$spool?->keep($json);
+			$spool?->backOff();
+			
+			return;
+		}
+		
+		// codesafe answered: one kept batch rides along — at most one extra
+		// post per request until the spool is empty
+		if($status >= 200 && $status < 300)
+		{
+			$kept = $spool?->take();
+			if($kept !== null)
+			{
+				[$status, $sent] = $this->transmit($kept);
+				if(self::retryable($status, $sent))
+				{
+					$spool->keep($kept);
+					$spool->backOff();
+				}
+			}
+		}
+	}
+	
+	/**
+	 * Whether the client already has its response, so a retry costs it
+	 * nothing: Application::handleShutdown() called fastcgi_finish_request()
+	 * before this flush (MG 2026-10-05: "after we called
+	 * fastcgi_finish_request"). Anywhere else — mod_php, a CLI, a sender
+	 * built without the application — one post, as ever
+	 */
+	protected function released(): bool
+	{
+		return isset($this->app) && $this->app->isResponseFinished();
+	}
+	
+	/** the moment before the retry — RETRY_DELAY_MS; the seam a test skips */
+	protected function pause(): void
+	{
+		usleep(self::RETRY_DELAY_MS * 1000);
+	}
+	
+	/** this install's spool (Spool), null without APCu — the seam a test points at a fixture prefix */
+	protected function spool(): ?Spool
+	{
+		return Spool::available(self::cachePrefix($this->app));
+	}
+	
+	/**
+	 * Whether a batch's answer says codesafe CERTAINLY did not take it, so
+	 * it is kept and posted again: it never got there whole (no resolve, no
+	 * connection, no TLS, a body cut short), or 429/502/503/504 — codesafe, or what stands in
+	 * front of it, said "later". A 2xx is done and a 4xx is final (sent
+	 * again it is refused again); an answer lost AFTER the batch went out —
+	 * a read timeout — may have been stored, and sent again it would be
+	 * stored twice, so it is not
+	 */
+	public static function retryable(
+		int $status,
+		bool $sent,
+	): bool
+	{
+		return $sent === false || in_array($status, [429, 502, 503, 504], true);
+	}
+	
+	/**
+	 * One POST of a batch: the answer's status (0 — none) and whether
+	 * codesafe may have it (an answer came, or the whole body went out —
+	 * libcurl's upload count is 0 when the name, the connection or TLS
+	 * failed first)
+	 *
+	 * @return array{int, bool}
+	 */
+	protected function transmit(
+		string $json,
+	): array
+	{
 		$otlp = $this->getOtlpUrl();
 		
 		// OTLP mode posts to the collector endpoint verbatim, without the
@@ -1368,6 +1480,15 @@ class Sender extends Service
 		]);
 		
 		curl_exec($handle);
+		$status = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+		
+		return [
+			$status,
+			// an answer, or the whole body out: codesafe may have it. A failure
+			// before either — the name, the connection, TLS, a body cut short —
+			// left nothing it could store
+			$status > 0 || (int)curl_getinfo($handle, CURLINFO_SIZE_UPLOAD_T) >= strlen($json),
+		];
 	}
 	
 	/**
