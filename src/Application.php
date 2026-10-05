@@ -92,6 +92,12 @@ class Application
 	 */
 	protected array $afterResponse = [];
 	
+	/**
+	 * Whether fastcgi_finish_request() released the client: the work after it
+	 * costs the visitor nothing (the codesafe sender's retry waits for it)
+	 */
+	protected bool $responseFinished = false;
+	
 	public function __construct(
 		?string $interface = null, // @see self::INT_*
 	)
@@ -749,6 +755,12 @@ class Application
 		return $this;
 	}
 	
+	/** whether the client already has its response (fastcgi_finish_request() ran and answered true) */
+	public function isResponseFinished(): bool
+	{
+		return $this->responseFinished;
+	}
+	
 	public function handleShutdown(): void
 	{
 		if($error = error_get_last())
@@ -856,7 +868,7 @@ class Application
 		// user never waits for them (best effort)
 		if(function_exists('fastcgi_finish_request') && $this->isInterfaceHttp())
 		{
-			fastcgi_finish_request();
+			$this->responseFinished = fastcgi_finish_request();
 		}
 		
 		foreach($this->afterResponse as $callback)
