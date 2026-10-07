@@ -11,8 +11,7 @@ use function str_ends_with;
 use function str_starts_with;
 
 /**
- * Page cache - the pure key/gating logic (the plugin's dispatch behaviour is
- * exercised by a live request, not the unit runner)
+ * Page cache - the pure key/gating logic (the plugin's dispatch: PageFlow)
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -58,16 +57,6 @@ class Page extends Test
 	public function nullResponseIsNotCacheable(): bool
 	{
 		return Subject::isCacheableResponse(null) === false;
-	}
-	
-	public function freshnessFollowsFreshUntil(): bool
-	{
-		$now = 1000;
-		
-		return Subject::isFresh([], $now) === true // no window - ttl is the clock
-			&& Subject::isFresh(['freshUntil' => 1000], $now) === true // inclusive
-			&& Subject::isFresh(['freshUntil' => 1001], $now) === true
-			&& Subject::isFresh(['freshUntil' => 999], $now) === false;
 	}
 	
 	public function etagIsStrongDeterministicAndBodySensitive(): bool

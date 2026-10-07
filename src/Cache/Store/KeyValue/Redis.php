@@ -242,6 +242,15 @@ abstract class Redis extends Tags
 	}
 	
 	#[Override]
+	public function itemId(
+		string $key,
+	): string
+	{
+		return $this->prefixer
+			->prefix($key, $this->getType());
+	}
+	
+	#[Override]
 	public function get(
 		string $key,
 		?Closure $resolver = null,
