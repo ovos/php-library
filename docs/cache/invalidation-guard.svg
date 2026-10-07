@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="584" viewBox="0 0 940 584" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="aBad" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ff003c"/></marker>
+		<marker id="aOk" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#00f0ff"/></marker>
+		<marker id="aWait" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#fcee0a"/></marker>
+		<marker id="aGrey" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8b8ba7"/></marker>
+		<marker id="aTime" markerWidth="9" markerHeight="9" refX="4" refY="7" orient="0"><path d="M0,0 L4,8 L8,0 z" fill="#8b8ba7"/></marker>
+		<style>
+			.title{font-size:17px;font-weight:700;fill:#fcee0a;letter-spacing:2px}
+			.subtitle{font-size:12px;fill:#8b8ba7;letter-spacing:0.5px}
+			.panelHead{font-size:12.5px;font-weight:700;letter-spacing:1.5px;text-anchor:middle}
+			.req{font-family:Consolas,'Courier New',monospace;font-size:10.5px;fill:#e8e8f0;text-anchor:middle}
+			.lblC{font-size:11px;fill:#8b8ba7;text-anchor:middle}
+			.em{font-size:11px;font-weight:700;fill:#e8e8f0;text-anchor:middle}
+			.cost{font-family:Consolas,'Courier New',monospace;font-size:13px;font-weight:700;text-anchor:middle;letter-spacing:1px}
+			.costSub{font-size:9.5px;text-anchor:middle;fill:#8b8ba7}
+			.foot{font-size:11px;fill:#8b8ba7}
+		</style>
+	</defs>
+	
+	<!-- canvas: chamfered plate -->
+	<path d="M14,0 H926 L940,14 V570 L926,584 H14 L0,570 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V570 L926,584 H14 L0,570 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V570 L926,583.5 H14 L0.5,570 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.8"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,544 V570 L926,583.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	
+	<!-- header -->
+	<text x="24" y="28" class="title" filter="url(#glow)">INVALIDATION GUARD &#8212; STALE WRITES</text>
+	<text x="24" y="47" class="subtitle">Request A recomputes a value while request B changes the source and invalidates the key</text>
+	<rect x="24" y="55" width="160" height="2" fill="#ff003c"/>
+	<rect x="192" y="55" width="10" height="2" fill="#ff003c" opacity="0.55"/>
+	<rect x="210" y="55" width="4" height="2" fill="#ff003c" opacity="0.3"/>
+	
+	<!-- ============ WITHOUT ============ -->
+	<path d="M28,74 H460 V502 L448,514 H16 V86 Z" fill="#0d0d17" stroke="#ff003c" stroke-width="1" opacity="0.9"/>
+	<path d="M28,74 H460 V102 H16 V86 Z" fill="#ff003c" opacity="0.13"/>
+	<line x1="16" y1="102" x2="460" y2="102" stroke="#ff003c" stroke-width="1" opacity="0.7"/>
+	<text x="238" y="93" class="panelHead" fill="#ff003c">WITHOUT THE GUARD &#8212; A STALE SET</text>
+	
+	<!-- lanes -->
+	<g>
+		<path d="M26,112 H146 V129 L141,134 H26 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="86" y="127" class="req">request A</text>
+		<line x1="86" y1="138" x2="86" y2="414" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.45" marker-end="url(#aTime)"/>
+		<path d="M178,112 H298 V129 L293,134 H178 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="238" y="127" class="req">cache key</text>
+		<line x1="238" y1="138" x2="238" y2="414" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.45" marker-end="url(#aTime)"/>
+		<path d="M330,112 H450 V129 L445,134 H330 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="390" y="127" class="req">request B</text>
+		<line x1="390" y1="138" x2="390" y2="414" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.45" marker-end="url(#aTime)"/>
+	</g>
+	
+	<!-- steps, top to bottom -->
+	<g>
+		<path d="M26,146 H146 V164 L140,170 H26 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="86" y="162" class="req">get() &#8594; miss</text>
+		<line x1="148" y1="158" x2="175" y2="158" stroke="#8b8ba7" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#aGrey)"/>
+		<path d="M178,146 H298 V164 L292,170 H178 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="238" y="162" class="req" style="fill:#8b8ba7">empty</text>
+		<path d="M26,184 H146 V210 L140,216 H26 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="86" y="197" class="req">SELECT &#8230;</text>
+		<text x="86" y="210" class="costSub">row: active</text>
+		<path d="M330,228 H450 V254 L444,260 H330 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="390" y="241" class="req">UPDATE &#8230;</text>
+		<text x="390" y="254" class="costSub">row: inactive</text>
+		<path d="M330,274 H450 V292 L444,298 H330 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="390" y="290" class="req">delete(key)</text>
+		<line x1="328" y1="286" x2="301" y2="286" stroke="#8b8ba7" stroke-width="1.6" marker-end="url(#aGrey)"/>
+		<path d="M178,274 H298 V292 L292,298 H178 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="238" y="290" class="req" style="fill:#8b8ba7">UNLINK &#8212; gone</text>
+		<path d="M26,318 H146 V336 L140,342 H26 Z" fill="#11111c" stroke="#ff003c" opacity="0.9"/>
+		<text x="86" y="334" class="req">set(key, active)</text>
+		<line x1="148" y1="330" x2="175" y2="330" stroke="#ff003c" stroke-width="1.6" marker-end="url(#aBad)"/>
+		<path d="M178,312 H298 V342 L292,348 H178 Z" fill="#11111c"/>
+		<path d="M178,312 H298 V342 L292,348 H178 Z" fill="#ff003c" fill-opacity="0.07" stroke="#ff003c" opacity="0.9"/>
+		<text x="238" y="327" class="req" style="fill:#ff003c">active</text>
+		<text x="238" y="340" class="costSub" style="fill:#ff003c">written: true</text>
+		<path d="M178,364 H298 V394 L292,400 H178 Z" fill="#11111c"/>
+		<path d="M178,364 H298 V394 L292,400 H178 Z" fill="#ff003c" fill-opacity="0.07" stroke="#ff003c" opacity="0.9"/>
+		<text x="238" y="379" class="req" style="fill:#ff003c">next get(): active</text>
+		<text x="238" y="392" class="costSub" style="fill:#ff003c">stale until the TTL ends</text>
+	</g>
+	
+	<text x="238" y="440" class="em">A's write lands after B's delete &#8212; the value</text>
+	<text x="238" y="456" class="em">from before the change stays cached.</text>
+	
+	<path d="M138,468 H346 V496 L338,504 H130 V476 Z" fill="#ff003c" fill-opacity="0.07" stroke="#ff003c" opacity="0.9"/>
+	<text x="238" y="486" class="cost" fill="#ff003c">stale for the TTL</text>
+	<text x="238" y="499" class="costSub">a deactivated row still served</text>
+	
+	<!-- ============ WITH ============ -->
+	<path d="M492,74 H924 V502 L912,514 H480 V86 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+	<path d="M492,74 H924 V102 H480 V86 Z" fill="#00f0ff" opacity="0.1"/>
+	<line x1="480" y1="102" x2="924" y2="102" stroke="#00f0ff" stroke-width="1" opacity="0.7"/>
+	<text x="702" y="93" class="panelHead" fill="#00f0ff">WITH THE GUARD &#8212; THE WRITE IS REFUSED</text>
+	
+	<!-- lanes -->
+	<g>
+		<path d="M490,112 H610 V129 L605,134 H490 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="550" y="127" class="req">request A</text>
+		<line x1="550" y1="138" x2="550" y2="414" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.45" marker-end="url(#aTime)"/>
+		<path d="M642,112 H762 V129 L757,134 H642 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="702" y="127" class="req">cache key</text>
+		<line x1="702" y1="138" x2="702" y2="414" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.45" marker-end="url(#aTime)"/>
+		<path d="M794,112 H914 V129 L909,134 H794 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="854" y="127" class="req">request B</text>
+		<line x1="854" y1="138" x2="854" y2="414" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.45" marker-end="url(#aTime)"/>
+	</g>
+	
+	<!-- steps, top to bottom -->
+	<g>
+		<path d="M490,140 H610 V170 L604,176 H490 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="550" y="155" class="req">get() &#8594; miss</text>
+		<text x="550" y="168" class="costSub" style="fill:#00f0ff">remembers: no epoch</text>
+		<line x1="612" y1="158" x2="639" y2="158" stroke="#8b8ba7" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#aGrey)"/>
+		<path d="M642,146 H762 V164 L756,170 H642 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="702" y="162" class="req" style="fill:#8b8ba7">empty</text>
+		<path d="M490,184 H610 V210 L604,216 H490 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="550" y="197" class="req">SELECT &#8230;</text>
+		<text x="550" y="210" class="costSub">row: active</text>
+		<path d="M794,228 H914 V254 L908,260 H794 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="854" y="241" class="req">UPDATE &#8230;</text>
+		<text x="854" y="254" class="costSub">row: inactive</text>
+		<path d="M794,274 H914 V292 L908,298 H794 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="854" y="290" class="req">delete(key)</text>
+		<line x1="792" y1="286" x2="765" y2="286" stroke="#fcee0a" stroke-width="1.6" marker-end="url(#aWait)"/>
+		<path d="M642,268 H762 V298 L756,304 H642 Z" fill="#11111c"/>
+		<path d="M642,268 H762 V298 L756,304 H642 Z" fill="#fcee0a" fill-opacity="0.07" stroke="#fcee0a" opacity="0.9"/>
+		<text x="702" y="283" class="req" style="fill:#fcee0a">tombstone</text>
+		<text x="702" y="296" class="costSub" style="fill:#fcee0a">epoch 7f3a &#183; 60 s</text>
+		<path d="M490,318 H610 V336 L604,342 H490 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="550" y="334" class="req">set(key, active)</text>
+		<line x1="612" y1="330" x2="639" y2="330" stroke="#00f0ff" stroke-width="1.6" marker-end="url(#aOk)"/>
+		<path d="M642,312 H762 V342 L756,348 H642 Z" fill="#11111c"/>
+		<path d="M642,312 H762 V342 L756,348 H642 Z" fill="#00f0ff" fill-opacity="0.07" stroke="#00f0ff" opacity="0.9"/>
+		<text x="702" y="327" class="req" style="fill:#00f0ff">refused: false</text>
+		<text x="702" y="340" class="costSub" style="fill:#00f0ff">no epoch &#8800; 7f3a</text>
+		<path d="M642,364 H762 V394 L756,400 H642 Z" fill="#11111c"/>
+		<path d="M642,364 H762 V394 L756,400 H642 Z" fill="#00f0ff" fill-opacity="0.07" stroke="#00f0ff" opacity="0.9"/>
+		<text x="702" y="379" class="req" style="fill:#00f0ff">next get(): miss</text>
+		<text x="702" y="392" class="costSub" style="fill:#00f0ff">recomputes: inactive</text>
+	</g>
+	
+	<text x="702" y="440" class="em">B's delete leaves a mark; A's write compares</text>
+	<text x="702" y="456" class="em">the epoch its miss saw, and is refused.</text>
+	
+	<path d="M602,468 H810 V496 L802,504 H594 V476 Z" fill="#00f0ff" fill-opacity="0.07" stroke="#00f0ff" opacity="0.9"/>
+	<text x="702" y="486" class="cost" fill="#00f0ff">1 recomputation</text>
+	<text x="702" y="499" class="costSub">the next read is fresh</text>
+	
+	<line x1="16" y1="528" x2="924" y2="528" stroke="#8b8ba7" opacity="0.3"/>
+	<text x="16" y="548" class="foot"><tspan font-weight="700" fill="#e8e8f0">Tags and clear():</tspan> Redis and Redisearch stamp the tag with the server clock; the versioned stores&#8217; rules are the mark. <tspan font-weight="700" fill="#e8e8f0">APCu:</tspan> a random token.</text>
+	<text x="16" y="565" class="foot"><tspan font-weight="700" fill="#e8e8f0">invalidation_window_ms</tspan> (60 000, 0 = off) bounds every mark: an older miss writes unguarded. A refused write releases the MemoLock lock.</text>
+</svg>

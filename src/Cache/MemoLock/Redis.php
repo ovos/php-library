@@ -177,6 +177,7 @@ class Redis extends MemoLock
 				$id,
 				$lockValue,
 				$resolver,
+				$fetcher,
 			);
 		}
 		
@@ -260,6 +261,7 @@ class Redis extends MemoLock
 							$id,
 							$lockValue,
 							$resolver,
+							$fetcher,
 						);
 					}
 				}
@@ -286,6 +288,7 @@ class Redis extends MemoLock
 			$id,
 			$lockValue,
 			$resolver,
+			$fetcher,
 		);
 	}
 	

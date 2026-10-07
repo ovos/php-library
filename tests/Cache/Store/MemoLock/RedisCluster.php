@@ -249,6 +249,9 @@ class RedisCluster extends Test
 	public function finalize(): void
 	{
 		$this->store?->clear();
+		// a fresh store for the next rule: this one remembers its misses
+		// (the invalidation guard - see KeyValue::rememberMiss())
+		$this->store = $this->getClusterStore();
 	}
 	
 	/**

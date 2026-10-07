@@ -14,7 +14,14 @@ use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
+use function bin2hex;
+use function is_array;
 use function is_int;
+use function random_bytes;
+use function sprintf;
+use function str_pad;
+
+use const STR_PAD_LEFT;
 
 /**
  * Redis
@@ -28,6 +35,19 @@ abstract class Redis extends Tags
 	public const string KEY_TAGS = 'tags';
 	
 	/**
+	 * The invalidation guard's field: a tombstone holds it alone, and an item
+	 * keeps it once its key was invalidated or written through (see
+	 * KeyValue::rememberMiss())
+	 */
+	public const string KEY_EPOCH = 'epoch';
+	
+	/**
+	 * What a write passes in place of an epoch when it is not guarded - no
+	 * miss of this instance came before it (a write-through)
+	 */
+	public const string UNGUARDED = '*';
+	
+	/**
 	 * Statuses
 	 *
 	 * Used for rawCommand, which returns strings instead of boolean values when OPT_REPLY_LITERAL is enabled
@@ -37,6 +57,12 @@ abstract class Redis extends Tags
 	
 	// Types
 	public const string TYPE_ITEMS = 'items';
+	
+	/**
+	 * The stamps the tag-index stores (Store\Redis, Redisearch) leave for the
+	 * window: one per invalidated tag, and the type key itself for a clear
+	 */
+	public const string TYPE_INVALIDATED = 'invalidated';
 	
 	// Libraries
 	/**
@@ -137,6 +163,12 @@ abstract class Redis extends Tags
 		ArrayObject $options,
 	): static
 	{
+		// the invalidation guard's window (see KeyValue::rememberMiss())
+		if(($window = $options->offsetGet('invalidation_window_ms')) !== null)
+		{
+			$this->setInvalidationWindowMs((int)$window);
+		}
+		
 		return $this;
 	}
 	
@@ -180,18 +212,24 @@ abstract class Redis extends Tags
 		
 		try
 		{
-			$value = $client->hGet(
-				$id,
+			// the data and the guard's epoch in the one round trip a read makes
+			$item = $client->hMGet($id, [
 				static::KEY_DATA,
-			);
+				static::KEY_EPOCH,
+			]);
+			$value = is_array($item) ? ($item[static::KEY_DATA] ?? false) : false;
 			
 			if($value !== false)
 			{
+				unset($this->misses[$id]);
+				
 				$value = $this->compressor
 					->decompress($value);
 				return $this->serializer
 					->unserialize($value);
 			}
+			
+			$this->rememberMiss($id, is_array($item) ? $item[static::KEY_EPOCH] : false);
 		}
 		// RedisClusterException does not extend RedisException, catch both
 		catch(RedisException|RedisClusterException $exception)
@@ -231,7 +269,14 @@ abstract class Redis extends Tags
 			->lockAndQueue(
 				$id,
 				fn() => $this->fetch($id),
-				fn() => $this->setFromResolver($key, $resolver, $ttl, $tags),
+				function() use ($id, $key, $resolver, $ttl, $tags): mixed
+				{
+					// the miss is stamped now, right before the value is computed
+					// (the caller's own computation, too, when there is no resolver)
+					$this->stampMiss($id);
+					
+					return $this->setFromResolver($key, $resolver, $ttl, $tags);
+				},
 				$queue,
 				$queueLockTtlMs,
 			);
@@ -302,8 +347,12 @@ abstract class Redis extends Tags
 		
 		$client->clearLastError();
 		
+		// the misses' stamp key goes with the wipe (cache_clear stamps it in the
+		// same step): a write landing between a wipe and a separate stamp would
+		// pass both
 		$result = $this->functions->call('cache_clear', [], [
 			$prefix,
+			...$this->clearedStamp(),
 		], long: true);
 		
 		if(is_int($result))
@@ -330,6 +379,168 @@ abstract class Redis extends Tags
 	public function collectGarbage(): bool|int
 	{
 		return true;
+	}
+	
+	/**
+	 * Replaces an item with its tombstone for the window - the key holds only
+	 * "epoch" (see KeyValue::rememberMiss()), no data, so every reader takes
+	 * it for a miss; the number of items that existed (0 or 1)
+	 */
+	protected function tombstone(
+		string $id,
+	): int
+	{
+		// this instance's own delete of the key is no race: a write it makes
+		// after it is meant (update, delete, write the new value). Its own
+		// clear and tag invalidation forget nothing - refusing is safe, and the
+		// stamps and rules judge only what they invalidated
+		unset($this->misses[$id]);
+		
+		$client = $this->getClient();
+		$client?->clearLastError();
+		$existed = $this->functions
+			->call('cache_tombstone', [$id], [
+				$this->newEpoch(),
+				$this->invalidationWindowMs,
+			]);
+		if(is_int($existed))
+		{
+			return $existed;
+		}
+		
+		// the call failed (a library that would not load, a writing script
+		// refused under maxmemory, a node without it): the item goes anyway -
+		// a delete that left it cached would be the stale value the guard
+		// exists against - and the failure is logged
+		$this->log(sprintf('cache_tombstone failed for "%s": %s',
+			$id,
+			$client?->getLastError() ?? 'no connection',
+		));
+		
+		return $this->unlink($id);
+	}
+	
+	/**
+	 * A plain removal - the fallback when a guarded one failed
+	 */
+	protected function unlink(
+		string $id,
+	): int
+	{
+		try
+		{
+			return (int)$this->getClient()?->unlink($id);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return 0;
+	}
+	
+	/**
+	 * The epoch a write-through brings: it marks the key, so a recomputation
+	 * whose miss came before it is refused (none when the guard is off)
+	 */
+	protected function writeThroughEpoch(): string
+	{
+		return $this->isGuarded() ? $this->newEpoch() : '';
+	}
+	
+	/**
+	 * What cache_clear stamps after its wipe: [key, window] for the tag-index
+	 * stores' "cleared" stamp, nothing for the others
+	 *
+	 * @return list<string|int>
+	 */
+	protected function clearedStamp(): array
+	{
+		return [];
+	}
+	
+	/**
+	 * A fresh token for a tombstone
+	 */
+	protected function newEpoch(): string
+	{
+		return bin2hex(random_bytes(8));
+	}
+	
+	/**
+	 * The server clock in microseconds - the time a miss stamps in the
+	 * tag-index stores, read from the server whose clock their tag stamps
+	 * use; null when it cannot be read
+	 */
+	protected function serverTime(): ?string
+	{
+		// a cluster's TIME needs a node: the tag-index stores run standalone
+		// only (their Lua reaches keys of any slot)
+		if(($client = $this->getClient()) === null
+			|| $client instanceof RedisClusterClient)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$time = $client->time();
+			if(is_array($time) && isset($time[0], $time[1]))
+			{
+				return $time[0] . str_pad((string)$time[1], 6, '0', STR_PAD_LEFT);
+			}
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return null;
+	}
+	
+	/**
+	 * The key of an invalidation stamp: one tag's, or (no tag) the store's
+	 * "cleared" stamp
+	 */
+	public function stampKey(
+		?string $tag = null,
+	): string
+	{
+		$type = $this->getType(static::TYPE_INVALIDATED);
+		
+		return $tag === null
+			? $type
+			: $this->prefixer->prefix($tag, $type);
+	}
+	
+	/**
+	 * Stamps the given tags (none: the store's "cleared" stamp) with the
+	 * server time, for the window - a guarded write whose miss came before
+	 * refuses
+	 */
+	protected function stamp(
+		array $tags = [],
+	): bool
+	{
+		if($this->isGuarded() === false)
+		{
+			return true;
+		}
+		
+		$keys = [];
+		foreach($tags as $tag)
+		{
+			$keys[] = $this->stampKey((string)$tag);
+		}
+		if($keys === [])
+		{
+			$keys[] = $this->stampKey();
+		}
+		
+		return $this->functions
+			->call('cache_stamp', $keys, [
+				$this->invalidationWindowMs,
+			]) !== false;
 	}
 	
 	/**

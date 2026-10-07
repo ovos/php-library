@@ -21,6 +21,23 @@ local function cache_search_batches(n, batch_size)
 end
 redis.register_function('[prefix]cache_search_batches', cache_search_batches)
 
+-- An invalidated item: its tombstone (the "epoch" field alone, for the
+-- window - see Cache.lua's invalidation guard), so a write computed before
+-- this invalidation cannot land after it; a plain UNLINK for a caller from
+-- before the guard. A tombstone carries no tags, so it leaves every tag
+-- match at once - the loop below ends as it did with UNLINK
+local function cache_search_remove(key, token, window_ms)
+	if token and window_ms and window_ms > 0 then
+		redis.call('DEL', key)
+		redis.call('HSET', key, 'epoch', token)
+		redis.call('PEXPIRE', key, window_ms)
+		
+		return
+	end
+	
+	redis.call('UNLINK', key)
+end
+
 -- Unlink all items from given tags
 -- Removes every ID that references any or all of the given tags,
 -- depending on the syntax passed to "tags": 
@@ -30,6 +47,8 @@ redis.register_function('[prefix]cache_search_batches', cache_search_batches)
 local function cache_search_unlink_by_tags(keys, args)
 	local index = args[1]
 	local tags = args[2]
+	local token = args[3]
+	local window_ms = tonumber(args[4])
 	local batch_size = 10000
 	local offset = 0
 	
@@ -54,11 +73,9 @@ local function cache_search_unlink_by_tags(keys, args)
 			table.insert(rems, result[i]) -- save for removal after the loop
 		end
 		
-		-- remove hash keys which no longer exist
-		if #rems > 0 then
-			for from, to in cache_search_batches(#rems) do
-				redis.call('UNLINK', unpack(rems, from, to))
-			end
+		-- remove the matched items (one by one: each leaves its tombstone)
+		for _, key in ipairs(rems) do
+			cache_search_remove(key, token, window_ms)
 		end
 	end
 end

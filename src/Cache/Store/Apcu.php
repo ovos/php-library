@@ -12,7 +12,11 @@ use function apcu_clear_cache;
 use function apcu_delete;
 use function apcu_fetch;
 use function apcu_store;
+use function bin2hex;
+use function ceil;
 use function is_string;
+use function max;
+use function random_bytes;
 
 /**
  * Apcu
@@ -21,6 +25,14 @@ use function is_string;
  */
 class Apcu extends KeyValue
 {
+	/**
+	 * The invalidation guard's mark beside an item: a fresh random token from
+	 * every delete() and every write-through, for the window (see
+	 * KeyValue::rememberMiss()) - a token, not a counter: a counter expired
+	 * and counted again would repeat the value a miss saw
+	 */
+	public const string EPOCH_SUFFIX = '#epoch';
+	
 	public function getMemoLock(): MemoLock
 	{
 		if($this->memoLock === null)
@@ -43,6 +55,9 @@ class Apcu extends KeyValue
 	{
 		$id = $this->prefixer
 			->prefix($key, $this->getGroup());
+		// the miss this write follows, if any: refused when a delete (or a
+		// write-through) marked the key since (see KeyValue::rememberMiss())
+		$miss = $this->takeMiss($id);
 		$value = $this->serializer
 			->serialize($value);
 		$value = $this->compressor
@@ -50,7 +65,33 @@ class Apcu extends KeyValue
 		
 		try
 		{
-			return apcu_store($id, $value, $ttl);
+			if($miss === null)
+			{
+				// a write-through marks the key: a recomputation whose miss came
+				// before it is refused
+				$this->mark($id);
+				
+				return $this->storeValue($id, $value, $ttl);
+			}
+			
+			if($this->epoch($id) !== $miss['epoch'])
+			{
+				return false;
+			}
+			
+			$stored = $this->storeValue($id, $value, $ttl);
+			
+			// APCu has no atomic compare-and-store for this: a delete between
+			// the check and the store takes the value back here - nothing
+			// stale stays, a reader can see it for that instant
+			if($stored && $this->epoch($id) !== $miss['epoch'])
+			{
+				apcu_delete($id);
+				
+				return false;
+			}
+			
+			return $stored;
 		}
 		finally
 		{
@@ -67,13 +108,56 @@ class Apcu extends KeyValue
 		
 		if($value !== false)
 		{
+			unset($this->misses[$id]);
+			
 			$value = $this->compressor
 				->decompress($value);
 			return $this->serializer
 				->unserialize($value);
 		}
 		
+		$this->rememberMiss($id, $this->epoch($id));
+		
 		return null;
+	}
+	
+	/**
+	 * The item's mark: how many deletes the window remembers ('' = none)
+	 */
+	protected function epoch(
+		string $id,
+	): string
+	{
+		$epoch = apcu_fetch($id . static::EPOCH_SUFFIX);
+		
+		return $epoch === false ? '' : (string)$epoch;
+	}
+	
+	/**
+	 * A fresh token beside the item, for the window (nothing when the guard
+	 * is off)
+	 */
+	protected function mark(
+		string $id,
+	): void
+	{
+		if($this->isGuarded())
+		{
+			apcu_store($id . static::EPOCH_SUFFIX, bin2hex(random_bytes(8)), max(1, (int)ceil($this->invalidationWindowMs / 1000)));
+		}
+	}
+	
+	/**
+	 * The store itself - a step of its own, so a test can land a delete
+	 * between the guard's check and it
+	 */
+	protected function storeValue(
+		string $id,
+		mixed $value,
+		int $ttl,
+	): bool
+	{
+		return apcu_store($id, $value, $ttl);
 	}
 	
 	public function get(
@@ -152,6 +236,11 @@ class Apcu extends KeyValue
 		{
 			$key = $this->prefixer
 				->prefix($key, $this->getGroup());
+			// this instance's own delete is no race (see KeyValue\Redis::tombstone())
+			unset($this->misses[$key]);
+			// the mark first: a write whose miss came before refuses, or takes
+			// its value back (see set())
+			$this->mark($key);
 		}
 		
 		return apcu_delete($key);

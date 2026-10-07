@@ -93,6 +93,294 @@ local function cache_hscan_keys_batch(hash_key, cursor, count, callback)
 end
 
 --[[ ------------------------------------------------------------------
+	Invalidation guard - a write computed before an invalidation never
+	lands after it (KeyValue: the miss remembers what it saw, the write
+	that follows it compares)
+--]] ------------------------------------------------------------------
+
+-- the field a tombstone holds alone, and an item keeps once its key was
+-- invalidated or written through: a later writer whose miss saw another
+-- token is refused
+local CACHE_EPOCH = 'epoch'
+
+-- Replaces a key with its tombstone: DEL, the token, the window - one step,
+-- or a tombstone landing on a fresh write would leave its data behind. Only a
+-- cache item (a hash) or an absent key gets one: a key holding anything else
+-- is a raw value a caller keeps under the store's prefix (a counter, a set)
+-- and is removed as before - a tombstone would turn it into a hash, and the
+-- caller's next INCR into a WRONGTYPE error. A window of 0 (the guard off)
+-- removes as before too. Answers whether an ITEM was there - a tombstone an
+-- earlier delete left is none
+local function cache_tombstone_key(key, token, window_ms)
+	local kind = redis.call('TYPE', key)['ok']
+	if kind ~= 'none' and kind ~= 'hash' then
+		return redis.call('DEL', key)
+	end
+	
+	local existed = 0
+	if kind == 'hash' then
+		existed = redis.call('HEXISTS', key, 'data')
+		redis.call('DEL', key)
+	end
+	if window_ms > 0 then
+		redis.call('HSET', key, CACHE_EPOCH, token)
+		redis.call('PEXPIRE', key, window_ms)
+	end
+	
+	return existed
+end
+
+-- Removes an item a tag invalidation reached: its tombstone when the caller
+-- passed one - a key already gone gets none (the tag's stamp covers the
+-- values being computed for it) - a plain UNLINK for a caller from before
+-- the guard
+local function cache_remove_item(key, token, window_ms)
+	if token and window_ms then
+		if redis.call('EXISTS', key) == 0 then
+			return 0
+		end
+		
+		return cache_tombstone_key(key, token, window_ms)
+	end
+	
+	return redis.call('UNLINK', key)
+end
+
+-- The server clock in microseconds, as an exact integer string (Lua 5.1
+-- numbers are doubles - 1.8e15 fits, but tostring() would print it in
+-- scientific notation)
+local function cache_now_us()
+	local now = redis.call('TIME')
+	
+	return string.format('%.0f', tonumber(now[1]) * 1000000 + tonumber(now[2]))
+end
+
+-- Whether a write may land: the key's epoch is still the one its miss saw
+-- ('' = none), and - when the miss stamped its time - no stamp key given was
+-- set after it (a tag invalidated, or the store cleared, meanwhile)
+local function cache_write_allowed(item_key, epoch, since_us, stamp_keys)
+	local current = redis.call('HGET', item_key, CACHE_EPOCH) or ''
+	if current ~= epoch then
+		return false
+	end
+	if since_us ~= '' then
+		local since = tonumber(since_us)
+		for _, stamp_key in ipairs(stamp_keys) do
+			local stamp = redis.call('GET', stamp_key)
+			if stamp and tonumber(stamp) > since then
+				return false
+			end
+		end
+	end
+	
+	return true
+end
+
+-- An item's expiry after a write. Its TTL when one is asked - unless the key
+-- carries an epoch whose window outlives it: then the data fields expire at
+-- the TTL, the key (and its epoch) at the window's end - a full window when
+-- the key had no expiry of its own - so a short-lived item cannot take the
+-- invalidation mark with it. No TTL: none for a key that held no data (fresh,
+-- or a tombstone whose window must not become the item's); an overwrite
+-- without a TTL keeps the one it had
+local function cache_write_expiry(item_key, ttl_s, had_data, rem_ms, window_ms, fields)
+	if ttl_s > 0 then
+		local ttl_ms = ttl_s * 1000
+		local keep_ms = 0
+		if window_ms > 0 and redis.call('HEXISTS', item_key, CACHE_EPOCH) == 1 then
+			keep_ms = window_ms
+			if rem_ms > 0 and rem_ms < window_ms then
+				keep_ms = rem_ms
+			end
+		end
+		if keep_ms > ttl_ms then
+			redis.call('PEXPIRE', item_key, keep_ms)
+			redis.call('HPEXPIRE', item_key, ttl_ms, 'FIELDS', #fields, unpack(fields))
+		else
+			redis.call('PEXPIRE', item_key, ttl_ms)
+		end
+	elseif had_data == 0 then
+		redis.call('PERSIST', item_key)
+	end
+end
+
+-- Tombstone one key (delete())
+-- cluster-safe: one declared key
+local function cache_tombstone(keys, args)
+	return cache_tombstone_key(keys[1], args[1], tonumber(args[2]))
+end
+redis.register_function('[prefix]cache_tombstone', cache_tombstone)
+
+-- Stamp the given keys with the server time (an invalidated tag, a cleared
+-- store), for the window: a guarded write whose miss came earlier refuses
+-- standalone-only: the stamp keys are of any slot
+local function cache_stamp(keys, args)
+	local now_us = cache_now_us()
+	for _, key in ipairs(keys) do
+		redis.call('SET', key, now_us, 'PX', tonumber(args[1]))
+	end
+	
+	return now_us
+end
+redis.register_function
+{
+	function_name = '[prefix]cache_stamp',
+	callback = cache_stamp,
+	flags = {'no-cluster'}
+}
+
+-- A hash item write - the Redisearch store's: guarded when args[1] is not
+-- the unguarded marker '*'; an unguarded write (a write-through) sets the
+-- fresh epoch it brings, so a recomputation that missed before it is refused
+-- keys: [1] item, [2..] stamp keys; args: [1] epoch the miss saw | '*',
+-- [2] miss time (us) | '', [3] ttl (s), [4] the write-through's epoch | '',
+-- [5] window (ms), [6..] field, value pairs
+-- standalone-only: the stamp keys are of any slot
+local function cache_guarded_hset(keys, args)
+	local item_key = keys[1]
+	if args[1] ~= '*' then
+		local stamp_keys = {}
+		for i = 2, #keys do
+			table.insert(stamp_keys, keys[i])
+		end
+		if cache_write_allowed(item_key, args[1], args[2], stamp_keys) == false then
+			return 0
+		end
+	end
+	
+	local had_data = redis.call('HEXISTS', item_key, 'data')
+	local rem_ms = redis.call('PTTL', item_key)
+	local pairs_list = {}
+	local names = {}
+	for i = 6, #args, 2 do
+		table.insert(pairs_list, args[i])
+		table.insert(pairs_list, args[i + 1])
+		table.insert(names, args[i])
+	end
+	redis.call('HSET', item_key, unpack(pairs_list))
+	if args[1] == '*' and args[4] ~= '' then
+		redis.call('HSET', item_key, CACHE_EPOCH, args[4])
+	end
+	cache_write_expiry(item_key, tonumber(args[3]), had_data, rem_ms, tonumber(args[5]), names)
+	
+	return 1
+end
+redis.register_function
+{
+	function_name = '[prefix]cache_guarded_hset',
+	callback = cache_guarded_hset,
+	flags = {'no-cluster'}
+}
+
+-- The tag-hash store's (Store\Redis) item write: the item and its tag
+-- index in one step - guarded when args[1] is not the unguarded marker '*';
+-- an unguarded write (a write-through) sets the fresh epoch it brings
+-- keys: [1] item, [2] the store's "cleared" stamp; args: [1] epoch the miss
+-- saw | '*', [2] miss time (us) | '', [3] ttl (s), [4] the item's key (its
+-- field in the tag hashes), [5] tag hash key prefix, [6] tag stamp key
+-- prefix, [7] the write-through's epoch | '', [8] window (ms), [9] data,
+-- [10..] tags
+-- standalone-only: the tag hashes and stamps are of any slot
+local function cache_set(keys, args)
+	local item_key = keys[1]
+	local key = args[4]
+	local tag_prefix = args[5]
+	local tags = {}
+	for i = 10, #args do
+		table.insert(tags, args[i])
+	end
+	
+	if args[1] ~= '*' then
+		local stamp_keys = {keys[2]}
+		for _, tag in ipairs(tags) do
+			table.insert(stamp_keys, args[6] .. tag)
+		end
+		if cache_write_allowed(item_key, args[1], args[2], stamp_keys) == false then
+			return 0
+		end
+	end
+	
+	local ttl = tonumber(args[3])
+	local had_data = redis.call('HEXISTS', item_key, 'data')
+	local rem_ms = redis.call('PTTL', item_key)
+	local current_csv = redis.call('HGET', item_key, 'tags')
+	local current = {}
+	if current_csv and current_csv ~= '' then
+		current = cache_split_string(current_csv, ',')
+	end
+	
+	local fields = {'data'}
+	if #tags > 0 then
+		redis.call('HSET', item_key, 'data', args[9], 'tags', table.concat(tags, ','))
+		table.insert(fields, 'tags')
+	else
+		redis.call('HSET', item_key, 'data', args[9])
+		-- an item that had tags and is written without them drops the field
+		if current_csv then
+			redis.call('HDEL', item_key, 'tags')
+		end
+	end
+	if args[1] == '*' and args[7] ~= '' then
+		redis.call('HSET', item_key, CACHE_EPOCH, args[7])
+	end
+	cache_write_expiry(item_key, ttl, had_data, rem_ms, tonumber(args[8]), fields)
+	
+	-- the tag index: the key joins its new tags; on a write with a TTL every
+	-- tag field's HEXPIRE follows it (re-saving with the same tags would
+	-- otherwise leave the field to expire before the item, which made the
+	-- item invisible to tag invalidation); it leaves the tags it dropped
+	local kept = {}
+	for _, tag in ipairs(tags) do
+		kept[tag] = true
+		if redis.call('HEXISTS', tag_prefix .. tag, key) == 0 then
+			redis.call('HSET', tag_prefix .. tag, key, '')
+		end
+		if ttl > 0 then
+			redis.call('HEXPIRE', tag_prefix .. tag, ttl, 'FIELDS', 1, key)
+		end
+	end
+	for _, tag in ipairs(current) do
+		if kept[tag] == nil then
+			redis.call('HDEL', tag_prefix .. tag, key)
+		end
+	end
+	
+	return 1
+end
+redis.register_function
+{
+	function_name = '[prefix]cache_set',
+	callback = cache_set,
+	flags = {'no-cluster'}
+}
+
+-- The tag-hash store's delete: the item leaves its tags' indexes and becomes
+-- a tombstone in one step - a write landing between the two would otherwise
+-- lose its tag entry to the HDEL, and stay out of reach of tag invalidation
+-- keys: [1] item; args: [1] token, [2] window (ms), [3] tag hash key prefix,
+-- [4] the item's key (its field in the tag hashes)
+-- standalone-only: the tag hashes are of any slot
+local function cache_delete_item(keys, args)
+	local item_key = keys[1]
+	if redis.call('TYPE', item_key)['ok'] == 'hash' then
+		local current_csv = redis.call('HGET', item_key, 'tags')
+		if current_csv and current_csv ~= '' then
+			for _, tag in ipairs(cache_split_string(current_csv, ',')) do
+				redis.call('HDEL', args[3] .. tag, args[4])
+			end
+		end
+	end
+	
+	return cache_tombstone_key(item_key, args[1], tonumber(args[2]))
+end
+redis.register_function
+{
+	function_name = '[prefix]cache_delete_item',
+	callback = cache_delete_item,
+	flags = {'no-cluster'}
+}
+
+--[[ ------------------------------------------------------------------
 	Maintenance
 --]] ------------------------------------------------------------------
 
@@ -100,6 +388,8 @@ end
 -- (used to "flush" the database, but only the prefixed items)
 local function cache_clear(keys, args)
 	local prefix = args[1]
+	local stamp_key = args[2] -- the store's "cleared" stamp (KeyValue\Redis), optional
+	local window_ms = tonumber(args[3] or 0)
 	
 	-- unlink every key one by one: a multi-key UNLINK would be illegal
 	-- on a cluster even under 'allow-cross-slot-keys' - the flag lets
@@ -111,6 +401,12 @@ local function cache_clear(keys, args)
 		redis.call('UNLINK', key)
 		count = count + 1
 	end)
+	
+	-- the "cleared" stamp in this same step: a write landing between a wipe
+	-- and a separate stamp would find neither its tombstone nor the stamp
+	if stamp_key and window_ms > 0 then
+		redis.call('SET', stamp_key, cache_now_us(), 'PX', window_ms)
+	end
 	
 	return count -- return count of deleted ids
 end
@@ -184,6 +480,8 @@ local function cache_unlink_clean_tags(keys, args)
 	local prefix_ids = prefix .. args[2]
 	local prefix_tag_ids = prefix .. args[3]
 	local field_tags = args[4]
+	local token = args[5] -- the tombstone (KeyValue\Redis), absent from an older caller
+	local window_ms = tonumber(args[6])
 	
 	for _, id in ipairs(ids) do
 		
@@ -198,8 +496,9 @@ local function cache_unlink_clean_tags(keys, args)
 				end
 			end
 			
-			-- remove the id itself
-			redis.call('UNLINK', prefix_ids .. id)
+			-- the item itself: its tombstone, so a write computed before this
+			-- invalidation cannot land after it
+			cache_remove_item(prefix_ids .. id, token, window_ms)
 		end
 	
 	end
@@ -220,6 +519,8 @@ local function cache_unlink_ids_by_tag(keys, args)
 	local tag = args[2]
 	local prefix_ids = prefix .. args[3]
 	local prefix_tag_ids = prefix .. args[4]
+	local token = args[5]
+	local window_ms = tonumber(args[6])
 	
 	if #ids == 0 then
 		return 1
@@ -249,8 +550,8 @@ local function cache_unlink_ids_by_tag(keys, args)
 		if lookup[id] then
 			-- save for removal after the loop
 			table.insert(rems, id)
-			-- remove the id itself
-			redis.call('UNLINK', prefix_ids .. id)
+			-- the item itself: its tombstone
+			cache_remove_item(prefix_ids .. id, token, window_ms)
 		end
 	end
 	
@@ -277,6 +578,8 @@ local function cache_unlink_by_tag(keys, args)
 	local prefix_ids = prefix .. args[3]
 	local prefix_tag_ids = prefix .. args[4]
 	local cursor = args[5] or '0' -- cursor for HSCAN, '0' for initial call
+	local token = args[6]
+	local window_ms = tonumber(args[7])
 	
 	if redis.call('EXISTS', prefix_tag_ids .. tag) == 0 then
 		return {0, '0'} -- tag does not exist, nothing to unlink, scan complete
@@ -292,8 +595,8 @@ local function cache_unlink_by_tag(keys, args)
 		function(id)
 			-- save for removal after the loop (within this batch)
 			table.insert(rems, id)
-			-- remove the id itself
-			redis.call('UNLINK', prefix_ids .. id)
+			-- the item itself: its tombstone
+			cache_remove_item(prefix_ids .. id, token, window_ms)
 		end
 	)
 	

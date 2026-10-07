@@ -10,15 +10,15 @@ use Override;
 use Redis as RedisClient;
 use RedisException;
 
-use function array_diff;
 use function array_intersect;
 use function array_merge;
-use function array_push;
 use function array_unique;
+use function array_values;
 use function count;
 use function explode;
-use function implode;
 use function is_array;
+use function is_int;
+use function sprintf;
 
 /**
  * Redis
@@ -41,6 +41,8 @@ class Redis extends Store
 		ArrayObject $options,
 	): static
 	{
+		parent::setStoreOptions($options);
+		
 		if(($cleanTags = $options->offsetGet('clean_tags')) !== null) // true or false
 		{
 			$this->setCleanTags($cleanTags);
@@ -141,29 +143,33 @@ class Redis extends Store
 		{
 			$id = $this->prefixer
 				->prefix($key, $this->getType());
-			$tags = $this->getCurrentTags($client, $id);
+			// this instance's own delete is no race (see KeyValue\Redis::tombstone())
+			unset($this->misses[$id]);
 			
+			// one step (Lua cache_delete_item): the item leaves its tags' indexes
+			// (the field is its key, as set() writes it) and becomes a tombstone
+			// (see KeyValue::rememberMiss()) - a write landing between two steps
+			// would lose its tag entry to the HDEL
 			$client->clearLastError();
-			$client->multi($this->multiMode);
-			$client->unlink($id);
-			
-			foreach($tags as $tag)
+			$existed = $this->functions
+				->call('cache_delete_item', [$id], [
+					$this->newEpoch(),
+					$this->invalidationWindowMs,
+					$this->getType(static::TYPE_TAGS) . Prefixer::SEPARATOR_PREFIX,
+					$key,
+				]);
+			if(is_int($existed))
 			{
-				$tagId = $this->prefixer
-					->prefix($tag, $this->getType(static::TYPE_TAGS));
-				$client->hDel($tagId, $id);
+				return $existed > 0;
 			}
 			
-			$result = $client->exec();
-			if($error = $client->getLastError())
-			{
-				$this->log($error);
-			}
+			// the call failed: the item goes anyway (see KeyValue\Redis::tombstone())
+			$this->log(sprintf('cache_delete_item failed for "%s": %s',
+				$id,
+				$client->getLastError() ?? 'no reply',
+			));
 			
-			if(is_array($result))
-			{
-				return $result[0] > 0; // unlink
-			}
+			return $this->unlink($id) > 0;
 		}
 		catch(RedisException $exception)
 		{
@@ -188,102 +194,60 @@ class Redis extends Store
 		
 		$id = $this->prefixer
 			->prefix($key, $this->getType());
+		// the miss this write follows, if any: it is guarded against an
+		// invalidation since (see KeyValue::rememberMiss())
+		$miss = $this->takeMiss($id);
+		
+		// a negative TTL expired the item at once (EXPIRE with a negative
+		// value deletes the key) - a delete it is
+		if($ttl < 0)
+		{
+			try
+			{
+				return $this->delete($key);
+			}
+			finally
+			{
+				$this->getMemoLock()
+					->releaseActiveLock($id);
+			}
+		}
 		
 		try
 		{
 			$value = $this->serializer->serialize($value);
 			$value = $this->compressor->compress($value);
 			
-			$currentTags = $this->getCurrentTags($client, $id);
-			
-			// if an item has some tags on it and a supplied array is empty,
-			// then we should remove the "tags" field on the item
-			if(count($currentTags) && count($tags) === 0)
-			{
-				$client->hDel($id, static::KEY_TAGS);
-			}
-			
+			// the item and its tag index in one step (Lua cache_set): the
+			// item's tags are read there, an item written without tags drops
+			// the field, every tag field's HEXPIRE follows the item's TTL, the
+			// tags it no longer has release it - a guarded write is refused
+			// when the key was invalidated, a tag of it stamped or the store
+			// cleared since its miss (an unstamped miss: the epoch only), and a
+			// write-through marks the key with a fresh epoch
 			$client->clearLastError();
-			$client->multi($this->multiMode);
-			
-			$args = [$id, static::KEY_DATA, $value];
-			if(count($tags))
-			{
-				array_push($args,
-					static::KEY_TAGS,
-					implode(',', $tags)
-				);
-			}
-			// @see https://redis.io/docs/latest/commands/hset/
-			$client->hSet(...$args);
-			
-			// set expire if needed
-			if($ttl)
-			{
-				$client->expire($id, $ttl);
-			}
-			
-			$addTags = array_diff($tags, $currentTags);
-			$removeTags = array_diff($currentTags, $tags);
-			
-			// process added tags
-			foreach($addTags as $tag)
-			{
-				$tagId = $this->prefixer
-					->prefix($tag, $this->getType(static::TYPE_TAGS));
-				
-				// add the id to the list of each tag
-				$client->hSet($tagId,
+			$result = $this->functions
+				->call('cache_set', [
+					$id,
+					$this->stampKey(),
+				], [
+					$miss['epoch'] ?? static::UNGUARDED,
+					$miss === null ? '' : ($miss['stamp'] ?? ''),
+					$ttl,
 					$key,
-					null,
-				);
-			}
-			
-			// Always refresh HEXPIRE for all tags (not just new ones).
-			// Without this, re-saving an item with the same tags extends the item's
-			// EXPIRE but leaves the tag hash field's HEXPIRE stale, eventually
-			// making the item invisible to tag-based clearing.
-			if($ttl)
-			{
-				foreach($tags as $tag)
-				{
-					$tagId = $this->prefixer
-						->prefix($tag, $this->getType(static::TYPE_TAGS));
-					
-					$client->rawCommand('HEXPIRE',
-						$tagId,
-						$ttl,
-						'FIELDS',
-						1,
-						$key,
-					);
-				}
-			}
-			
-			// process removed tags
-			// remove the id from the list of each tag
-			foreach($removeTags as $tag)
-			{
-				$tagId = $this->prefixer
-					->prefix($tag, $this->getType(static::TYPE_TAGS));
-				
-				$client->hDel($tagId,
-					$key,
-				);
-			}
-			
-			$result = $client->exec();
-			if($error = $client->getLastError())
+					$this->getType(static::TYPE_TAGS) . Prefixer::SEPARATOR_PREFIX,
+					$this->getType(static::TYPE_INVALIDATED) . Prefixer::SEPARATOR_PREFIX,
+					$miss === null ? $this->writeThroughEpoch() : '',
+					$this->invalidationWindowMs,
+					$value,
+					...array_values(array_unique($tags)),
+				]);
+			if($result === false && ($error = $client->getLastError()))
 			{
 				$this->log($error);
-				
-				return false;
 			}
 			
-			if(is_array($result))
-			{
-				return $result[0] !== false; // hSet
-			}
+			return (int)$result === 1;
 		}
 		catch(RedisException $exception)
 		{
@@ -323,9 +287,14 @@ class Redis extends Store
 		$group = $this->getKeyBase();
 		$typeItems = static::TYPE_ITEMS . Prefixer::SEPARATOR_PREFIX;
 		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
+		// the items invalidated leave tombstones; the stamp first covers the
+		// ones being computed now, not in the tag index yet
+		$epoch = $this->newEpoch();
 		
 		try
 		{
+			$this->stamp($tags);
+			
 			// this is an option functionality, which is not required
 			// at the cost of speed on invalidation; it keeps a database smaller (clean)
 			// by removing ids from tags
@@ -344,6 +313,8 @@ class Redis extends Store
 							$typeItems,
 							$typeTags,
 							static::KEY_TAGS,
+							$epoch,
+							$this->invalidationWindowMs,
 						], long: true);
 					
 					if($error = $client->getLastError())
@@ -369,6 +340,8 @@ class Redis extends Store
 							$typeItems,
 							$typeTags,
 							$cursor,
+							$epoch,
+							$this->invalidationWindowMs,
 						], long: true);
 					
 					if(is_array($result) === false
@@ -410,6 +383,11 @@ class Redis extends Store
 			return false;
 		}
 		
+		// every tag is stamped - a value being computed now refuses for any of
+		// them (one carrying a single tag would have survived; refusing a
+		// write is always safe)
+		$this->stamp($tags);
+		
 		$ids = $this->getIdsMatchingAllTags($tags);
 		
 		if(count($ids) === 0)
@@ -420,6 +398,7 @@ class Redis extends Store
 		$group = $this->getKeyBase();
 		$typeItems = static::TYPE_ITEMS . Prefixer::SEPARATOR_PREFIX;
 		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
+		$epoch = $this->newEpoch();
 		
 		try
 		{
@@ -434,6 +413,8 @@ class Redis extends Store
 						$typeItems,
 						$typeTags,
 						static::KEY_TAGS,
+						$epoch,
+						$this->invalidationWindowMs,
 					], long: true);
 			}
 			else
@@ -448,6 +429,8 @@ class Redis extends Store
 							$tag,
 							$typeItems,
 							$typeTags,
+							$epoch,
+							$this->invalidationWindowMs,
 						], long: true);
 				}
 			}
@@ -465,6 +448,28 @@ class Redis extends Store
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * The physical wipe stamps "cleared" in the same step: a value computed
+	 * before the wipe and written after it is refused (its miss came first)
+	 */
+	#[Override]
+	protected function clearedStamp(): array
+	{
+		return $this->isGuarded()
+			? [$this->stampKey(), $this->invalidationWindowMs]
+			: [];
+	}
+	
+	/**
+	 * A miss stamps the server time: a tag stamped (or the store cleared)
+	 * after it refuses the write that follows
+	 */
+	#[Override]
+	protected function missStamp(): ?string
+	{
+		return $this->serverTime();
 	}
 	
 	public function getIdsMatchingAnyTags(

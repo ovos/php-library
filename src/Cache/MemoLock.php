@@ -144,16 +144,41 @@ abstract class MemoLock
 		string $id,
 	): bool;
 	
+	/**
+	 * The lock is this process's: it computes - unless the value landed
+	 * meanwhile (double-checked locking). A process whose miss came just
+	 * before the holder wrote and released, and whose subscription missed the
+	 * publication, takes the free lock next; without the second look it
+	 * computes the value again (the lock orders the computing, not the
+	 * reading - Benchmarks\Cache\Store\MemoLock\RedisCluster counted two
+	 * resolutions). One read more, for the holder only; a lock-only call
+	 * (no fetcher) computes as before
+	 */
 	protected function lockAcquired(
 		string $id,
 		string $lockValue,
 		?Closure $resolver = null,
+		?Closure $fetcher = null,
 	): mixed
 	{
 		$this->queueLocks[$id] = $lockValue;
 		
+		// inside the try: a fetcher that throws releases the lock at once, not at
+		// its TTL (the waiters would stall until then)
 		try
 		{
+			// the second look: the value may have landed between this process's
+			// miss and its lock - the holder wrote and released just before, and
+			// its publication came before our subscription; computing now would
+			// duplicate the work the lock exists to save
+			if($fetcher !== null && ($result = $this->invoker->invoke($fetcher)) !== null)
+			{
+				// released, so the waiters are told (and read it)
+				$this->releaseActiveLock($id);
+				
+				return $result;
+			}
+			
 			return $this->invoker
 				->invoke($resolver);
 		}
