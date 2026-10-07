@@ -6,6 +6,7 @@ namespace Ovos\Cache\Store;
 use Ovos\Cache\MemoLock\Apcu as MemoLock;
 use APCUIterator;
 use Closure;
+use Override;
 
 use function apcu_cache_info;
 use function apcu_clear_cache;
@@ -108,12 +109,13 @@ class Apcu extends KeyValue
 		
 		if($value !== false)
 		{
-			unset($this->misses[$id]);
-			
 			$value = $this->compressor
 				->decompress($value);
-			return $this->serializer
-				->unserialize($value);
+			
+			return $this->found($id,
+				$this->serializer->unserialize($value),
+				fn() => $this->epoch($id),
+			);
 		}
 		
 		$this->rememberMiss($id, $this->epoch($id));
@@ -166,13 +168,18 @@ class Apcu extends KeyValue
 		int $ttl = 0,
 		?bool $queue = null, // override of the config switch
 		?int $queueLockTtlS = null, // override of the config value
+		int $stale = 0, // seconds past the ttl a value is served while it is refreshed
 	): mixed
 	{
 		$id = $this->prefixer
 			->prefix($key, $this->getGroup());
 		
-		// initial hit check (fast path)
-		if(($data = $this->fetch($id)) !== null)
+		// initial hit check (fast path); past its ttl, a value written with a
+		// stale time is served while it is refreshed (see revalidate())
+		$refresh = $stale > 0 && $resolver !== null
+			? fn() => $this->setFromResolver($key, $resolver, $ttl, $stale)
+			: null;
+		if(($data = $this->served($id, $this->fetch($id), $refresh)) !== null)
 		{
 			return $data;
 		}
@@ -180,11 +187,35 @@ class Apcu extends KeyValue
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
-				fn() => $this->fetch($id),
-				fn() => $this->setFromResolver($key, $resolver, $ttl),
+				fn() => $this->fresh($this->fetch($id)),
+				fn() => $this->setFromResolver($key, $resolver, $ttl, $stale),
 				$queue,
 				$queueLockTtlS,
 			);
+	}
+	
+	/**
+	 * The resolver's value, stored - with a stale time (get(stale:)) as the
+	 * value and its fresh time, kept that long past it
+	 */
+	#[Override]
+	public function setFromResolver(
+		string $key,
+		?Closure $resolver,
+		int $ttl = 0,
+		int $stale = 0,
+	): mixed
+	{
+		$value = $this->invoker
+			->invoke($resolver);
+		
+		if($value !== null)
+		{
+			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale);
+			$this->set($key, $stored, $storedTtl);
+		}
+		
+		return $value;
 	}
 	
 	/**
@@ -206,7 +237,7 @@ class Apcu extends KeyValue
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
-				fn() => $this->fetch($id),
+				fn() => $this->fresh($this->fetch($id)),
 				$resolver,
 				true,
 				$queueLockTtlS,

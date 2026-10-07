@@ -11,6 +11,7 @@ use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\RedisVersionedProbe;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
+use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Ovos\Test\Exception\SkipException;
 use Override;
@@ -33,6 +34,7 @@ class RedisVersioned extends Test
 {
 	use TraitRedis;
 	use TraitInvalidationGuard;
+	use TraitStaleWhileRevalidate;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -838,6 +840,14 @@ class RedisVersioned extends Test
 			->disconnect();
 	}
 	
+	/**
+	 * A fresh store - another process (TraitStaleWhileRevalidate)
+	 */
+	protected function staleStore(): KeyValueRedis
+	{
+		return $this->guardStore();
+	}
+
 	/**
 	 * A fresh store - another process (TraitInvalidationGuard); its rules read
 	 * exactly, so a reader sees an invalidation at once rather than within

@@ -9,6 +9,7 @@ use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\Apcu as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
+use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Override;
 
 use function Ovos\config;
@@ -23,6 +24,8 @@ use function is_string;
  */
 class Apcu extends Test
 {
+	use TraitStaleWhileRevalidate;
+	
 	public const string KEY_ITEM = 'item';
 	
 	protected ArrayObject $config;
@@ -292,6 +295,15 @@ class Apcu extends Test
 		return $refused && $through && $ownWritten;
 	}
 	
+	/**
+	 * A fresh store - another process sharing this APCu
+	 * (TraitStaleWhileRevalidate)
+	 */
+	protected function staleStore(): Store
+	{
+		return $this->newStore();
+	}
+
 	/**
 	 * A fresh store - another process sharing this APCu
 	 */

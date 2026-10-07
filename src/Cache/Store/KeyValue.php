@@ -9,7 +9,9 @@ use Ovos\Invoker;
 use Ovos\Cache\MemoLock;
 use Ovos\Cache\Prefixer;
 use Ovos\Cache\Serializer;
+use Ovos\Cache\Stale;
 use Closure;
+use Throwable;
 
 use function array_key_first;
 use function count;
@@ -65,6 +67,11 @@ abstract class KeyValue
 	 * @var array<string, array{epoch: string, stamp: ?string, at: float}>
 	 */
 	protected array $misses = [];
+	
+	/**
+	 * Runs a stale value's refresh later (see setDeferrer()); null: inline
+	 */
+	protected ?Closure $deferrer = null;
 	
 	public function __construct(
 		?string $prefix = null,
@@ -241,6 +248,197 @@ abstract class KeyValue
 		}
 		
 		return $miss;
+	}
+	
+	/**
+	 * Where a stale value's refresh runs (get(stale:), see revalidate()):
+	 * the deferrer is handed the refresh as a closure to call later -
+	 * Service\Cache gives an HTTP request's stores Application::afterResponse(),
+	 * so it runs once the client has its response. Null (a CLI, a worker, a
+	 * store built by hand): inline
+	 */
+	public function setDeferrer(
+		?Closure $deferrer,
+	): static
+	{
+		$this->deferrer = $deferrer;
+		
+		return $this;
+	}
+	
+	public function getDeferrer(): ?Closure
+	{
+		return $this->deferrer;
+	}
+	
+	/**
+	 * Reads an item by its prefixed id: its value, or null for a miss
+	 */
+	abstract protected function fetch(
+		string $id,
+	): mixed;
+	
+	/**
+	 * What fetch() found: a value past its fresh time (written with a stale
+	 * time, see Stale) is a miss to the guard - the write that refreshes it
+	 * follows this read - so it is remembered with the epoch the item
+	 * carries ($epoch, or a Closure reading it when that costs a read of its
+	 * own); anything else is a hit
+	 */
+	protected function found(
+		string $id,
+		mixed $value,
+		mixed $epoch,
+	): mixed
+	{
+		if($value instanceof Stale && $value->isFresh() === false)
+		{
+			$this->rememberMiss($id, $epoch instanceof Closure ? $epoch() : $epoch);
+		}
+		else
+		{
+			unset($this->misses[$id]);
+		}
+		
+		return $value;
+	}
+	
+	/**
+	 * A read as a caller sees it: a value written with a stale time while it
+	 * is fresh, nothing once it is not - a read that does not ask for stale
+	 * values takes it for a miss
+	 */
+	protected function fresh(
+		mixed $data,
+	): mixed
+	{
+		if($data instanceof Stale)
+		{
+			return $data->isFresh()
+				? $data->value
+				: null;
+		}
+		
+		return $data;
+	}
+	
+	/**
+	 * What get() serves from a read: a value, or a fresh one written with a
+	 * stale time, as it is; one past its fresh time while it is refreshed,
+	 * when the caller asked for it ($refresh, see revalidate()). Null: a
+	 * miss - a value past its fresh time to a read without stale: included
+	 */
+	protected function served(
+		string $id,
+		mixed $data,
+		?Closure $refresh,
+	): mixed
+	{
+		if($data instanceof Stale === false || $data->isFresh())
+		{
+			return $this->fresh($data);
+		}
+		
+		return $refresh !== null
+			? $this->revalidate($id, $data->value, $refresh)
+			: null;
+	}
+	
+	/**
+	 * Stale-while-revalidate: returns the stale value at once and refreshes
+	 * the item - after the response where there is one (the deferrer), inline
+	 * otherwise, the caller then getting what was computed. One process
+	 * refreshes: MemoLock elects it when the refresh runs, without waiting
+	 * (tryLock()), and it reads the item once more - another process may have
+	 * refreshed it meanwhile, or an invalidation removed it (the next read
+	 * computes). That read remembers the epoch the item carries, so the
+	 * refresh's write is guarded like a miss's: an invalidation during the
+	 * refresh refuses it
+	 */
+	protected function revalidate(
+		string $id,
+		mixed $stale,
+		Closure $refresh,
+	): mixed
+	{
+		$run = function() use ($id, $refresh): mixed
+		{
+			$memoLock = $this->getMemoLock();
+			if($memoLock->tryLock($id) === false)
+			{
+				// another process refreshes it
+				return null;
+			}
+			
+			try
+			{
+				$data = $this->fetch($id);
+				if($data instanceof Stale === false || $data->isFresh())
+				{
+					// refreshed meanwhile, or gone: nothing to refresh
+					return $this->fresh($data);
+				}
+				
+				$this->stampMiss($id);
+				
+				return $refresh();
+			}
+			catch(Throwable $throwable)
+			{
+				// the stale value stays: the next read past its fresh time tries again
+				$this->log($throwable);
+				
+				return null;
+			}
+			finally
+			{
+				// set() releases it when it writes, a refused write too; twice is a no-op
+				$memoLock->releaseActiveLock($id);
+			}
+		};
+		
+		if($this->deferrer !== null)
+		{
+			($this->deferrer)($run);
+			
+			return $stale;
+		}
+		
+		return $run() ?? $stale;
+	}
+	
+	/**
+	 * What a resolver's value is stored as: with a stale time (get(stale:))
+	 * the value and its fresh time, kept that long past it - only with a TTL
+	 *
+	 * @return array{0: mixed, 1: int} the value to store and its TTL
+	 */
+	protected function withStale(
+		mixed $value,
+		int $ttl,
+		int $stale,
+	): array
+	{
+		if($stale <= 0 || $ttl <= 0)
+		{
+			return [$value, $ttl];
+		}
+		
+		return [
+			new Stale($value, microtime(true) + $ttl),
+			$ttl + $stale,
+		];
+	}
+	
+	/**
+	 * Logs events (messages/errors/exceptions) - a store with no connection
+	 * to log through drops them
+	 */
+	public function log(
+		...$event,
+	): static
+	{
+		return $this;
 	}
 	
 	abstract public function getMemoLock(): MemoLock;

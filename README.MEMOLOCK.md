@@ -228,6 +228,28 @@ waited `wait_attempts` rounds without winning the lock runs anyway - a crashed
 holder must never block everybody. Size both for the section (see *How to
 choose the lock TTL*).
 
+### Take the lock only when it is free (`tryLock()`)
+
+For work that must run once but that nobody should wait for - the caller that
+finds the lock taken simply leaves it to the holder:
+
+```php
+if($memoLock->tryLock($id))
+{
+    try
+    {
+        $this->refresh();
+    }
+    finally
+    {
+        $memoLock->releaseActiveLock($id);
+    }
+}
+```
+
+The stores' stale-while-revalidate (`get(stale:)`, see README.CACHE.md) elects
+its one refresher this way.
+
 ### Force queueing for a single call
 
 Override the global queue setting for one call:

@@ -13,6 +13,7 @@ use Ovos\Exception\MissingException\MissingConfigException;
 use Ovos\Service;
 use Ovos\Service\Cache\Perishable;
 use Ovos\Service\Cache\Persistent;
+use Closure;
 
 /**
  * Cache
@@ -90,9 +91,18 @@ class Cache extends Service
 	{
 		// the common base of every configurable store - an enumerated
 		// union broke the first project using the RedisVersioned store
-		return $persistent
+		$store = $persistent
 			? $this->getPersistent()->getStore()
 			: $this->getPerishable()->getStore();
+		
+		// a stale value's refresh (get(stale:)) runs once the client has its
+		// response; a CLI or a worker has none to wait for - inline there
+		if($store->getDeferrer() === null && $this->app->isInterfaceHttp())
+		{
+			$store->setDeferrer(fn(Closure $refresh) => $this->app->afterResponse($refresh));
+		}
+		
+		return $store;
 	}
 	
 	public function getQueue(

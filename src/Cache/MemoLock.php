@@ -145,6 +145,18 @@ abstract class MemoLock
 	): bool;
 	
 	/**
+	 * Takes the lock when it is free, without waiting: true when this
+	 * process holds it now (release it with releaseActiveLock()), false when
+	 * another holds it. Elects the one process that refreshes a stale value
+	 * (KeyValue::get(stale:)) while the others serve it; nobody waits, so a
+	 * queue switched off does not change it
+	 */
+	abstract public function tryLock(
+		string $id,
+		?int $queueLockTtlMs = null,
+	): bool;
+	
+	/**
 	 * The lock is this process's: it computes - unless the value landed
 	 * meanwhile (double-checked locking). A process whose miss came just
 	 * before the holder wrote and released, and whose subscription missed the

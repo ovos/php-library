@@ -478,6 +478,49 @@ class Redis extends MemoLock
 	}
 	
 	/**
+	 * Takes the lock when it is free, without waiting - false as well when
+	 * Redis cannot be reached (see MemoLock::tryLock())
+	 */
+	public function tryLock(
+		string $id,
+		?int $queueLockTtlMs = null,
+	): bool
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		$lockValue = bin2hex(random_bytes(16));
+		
+		try
+		{
+			$lockAcquired = $client->set(
+				$this->prefixer
+					->prefix(static::TYPE_LOCK, $id),
+				$lockValue,
+				[
+					'NX',
+					'PX' => $queueLockTtlMs ?? $this->queueLockTtlMs,
+				],
+			);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->connection->log($exception);
+			
+			return false;
+		}
+		
+		if($lockAcquired)
+		{
+			$this->queueLocks[$id] = $lockValue;
+		}
+		
+		return (bool)$lockAcquired;
+	}
+	
+	/**
 	 * This function should be used for long-running processes
 	 * which hold the lock for longer than default lock TTL
 	 */
