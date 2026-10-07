@@ -187,6 +187,13 @@ class Apcu extends KeyValue
 			);
 	}
 	
+	/**
+	 * Manual lock control: returns the cached value when another process
+	 * produced it meanwhile (this one holds NO lock then), otherwise what the
+	 * resolver returns - null without one - while this process holds the
+	 * lock: compute, then set() (or releaseActiveLock()). See
+	 * KeyValue\Redis::lockAndQueue()
+	 */
 	public function lockAndQueue(
 		string $key,
 		?Closure $resolver = null,
@@ -199,7 +206,7 @@ class Apcu extends KeyValue
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
-				null,
+				fn() => $this->fetch($id),
 				$resolver,
 				true,
 				$queueLockTtlS,

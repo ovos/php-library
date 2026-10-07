@@ -282,6 +282,15 @@ abstract class Redis extends Tags
 			);
 	}
 	
+	/**
+	 * Manual lock control: returns the cached value when another process
+	 * produced it meanwhile (this one holds NO lock then), otherwise what the
+	 * resolver returns - null without one - while this process holds the
+	 * lock: compute, then set() (or releaseActiveLock()). The cache is read
+	 * after waiting and once more right after the lock is taken, as in get().
+	 * A key that is never set (a critical section) reads as nothing, so every
+	 * caller takes the lock in turn
+	 */
 	public function lockAndQueue(
 		string $key,
 		?Closure $resolver = null,
@@ -301,8 +310,16 @@ abstract class Redis extends Tags
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
-				null,
-				$resolver,
+				fn() => $this->fetch($id),
+				function() use ($id, $resolver): mixed
+				{
+					// the miss is stamped now, right before this process
+					// computes (see get())
+					$this->stampMiss($id);
+					
+					return $this->invoker
+						->invoke($resolver);
+				},
 				true,
 				$queueLockTtlMs,
 			);

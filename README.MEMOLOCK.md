@@ -131,40 +131,38 @@ For advanced scenarios where you need explicit control over the lock lifecycle.
 
 ### Lock, compute, set
 
+Most of the time you don't need it: `get()` without a resolver, with the queue
+on, already holds the lock for you when it returns `null`:
+
 ```php
-if($cache->get('key', queue: false) === null)
+if(($value = $cache->get('key', queue: true)) === null)
 {
-    $cache->lockAndQueue('key');         // Acquire lock, others start waiting
+    // null: this process holds the lock - the others wait for it
     $value = $this->expensiveWork();
     $cache->set('key', $value, ttl: 60); // Set value AND release lock
 }
 ```
 
-`lockAndQueue('key')` here has no fetcher: it only serialises. A waiter returns
-as soon as the holder releases - it does not read what the holder wrote - and
-whoever takes the lock does not look again either. The `get()`-based paths (a
-resolver, or the traditional get/set above) do both: they read the cache after
-waiting AND once more right after taking the lock (double-checked locking), so
-a value written by the holder before is returned instead of being computed
-again. With manual lock control, check again yourself when the work should
-not run twice:
+With the lock in your own hands, `lockAndQueue('key')` does the same. It
+returns the cached value when another process produced it meanwhile - this
+process holds **no** lock then, there is nothing to do - and `null` while this
+process holds the lock:
 
 ```php
-if($cache->get('key', queue: false) === null)
+if(($value = $cache->get('key', queue: false)) === null
+    && ($value = $cache->lockAndQueue('key')) === null
+)
 {
-    $cache->lockAndQueue('key');
-    // the holder before us may have written it while we waited
-    if(($value = $cache->get('key', queue: false)) === null)
-    {
-        $value = $this->expensiveWork();
-        $cache->set('key', $value, ttl: 60); // Set value AND release lock
-    }
-    else
-    {
-        $cache->releaseActiveLock('key');   // nothing to write - release
-    }
+    // null: this process holds the lock
+    $value = $this->expensiveWork();
+    $cache->set('key', $value, ttl: 60); // Set value AND release lock
 }
 ```
+
+Both read the cache after waiting AND once more right after taking the lock
+(double-checked locking): a value the holder before wrote is handed back,
+never computed again. Use the return value - code that ignores it and
+computes anyway runs the work again, without the lock.
 
 ### Error handling - release without setting
 
@@ -172,16 +170,18 @@ If you acquire a lock but can't produce a value (e.g., an error), release
 the lock so others can try:
 
 ```php
-$cache->lockAndQueue('key');
-try
+if(($value = $cache->lockAndQueue('key')) === null)
 {
-    $value = $this->riskyOperation();
-    $cache->set('key', $value, ttl: 60);
-}
-catch(Throwable $e)
-{
-    $cache->releaseActiveLock('key');   // Release lock without setting a value
-    throw $e;
+    try
+    {
+        $value = $this->riskyOperation();
+        $cache->set('key', $value, ttl: 60);
+    }
+    catch(Throwable $e)
+    {
+        $cache->releaseActiveLock('key');   // Release lock without setting a value
+        throw $e;
+    }
 }
 ```
 
@@ -191,18 +191,23 @@ If your computation takes longer than the lock TTL, renew the lock
 periodically to prevent others from stealing it:
 
 ```php
-$cache->lockAndQueue('key');
-foreach($largeDataSet as $item)
+if(($result = $cache->lockAndQueue('key')) === null)
 {
-    $this->processItem($item);
-    $cache->renewLock('key');   // Reset the lock TTL
+    $result = [];
+    foreach($largeDataSet as $item)
+    {
+        $result[] = $this->processItem($item);
+        $cache->renewLock('key');   // Reset the lock TTL
+    }
+    $cache->set('key', $result, ttl: 300);
 }
-$cache->set('key', $result, ttl: 300);
 ```
 
 ### Critical section (lock-only, no cache)
 
-Use MemoLock purely as a distributed mutex to prevent parallel execution:
+Use MemoLock purely as a distributed mutex to prevent parallel execution.
+Nothing is ever cached under the key, so every caller reads nothing and takes
+the lock in turn - pick a key no value is cached under:
 
 ```php
 $cache->lockAndQueue('import:companies');
@@ -216,6 +221,12 @@ finally
     $cache->releaseActiveLock('import:companies');
 }
 ```
+
+The lock is a lease, not a hard mutex. A holder that outlives `lock_ttl_ms`
+without `renewLock()` loses it to the next worker, and a waiter that has
+waited `wait_attempts` rounds without winning the lock runs anyway - a crashed
+holder must never block everybody. Size both for the section (see *How to
+choose the lock TTL*).
 
 ### Force queueing for a single call
 
@@ -240,7 +251,8 @@ You can use MemoLock directly for non-cache scenarios like file generation
 or resource provisioning. Pass a `fetcher` whenever the work produces
 something you can look up: it is asked after waiting, and once more right
 after the lock is taken - a result that landed just before is returned
-instead of being produced again. Without one, `lockAndQueue()` only serialises.
+instead of being produced again. Without one, `lockAndQueue()` is a mutex
+(lock-only): each waiter takes the lock in turn, and its caller releases it.
 
 ### Redis MemoLock
 
