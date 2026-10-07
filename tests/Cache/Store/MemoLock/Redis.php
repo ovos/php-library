@@ -11,6 +11,7 @@ use Ovos\Cache\Store\Redis as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Parallel;
+use Ovos\Test\Cache\Store\MemoLock\TraitQueueRules;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Override;
 
@@ -26,6 +27,7 @@ use function sprintf;
 class Redis extends Test
 {
 	use TraitRedis;
+	use TraitQueueRules;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -341,6 +343,16 @@ class Redis extends Test
 			$this->store->delete(self::KEY_ITEM);
 			$this->store->delete(self::KEY_ITEM_COUNTER);
 		}
+	}
+	
+	/**
+	 * The client script the parallel rules run (see TraitQueueRules)
+	 */
+	protected function clientScript(): string
+	{
+		return __DIR__
+			. DIRECTORY_SEPARATOR . 'Redis'
+			. DIRECTORY_SEPARATOR . 'Client.file.php';
 	}
 	
 	/**

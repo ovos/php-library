@@ -228,13 +228,10 @@ class Redis extends MemoLock
 			
 			// either we got the message or we timed-out
 			
-			// lock-only mode
-			if($fetcher === null && $success === true)
-			{
-				return true;
-			}
-			
-			// check if the result was produced while we were waiting
+			// check if the result was produced while we were waiting; with
+			// no fetcher (lock-only) there is nothing to read, and the waiter
+			// races for the lock below like any other - it used to return on
+			// the release without the lock, so every waiter ran at once
 			if(($result = $this->invoker
 				->invoke($fetcher)) !== null)
 			{
