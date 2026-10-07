@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="690" viewBox="0 0 940 690" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="aBad" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ff003c"/></marker>
+		<marker id="aOk" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#00f0ff"/></marker>
+		<marker id="aWait" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#fcee0a"/></marker>
+		<marker id="aGrey" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8b8ba7"/></marker>
+		<marker id="aTime" markerWidth="9" markerHeight="9" refX="4" refY="7" orient="0"><path d="M0,0 L4,8 L8,0 z" fill="#8b8ba7"/></marker>
+		<style>
+			.title{font-size:17px;font-weight:700;fill:#fcee0a;letter-spacing:2px}
+			.subtitle{font-size:12px;fill:#8b8ba7;letter-spacing:0.5px}
+			.panelHead{font-size:12.5px;font-weight:700;letter-spacing:1.5px;text-anchor:middle}
+			.req{font-family:Consolas,'Courier New',monospace;font-size:10.5px;fill:#e8e8f0;text-anchor:middle}
+			.seg{font-family:Consolas,'Courier New',monospace;font-size:11px;font-weight:700;text-anchor:middle;letter-spacing:1px}
+			.lblC{font-size:11px;fill:#8b8ba7;text-anchor:middle}
+			.em{font-size:11px;font-weight:700;fill:#e8e8f0;text-anchor:middle}
+			.cost{font-family:Consolas,'Courier New',monospace;font-size:13px;font-weight:700;text-anchor:middle;letter-spacing:1px}
+			.costSub{font-size:9.5px;text-anchor:middle;fill:#8b8ba7}
+			.foot{font-size:11px;fill:#8b8ba7}
+		</style>
+	</defs>
+	
+	<!-- canvas: chamfered plate -->
+	<path d="M14,0 H926 L940,14 V676 L926,690 H14 L0,676 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V676 L926,690 H14 L0,676 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V676 L926,689.5 H14 L0.5,676 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.8"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,650 V676 L926,689.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	
+	<!-- header -->
+	<text x="24" y="28" class="title" filter="url(#glow)">STALE-WHILE-REVALIDATE &#8212; get(stale:)</text>
+	<text x="24" y="47" class="subtitle">A value past its ttl is served at once, to everyone, while ONE process refreshes it</text>
+	<rect x="24" y="55" width="160" height="2" fill="#ff003c"/>
+	<rect x="192" y="55" width="10" height="2" fill="#ff003c" opacity="0.55"/>
+	<rect x="210" y="55" width="4" height="2" fill="#ff003c" opacity="0.3"/>
+	
+	<!-- ============ AN ITEM'S LIFE ============ -->
+	<path d="M28,74 H924 V250 L912,262 H16 V86 Z" fill="#0d0d17" stroke="#fcee0a" stroke-width="1" opacity="0.9"/>
+	<path d="M28,74 H924 V102 H16 V86 Z" fill="#fcee0a" opacity="0.1"/>
+	<line x1="16" y1="102" x2="924" y2="102" stroke="#fcee0a" stroke-width="1" opacity="0.7"/>
+	<text x="470" y="93" class="panelHead" fill="#fcee0a">AN ITEM&#8217;S LIFE &#8212; get($key, $resolver, ttl: 60, stale: 300)</text>
+	<g>
+		<rect x="64" y="178" width="236" height="22" fill="#00f0ff" fill-opacity="0.18" stroke="#00f0ff"/>
+		<text x="182" y="193" class="seg" fill="#00f0ff">FRESH</text>
+		<rect x="300" y="178" width="400" height="22" fill="#fcee0a" fill-opacity="0.14" stroke="#fcee0a"/>
+		<text x="500" y="193" class="seg" fill="#fcee0a">STALE</text>
+		<rect x="700" y="178" width="176" height="22" fill="#8b8ba7" fill-opacity="0.08" stroke="#8b8ba7" stroke-dasharray="4 3"/>
+		<text x="788" y="193" class="seg" fill="#8b8ba7">GONE</text>
+		<line x1="64" y1="200" x2="64" y2="206" stroke="#8b8ba7" opacity="0.8"/>
+		<text x="64" y="218" class="lblC">written</text>
+		<line x1="300" y1="200" x2="300" y2="206" stroke="#8b8ba7" opacity="0.8"/>
+		<text x="300" y="218" class="lblC">ttl</text>
+		<line x1="700" y1="200" x2="700" y2="206" stroke="#8b8ba7" opacity="0.8"/>
+		<text x="700" y="218" class="lblC">ttl + stale</text>
+		<path d="M116,118 H248 V144 L242,150 H116 Z" fill="#11111c"/>
+		<path d="M116,118 H248 V144 L242,150 H116 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="182" y="131" class="req">read</text>
+		<text x="182" y="144" class="costSub" style="fill:#00f0ff">the value</text>
+		<line x1="182" y1="150" x2="182" y2="174" stroke="#00f0ff" stroke-width="1.6" marker-end="url(#aOk)"/>
+		<path d="M434,110 H566 V144 L560,150 H434 Z" fill="#11111c"/>
+		<path d="M434,110 H566 V144 L560,150 H434 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="500" y="120" class="req">read</text>
+		<text x="500" y="133" class="costSub" style="fill:#fcee0a">the value at once</text>
+		<text x="500" y="146" class="costSub" style="fill:#fcee0a">+ ONE refresh</text>
+		<line x1="500" y1="150" x2="500" y2="174" stroke="#fcee0a" stroke-width="1.6" marker-end="url(#aWait)"/>
+		<path d="M722,118 H854 V144 L848,150 H722 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="788" y="131" class="req">read</text>
+		<text x="788" y="144" class="costSub" style="fill:#8b8ba7">a miss: MemoLock</text>
+		<line x1="788" y1="150" x2="788" y2="174" stroke="#8b8ba7" stroke-width="1.6" marker-end="url(#aGrey)"/>
+		<text x="500" y="242" class="lblC" style="fill:#fcee0a">the refresh writes a fresh value &#8212; the clock starts again</text>
+		<text x="788" y="242" class="lblC">one computes, the rest wait</text>
+		<text x="182" y="242" class="lblC" style="fill:#00f0ff">a hit</text>
+	</g>
+	
+	<!-- ============ WITHOUT ============ -->
+	<path d="M28,276 H460 V598 L448,610 H16 V288 Z" fill="#0d0d17" stroke="#ff003c" stroke-width="1" opacity="0.9"/>
+	<path d="M28,276 H460 V304 H16 V288 Z" fill="#ff003c" opacity="0.13"/>
+	<line x1="16" y1="304" x2="460" y2="304" stroke="#ff003c" stroke-width="1" opacity="0.7"/>
+	<text x="238" y="295" class="panelHead" fill="#ff003c">WITHOUT stale: &#8212; AT EXPIRY, VISITORS WAIT</text>
+	
+	<g>
+		<path d="M22,314 H150 V331 L145,336 H22 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="86" y="329" class="req">visitor A</text>
+		<line x1="86" y1="340" x2="86" y2="516" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M174,314 H302 V331 L297,336 H174 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="238" y="329" class="req">visitor B</text>
+		<line x1="238" y1="340" x2="238" y2="516" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M326,314 H454 V331 L449,336 H326 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="390" y="329" class="req">visitor C</text>
+		<line x1="390" y1="340" x2="390" y2="516" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M22,350 H150 V376 L144,382 H22 Z" fill="#11111c"/>
+		<path d="M22,350 H150 V376 L144,382 H22 Z" fill="#ff003c" fill-opacity="0.08" stroke="#ff003c" opacity="0.9"/>
+		<text x="86" y="363" class="req">get() &#8594; miss</text>
+		<text x="86" y="376" class="costSub" style="fill:#ff003c">wins the lock</text>
+		<path d="M174,350 H302 V376 L296,382 H174 Z" fill="#11111c"/>
+		<path d="M174,350 H302 V376 L296,382 H174 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="238" y="363" class="req">get() &#8594; miss</text>
+		<text x="238" y="376" class="costSub" style="fill:#fcee0a">waits (MemoLock)</text>
+		<path d="M326,350 H454 V376 L448,382 H326 Z" fill="#11111c"/>
+		<path d="M326,350 H454 V376 L448,382 H326 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="390" y="363" class="req">get() &#8594; miss</text>
+		<text x="390" y="376" class="costSub" style="fill:#fcee0a">waits (MemoLock)</text>
+		<path d="M22,392 H150 V458 L144,464 H22 Z" fill="#11111c"/>
+		<path d="M22,392 H150 V458 L144,464 H22 Z" fill="#ff003c" fill-opacity="0.08" stroke="#ff003c" opacity="0.9"/>
+		<text x="86" y="418" class="req" style="fill:#ff003c">computes</text>
+		<text x="86" y="431" class="costSub" style="fill:#ff003c">the visitor</text>
+		<text x="86" y="444" class="costSub" style="fill:#ff003c">waits for it</text>
+		<path d="M174,392 H302 V458 L296,464 H174 Z" fill="#11111c"/>
+		<path d="M174,392 H302 V458 L296,464 H174 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="238" y="432" class="req" style="fill:#fcee0a">waiting&#8230;</text>
+		<path d="M326,392 H454 V458 L448,464 H326 Z" fill="#11111c"/>
+		<path d="M326,392 H454 V458 L448,464 H326 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="390" y="432" class="req" style="fill:#fcee0a">waiting&#8230;</text>
+		<path d="M22,476 H150 V498 L144,504 H22 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="86" y="494" class="req">the value</text>
+		<path d="M174,476 H302 V498 L296,504 H174 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="238" y="494" class="req">A&#8217;s value</text>
+		<path d="M326,476 H454 V498 L448,504 H326 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="390" y="494" class="req">A&#8217;s value</text>
+	</g>
+	<text x="238" y="540" class="em">The ttl ends: one request recomputes and</text>
+	<text x="238" y="556" class="em">every request behind it waits for that.</text>
+	<path d="M138,566 H346 V594 L338,602 H130 V574 Z" fill="#ff003c" fill-opacity="0.07" stroke="#ff003c" opacity="0.9"/>
+	<text x="238" y="584" class="cost" fill="#ff003c">3 visitors wait</text>
+	<text x="238" y="597" class="costSub">for one computation</text>
+	
+	<!-- ============ WITH ============ -->
+	<path d="M492,276 H924 V598 L912,610 H480 V288 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+	<path d="M492,276 H924 V304 H480 V288 Z" fill="#00f0ff" opacity="0.1"/>
+	<line x1="480" y1="304" x2="924" y2="304" stroke="#00f0ff" stroke-width="1" opacity="0.7"/>
+	<text x="702" y="295" class="panelHead" fill="#00f0ff">WITH stale: &#8212; NOBODY WAITS</text>
+	
+	<g>
+		<path d="M486,314 H614 V331 L609,336 H486 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="550" y="329" class="req">visitor A</text>
+		<line x1="550" y1="340" x2="550" y2="516" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M638,314 H766 V331 L761,336 H638 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="702" y="329" class="req">visitor B</text>
+		<line x1="702" y1="340" x2="702" y2="516" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M790,314 H918 V331 L913,336 H790 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="854" y="329" class="req">visitor C</text>
+		<line x1="854" y1="340" x2="854" y2="516" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M486,350 H614 V376 L608,382 H486 Z" fill="#11111c"/>
+		<path d="M486,350 H614 V376 L608,382 H486 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="550" y="363" class="req">get() &#8594; stale</text>
+		<text x="550" y="376" class="costSub" style="fill:#00f0ff">the value at once</text>
+		<path d="M638,350 H766 V376 L760,382 H638 Z" fill="#11111c"/>
+		<path d="M638,350 H766 V376 L760,382 H638 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="702" y="363" class="req">get() &#8594; stale</text>
+		<text x="702" y="376" class="costSub" style="fill:#00f0ff">the value at once</text>
+		<path d="M790,350 H918 V376 L912,382 H790 Z" fill="#11111c"/>
+		<path d="M790,350 H918 V376 L912,382 H790 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="854" y="363" class="req">get() &#8594; stale</text>
+		<text x="854" y="376" class="costSub" style="fill:#00f0ff">the value at once</text>
+		<path d="M486,392 H614 V458 L608,464 H486 Z" fill="#11111c"/>
+		<path d="M486,392 H614 V458 L608,464 H486 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="550" y="418" class="req" style="fill:#fcee0a">after the response:</text>
+		<text x="550" y="431" class="costSub" style="fill:#fcee0a">tryLock &#8594; elected</text>
+		<text x="550" y="444" class="costSub" style="fill:#fcee0a">refresh, guarded set</text>
+		<path d="M638,392 H766 V458 L760,464 H638 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="702" y="418" class="req">after the response:</text>
+		<text x="702" y="431" class="costSub">tryLock lost</text>
+		<text x="702" y="444" class="costSub">nothing to do</text>
+		<path d="M790,392 H918 V458 L912,464 H790 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="854" y="418" class="req">after the response:</text>
+		<text x="854" y="431" class="costSub">tryLock lost</text>
+		<text x="854" y="444" class="costSub">nothing to do</text>
+		<path d="M486,476 H614 V498 L608,504 H486 Z" fill="#11111c"/>
+		<path d="M486,476 H614 V498 L608,504 H486 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="550" y="494" class="req" style="fill:#00f0ff">next read: fresh</text>
+		<path d="M638,476 H766 V498 L760,504 H638 Z" fill="#11111c"/>
+		<path d="M638,476 H766 V498 L760,504 H638 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="702" y="494" class="req" style="fill:#00f0ff">next read: fresh</text>
+		<path d="M790,476 H918 V498 L912,504 H790 Z" fill="#11111c"/>
+		<path d="M790,476 H918 V498 L912,504 H790 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="854" y="494" class="req" style="fill:#00f0ff">next read: fresh</text>
+	</g>
+	<text x="702" y="540" class="em">Everyone gets the stale value at once; one</text>
+	<text x="702" y="556" class="em">refresh runs after its response.</text>
+	<path d="M602,566 H810 V594 L802,602 H594 V574 Z" fill="#00f0ff" fill-opacity="0.07" stroke="#00f0ff" opacity="0.9"/>
+	<text x="702" y="584" class="cost" fill="#00f0ff">0 visitors wait</text>
+	<text x="702" y="597" class="costSub">1 refresh, after the response</text>
+	
+	<line x1="16" y1="626" x2="924" y2="626" stroke="#8b8ba7" opacity="0.3"/>
+	<text x="16" y="645" class="foot"><tspan font-weight="700" fill="#e8e8f0">Only ageing serves a stale value:</tspan> delete(), a tag or clear() remove the item (a miss, never stale), and a refresh&#8217;s write</text>
+	<text x="16" y="660" class="foot">is refused when an invalidation landed while it ran. <tspan font-weight="700" fill="#e8e8f0">Opt-in per call</tspan> &#8212; a read without stale: takes an aged value for a miss.</text>
+	<text x="16" y="675" class="foot"><tspan font-weight="700" fill="#e8e8f0">CLI, workers:</tspan> no response to finish &#8212; the elected caller refreshes inline and gets the new value.</text>
+</svg>
