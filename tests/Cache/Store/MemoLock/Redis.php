@@ -14,6 +14,8 @@ use Ovos\Test\Parallel;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Override;
 
+use function bin2hex;
+use function random_bytes;
 use function sprintf;
 
 /**
@@ -349,6 +351,9 @@ class Redis extends Test
 	public function finalize(): void
 	{
 		$this->store->clear();
+		// a fresh store for the next rule: this one remembers its misses
+		// (the invalidation guard - see KeyValue::rememberMiss())
+		$this->store = $this->getStore(Store::class);
 	}
 	
 	/**
@@ -360,5 +365,32 @@ class Redis extends Test
 	{
 		$this->store->getConnection()
 			->disconnect();
+	}
+	
+	/**
+	 * RULE: the lock holder looks once more before it computes - a value that
+	 * landed between its miss and its lock is returned, not computed again
+	 * (double-checked locking), and the lock is released
+	 */
+	public function theHolderLooksAgainBeforeComputing(): bool
+	{
+		$memoLock = $this->getMemoLock();
+		$id = 'guard-double-check:' . bin2hex(random_bytes(4));
+		$computed = false;
+		
+		$result = $memoLock->lockAndQueue(
+			$id,
+			fetcher: fn(): string => 'found',
+			resolver: function() use (&$computed): string
+			{
+				$computed = true;
+				
+				return 'computed';
+			},
+			queue: true,
+		);
+		$released = $memoLock->releaseActiveLock($id) === false;
+		
+		return $result === 'found' && $computed === false && $released;
 	}
 }

@@ -120,6 +120,7 @@ class Apcu extends MemoLock
 				$id,
 				$lockValue,
 				$resolver,
+				$fetcher,
 			);
 		}
 		
@@ -158,6 +159,7 @@ class Apcu extends MemoLock
 						$id,
 						$lockValue,
 						$resolver,
+						$fetcher,
 					);
 				}
 			}
@@ -178,6 +180,7 @@ class Apcu extends MemoLock
 			$id,
 			$lockValue,
 			$resolver,
+			$fetcher,
 		);
 	}
 	

@@ -13,6 +13,9 @@ use Override;
 
 use function Ovos\config;
 
+use function apcu_fetch;
+use function is_string;
+
 /**
  * Apcu
  *
@@ -255,5 +258,102 @@ class Apcu extends Test
 	public function deconstruct(): void
 	{
 		$this->store->clear();
+	}
+	
+	/**
+	 * RULE: the invalidation guard (see KeyValue::rememberMiss()) - a value
+	 * computed before another instance deleted its key is never served after
+	 * it; a write-through is written; an instance's own delete after its miss
+	 * does not refuse its own write
+	 */
+	public function theInvalidationGuardHolds(): bool
+	{
+		$key = 'guard-item';
+		$reader = $this->newStore();
+		$writer = $this->newStore();
+		$writer->delete($key);
+		
+		$reader->get($key, queue: false);
+		$writer->delete($key);
+		$refused = $reader->set($key, 'stale', 60) === false
+			&& $this->newStore()->get($key, queue: false) === null;
+		
+		$through = $reader->set($key, 'through', 60)
+			&& $this->newStore()->get($key, queue: false) === 'through';
+		$writer->delete($key);
+		
+		$own = $this->newStore();
+		$own->get($key, queue: false);
+		$own->delete($key);
+		$ownWritten = $own->set($key, 'own', 60)
+			&& $this->newStore()->get($key, queue: false) === 'own';
+		$writer->delete($key);
+		
+		return $refused && $through && $ownWritten;
+	}
+	
+	/**
+	 * A fresh store - another process sharing this APCu
+	 */
+	protected function newStore(): Store
+	{
+		return new Store(
+			$this->config->prefix,
+			$this->config->perishable,
+			KeyValue::GROUP_TESTS,
+		);
+	}
+	
+	/**
+	 * RULE: a delete landing between the guard's check and the store is
+	 * caught after it - the value is taken back, nothing stale stays
+	 */
+	public function aDeleteRacingTheStoreIsTakenBack(): bool
+	{
+		$key = 'guard-race';
+		$writer = $this->newStore();
+		$reader = new class($this->config->prefix, $this->config->perishable, KeyValue::GROUP_TESTS) extends Store
+		{
+			public ?Store $other = null;
+			
+			protected function storeValue(
+				string $id,
+				mixed $value,
+				int $ttl,
+			): bool
+			{
+				// the race, landed exactly here
+				$this->other?->delete('guard-race');
+				
+				return parent::storeValue($id, $value, $ttl);
+			}
+		};
+		$reader->other = $writer;
+		$writer->delete($key);
+		
+		$reader->get($key, queue: false);
+		$written = $reader->set($key, 'stale', 60);
+		$read = $this->newStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $written === false && $read === null;
+	}
+	
+	/**
+	 * RULE: every delete leaves a fresh token - two in a row differ, so a
+	 * mark that expired and came back can never repeat what a miss saw
+	 */
+	public function everyDeleteLeavesAFreshToken(): bool
+	{
+		$key = 'guard-token';
+		$store = $this->newStore();
+		$id = $store->prefix($key, $store->getGroup());
+		
+		$store->delete($key);
+		$first = apcu_fetch($id . Store::EPOCH_SUFFIX);
+		$store->delete($key);
+		$second = apcu_fetch($id . Store::EPOCH_SUFFIX);
+		
+		return is_string($first) && is_string($second) && $first !== $second;
 	}
 }

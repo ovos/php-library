@@ -4,10 +4,14 @@ declare(strict_types=1);
 namespace Tests\Cache\Store;
 
 use Ovos\Cache\Store\RedisClusterVersioned as Store;
+use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Test;
 use Ovos\Test\Internal;
+use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitRedisCluster;
 use Override;
+
+use function array_keys;
 
 /**
  * RedisClusterVersioned
@@ -22,6 +26,7 @@ use Override;
 class RedisClusterVersioned extends Test
 {
 	use TraitRedisCluster;
+	use TraitInvalidationGuard;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -320,6 +325,9 @@ class RedisClusterVersioned extends Test
 	public function finalize(): void
 	{
 		$this->store?->clearPhysical();
+		// a fresh store for the next rule: this one remembers its misses
+		// (the invalidation guard - see KeyValue::rememberMiss())
+		$this->store = $this->getClusterStore();
 	}
 	
 	/**
@@ -331,5 +339,100 @@ class RedisClusterVersioned extends Test
 	{
 		$this->store?->getConnection()
 			->disconnect();
+	}
+	
+	/**
+	 * A fresh store - another process (TraitInvalidationGuard); its rules read
+	 * exactly, so a reader sees an invalidation at once rather than within
+	 * rules_cache_ms (the store's documented staleness window)
+	 */
+	protected function guardStore(
+		array $storeOptions = [],
+	): KeyValueRedis
+	{
+		return $this->getClusterStore($storeOptions + [
+			'rules_cache_ms' => 0,
+			'rules_shared_cache' => false,
+		]);
+	}
+	
+	/**
+	 * RULE: a stale item's cleanup removes only that item - a delete() that
+	 * left a tombstone between the read and the cleanup keeps it (an UNLINK
+	 * erased it, and a recomputation that missed before the delete passed the
+	 * guard); the epoch an item carries stays when its data goes
+	 */
+	public function aStaleCleanupKeepsANewerTombstone(): bool
+	{
+		$store = $this->guardStore();
+		$client = $store->getClient();
+		$key = $this->guardKey('stale');
+		$id = $store->prefix($key, $store->getType());
+		
+		$store->set($key, 'x', 60);
+		$mark = (string)$client->hGet($id, 'mark');
+		$store->delete($key);
+		$token = $client->hGet($id, KeyValueRedis::KEY_EPOCH);
+		$kept = (int)$store->getFunctions()->call('cache_versioned_drop_stale', [$id], [$mark]) === 0
+			&& $client->hGet($id, KeyValueRedis::KEY_EPOCH) === $token;
+		
+		// an item carrying an epoch loses its data, keeps the epoch
+		$writer = $this->guardStore();
+		$writer->set($key, 'y', 60);
+		$mark = (string)$client->hGet($id, 'mark');
+		$stripped = (int)$store->getFunctions()->call('cache_versioned_drop_stale', [$id], [$mark]) === 1
+			&& array_keys((array)$client->hGetAll($id)) === [KeyValueRedis::KEY_EPOCH];
+		$store->delete($key);
+		
+		return $kept && $stripped;
+	}
+	
+	/**
+	 * RULE: a stale item's cleanup keeps its epoch for the window, not for the
+	 * item's remaining lifetime: past the window the epoch guards no miss (an
+	 * older one goes unguarded), so an epoch-only hash kept for up to the
+	 * retention is memory and nothing else
+	 */
+	public function aStaleCleanupKeepsTheEpochForTheWindowOnly(): bool
+	{
+		$writer = $this->guardStore();
+		$client = $writer->getClient();
+		$key = $this->guardKey('stale-window');
+		$id = $writer->prefix($key, $writer->getType());
+		
+		// a write-through (no miss before it), so the item carries an epoch
+		$writer->set($key, 'x', 3600, [self::GUARD_TAG]);
+		$writer->invalidateTags([self::GUARD_TAG]);
+		
+		$reader = $this->guardStore();
+		$read = $reader->get($key, queue: false);
+		$fields = array_keys((array)$client->hGetAll($id));
+		$ttl = (int)$client->pTtl($id);
+		$reader->delete($key);
+		
+		return $read === null
+			&& $fields === [KeyValueRedis::KEY_EPOCH]
+			&& $ttl > 0
+			&& $ttl <= $reader->getInvalidationWindowMs();
+	}
+	
+	/**
+	 * RULE: a reader whose held rule set lags (rules_cache_ms) still never
+	 * serves a value computed before a tag invalidation: its miss stamps the
+	 * older watermark it holds, so the rule reads as newer
+	 */
+	public function aLaggingRuleSetStillGuards(): bool
+	{
+		$reader = $this->guardStore(['rules_cache_ms' => 1000, 'rules_shared_cache' => false]);
+		$writer = $this->guardStore();
+		$key = $this->guardKey('lag');
+		
+		$reader->get($key, queue: false);
+		$writer->invalidateTags([self::GUARD_TAG]);
+		$reader->set($key, 'stale', 60, [self::GUARD_TAG]);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $read === null;
 	}
 }

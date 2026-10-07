@@ -64,6 +64,7 @@ class RedisClusterVersioned extends RedisVersioned
 		string $value,
 		array $tags,
 		int $ttl,
+		string $epoch = '', // a write-through's: marks the key (see KeyValue::rememberMiss())
 	): mixed
 	{
 		return $this->functions
@@ -73,6 +74,8 @@ class RedisClusterVersioned extends RedisVersioned
 				$ttl * 1000, // ms
 				$this->rulesRetentionS * 1000, // ms
 				$this->watermark(),
+				$epoch,
+				$this->invalidationWindowMs,
 			]);
 	}
 	

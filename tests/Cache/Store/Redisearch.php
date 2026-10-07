@@ -4,8 +4,10 @@ declare(strict_types=1);
 namespace Tests\Cache\Store;
 
 use Ovos\Cache\Store\Redisearch as Store;
+use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Test;
 use Ovos\Test\Internal;
+use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Override;
 
@@ -17,6 +19,7 @@ use Override;
 class Redisearch extends Test
 {
 	use TraitRedis;
+	use TraitInvalidationGuard;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -138,6 +141,9 @@ class Redisearch extends Test
 	{
 		$this->store->clear();
 		$this->store->indexDrop($this->store->getType());
+		// a fresh store for the next rule: this one remembers its misses
+		// (the invalidation guard - see KeyValue::rememberMiss())
+		$this->store = $this->getStore(Store::class);
 	}
 	
 	/**
@@ -149,5 +155,15 @@ class Redisearch extends Test
 	{
 		$this->store->getConnection()
 			->disconnect();
+	}
+	
+	/**
+	 * A fresh store - another process (TraitInvalidationGuard)
+	 */
+	protected function guardStore(
+		array $storeOptions = [],
+	): KeyValueRedis
+	{
+		return $this->getStore(Store::class, $storeOptions);
 	}
 }

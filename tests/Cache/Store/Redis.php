@@ -3,11 +3,15 @@ declare(strict_types=1);
 
 namespace Tests\Cache\Store;
 
+use Ovos\Cache\Prefixer;
 use Ovos\Cache\Store\Redis as Store;
+use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Test;
 use Ovos\Test\Internal;
+use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Override;
+use ReflectionMethod;
 
 use function count;
 use function array_diff;
@@ -21,6 +25,7 @@ use function in_array;
 class Redis extends Test
 {
 	use TraitRedis;
+	use TraitInvalidationGuard;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -365,6 +370,9 @@ class Redis extends Test
 	public function finalize(): void
 	{
 		$this->store->clear();
+		// a fresh store for the next rule: this one remembers its misses
+		// (the invalidation guard - see KeyValue::rememberMiss())
+		$this->store = $this->getStore(Store::class);
 	}
 	
 	/**
@@ -376,5 +384,55 @@ class Redis extends Test
 	{
 		$this->store->getConnection()
 			->disconnect();
+	}
+	
+	/**
+	 * A fresh store - another process (TraitInvalidationGuard)
+	 */
+	protected function guardStore(
+		array $storeOptions = [],
+	): KeyValueRedis
+	{
+		return $this->getStore(Store::class, $storeOptions);
+	}
+	
+	/**
+	 * RULE: a deleted item leaves the indexes of its tags - the field a tag
+	 * hash holds is the item's key, as set() writes it (delete() dropped the
+	 * prefixed id, which matched no field and left the reference to the
+	 * garbage collector)
+	 */
+	public function aDeleteLeavesItsTags(): bool
+	{
+		$tag = 'guard-tag-index';
+		$this->store->set(self::KEY_ITEM, 'tagged', 60, [$tag]);
+		$before = $this->store->getIdsMatchingAnyTags([$tag]);
+		$this->store->delete(self::KEY_ITEM);
+		$after = $this->store->getIdsMatchingAnyTags([$tag]);
+		
+		return in_array(self::KEY_ITEM, $before, true)
+			&& in_array(self::KEY_ITEM, $after, true) === false;
+	}
+	
+	/**
+	 * RULE: a caller of the tag functions from before the guard (no token, no
+	 * window) still removes what it reaches - an UNLINK, no tombstone
+	 */
+	public function anOlderCallerOfTheTagFunctionsUnlinks(): bool
+	{
+		$tag = 'guard-tag-legacy';
+		$this->store->set(self::KEY_ITEM, 'tagged', 60, [$tag]);
+		$id = $this->store->prefix(self::KEY_ITEM, $this->store->getType());
+		$keyBase = (new ReflectionMethod($this->store, 'getKeyBase'))->invoke($this->store);
+		
+		$this->store->getFunctions()->call('cache_unlink_by_tag', [], [
+			$keyBase,
+			$tag,
+			Store::TYPE_ITEMS . Prefixer::SEPARATOR_PREFIX,
+			Store::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX,
+			'0',
+		]);
+		
+		return (int)$this->store->getClient()->exists($id) === 0;
 	}
 }

@@ -146,6 +146,8 @@ class RedisVersioned extends Store
 		ArrayObject $options,
 	): static
 	{
+		parent::setStoreOptions($options);
+		
 		if(($retention = $options->offsetGet('rules_retention_s')) !== null)
 		{
 			$this->rulesRetentionS = (int)$retention;
@@ -182,6 +184,24 @@ class RedisVersioned extends Store
 		
 		$id = $this->prefixer
 			->prefix($key, $this->getType());
+		// the miss this write follows, if any: refused when the key was
+		// deleted (or written through) since, stamped with the watermark the
+		// miss saw (see KeyValue::rememberMiss())
+		$miss = $this->takeMiss($id);
+		
+		// a negative TTL expired the item at once - a delete it is
+		if($ttl < 0)
+		{
+			try
+			{
+				return $this->delete($key);
+			}
+			finally
+			{
+				$this->getMemoLock()
+					->releaseActiveLock($id);
+			}
+		}
 		
 		// an explicitly requested TTL above the retention is capped to it
 		// (see the class doc) - surface the surprise instead of hiding it
@@ -202,7 +222,26 @@ class RedisVersioned extends Store
 			$value = $this->compressor
 				->compress($value);
 			
-			$result = $this->setCall($id, $value, $tags, $ttl);
+			// the watermark the miss saw - taken right before the computation
+			// (stampMiss()); a miss nobody stamped takes the one held now, which
+			// still guards the epoch (a rule between the miss and now is the
+			// gap the stamp closes)
+			$mark = $miss === null
+				? null
+				: ($miss['stamp'] ?? $this->missStamp());
+			
+			$result = $mark === null
+				? $this->setCall($id, $value, $tags, $ttl, $miss === null ? $this->writeThroughEpoch() : '')
+				: $this->functions
+					->call('cache_versioned_set_guarded', [$id], [
+						$value,
+						implode(',', $tags),
+						$ttl * 1000, // ms
+						$this->rulesRetentionS * 1000, // ms
+						$mark,
+						$miss['epoch'],
+						$this->invalidationWindowMs,
+					]);
 			
 			return (int)$result === 1;
 		}
@@ -249,15 +288,18 @@ class RedisVersioned extends Store
 				static::KEY_DATA,
 				static::KEY_TAGS,
 				static::KEY_MARK,
+				static::KEY_EPOCH,
 			]);
 			
 			// a missing "tags" field means the hash does not exist (an untagged
-			// item still stores tags as an empty string); "data" must be present
-			// too, to decompress
+			// item still stores tags as an empty string) or is a tombstone;
+			// "data" must be present too, to decompress
 			if(is_array($item) === false
 				|| ($item[static::KEY_TAGS] ?? false) === false
 				|| ($item[static::KEY_DATA] ?? false) === false)
 			{
+				$this->rememberMiss($id, is_array($item) ? $item[static::KEY_EPOCH] : false);
+				
 				return null;
 			}
 			
@@ -268,11 +310,22 @@ class RedisVersioned extends Store
 				(string)$item[static::KEY_MARK],
 			))
 			{
-				// lazily remove the stale item
-				$client->unlink($id);
+				// lazily remove the stale item - only while it is still that item
+				// (Lua cache_versioned_drop_stale): a delete() between this read
+				// and the removal left a tombstone, and an UNLINK would erase its
+				// epoch. The epoch the item carries stays for the window, so the
+				// miss remembers it
+				$this->functions
+					->call('cache_versioned_drop_stale', [$id], [
+						(string)$item[static::KEY_MARK],
+						(string)$this->invalidationWindowMs,
+					]);
+				$this->rememberMiss($id, $item[static::KEY_EPOCH]);
 				
 				return null;
 			}
+			
+			unset($this->misses[$id]);
 			
 			$value = $this->compressor
 				->decompress($item[static::KEY_DATA]);
@@ -297,6 +350,7 @@ class RedisVersioned extends Store
 		string $value,
 		array $tags,
 		int $ttl,
+		string $epoch = '', // a write-through's: marks the key (see KeyValue::rememberMiss())
 	): mixed
 	{
 		return $this->functions
@@ -308,6 +362,8 @@ class RedisVersioned extends Store
 				implode(',', $tags),
 				$ttl * 1000, // ms
 				$this->rulesRetentionS * 1000, // ms
+				$epoch,
+				$this->invalidationWindowMs,
 			]);
 	}
 	
@@ -324,9 +380,9 @@ class RedisVersioned extends Store
 		{
 			$id = $this->prefixer
 				->prefix($key, $this->getType());
-			$result = $client->unlink($id);
 			
-			return $result > 0;
+			// its tombstone (see KeyValue\Redis::rememberMiss())
+			return $this->tombstone($id) > 0;
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{
@@ -334,6 +390,34 @@ class RedisVersioned extends Store
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * A miss stamps the rules watermark it saw - the held set's last id (the
+	 * cluster store stamped its writes with it before the guard). It lags the
+	 * stream's head by at most rules_cache_ms, which only judges the item stale
+	 * sooner, never fresh wrongly; and it is consistent with what readers hold:
+	 * the stream's head is not - a reader whose held set is momentarily empty
+	 * (just after a physical clear) takes any real mark for a lost stream and
+	 * reads the item stale. The write that follows is stamped with it
+	 * (cache_versioned_set_guarded), so a rule appended since makes the item
+	 * stale on its next read. Null when the rules cannot be read: the write
+	 * goes unguarded, as before the guard
+	 */
+	#[Override]
+	protected function missStamp(): ?string
+	{
+		try
+		{
+			return $this->getRules()
+				->last();
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		return null;
 	}
 	
 	public function invalidateTags(

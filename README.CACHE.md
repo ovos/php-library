@@ -501,6 +501,62 @@ $jobsStore->invalidateCache(Jobs::CACHE_NAMES);
 $jobsStore->invalidateCache(Jobs::CACHE_RELATIONS);
 ```
 
+## Invalidation guard (stale writes)
+
+Every store refuses a value that was computed before an invalidation and
+written after it - the race Facebook's memcache paper calls a *stale set*
+(memcache solves it with leases):
+
+1. a request misses, and recomputes the value from its source (e.g. MySQL)
+2. another request changes the source and invalidates the key (`delete()`,
+   `invalidateTags()`, `clear()`)
+3. the first request writes what it read before the change
+
+Without the guard the old value stays cached for its whole TTL - a
+deactivated record still served, a revoked key still accepted. MemoLock does
+not prevent it: it orders the readers (one computes, the rest wait), not the
+writer that invalidates.
+
+![Invalidation guard - without vs with: a write that follows an invalidation is refused](docs/cache/invalidation-guard.png)
+
+How it works:
+
+- an invalidation leaves a mark for a window (`invalidation_window_ms`,
+  default 60 000): `delete()` replaces the item with a *tombstone* (the key
+  holds only an `epoch` token, no data - every reader takes it for a miss);
+  tag invalidation and `clear()` stamp the tags (Redis, Redisearch) or append
+  a rule (the versioned stores); APCu keeps a token beside the item
+- a miss remembers what it saw, and the write that follows it compares
+  atomically (Lua; APCu checks, stores, re-checks and takes its value back) -
+  a write that lost the race is refused: `set()` returns `false`, nothing is
+  stored, the MemoLock lock is released, and the next reader recomputes
+- a `set()` with no miss of its own before it is a write-through: written as
+  before, and it marks the key, so an older recomputation still in flight is
+  refused in turn
+
+Refusing a cache write is always safe; serving a stale value is the bug.
+No caller changes are needed: the `get()`/`set()` pair, the resolver and the
+manual lock control all go through the same miss and the same write.
+
+What callers may notice:
+
+- `set()` returns `false` more often - after an invalidation that raced it.
+  Treat `false` as "not cached", never as an error to retry in a loop.
+- A store's own `clear()` or `invalidateTags()` refuses its own earlier
+  miss's write too (only its own `delete($key)` releases that key's miss).
+  A long-lived instance reused across unrelated steps - a test class, a worker
+  that clears between jobs - should take a fresh store, or expect the refusal.
+- A deleted key exists (as a hash holding `epoch`) for the window: raw `EXISTS`
+  checks and the Redisearch index see it. A key holding a non-hash value (a raw
+  counter kept under the prefix) is removed as before - never tombstoned.
+- The tag stamps of the Redis and Redisearch stores compare the Redis server
+  clock (`TIME`): a clock stepped backwards can let a raced write through.
+- During a rolling deploy, old and new code reload each other's Lua library
+  (the source-hash check); correctness holds, the reloads stop once one
+  version runs.
+- Bounds: a recomputation longer than the window is not covered (the mark is
+  gone); `invalidation_window_ms: 0` switches the guard off.
+
 ## Stampede protection (MemoLock)
 
 When a popular cache key expires, many requests may try to rebuild it
@@ -565,6 +621,7 @@ cache:
       rules_retention_s: 2592000       # Versioned stores: rules + maximum item lifetime (s)
       rules_cache_ms: 1000             # Versioned stores: how long a held rule set is reused (ms)
       rules_shared_cache: yes          # Versioned stores: share the rule set across the server's workers (APCu; default: on when available)
+      invalidation_window_ms: 60000    # Invalidation guard: how long an invalidation is remembered; 0 = off (see above)
     compression:
       enabled: yes
       threshold: 2048

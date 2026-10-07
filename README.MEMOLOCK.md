@@ -140,6 +140,32 @@ if($cache->get('key', queue: false) === null)
 }
 ```
 
+`lockAndQueue('key')` here has no fetcher: it only serialises. A waiter returns
+as soon as the holder releases - it does not read what the holder wrote - and
+whoever takes the lock does not look again either. The `get()`-based paths (a
+resolver, or the traditional get/set above) do both: they read the cache after
+waiting AND once more right after taking the lock (double-checked locking), so
+a value written by the holder before is returned instead of being computed
+again. With manual lock control, check again yourself when the work should
+not run twice:
+
+```php
+if($cache->get('key', queue: false) === null)
+{
+    $cache->lockAndQueue('key');
+    // the holder before us may have written it while we waited
+    if(($value = $cache->get('key', queue: false)) === null)
+    {
+        $value = $this->expensiveWork();
+        $cache->set('key', $value, ttl: 60); // Set value AND release lock
+    }
+    else
+    {
+        $cache->releaseActiveLock('key');   // nothing to write - release
+    }
+}
+```
+
 ### Error handling - release without setting
 
 If you acquire a lock but can't produce a value (e.g., an error), release
@@ -211,7 +237,10 @@ $cache->setQueueEnabled($wasEnabled);
 ## Standalone MemoLock (without cache stores)
 
 You can use MemoLock directly for non-cache scenarios like file generation
-or resource provisioning.
+or resource provisioning. Pass a `fetcher` whenever the work produces
+something you can look up: it is asked after waiting, and once more right
+after the lock is taken - a result that landed just before is returned
+instead of being produced again. Without one, `lockAndQueue()` only serialises.
 
 ### Redis MemoLock
 

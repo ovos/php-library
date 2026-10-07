@@ -8,9 +8,11 @@ use Override;
 use RedisClusterException;
 use RedisException;
 
-use function in_array;
-use function implode;
 use function count;
+use function implode;
+use function in_array;
+use function mb_strtolower;
+use function trim;
 
 /**
  * Redisearch
@@ -46,6 +48,23 @@ class Redisearch extends Store
 		
 		$id = $this->prefixer
 			->prefix($key, $this->getType());
+		// the miss this write follows, if any: it is guarded against an
+		// invalidation since (see KeyValue::rememberMiss())
+		$miss = $this->takeMiss($id);
+		
+		// a negative TTL expired the item at once - a delete it is
+		if($ttl < 0)
+		{
+			try
+			{
+				return $this->delete($key);
+			}
+			finally
+			{
+				$this->getMemoLock()
+					->releaseActiveLock($id);
+			}
+		}
 		
 		try
 		{
@@ -54,28 +73,38 @@ class Redisearch extends Store
 			$value = $this->compressor
 				->compress($value);
 			
-			$client->clearLastError();
-			$client->multi($this->multiMode);
-			// hSet can set multiple pairs of key => value, do not believe the PhpStorm Stub
-			// @see https://redis.io/docs/latest/commands/hset/
-			$client->hSet(
-				$id,
-				static::KEY_DATA, $value,
-				static::KEY_TAGS, implode(', ', $tags),
-			);
-			
-			// set expire if needed
-			if($ttl > 0)
+			// one step (Lua cache_guarded_hset): refused when the key was
+			// invalidated, one of its tags stamped or the store cleared since
+			// the miss (an unstamped miss: the epoch only); a write-through
+			// marks the key with a fresh epoch; a key that held no data (a
+			// tombstone) gets no expiry but the item's
+			$stampKeys = [$this->stampKey()];
+			foreach($tags as $tag)
 			{
-				$client->expire($id, $ttl);
+				$stampKeys[] = $this->stampKey((string)$tag);
 			}
-			$result = $client->exec();
-			if($error = $client->getLastError())
+			$client->clearLastError();
+			$result = $this->functions
+				->call('cache_guarded_hset', [
+					$id,
+					...$stampKeys,
+				], [
+					$miss['epoch'] ?? static::UNGUARDED,
+					$miss === null ? '' : ($miss['stamp'] ?? ''),
+					$ttl,
+					$miss === null ? $this->writeThroughEpoch() : '',
+					$this->invalidationWindowMs,
+					static::KEY_DATA,
+					$value,
+					static::KEY_TAGS,
+					implode(', ', $tags),
+				]);
+			if($result === false && ($error = $client->getLastError()))
 			{
 				$this->log($error);
 			}
 			
-			return $result[0] !== false;
+			return (int)$result === 1;
 		}
 		catch(RedisException $exception)
 		{
@@ -104,9 +133,9 @@ class Redisearch extends Store
 		{
 			$id = $this->prefixer
 				->prefix($key, $this->getType());
-			$result = $client->unlink($id);
 			
-			return $result > 0;
+			// its tombstone (see KeyValue\Redis::rememberMiss())
+			return $this->tombstone($id) > 0;
 		}
 		// RedisClusterException does not extend RedisException, catch both
 		// (this method is inherited by the RedisCluster store)
@@ -158,10 +187,15 @@ class Redisearch extends Store
 				: '@tags:{' . implode('|', $tags) . '}' // matches any of the tags
 			;
 			
+			// the stamp first covers the values being computed now; the items
+			// found leave tombstones
+			$this->stamp($tags);
 			$this->functions
 				->call('cache_search_unlink_by_tags', [], [
 					$type,
 					$query,
+					$this->newEpoch(),
+					$this->invalidationWindowMs,
 				]);
 			
 			return true;
@@ -176,6 +210,7 @@ class Redisearch extends Store
 	
 	public function clear(): bool
 	{
+		// the wipe stamps "cleared" in the same step (see clearedStamp())
 		$keysUnlinked = parent::clear();
 		if($keysUnlinked === false)
 		{
@@ -183,6 +218,44 @@ class Redisearch extends Store
 		}
 		
 		return $this->indexRebuild();
+	}
+	
+	/**
+	 * A miss stamps the server time: a tag stamped (or the store cleared)
+	 * after it refuses the write that follows
+	 */
+	#[Override]
+	protected function missStamp(): ?string
+	{
+		return $this->serverTime();
+	}
+	
+	/**
+	 * The physical wipe stamps "cleared" in the same step: a value computed
+	 * before the wipe and written after it is refused (its miss came first)
+	 */
+	#[Override]
+	protected function clearedStamp(): array
+	{
+		return $this->isGuarded()
+			? [$this->stampKey(), $this->invalidationWindowMs]
+			: [];
+	}
+	
+	/**
+	 * A tag's stamp as the index matches it: the TAG field is case-insensitive
+	 * and trims its values, so invalidating "Foo" reaches "foo " - and must
+	 * refuse a write tagged that way too
+	 */
+	#[Override]
+	public function stampKey(
+		?string $tag = null,
+	): string
+	{
+		return parent::stampKey($tag === null
+			? null
+			: mb_strtolower(trim($tag)),
+		);
 	}
 	
 	public function indexRebuild(): bool
