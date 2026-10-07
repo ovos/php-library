@@ -162,6 +162,15 @@ class Apcu extends KeyValue
 		return apcu_store($id, $value, $ttl);
 	}
 	
+	#[Override]
+	public function itemId(
+		string $key,
+	): string
+	{
+		return $this->prefixer
+			->prefix($key, $this->getGroup());
+	}
+	
 	public function get(
 		string $key,
 		?Closure $resolver = null,

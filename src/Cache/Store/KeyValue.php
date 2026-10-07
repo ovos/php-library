@@ -279,6 +279,27 @@ abstract class KeyValue
 	): mixed;
 	
 	/**
+	 * The prefixed id $key is stored - and locked (MemoLock) - under
+	 */
+	abstract public function itemId(
+		string $key,
+	): string;
+	
+	/**
+	 * Reads $key as it is stored, without the stampede lock: a value written
+	 * with a stale time comes back as its Stale, fresh or aged (get() unwraps
+	 * it) - for a caller that serves an aged value itself while it refreshes
+	 * it (Plugins\Cache\Page). An aged read is a miss to the invalidation
+	 * guard, so the write that refreshes it is guarded
+	 */
+	public function peek(
+		string $key,
+	): mixed
+	{
+		return $this->fetch($this->itemId($key));
+	}
+	
+	/**
 	 * What fetch() found: a value past its fresh time (written with a stale
 	 * time, see Stale) is a miss to the guard - the write that refreshes it
 	 * follows this read - so it is remembered with the epoch the item

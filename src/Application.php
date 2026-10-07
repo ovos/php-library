@@ -27,6 +27,7 @@ use function implode;
 use function set_include_path;
 use function get_include_path;
 use function error_get_last;
+use function fastcgi_finish_request;
 use function function_exists;
 use function register_shutdown_function;
 
@@ -98,6 +99,12 @@ class Application
 	 */
 	protected bool $responseFinished = false;
 	
+	/**
+	 * A response went out before the request ended (finishResponse()):
+	 * nothing is sent after it
+	 */
+	protected bool $responseSentEarly = false;
+	
 	public function __construct(
 		?string $interface = null, // @see self::INT_*
 	)
@@ -137,7 +144,7 @@ class Application
 		{
 			$this->setResponse(
 				(new Redirect($redirect))->setHttpCode(301));
-				
+			
 			return;
 		}
 		
@@ -619,7 +626,7 @@ class Application
 			{
 				$servicesConfig = $container->get(self::CONTAINER_KEY_CONFIG)
 					->system->services;
-					
+				
 				/**
 				 * @var Services $servicesClass
 				 */
@@ -761,6 +768,36 @@ class Application
 		return $this->responseFinished;
 	}
 	
+	/**
+	 * Sends $response now and releases the client (fastcgi_finish_request()),
+	 * so the request goes on working with nobody waiting - the page cache
+	 * serves a stale page this way and renders the fresh one after it.
+	 * Nothing is sent after it: the response the request ends with, an error
+	 * page included, stays unsent (the client is gone, and its headers went
+	 * with the first one). False, and nothing sent, where the client cannot
+	 * be released early: not an HTTP request, no FastCGI (mod_php), or a
+	 * response already out
+	 */
+	public function finishResponse(
+		Response $response,
+	): bool
+	{
+		if($this->responseSentEarly === true
+			|| $this->isInterfaceHttp() === false
+			|| function_exists('fastcgi_finish_request') === false)
+		{
+			return false;
+		}
+		
+		// sent on its own: the request's response, which the action and the
+		// layout go on rendering into, is never sent
+		$this->sendResponse($response);
+		$this->responseSentEarly = true;
+		$this->responseFinished = fastcgi_finish_request();
+		
+		return true;
+	}
+	
 	public function handleShutdown(): void
 	{
 		if($error = error_get_last())
@@ -865,8 +902,11 @@ class Application
 		
 		// the response is sent — release the client, then run the deferred
 		// post-response callbacks (e.g. the codesafe flush), so the
-		// user never waits for them (best effort)
-		if(function_exists('fastcgi_finish_request') && $this->isInterfaceHttp())
+		// user never waits for them (best effort); a response finished early
+		// released it already (finishResponse())
+		if(function_exists('fastcgi_finish_request')
+			&& $this->isInterfaceHttp()
+			&& $this->responseSentEarly === false)
 		{
 			$this->responseFinished = fastcgi_finish_request();
 		}
@@ -944,7 +984,9 @@ class Application
 			return $this;
 		}
 		
-		if($response->isSent())
+		// one response per request: after one went out early (finishResponse())
+		// the client is gone, and a second would only fail on its headers
+		if($response->isSent() || $this->responseSentEarly === true)
 		{
 			return $this;
 		}
