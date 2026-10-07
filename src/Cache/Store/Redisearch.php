@@ -8,10 +8,12 @@ use Override;
 use RedisClusterException;
 use RedisException;
 
+use function array_map;
 use function count;
 use function implode;
 use function in_array;
 use function mb_strtolower;
+use function preg_replace;
 use function trim;
 
 /**
@@ -182,9 +184,10 @@ class Redisearch extends Store
 			 * * any: @tags:{New York|Los Angeles|Barcelona}
 			 * * all: @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}
 			 */
+			$queryTags = array_map($this->queryTag(...), $tags);
 			$query = $matching === static::MATCHING_ALL
-				? '@tags:{' . implode('} @tags:{', $tags) . '}' // matches all of the tags
-				: '@tags:{' . implode('|', $tags) . '}' // matches any of the tags
+				? '@tags:{' . implode('} @tags:{', $queryTags) . '}' // matches all of the tags
+				: '@tags:{' . implode('|', $queryTags) . '}' // matches any of the tags
 			;
 			
 			// the stamp first covers the values being computed now; the items
@@ -240,6 +243,19 @@ class Redisearch extends Store
 		return $this->isGuarded()
 			? [$this->stampKey(), $this->invalidationWindowMs]
 			: [];
+	}
+	
+	/**
+	 * A tag as the query syntax takes it (@tags:{...}): RediSearch reads
+	 * punctuation and whitespace there as syntax - "user:42" or "a-b" made
+	 * the whole FT.SEARCH a syntax error and the invalidation reached nothing
+	 * - so every character but a letter, a digit or "_" is escaped
+	 */
+	protected function queryTag(
+		string $tag,
+	): string
+	{
+		return preg_replace('/[^\p{L}\p{N}_]/u', '\\\\$0', $tag) ?? $tag;
 	}
 	
 	/**

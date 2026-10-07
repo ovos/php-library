@@ -92,6 +92,36 @@ class Redisearch extends Test
 		}
 	}
 	
+	/**
+	 * RULE: a tag with punctuation or a space is invalidated like any other -
+	 * unescaped, "user:42" made the whole FT.SEARCH a syntax error, and every
+	 * item it should have reached stayed
+	 */
+	public function aTagWithPunctuationIsInvalidated(): bool
+	{
+		$this->store->indexRebuild();
+		
+		$this->store->set('item1', 'test', tags: ['user:42', 'a-b c']);
+		$this->store->set('item2', 'test', tags: ['a-b c', 'x.y@z']);
+		
+		$this->store->invalidateTags(['user:42']);
+		$this->store->invalidateTags(['a-b c', 'x.y@z'], Store::MATCHING_ALL);
+		
+		$item1 = $this->store->get('item1', queue: false);
+		$item2 = $this->store->get('item2', queue: false);
+		
+		try
+		{
+			return $item1 === null
+				&& $item2 === null;
+		}
+		finally
+		{
+			$this->store->delete('item1');
+			$this->store->delete('item2');
+		}
+	}
+	
 	public function invalidateTagsMatchingAll(): bool
 	{
 		$this->store->indexRebuild();
