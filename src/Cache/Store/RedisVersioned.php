@@ -325,12 +325,13 @@ class RedisVersioned extends Store
 				return null;
 			}
 			
-			unset($this->misses[$id]);
-			
 			$value = $this->compressor
 				->decompress($item[static::KEY_DATA]);
-			return $this->serializer
-				->unserialize($value);
+			
+			return $this->found($id,
+				$this->serializer->unserialize($value),
+				$item[static::KEY_EPOCH],
+			);
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{

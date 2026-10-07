@@ -443,6 +443,49 @@ if($store->get('key') === null)
 }
 ```
 
+### Pattern 5: Stale-while-revalidate (`stale:`)
+
+A value that expires makes its next reader wait for the recomputation, and
+MemoLock makes the others wait for that reader. With `stale:`, a value past its
+`ttl` is still served for `stale` more seconds - at once, to everyone - while
+ONE process refreshes it:
+
+```php
+$value = $store->get(
+    'dashboard:stats',
+    resolver: fn() => $this->computeStats(),
+    ttl: 60,      // fresh for a minute
+    stale: 300,   // then served up to five more minutes while it is refreshed
+);
+```
+
+- Opt-in per call; it needs a resolver and a `ttl`. Without `stale:` nothing
+  changes, and a read without it takes a value past its `ttl` for a miss - a
+  caller that must never see an old value (a permission, a kill switch) does
+  not get one.
+- The refresh runs after the response for HTTP requests (the cache service
+  hands its stores `Application::afterResponse()`, which runs after
+  `fastcgi_finish_request()`), and inline in a CLI or a worker - the caller
+  then gets the new value. A store built by hand refreshes inline until it is
+  given a deferrer (`setDeferrer()`).
+- One process refreshes: MemoLock elects it without waiting (`tryLock()`) when
+  the refresh runs, and it reads the item once more first - another process
+  may have refreshed it already. Everyone else gets the stale value; nobody
+  waits. A real miss (the first read, past `ttl + stale`, after an
+  invalidation or an eviction) still goes through MemoLock: one computes, the
+  rest wait for it.
+- Only ageing serves a stale value. An invalidation (`delete()`, a tag,
+  `clear()`) removes the item as before, and the refresh's write is guarded
+  like a miss's: an invalidation during the refresh refuses it (see
+  *Invalidation guard*).
+- A refresh that throws is logged and keeps the stale value; the next read
+  past the `ttl` tries again.
+- The item lives `ttl + stale` and carries its fresh time inside the value
+  (`Ovos\Cache\Stale`). A library older than this reading such a key gets
+  that object back - possible only across hosts during a rolling deploy.
+- A subclass that overrides a store's `get()` must add the `int $stale = 0`
+  parameter.
+
 ## Cache invalidation
 
 ### Via the CacheService trait

@@ -10,9 +10,13 @@ use Ovos\Cache\Prefixer;
 use Closure;
 
 use function array_key_exists;
+use function apcu_add;
+use function apcu_delete;
 use function apcu_entry;
 use function apcu_exists;
+use function apcu_fetch;
 use function bin2hex;
+use function ceil;
 use function microtime;
 use function random_bytes;
 use function random_int;
@@ -233,6 +237,33 @@ class Apcu extends MemoLock
 		
 		// when false = lock doesn't exist or belongs to another process
 		return false;
+	}
+	
+	/**
+	 * Takes the lock when it is free, without waiting (see
+	 * MemoLock::tryLock())
+	 */
+	public function tryLock(
+		string $id,
+		?int $queueLockTtlMs = null,
+	): bool
+	{
+		$lockValue = bin2hex(random_bytes(16));
+		$lockAcquired = apcu_add(
+			$this->prefixer
+				->prefix(static::TYPE_LOCK, $id),
+			$lockValue,
+			$queueLockTtlMs !== null
+				? (int)ceil($queueLockTtlMs / 1000)
+				: $this->queueLockTtlS,
+		);
+		
+		if($lockAcquired)
+		{
+			$this->queueLocks[$id] = $lockValue;
+		}
+		
+		return $lockAcquired;
 	}
 	
 	/**

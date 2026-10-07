@@ -221,12 +221,13 @@ abstract class Redis extends Tags
 			
 			if($value !== false)
 			{
-				unset($this->misses[$id]);
-				
 				$value = $this->compressor
 					->decompress($value);
-				return $this->serializer
-					->unserialize($value);
+				
+				return $this->found($id,
+					$this->serializer->unserialize($value),
+					$item[static::KEY_EPOCH],
+				);
 			}
 			
 			$this->rememberMiss($id, is_array($item) ? $item[static::KEY_EPOCH] : false);
@@ -248,19 +249,24 @@ abstract class Redis extends Tags
 		array $tags = [],
 		?bool $queue = null, // override of the config switch
 		?int $queueLockTtlMs = null, // override of the config value
+		int $stale = 0, // seconds past the ttl a value is served while it is refreshed
 	): mixed
 	{
 		if($this->getClient() === null)
 		{
 			// no connection (fast path)
-			return $this->setFromResolver($key, $resolver, $ttl, $tags);
+			return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale);
 		}
 		
 		$id = $this->prefixer
 			->prefix($key, $this->getType());
 		
-		// initial hit check (fast path)
-		if(($data = $this->fetch($id)) !== null)
+		// initial hit check (fast path); past its ttl, a value written with a
+		// stale time is served while it is refreshed (see revalidate())
+		$refresh = $stale > 0 && $resolver !== null
+			? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $stale)
+			: null;
+		if(($data = $this->served($id, $this->fetch($id), $refresh)) !== null)
 		{
 			return $data;
 		}
@@ -268,14 +274,14 @@ abstract class Redis extends Tags
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
-				fn() => $this->fetch($id),
-				function() use ($id, $key, $resolver, $ttl, $tags): mixed
+				fn() => $this->fresh($this->fetch($id)),
+				function() use ($id, $key, $resolver, $ttl, $tags, $stale): mixed
 				{
 					// the miss is stamped now, right before the value is computed
 					// (the caller's own computation, too, when there is no resolver)
 					$this->stampMiss($id);
 					
-					return $this->setFromResolver($key, $resolver, $ttl, $tags);
+					return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale);
 				},
 				$queue,
 				$queueLockTtlMs,
@@ -310,7 +316,7 @@ abstract class Redis extends Tags
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
-				fn() => $this->fetch($id),
+				fn() => $this->fresh($this->fetch($id)),
 				function() use ($id, $resolver): mixed
 				{
 					// the miss is stamped now, right before this process
@@ -563,6 +569,7 @@ abstract class Redis extends Tags
 	/**
 	 * Logs events (messages/errors/exceptions)
 	 */
+	#[Override]
 	public function log(
 		...$event,
 	): static
