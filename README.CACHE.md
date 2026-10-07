@@ -459,6 +459,8 @@ $value = $store->get(
 );
 ```
 
+![Stale-while-revalidate - an item's life, and the visitors at expiry without and with stale:](docs/cache/stale-while-revalidate.png)
+
 - Opt-in per call; it needs a resolver and a `ttl`. Without `stale:` nothing
   changes, and a read without it takes a value past its `ttl` for a miss - a
   caller that must never see an old value (a permission, a kill switch) does
