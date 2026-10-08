@@ -438,9 +438,15 @@ class RedisVersioned extends Store
 		return null;
 	}
 	
+	/**
+	 * Invalidates the items carrying the tags - one rule; $hard: a soft value
+	 * it reaches is a miss at once, not served for its stale time - also when a
+	 * soft rule follows it, or it follows a soft one (Rules keeps both)
+	 */
 	public function invalidateTags(
 		array $tags,
 		string $matching = self::MATCHING_ANY,
+		bool $hard = false,
 	): bool
 	{
 		if(count($tags) === 0)
@@ -448,7 +454,7 @@ class RedisVersioned extends Store
 			return false;
 		}
 		
-		return $this->addRule($matching, $tags);
+		return $this->addRule($matching, $tags, $hard);
 	}
 	
 	/**
@@ -502,6 +508,7 @@ class RedisVersioned extends Store
 	protected function addRule(
 		string $mode,
 		array $tags,
+		bool $hard = false,
 	): bool
 	{
 		if($this->getClient() === null)
@@ -518,6 +525,7 @@ class RedisVersioned extends Store
 					$mode,
 					implode(',', $tags),
 					$this->rulesRetentionS * 1000, // ms
+					$hard ? '1' : '0',
 				]);
 			
 			// the held set is behind the rule just written: the next read

@@ -271,9 +271,16 @@ class Redis extends Store
 		return false;
 	}
 	
+	/**
+	 * Invalidates the items carrying the tags; $hard: a soft value is a miss at
+	 * once too, not served for its stale time (a softly invalidated value has
+	 * left its tags, so a hard invalidation after it does not reach it - it
+	 * stays soft for its window)
+	 */
 	public function invalidateTags(
 		array $tags,
 		string $matching = self::MATCHING_ANY,
+		bool $hard = false,
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
@@ -289,7 +296,7 @@ class Redis extends Store
 		// invalidate only the items having all of the tags
 		if($matching === static::MATCHING_ALL)
 		{
-			return $this->invalidateTagsMatchingAll($tags);
+			return $this->invalidateTagsMatchingAll($tags, $hard);
 		}
 		
 		$group = $this->getKeyBase();
@@ -323,6 +330,7 @@ class Redis extends Store
 							static::KEY_TAGS,
 							$epoch,
 							$this->invalidationWindowMs,
+							$hard ? '1' : '0',
 						], long: true);
 					
 					if($error = $client->getLastError())
@@ -350,6 +358,7 @@ class Redis extends Store
 							$cursor,
 							$epoch,
 							$this->invalidationWindowMs,
+							$hard ? '1' : '0',
 						], long: true);
 					
 					if(is_array($result) === false
@@ -384,6 +393,7 @@ class Redis extends Store
 	 */
 	protected function invalidateTagsMatchingAll(
 		array $tags,
+		bool $hard = false,
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
@@ -423,6 +433,7 @@ class Redis extends Store
 						static::KEY_TAGS,
 						$epoch,
 						$this->invalidationWindowMs,
+						$hard ? '1' : '0',
 					], long: true);
 			}
 			else
@@ -439,6 +450,7 @@ class Redis extends Store
 							$typeTags,
 							$epoch,
 							$this->invalidationWindowMs,
+							$hard ? '1' : '0',
 						], long: true);
 				}
 			}

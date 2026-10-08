@@ -75,6 +75,12 @@ abstract class KeyValue
 	 */
 	protected ?Closure $deferrer = null;
 	
+	/**
+	 * A forced refresh's read is under way: what it finds is a miss (see
+	 * forceMiss())
+	 */
+	protected bool $refreshing = false;
+	
 	public function __construct(
 		?string $prefix = null,
 		?ArrayObject $config = null,
@@ -314,7 +320,8 @@ abstract class KeyValue
 		mixed $epoch,
 	): mixed
 	{
-		if($value instanceof Stale && $value->isFresh() === false)
+		if(($value instanceof Stale && $value->isFresh() === false)
+			|| $this->refreshing)
 		{
 			$this->rememberMiss($id, $epoch instanceof Closure ? $epoch() : $epoch);
 		}
@@ -362,9 +369,84 @@ abstract class KeyValue
 			return $this->fresh($data);
 		}
 		
+		// past its stale time, a value kept for errors is a miss - its value
+		// waits for a computation that fails (see computeOrFallback())
+		if($data->isServable() === false)
+		{
+			return null;
+		}
+		
 		return $refresh !== null
 			? $this->revalidate($id, $data->value, $refresh)
 			: null;
+	}
+	
+	/**
+	 * A value kept for errors that the read found past its fresh time - the
+	 * fallback of the miss's computation, when the caller asked for one
+	 * (get(staleIfError:))
+	 */
+	protected function errorFallback(
+		mixed $data,
+		int $staleIfError,
+	): ?Stale
+	{
+		return $staleIfError > 0
+			&& $data instanceof Stale
+			&& $data->errorFor > 0
+			&& $data->isFresh() === false
+				? $data
+				: null;
+	}
+	
+	/**
+	 * The miss's computation: with a value kept for errors, one that throws
+	 * hands that value back instead - logged, the lock freed (nothing was
+	 * written)
+	 */
+	protected function computeOrFallback(
+		string $id,
+		Closure $compute,
+		?Stale $fallback,
+	): mixed
+	{
+		if($fallback === null)
+		{
+			return $compute();
+		}
+		
+		try
+		{
+			return $compute();
+		}
+		catch(Throwable $throwable)
+		{
+			$this->log($throwable);
+			$this->getMemoLock()
+				->releaseActiveLock($id);
+			
+			return $fallback->value;
+		}
+	}
+	
+	/**
+	 * Reads $id for a forced refresh (get(refresh:)): whatever it finds is
+	 * remembered as a miss, so the write that refreshes it is guarded like a
+	 * miss's - a delete or an invalidation while it computes refuses it
+	 */
+	protected function forceMiss(
+		string $id,
+	): void
+	{
+		$this->refreshing = true;
+		try
+		{
+			$this->fetch($id);
+		}
+		finally
+		{
+			$this->refreshing = false;
+		}
 	}
 	
 	/**
@@ -435,7 +517,8 @@ abstract class KeyValue
 	 * the value and its fresh time, kept that long past it - with a TTL; a
 	 * soft one (soft: true) may also be served that long after a tag
 	 * invalidation, and needs no TTL: without one it is fresh until an
-	 * invalidation reaches it, and kept as long as before
+	 * invalidation reaches it, and kept as long as before. A value kept for
+	 * errors (get(staleIfError:), with a TTL) lives that much longer still
 	 *
 	 * @return array{0: mixed, 1: int} the value to store and its TTL
 	 */
@@ -444,9 +527,13 @@ abstract class KeyValue
 		int $ttl,
 		int $stale,
 		bool $soft = false,
+		int $staleIfError = 0,
 	): array
 	{
-		if($stale <= 0)
+		$stale = max(0, $stale);
+		$staleIfError = max(0, $staleIfError);
+		
+		if($stale === 0 && $staleIfError === 0)
 		{
 			return [$value, $ttl];
 		}
@@ -454,12 +541,12 @@ abstract class KeyValue
 		if($ttl > 0)
 		{
 			return [
-				new Stale($value, microtime(true) + $ttl, $stale, $soft),
-				$ttl + $stale,
+				new Stale($value, microtime(true) + $ttl, $stale, $soft, $staleIfError),
+				$ttl + $stale + $staleIfError,
 			];
 		}
 		
-		return $soft
+		return $soft && $stale > 0
 			? [new Stale($value, INF, $stale, true), $ttl]
 			: [$value, $ttl];
 	}
@@ -511,16 +598,35 @@ abstract class KeyValue
 		int $ttl = 0,
 	): mixed;
 	
+	/**
+	 * Computes and stores - the resolver is called as
+	 * function(KeyValue $store, string $key, int &$ttl, array &$tags, bool &$save):
+	 * it may change the TTL, the tags (a store with tags) and whether the value
+	 * is stored at all from what it computed ($save false: nothing is written,
+	 * the lock is freed); a resolver that takes fewer arguments is called the
+	 * same way
+	 */
 	public function setFromResolver(
 		string $key,
 		?Closure $resolver,
 		int $ttl = 0,
 	): mixed
 	{
-		$value = $this->invoker
-			->invoke($resolver);
+		if($resolver === null)
+		{
+			return null;
+		}
 		
-		if($value !== null)
+		$tags = [];
+		$save = true;
+		$value = $resolver($this, $key, $ttl, $tags, $save);
+		
+		if($save === false)
+		{
+			// nothing written: the lock goes now, not at its TTL
+			$this->releaseActiveLock($key);
+		}
+		else if($value !== null)
 		{
 			$this->set($key, $value, $ttl);
 		}

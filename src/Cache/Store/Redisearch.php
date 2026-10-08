@@ -156,9 +156,14 @@ class Redisearch extends Store
 		return false;
 	}
 	
+	/**
+	 * Invalidates the items carrying the tags; $hard: a soft value is a miss at
+	 * once too (see Redis::invalidateTags())
+	 */
 	public function invalidateTags(
 		array $tags,
 		string $matching = self::MATCHING_ANY,
+		bool $hard = false,
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
@@ -206,6 +211,7 @@ class Redisearch extends Store
 					$query,
 					$this->newEpoch(),
 					$this->invalidationWindowMs,
+					$hard ? '1' : '0',
 				]);
 			
 			return true;

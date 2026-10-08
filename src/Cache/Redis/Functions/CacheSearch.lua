@@ -30,10 +30,11 @@ redis.register_function('[prefix]cache_search_batches', cache_search_batches)
 -- instead - soft invalidation, as Cache.lua's cache_soft_mark: a new epoch,
 -- the "invalidated" mark, the data and the mark expiring with the window
 -- (never later than the item would have); its tags go, so it leaves every
--- tag match too
-local function cache_search_remove(key, token, window_ms)
+-- tag match too. A hard invalidation (invalidateTags(hard: true))
+-- tombstones a soft value's item like any other
+local function cache_search_remove(key, token, window_ms, hard)
 	if token and window_ms and window_ms > 0 then
-		local soft_ms = tonumber(redis.call('HGET', key, 'soft') or '')
+		local soft_ms = hard ~= true and tonumber(redis.call('HGET', key, 'soft') or '') or nil
 		if soft_ms and soft_ms > 0 and redis.call('HEXISTS', key, 'data') == 1 then
 			local ttl_ms = redis.call('PTTL', key)
 			local left_ms = soft_ms
@@ -74,6 +75,7 @@ local function cache_search_unlink_by_tags(keys, args)
 	local tags = args[2]
 	local token = args[3]
 	local window_ms = tonumber(args[4])
+	local hard = args[5] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
 	local batch_size = 10000
 	local offset = 0
 	
@@ -100,7 +102,7 @@ local function cache_search_unlink_by_tags(keys, args)
 		
 		-- remove the matched items (one by one: each leaves its tombstone)
 		for _, key in ipairs(rems) do
-			cache_search_remove(key, token, window_ms)
+			cache_search_remove(key, token, window_ms, hard)
 		end
 	end
 end

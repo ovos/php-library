@@ -286,39 +286,55 @@ abstract class Redis extends Tags
 		?int $queueLockTtlMs = null, // override of the config value
 		int $stale = 0, // seconds past the ttl a value is served while it is refreshed
 		bool $soft = false, // ... and past a tag invalidation (soft invalidation)
+		bool $refresh = false, // recompute whatever is cached - guarded like a miss
+		int $staleIfError = 0, // seconds past the stale time a value is kept, served when the computation fails
 	): mixed
 	{
 		if($this->getClient() === null)
 		{
 			// no connection (fast path)
-			return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft);
+			return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft, $staleIfError);
 		}
 		
 		$id = $this->prefixer
 			->prefix($key, $this->getType());
+		$compute = function() use ($id, $key, $resolver, $ttl, $tags, $stale, $soft, $staleIfError): mixed
+		{
+			// the miss is stamped now, right before the value is computed
+			// (the caller's own computation, too, when there is no resolver)
+			$this->stampMiss($id);
+			
+			return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft, $staleIfError);
+		};
+		
+		// a forced refresh: no hit, and no second look at the lock - a refresh
+		// in flight is waited for, then this one computes too (lock-only)
+		if($refresh)
+		{
+			$this->forceMiss($id);
+			
+			return $this->getMemoLock()
+				->lockAndQueue($id, null, $compute, $queue, $queueLockTtlMs);
+		}
 		
 		// initial hit check (fast path); past its ttl, a value written with a
 		// stale time is served while it is refreshed (see revalidate())
-		$refresh = $stale > 0 && $resolver !== null
-			? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft)
+		$revalidate = $stale > 0 && $resolver !== null
+			? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft, $staleIfError)
 			: null;
-		if(($data = $this->served($id, $this->fetch($id), $refresh)) !== null)
+		$data = $this->fetch($id);
+		if(($served = $this->served($id, $data, $revalidate)) !== null)
 		{
-			return $data;
+			return $served;
 		}
+		
+		$fallback = $this->errorFallback($data, $staleIfError);
 		
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
 				fn() => $this->fresh($this->fetch($id)),
-				function() use ($id, $key, $resolver, $ttl, $tags, $stale, $soft): mixed
-				{
-					// the miss is stamped now, right before the value is computed
-					// (the caller's own computation, too, when there is no resolver)
-					$this->stampMiss($id);
-					
-					return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft);
-				},
+				fn() => $this->computeOrFallback($id, $compute, $fallback),
 				$queue,
 				$queueLockTtlMs,
 			);
