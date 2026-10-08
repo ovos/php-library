@@ -81,6 +81,15 @@ $store->invalidateTags(['categories']);
 The options are per call: a `get()` that does not pass them behaves as it
 always did. APCu has no tags, so `soft:` and `hard:` mean nothing there.
 
+![A value's life - one get(), every option](docs/cache/record-lifecycle.png)
+
+Over time a value is fresh for its TTL (a hit), then stale for `stale:` (served
+at once while one process refreshes it), then kept for errors for
+`staleIfError:` (a miss, computed at once - a computation that throws gets the
+kept value), then gone. `delete()` and `clear()` end it at once; so does a tag
+invalidation, unless the value was written with `soft: true` - then it is
+stale for its `stale:` window, and `hard: true` overrules that.
+
 ## Store differences
 
 The four persistent stores split into two families by **what `invalidateTags()`
