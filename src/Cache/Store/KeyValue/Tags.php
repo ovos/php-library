@@ -34,6 +34,7 @@ abstract class Tags extends KeyValue
 		array $tags = [],
 		int $stale = 0,
 		bool $soft = false,
+		int $staleIfError = 0,
 	): mixed
 	{
 		if($resolver === null)
@@ -41,13 +42,20 @@ abstract class Tags extends KeyValue
 			return null;
 		}
 		
-		// the order of arguments is compatible with backends
-		// which do not support tags
-		$value = $resolver($this, $key, $ttl, $tags);
+		// the order of arguments is compatible with backends which do not
+		// support tags; the resolver may change $ttl, $tags and $save by
+		// reference from what it computed (see KeyValue::setFromResolver())
+		$save = true;
+		$value = $resolver($this, $key, $ttl, $tags, $save);
 		
-		if($value !== null)
+		if($save === false)
 		{
-			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale, $soft);
+			// nothing written: the lock goes now, not at its TTL
+			$this->releaseActiveLock($key);
+		}
+		else if($value !== null)
+		{
+			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale, $soft, $staleIfError);
 			$this->set($key, $stored, $storedTtl, $tags);
 		}
 		

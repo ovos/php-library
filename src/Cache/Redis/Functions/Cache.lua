@@ -167,15 +167,16 @@ end
 -- Removes an item a tag invalidation reached: its tombstone when the caller
 -- passed one - a key already gone gets none (the tag's stamp covers the
 -- values being computed for it), a soft value's item its soft mark (the
--- guard on) - a plain UNLINK for a caller from before the guard
-local function cache_remove_item(key, token, window_ms)
+-- guard on, the invalidation not hard) - a plain UNLINK for a caller from
+-- before the guard
+local function cache_remove_item(key, token, window_ms, hard)
 	if token and window_ms then
 		local kind = redis.call('TYPE', key)['ok']
 		if kind == 'none' then
 			return 0
 		end
 		
-		if window_ms > 0 and kind == 'hash' then
+		if window_ms > 0 and kind == 'hash' and hard ~= true then
 			local soft_ms = tonumber(redis.call('HGET', key, CACHE_SOFT) or '')
 			if soft_ms and soft_ms > 0 and redis.call('HEXISTS', key, 'data') == 1 then
 				return cache_soft_mark(key, token, window_ms, soft_ms)
@@ -574,6 +575,7 @@ local function cache_unlink_clean_tags(keys, args)
 	local field_tags = args[4]
 	local token = args[5] -- the tombstone (KeyValue\Redis), absent from an older caller
 	local window_ms = tonumber(args[6])
+	local hard = args[7] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
 	
 	for _, id in ipairs(ids) do
 		
@@ -590,7 +592,7 @@ local function cache_unlink_clean_tags(keys, args)
 			
 			-- the item itself: its tombstone, so a write computed before this
 			-- invalidation cannot land after it
-			cache_remove_item(prefix_ids .. id, token, window_ms)
+			cache_remove_item(prefix_ids .. id, token, window_ms, hard)
 		end
 	
 	end
@@ -613,6 +615,7 @@ local function cache_unlink_ids_by_tag(keys, args)
 	local prefix_tag_ids = prefix .. args[4]
 	local token = args[5]
 	local window_ms = tonumber(args[6])
+	local hard = args[7] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
 	
 	if #ids == 0 then
 		return 1
@@ -643,7 +646,7 @@ local function cache_unlink_ids_by_tag(keys, args)
 			-- save for removal after the loop
 			table.insert(rems, id)
 			-- the item itself: its tombstone
-			cache_remove_item(prefix_ids .. id, token, window_ms)
+			cache_remove_item(prefix_ids .. id, token, window_ms, hard)
 		end
 	end
 	
@@ -672,6 +675,7 @@ local function cache_unlink_by_tag(keys, args)
 	local cursor = args[5] or '0' -- cursor for HSCAN, '0' for initial call
 	local token = args[6]
 	local window_ms = tonumber(args[7])
+	local hard = args[8] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
 	
 	if redis.call('EXISTS', prefix_tag_ids .. tag) == 0 then
 		return {0, '0'} -- tag does not exist, nothing to unlink, scan complete
@@ -688,7 +692,7 @@ local function cache_unlink_by_tag(keys, args)
 			-- save for removal after the loop (within this batch)
 			table.insert(rems, id)
 			-- the item itself: its tombstone
-			cache_remove_item(prefix_ids .. id, token, window_ms)
+			cache_remove_item(prefix_ids .. id, token, window_ms, hard)
 		end
 	)
 	

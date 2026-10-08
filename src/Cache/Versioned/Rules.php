@@ -43,6 +43,12 @@ use function max;
  * then, whatever its tags: the one verdict that cannot serve a value past
  * its invalidation. An item stamped 0-0 saw no rule and is exempt.
  *
+ * A rule may be hard (invalidateTags(hard: true)): a soft value it reaches is
+ * a miss at once. Besides the newest rule per tag the set keeps the newest
+ * HARD rule per tag, so a soft rule that follows a hard one does not soften
+ * it for the items written before the hard one; an 'all' rule carries its
+ * flag.
+ *
  * toArray() / fromArray() carry the set across requests (see SharedRules);
  * the shape is plain arrays only, so APCu stores it as it is.
  *
@@ -60,6 +66,7 @@ class Rules
 	public const string FIELD_MODE = 'mode';
 	public const string FIELD_TAGS = 'tags';
 	public const string FIELD_FIRST = 'first';
+	public const string FIELD_HARD = 'hard';
 	
 	// Modes
 	public const string MODE_ALL = 'all';
@@ -70,6 +77,7 @@ class Rules
 	protected const string KEY_LAST = 'last';
 	protected const string KEY_FIRST = 'first';
 	protected const string KEY_FIRST_OPENED = 'first_opened';
+	protected const string KEY_HARD = 'hard';
 	
 	/**
 	 * The newest 'any' rule id naming each tag: tag => [ms, sequence]
@@ -77,7 +85,12 @@ class Rules
 	protected array $tags = [];
 	
 	/**
-	 * The 'all' rules, oldest first: [ms, sequence, tags[]]
+	 * The newest HARD 'any' rule id naming each tag: tag => [ms, sequence]
+	 */
+	protected array $hard = [];
+	
+	/**
+	 * The 'all' rules, oldest first: [ms, sequence, tags[], hard]
 	 */
 	protected array $all = [];
 	
@@ -138,6 +151,7 @@ class Rules
 				// the stream moved from under us: whatever it holds now is
 				// the whole truth, and what we held is not part of it
 				$this->tags = [];
+				$this->hard = [];
 				$this->all = [];
 				$this->last = self::NONE;
 				$this->first = self::NONE;
@@ -220,9 +234,9 @@ class Rules
 	 * When the item was invalidated: the time (ms, the server's - a rule's id)
 	 * of the NEWEST rule it has not seen that invalidates it - only the newest
 	 * rule per tag is kept, so that is what can be told. Null when no rule
-	 * invalidates it, when a clear it has not seen does (a clear stays hard),
-	 * and when the stream lost rules it saw: those verdicts stand hard (soft
-	 * invalidation cannot time them)
+	 * invalidates it, when a clear or a hard rule it has not seen does (both
+	 * stay hard), and when the stream lost rules it saw: those verdicts stand
+	 * hard (soft invalidation cannot time them)
 	 *
 	 * @param string[] $itemTags
 	 */
@@ -247,6 +261,13 @@ class Rules
 		$at = null;
 		foreach($tags as $tag => $_)
 		{
+			// a hard rule it has not seen: hard, whatever else invalidated it
+			if(isset($this->hard[$tag])
+				&& static::isNewer($this->hard[$tag][0], $this->hard[$tag][1], $markMs, $markSequence))
+			{
+				return null;
+			}
+			
 			if(isset($this->tags[$tag])
 				&& static::isNewer($this->tags[$tag][0], $this->tags[$tag][1], $markMs, $markSequence))
 			{
@@ -254,8 +275,9 @@ class Rules
 			}
 		}
 		
-		foreach($this->all as [$ms, $sequence, $ruleTags])
+		foreach($this->all as $rule)
 		{
+			[$ms, $sequence, $ruleTags] = $rule;
 			if(static::isNewer($ms, $sequence, $markMs, $markSequence) === false)
 			{
 				continue;
@@ -280,6 +302,12 @@ class Rules
 			
 			if($matched)
 			{
+				// a hard 'all' rule: hard (an 'all' rule written before the flag reads soft)
+				if(($rule[3] ?? false) === true)
+				{
+					return null;
+				}
+				
 				$at = max($at ?? 0, $ms);
 			}
 		}
@@ -294,6 +322,7 @@ class Rules
 	{
 		return [
 			static::KEY_TAGS => $this->tags,
+			static::KEY_HARD => $this->hard,
 			static::KEY_ALL => $this->all,
 			static::KEY_LAST => $this->last,
 			static::KEY_FIRST => $this->first,
@@ -322,6 +351,10 @@ class Rules
 		
 		$rules = new static($retentionMs);
 		$rules->tags = $state[static::KEY_TAGS];
+		// a set shared before the hard rules were kept: none
+		$rules->hard = is_array($state[static::KEY_HARD] ?? null)
+			? $state[static::KEY_HARD]
+			: [];
 		$rules->all = $state[static::KEY_ALL];
 		$rules->last = $state[static::KEY_LAST];
 		$rules->first = $state[static::KEY_FIRST];
@@ -406,10 +439,12 @@ class Rules
 		$tags = $tags === ''
 			? []
 			: explode(',', $tags);
+		$hard = is_scalar($fields[static::FIELD_HARD] ?? null)
+			&& (string)$fields[static::FIELD_HARD] === '1';
 		
 		if($mode === static::MODE_ALL)
 		{
-			$this->all[] = [$ms, $sequence, $tags];
+			$this->all[] = [$ms, $sequence, $tags, $hard];
 		}
 		else
 		{
@@ -417,6 +452,10 @@ class Rules
 			foreach($tags as $tag)
 			{
 				$this->tags[$tag] = [$ms, $sequence];
+				if($hard)
+				{
+					$this->hard[$tag] = [$ms, $sequence];
+				}
 			}
 		}
 		
@@ -466,6 +505,14 @@ class Rules
 			if(static::isNewer($ms, $sequence, $floorMs, $floorSequence) === false)
 			{
 				unset($this->tags[$tag]);
+			}
+		}
+		
+		foreach($this->hard as $tag => [$ms, $sequence])
+		{
+			if(static::isNewer($ms, $sequence, $floorMs, $floorSequence) === false)
+			{
+				unset($this->hard[$tag]);
 			}
 		}
 		

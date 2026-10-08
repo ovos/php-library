@@ -179,26 +179,42 @@ class Apcu extends KeyValue
 		?int $queueLockTtlS = null, // override of the config value
 		int $stale = 0, // seconds past the ttl a value is served while it is refreshed
 		bool $soft = false, // APCu has no tags: no invalidation to soften, accepted for the API's sake
+		bool $refresh = false, // recompute whatever is cached - guarded like a miss
+		int $staleIfError = 0, // seconds past the stale time a value is kept, served when the computation fails
 	): mixed
 	{
 		$id = $this->prefixer
 			->prefix($key, $this->getGroup());
+		$compute = fn() => $this->setFromResolver($key, $resolver, $ttl, $stale, $soft, $staleIfError);
+		
+		// a forced refresh: no hit, and no second look at the lock - a refresh
+		// in flight is waited for, then this one computes too (lock-only)
+		if($refresh)
+		{
+			$this->forceMiss($id);
+			
+			return $this->getMemoLock()
+				->lockAndQueue($id, null, $compute, $queue, $queueLockTtlS);
+		}
 		
 		// initial hit check (fast path); past its ttl, a value written with a
 		// stale time is served while it is refreshed (see revalidate())
-		$refresh = $stale > 0 && $resolver !== null
-			? fn() => $this->setFromResolver($key, $resolver, $ttl, $stale, $soft)
+		$revalidate = $stale > 0 && $resolver !== null
+			? $compute
 			: null;
-		if(($data = $this->served($id, $this->fetch($id), $refresh)) !== null)
+		$data = $this->fetch($id);
+		if(($served = $this->served($id, $data, $revalidate)) !== null)
 		{
-			return $data;
+			return $served;
 		}
+		
+		$fallback = $this->errorFallback($data, $staleIfError);
 		
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
 				fn() => $this->fresh($this->fetch($id)),
-				fn() => $this->setFromResolver($key, $resolver, $ttl, $stale, $soft),
+				fn() => $this->computeOrFallback($id, $compute, $fallback),
 				$queue,
 				$queueLockTtlS,
 			);
@@ -215,14 +231,28 @@ class Apcu extends KeyValue
 		int $ttl = 0,
 		int $stale = 0,
 		bool $soft = false,
+		int $staleIfError = 0,
 	): mixed
 	{
-		$value = $this->invoker
-			->invoke($resolver);
-		
-		if($value !== null)
+		if($resolver === null)
 		{
-			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale, $soft);
+			return null;
+		}
+		
+		// the resolver may change $ttl and $save by reference (no tags here -
+		// see KeyValue::setFromResolver())
+		$tags = [];
+		$save = true;
+		$value = $resolver($this, $key, $ttl, $tags, $save);
+		
+		if($save === false)
+		{
+			// nothing written: the lock goes now, not at its TTL
+			$this->releaseActiveLock($key);
+		}
+		else if($value !== null)
+		{
+			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale, $soft, $staleIfError);
 			$this->set($key, $stored, $storedTtl);
 		}
 		

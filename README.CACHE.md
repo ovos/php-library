@@ -412,22 +412,31 @@ $value = $store->get(
 $store->invalidateTags(['user:42']);
 ```
 
-The resolver can also modify tags and TTL dynamically:
+The resolver can also decide, from what it computed, how the value is kept -
+its TTL, its tags (the stores with tags), or not to keep it at all. Every store
+calls it as `function($store, $key, &$ttl, &$tags, &$save)`; a resolver that
+takes fewer arguments is called the same way:
 
 ```php
 $value = $store->get(
     'key',
-    resolver: function($store, $key, &$ttl, &$tags)
+    resolver: function($store, $key, &$ttl, &$tags, &$save)
     {
         $data = $this->computeExpensiveResult();
         $tags[] = 'computed:' . $data->category;
         $ttl = $data->isVolatile ? 60 : 3600;
+        // an incomplete answer from the origin: hand it back, keep nothing
+        $save = $data->isComplete;
         return $data;
     },
     ttl: 300,
     tags: ['base-tag'],
 );
 ```
+
+With `$save = false` the value is returned and nothing is written; the
+stampede lock is freed at once, so the next caller computes without waiting
+for it to expire.
 
 ### Pattern 4: Traditional get/set
 
@@ -530,6 +539,42 @@ $store->get('menu:main', fn() => $this->buildMenu(), ttl: 0, tags: ['menu'], sta
   shape older callers send); the tag invalidation marks it (`invalidated`)
   instead of tombstoning it.
 
+#### Forced refresh (`refresh: true`)
+
+`get(..., refresh: true)` recomputes whatever is cached - for a warm-up or a
+"refresh now" action - and stores the new value as any computation would
+(`stale:`, `soft:`, `staleIfError:` and the resolver's references apply):
+
+```php
+$offers = $store->get('offers', $this->loadOffers(...), ttl: 300, refresh: true);
+```
+
+- It never serves the cached value, and the lock's second look is skipped: a
+  refresh already running elsewhere is waited for, then this one computes too -
+  the caller asked for a value computed after its request.
+- Its write is guarded like a miss's: a `delete()` or a tag invalidation while
+  it computes refuses it.
+
+#### Stale-if-error (`staleIfError:`)
+
+`get(..., staleIfError: 3600)` keeps a value that long past its stale time -
+not to be served, but as the answer when its computation fails:
+
+```php
+$timetable = $store->get('timetable:' . $day, $this->fetchTimetable(...), ttl: 300, stale: 60, staleIfError: 3600);
+```
+
+- Fresh for the TTL, served stale while one process refreshes it for `stale`,
+  then a miss: computed at once, and if the computation throws, the kept value
+  is returned instead (the exception is logged, the lock freed, nothing written).
+- It needs a TTL (a value without one never ages), and the item lives
+  ttl + stale + staleIfError.
+- A read that does not pass `staleIfError:` gets the exception as before; a
+  `delete()`, `clear()` or tag invalidation removes the kept value with the rest
+  (a soft invalidation keeps it for its window).
+- Without `staleIfError:` nothing changes: a stale value is served for as long
+  as it is there.
+
 ## Cache invalidation
 
 ### Via the CacheService trait
@@ -563,6 +608,23 @@ $store->invalidateTags(['user:42', 'products'], $store::MATCHING_ALL);
 On the versioned stores (RedisVersioned, RedisClusterVersioned) the matched items are
 not deleted: they become invisible immediately and physically expire by their
 TTL - which is what makes the call O(1) regardless of the match count.
+
+`hard: true` makes a tag invalidation a miss at once for soft values too
+(see "Soft invalidation") - for a change the old value must not outlive, such
+as a customer's own edit:
+
+```php
+$store->invalidateTags(['customer:42'], hard: true);
+```
+
+- The value opts in to soft invalidation (`soft: true`); the invalidation can
+  overrule it. Without `hard:` a soft value is softened as before.
+- The versioned stores keep the newest hard rule per tag, so a soft
+  invalidation that follows a hard one does not soften it, and a hard one that
+  follows a soft one hardens it.
+- On the tag-index stores (Redis, Redisearch) a softly invalidated value has
+  left its tags' indexes, so a hard invalidation after it does not reach it: it
+  stays soft until its window ends.
 
 ### When to invalidate
 

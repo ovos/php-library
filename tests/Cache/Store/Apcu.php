@@ -10,6 +10,7 @@ use Ovos\Cache\Store\Apcu as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
+use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Override;
 
@@ -27,6 +28,7 @@ class Apcu extends Test
 {
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
+	use TraitCachePolicy;
 	
 	public const string KEY_ITEM = 'item';
 	

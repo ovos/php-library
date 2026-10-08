@@ -12,6 +12,7 @@ use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\RedisVersionedProbe;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
+use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Ovos\Test\Exception\SkipException;
@@ -37,6 +38,7 @@ class RedisVersioned extends Test
 	use TraitInvalidationGuard;
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
+	use TraitCachePolicy;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -293,6 +295,79 @@ class RedisVersioned extends Test
 			&& $rules->last() === '3000-0'
 			&& $rules->isStale(['new'], '2000-0') === true
 			&& $rules->isStale(['new'], '3000-0') === false;
+	}
+	
+	/**
+	 * A hard rule (invalidateTags(hard: true)) answers no soft time - and a
+	 * soft rule after it does not soften it for the items written before it,
+	 * only for those written between the two
+	 */
+	public function aHardRuleStaysHardUnderASoftOneForOlderItems(): bool
+	{
+		$rules = new Rules(3600000);
+		$rules->absorb([
+			'1000-0' => ['mode' => 'any', 'tags' => 'tag1', 'first' => '1', 'hard' => '1'],
+			'2000-0' => ['mode' => 'any', 'tags' => 'tag1', 'first' => '0'],
+		]);
+		
+		return $rules->invalidatedAt(['tag1'], '0-0') === null
+			&& $rules->invalidatedAt(['tag1'], '1500-0') === 2000
+			&& $rules->isStale(['tag1'], '0-0') === true;
+	}
+	
+	/**
+	 * A hard 'all' rule is hard for the items carrying all of its tags
+	 */
+	public function aHardAllRuleIsHard(): bool
+	{
+		$rules = new Rules(3600000);
+		$rules->absorb([
+			'1000-0' => ['mode' => 'all', 'tags' => 'a,b', 'first' => '1', 'hard' => '1'],
+			'2000-0' => ['mode' => 'all', 'tags' => 'c,d', 'first' => '0'],
+		]);
+		
+		return $rules->invalidatedAt(['a', 'b'], '0-0') === null
+			&& $rules->invalidatedAt(['c', 'd'], '0-0') === 2000;
+	}
+	
+	/**
+	 * The hard rules cross requests with the set (SharedRules), and a set
+	 * shared before they were kept still loads - with none
+	 */
+	public function hardRulesCrossTheSharedRules(): bool
+	{
+		$rules = new Rules(3600000);
+		$rules->absorb([
+			'1000-0' => ['mode' => 'any', 'tags' => 'tag1', 'first' => '1', 'hard' => '1'],
+			'2000-0' => ['mode' => 'any', 'tags' => 'tag1', 'first' => '0'],
+		]);
+		
+		$shared = Rules::fromArray($rules->toArray(), 3600000);
+		$before = $rules->toArray();
+		unset($before['hard']);
+		$older = Rules::fromArray($before, 3600000);
+		
+		return $shared instanceof Rules
+			&& $shared->invalidatedAt(['tag1'], '0-0') === null
+			&& $older instanceof Rules
+			&& $older->invalidatedAt(['tag1'], '0-0') === 2000;
+	}
+	
+	/**
+	 * The retention drops a hard rule with the rest - it cannot match
+	 * anything alive any more
+	 */
+	public function theRetentionDropsHardRulesToo(): bool
+	{
+		$rules = new Rules(1000);
+		$rules->absorb([
+			'1000-0' => ['mode' => 'any', 'tags' => 'old', 'first' => '1', 'hard' => '1'],
+			'3000-0' => ['mode' => 'any', 'tags' => 'new', 'first' => '0', 'hard' => '1'],
+		]);
+		
+		$state = $rules->toArray();
+		
+		return $state['hard'] === ['new' => [3000, 0]];
 	}
 	
 	/**
