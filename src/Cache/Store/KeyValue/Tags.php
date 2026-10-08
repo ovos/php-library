@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Store\KeyValue;
 
+use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue;
 use Override;
 use Closure;
@@ -55,7 +56,7 @@ abstract class Tags extends KeyValue
 		}
 		else if($value !== null)
 		{
-			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale, $soft, $staleIfError);
+			[$stored, $storedTtl] = Stale::wrap($value, $ttl, $stale, $soft, $staleIfError);
 			$this->set($key, $stored, $storedTtl, $tags);
 		}
 		

@@ -20,8 +20,6 @@ use function is_scalar;
 use function max;
 use function microtime;
 
-use const INF;
-
 /**
  * KeyValue
  *
@@ -369,8 +367,8 @@ abstract class KeyValue
 			return $this->fresh($data);
 		}
 		
-		// past its stale time, a value kept for errors is a miss - its value
-		// waits for a computation that fails (see computeOrFallback())
+		// past its stale time a value is a miss - one kept for errors waits
+		// for a computation that fails (see computeOrFallback())
 		if($data->isServable() === false)
 		{
 			return null;
@@ -393,8 +391,7 @@ abstract class KeyValue
 	{
 		return $staleIfError > 0
 			&& $data instanceof Stale
-			&& $data->errorFor > 0
-			&& $data->isFresh() === false
+			&& $data->isKeptForErrors()
 				? $data
 				: null;
 	}
@@ -510,45 +507,6 @@ abstract class KeyValue
 		}
 		
 		return $run() ?? $stale;
-	}
-	
-	/**
-	 * What a resolver's value is stored as: with a stale time (get(stale:))
-	 * the value and its fresh time, kept that long past it - with a TTL; a
-	 * soft one (soft: true) may also be served that long after a tag
-	 * invalidation, and needs no TTL: without one it is fresh until an
-	 * invalidation reaches it, and kept as long as before. A value kept for
-	 * errors (get(staleIfError:), with a TTL) lives that much longer still
-	 *
-	 * @return array{0: mixed, 1: int} the value to store and its TTL
-	 */
-	protected function withStale(
-		mixed $value,
-		int $ttl,
-		int $stale,
-		bool $soft = false,
-		int $staleIfError = 0,
-	): array
-	{
-		$stale = max(0, $stale);
-		$staleIfError = max(0, $staleIfError);
-		
-		if($stale === 0 && $staleIfError === 0)
-		{
-			return [$value, $ttl];
-		}
-		
-		if($ttl > 0)
-		{
-			return [
-				new Stale($value, microtime(true) + $ttl, $stale, $soft, $staleIfError),
-				$ttl + $stale + $staleIfError,
-			];
-		}
-		
-		return $soft && $stale > 0
-			? [new Stale($value, INF, $stale, true), $ttl]
-			: [$value, $ttl];
 	}
 	
 	/**

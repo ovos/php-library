@@ -73,7 +73,7 @@ class Redisearch extends Store
 		{
 			// a soft value's item carries its stale time, so a tag invalidation
 			// marks it instead of tombstoning it (see KeyValue\Redis::KEY_SOFT)
-			$soft = $value instanceof Stale && $value->soft
+			$soft = $value instanceof Stale && $value->isSoft()
 				? [static::KEY_SOFT, $value->staleFor * 1000]
 				: [];
 			$value = $this->serializer

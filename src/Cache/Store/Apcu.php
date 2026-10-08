@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Cache\Store;
 
 use Ovos\Cache\MemoLock\Apcu as MemoLock;
+use Ovos\Cache\Stale;
 use APCUIterator;
 use Closure;
 use Override;
@@ -252,7 +253,7 @@ class Apcu extends KeyValue
 		}
 		else if($value !== null)
 		{
-			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale, $soft, $staleIfError);
+			[$stored, $storedTtl] = Stale::wrap($value, $ttl, $stale, $soft, $staleIfError);
 			$this->set($key, $stored, $storedTtl);
 		}
 		

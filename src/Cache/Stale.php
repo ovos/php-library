@@ -3,28 +3,33 @@ declare(strict_types=1);
 
 namespace Ovos\Cache;
 
+use function max;
 use function microtime;
+
+use const INF;
 
 /**
  * Stale
  *
- * A value written by get(stale:) - stale-while-revalidate. It is fresh
- * until $freshUntil and kept for the stale time past it (the item's TTL is
- * ttl + stale): a read in that time returns the value at once while one
- * process refreshes it. Stored as the item's value, so every store carries
- * it the same way; a read without stale: takes it for a miss once it is no
- * longer fresh.
+ * A value written with a stale time (get(stale:)) or a time kept for errors
+ * (get(staleIfError:)), as it is stored - every store carries it the same
+ * way, inside the serialized value. Its windows are its own, on the
+ * application's clock; the store's TTL (wrap() sets it to cover them) only
+ * collects what is past them:
+ * - fresh until $freshUntil (INF: a soft value written without a TTL, fresh
+ *   until an invalidation reaches it);
+ * - then servable for $staleFor seconds while one process refreshes it
+ *   (stale-while-revalidate) - a read without stale: takes it for a miss;
+ * - then kept for $errorFor seconds more: a miss, whose computation, if it
+ *   throws, hands back this value instead of the exception.
  *
- * A soft value (get(stale:, soft: true)) may be served the same way for
- * $staleFor seconds after a tag invalidation reached it - soft
- * invalidation; its fresh time is INF when it was written without a TTL,
- * so it ages by an invalidation only. A hard value, and every delete() or
+ * $staleFor is also the window after a soft invalidation: a soft value
+ * (get(stale:, soft: true)) a tag invalidation reached is served that long
+ * while it is recomputed. That verdict is the store's, made at read time
+ * (invalidated()) and never stored. A hard value, and every delete() or
  * clear(), is a miss at once.
  *
- * A value written with get(staleIfError:) is kept $errorFor seconds past
- * its stale time (the item's TTL is ttl + stale + staleIfError): a read in
- * that time is a miss whose computation, if it fails, hands back this
- * value instead of the exception
+ * wrap() decides which value is wrapped, and how - the one place for it
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -32,10 +37,10 @@ final readonly class Stale
 {
 	/**
 	 * @param float $freshUntil when it stops being fresh (microtime; INF: never by age)
-	 * @param int $staleFor the stale time: seconds it may be served past its age, or past a soft invalidation
-	 * @param bool $soft a tag invalidation softens to the stale time too
-	 * @param int $errorFor seconds past the stale time it is kept for a computation that fails
-	 * @param bool $invalidated aged by a soft invalidation (its window is the store's), not by time
+	 * @param int $staleFor seconds it may be served past its fresh time, or past a soft invalidation
+	 * @param bool $soft a tag invalidation softens it to the stale time (see isSoft())
+	 * @param int $errorFor seconds past the stale time it is kept for a computation that throws
+	 * @param bool $invalidated a read found it softly invalidated - the store's verdict, never stored
 	 */
 	public function __construct(
 		public mixed $value,
@@ -48,38 +53,110 @@ final readonly class Stale
 	{
 	}
 	
+	/**
+	 * What a value is stored as and for how long: with a TTL and a stale time
+	 * or a time kept for errors, a record fresh for the TTL and stored for
+	 * all three; a soft one also without a TTL (fresh until an invalidation,
+	 * stored as long as before); anything else as it is. Soft needs a stale
+	 * time, the time kept for errors a TTL
+	 *
+	 * @return array{0: mixed, 1: int} the value or its record, and its TTL
+	 */
+	public static function wrap(
+		mixed $value,
+		int $ttl,
+		int $stale,
+		bool $soft = false,
+		int $staleIfError = 0,
+	): array
+	{
+		$stale = max(0, $stale);
+		$staleIfError = max(0, $staleIfError);
+		$soft = $soft && $stale > 0;
+		
+		if($ttl > 0 && ($stale > 0 || $staleIfError > 0))
+		{
+			return [
+				new self($value, microtime(true) + $ttl, $stale, $soft, $staleIfError),
+				$ttl + $stale + $staleIfError,
+			];
+		}
+		
+		return $soft && $ttl <= 0
+			? [new self($value, INF, $stale, true), $ttl]
+			: [$value, $ttl];
+	}
+	
 	public function isFresh(): bool
 	{
-		return microtime(true) < $this->freshUntil;
+		return $this->invalidated === false
+			&& microtime(true) < $this->freshUntil;
 	}
 	
 	/**
-	 * Whether an aged value may still be served while it is refreshed: a
-	 * value kept for errors only inside its stale time (past it, it is kept
-	 * for a failing computation alone); any other value as long as it is
-	 * there - its TTL, or a soft invalidation's window, ends the stale time
+	 * Whether a value past its fresh time may still be served while it is
+	 * refreshed: inside its stale time - or, softly invalidated, inside the
+	 * window the store judged
 	 */
 	public function isServable(): bool
 	{
-		return $this->errorFor <= 0
-			|| $this->invalidated
+		return $this->invalidated
 			|| microtime(true) < $this->freshUntil + $this->staleFor;
 	}
 	
 	/**
-	 * The same value, past its fresh time - how a read hands out a soft value
-	 * an invalidation reached: served while it is refreshed, a miss to a read
-	 * without stale:
+	 * Whether a value past its fresh time is kept for a computation that
+	 * throws (get(staleIfError:)): until its stale time and the time kept for
+	 * errors are over - softly invalidated, while the store keeps it
 	 */
-	public function aged(): self
+	public function isKeptForErrors(): bool
 	{
-		return new self($this->value, 0.0, $this->staleFor, $this->soft, $this->errorFor, true);
+		return $this->errorFor > 0
+			&& $this->isFresh() === false
+			&& ($this->invalidated
+				|| microtime(true) < $this->freshUntil + $this->staleFor + $this->errorFor);
+	}
+	
+	/**
+	 * Whether a tag invalidation softens it: soft, and a stale time to serve
+	 * it in
+	 */
+	public function isSoft(): bool
+	{
+		return $this->soft
+			&& $this->staleFor > 0;
+	}
+	
+	/**
+	 * The same value, softly invalidated - how a read hands out a soft value
+	 * an invalidation reached: served while it is refreshed, a miss to a read
+	 * without stale:. Its fresh time stays; the mark is never stored
+	 */
+	public function invalidated(): self
+	{
+		return new self($this->value, $this->freshUntil, $this->staleFor, $this->soft, $this->errorFor, true);
+	}
+	
+	/**
+	 * What is stored - the invalidated mark is a read's verdict, not part of
+	 * the value
+	 */
+	public function __serialize(): array
+	{
+		return [
+			'value' => $this->value,
+			'freshUntil' => $this->freshUntil,
+			'staleFor' => $this->staleFor,
+			'soft' => $this->soft,
+			'errorFor' => $this->errorFor,
+		];
 	}
 	
 	/**
 	 * A Stale written before the stale time and the soft flag were stored
 	 * reads as a hard one; one written before staleIfError as kept for no
-	 * error
+	 * error; a stored invalidated mark (written before it was left out) is
+	 * ignored
 	 */
 	public function __unserialize(
 		array $data,
@@ -90,6 +167,6 @@ final readonly class Stale
 		$this->staleFor = (int)($data['staleFor'] ?? 0);
 		$this->soft = (bool)($data['soft'] ?? false);
 		$this->errorFor = (int)($data['errorFor'] ?? 0);
-		$this->invalidated = (bool)($data['invalidated'] ?? false);
+		$this->invalidated = false;
 	}
 }

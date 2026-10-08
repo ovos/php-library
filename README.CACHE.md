@@ -532,9 +532,12 @@ $value = $store->get(
   *Invalidation guard*).
 - A refresh that throws is logged and keeps the stale value; the next read
   past the `ttl` tries again.
-- The item lives `ttl + stale` and carries its fresh time inside the value
-  (`Ovos\Cache\Stale`). A library older than this reading such a key gets
-  that object back - possible only across hosts during a rolling deploy.
+- The value carries its own times inside it (`Ovos\Cache\Stale`: fresh
+  until, stale for, kept for errors), and they decide - the item lives
+  `ttl + stale` (`+ staleIfError`) only so that the store collects it after.
+  A soft invalidation is the store's verdict at read time, never stored.
+  A library older than this reading such a key gets that object back -
+  possible only across hosts during a rolling deploy.
 - A subclass that overrides a store's `get()` must add the `int $stale = 0`
   parameter (and `bool $soft = false`, below).
 
@@ -613,8 +616,8 @@ $timetable = $store->get('timetable:' . $day, $this->fetchTimetable(...), ttl: 3
 - A read that does not pass `staleIfError:` gets the exception as before; a
   `delete()`, `clear()` or tag invalidation removes the kept value with the rest
   (a soft invalidation keeps it for its window).
-- Without `staleIfError:` nothing changes: a stale value is served for as long
-  as it is there.
+- With it or without it, a value stops being served at the end of its stale
+  time - its own times decide, not the store's TTL.
 
 ## Cache invalidation
 

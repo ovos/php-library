@@ -240,13 +240,13 @@ abstract class Redis extends Tags
 					->unserialize($value);
 				
 				// softly invalidated, inside its window (the mark and the data
-				// expire with it): the value is handed out aged - served while
-				// it is refreshed, a miss to a read without stale: (only a soft
-				// value is ever marked; anything else marked is a miss)
+				// expire with it): the value is handed out invalidated - served
+				// while it is refreshed, a miss to a read without stale: (only a
+				// soft value is ever marked; anything else marked is a miss)
 				if(($item[static::KEY_INVALIDATED] ?? false) !== false)
 				{
 					$value = $value instanceof Stale
-						? $value->aged()
+						? $value->invalidated()
 						: null;
 				}
 				

@@ -236,6 +236,50 @@ class PageFlow extends Test
 	}
 	
 	/**
+	 * RULE: a page stored with a stale time carries it - its record says how
+	 * long it may be served past its ttl
+	 */
+	public function aPageCarriesItsStaleTime(): bool
+	{
+		$store = $this->pageStore();
+		$this->clean($store);
+		
+		$this->dispatch($this->request($store, stale: 45), 'rendered');
+		$stored = $this->pageStore()->peek(self::KEY);
+		$this->clean($store);
+		
+		return $stored instanceof Stale
+			&& $stored->staleFor === 45
+			&& $stored->isFresh() === true;
+	}
+	
+	/**
+	 * RULE: a page past its stale time is rendered, not served - while its
+	 * item is still there
+	 */
+	public function aPagePastItsStaleTimeIsRenderedNotServed(): bool
+	{
+		$store = $this->pageStore();
+		$store->set(self::KEY, new Stale([
+			'code' => 200,
+			'headers' => [],
+			'savedAt' => time(),
+			'body' => 'too old',
+		], microtime(true) - 100, 60), 120);
+		
+		$request = $this->request($store);
+		$this->dispatch($request, 'fresh');
+		$stored = $this->pageStore()->peek(self::KEY);
+		$this->clean($store);
+		
+		return $request->rendered === true
+			&& $request->app->finished === []
+			&& (string)$request->app->current === 'fresh'
+			&& $stored instanceof Stale
+			&& ($stored->value['body'] ?? null) === 'fresh';
+	}
+	
+	/**
 	 * RULE: without a stale time a page is stored plain, and served as it is
 	 */
 	public function aPageWithoutAStaleTimeIsStoredPlain(): bool
@@ -296,12 +340,13 @@ class PageFlow extends Test
 		bool $fresh,
 	): void
 	{
+		// as the plugin stores it: with its stale time (see Page::store())
 		$store->set(self::KEY, new Stale([
 			'code' => 200,
 			'headers' => [],
 			'savedAt' => time(),
 			'body' => $body,
-		], microtime(true) + ($fresh ? 60 : -1)), 120);
+		], microtime(true) + ($fresh ? 60 : -1), 60), 120);
 	}
 	
 	/**
@@ -317,7 +362,7 @@ class PageFlow extends Test
 			'headers' => [],
 			'savedAt' => time(),
 			'body' => $body,
-		], microtime(true) + ($fresh ? 60 : -1)), 5);
+		], microtime(true) + ($fresh ? 60 : -1), 60), 5);
 	}
 	
 	protected function deleteApcu(): void
