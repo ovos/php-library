@@ -168,6 +168,40 @@ class Logger extends Test
 			&& $masked['username'] !== 'marcin';
 	}
 	
+	/**
+	 * RULE: PHP's `::` separates no pair — the method an error names stays
+	 * as it was written, whatever its class is called; a real pair beside it
+	 * is still masked or redacted. Mirrors codesafe's Scrubber.
+	 *
+	 * Prevents: `Controllers\User::unlock()` written as `User::***o***)` and
+	 * `Ovos\Password::generate()` as `Password:[redacted])` (bo2go
+	 * e628a7b51f2cac37, MG 2026-10-08: "we mask the action name and we
+	 * should not do it").
+	 */
+	public function aScopeOperatorSeparatesNoPair(): bool
+	{
+		$logger = new Subject;
+		$methods = [
+			'Too few arguments to function Controllers\User::unlock(), 0 passed',
+			'Too few arguments to function Ovos\Password::generate(), 0 passed',
+			'Call to undefined method Token::verify()',
+			'Login::check() and Username::find()',
+		];
+		foreach($methods as $message)
+		{
+			if($logger->removeText($message) !== $message)
+			{
+				return false;
+			}
+		}
+		
+		return $logger->removeText('Login::check() failed for user=marcin') === 'Login::check() failed for user=m***i*'
+			&& $logger->removeText('user: marcin') === 'user: m***i*'
+			&& $logger->removeText('user:marcin') === 'user:m***i*'
+			&& $logger->removeText('Token::verify() password: hunter22') === 'Token::verify() password: [redacted]'
+			&& $logger->removeText('password:hunter22') === 'password:[redacted]';
+	}
+	
 	public function masksEveryEmailInFreeText(): bool
 	{
 		$out = (new Subject)->remove([
