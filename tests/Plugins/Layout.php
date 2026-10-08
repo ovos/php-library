@@ -103,6 +103,30 @@ class Layout extends Test
 	}
 	
 	/**
+	 * RULE: a layout starts from a fresh page — the placeholders, the body's
+	 * classes and every element's classes a controller before it set are gone
+	 * once it is built.
+	 *
+	 * Prevents: the error page, whose layout is built after the failed
+	 * controller's plugins ran, keeping the class that controller's header
+	 * widget put on <body> (`with-header-widget`, which hides the top bar) —
+	 * bo2go's 404 under /user rendered without its logo
+	 * (bo2go docs/plans/ERROR.PAGE.LAYOUT.PLAN.md).
+	 */
+	public function aNewLayoutStartsFromAFreshPage(): bool
+	{
+		View::body()->addClass('with-header-widget');
+		View::elements()->main->addClass('main-users');
+		View::placeholders()->top->append('<section class="widget-header">');
+		
+		new Subject('page.phtml');
+		
+		return View::body()->hasAnyClasses() === false
+			&& View::elements()->main->hasAnyClasses() === false
+			&& View::placeholders()->toArray() === [];
+	}
+	
+	/**
 	 * …and the older rule still holds: only an Html response wears a layout,
 	 * so a JSON answer keeps its own body whether or not it was sent.
 	 */

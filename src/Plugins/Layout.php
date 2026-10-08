@@ -42,7 +42,16 @@ class Layout extends Plugin
 		}
 		
 		$this->layout = new View\Layout($layout);
+		// a fresh page: nothing a controller before this one put into the
+		// placeholders, the body or the elements carries over. The error page
+		// builds its layout after the failed controller's plugins ran, and
+		// User's Layout\Homepage had added `with-header-widget` to <body> —
+		// the class that hides the top bar for a header widget the clear
+		// placeholders no longer held, so bo2go's 404 under /user lost its
+		// logo (bo2go docs/plans/ERROR.PAGE.LAYOUT.PLAN.md)
 		$this->layout::placeholders()->clear();
+		$this->layout::body()->clear();
+		$this->layout::elements()->clear();
 		
 		// automatically create these placeholders
 		foreach($this->placeholders as $placeholder)
