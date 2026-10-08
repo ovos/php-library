@@ -4,9 +4,11 @@ declare(strict_types=1);
 namespace Ovos;
 
 use Ovos\Controller\Plugin;
+use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Exception\RuntimeException;
 use Ovos\Logger\Traits\LogsEvents;
+use ReflectionFunctionAbstract;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionType;
@@ -14,10 +16,14 @@ use ReflectionUnionType;
 use Throwable;
 
 use function array_column;
+use function array_filter;
 use function array_key_exists;
+use function array_keys;
+use function array_merge;
 use function array_shift;
 use function class_exists;
 use function count;
+use function implode;
 use function in_array;
 use function is_bool;
 use function is_float;
@@ -87,6 +93,20 @@ class Controller
 		if($this->isDispatched())
 		{
 			return null;
+		}
+		
+		// a URL that names the action but leaves out an argument it requires
+		// names no page: the 404 an unknown action gets, never the 500 of the
+		// ArgumentCountError PHP throws on the call (codesafe e628a7b51f2cac37:
+		// a scanner's /user/unlock without its id). Checked after
+		// preDispatch(), so every plugin — the login redirect, the CLI-only
+		// 403, the shield — still answers first
+		$missing = static::missingActionParams(new ReflectionMethod($this, $action), $actionParams);
+		if($missing !== [])
+		{
+			throw new NotFoundException(
+				'%s::%s() requires $%s, which the request does not supply',
+				static::class, $action, implode(', $', $missing));
 		}
 		
 		$response = $this->$action(...$actionParams);
@@ -167,6 +187,44 @@ class Controller
 		}
 		
 		return $requestParams;
+	}
+	
+	/**
+	 * The required parameters of an action its arguments leave without a
+	 * value, by name and in declaration order — empty when the call can be
+	 * made.
+	 *
+	 * The arguments as getActionParams() builds them and dispatch() spreads
+	 * them: a value under an integer key fills the parameters from the first
+	 * one, a value under a string key the parameter of that name. A parameter
+	 * is required exactly when PHP requires it — isOptional() is false, which
+	 * a variadic or a defaulted parameter never is unless a required one
+	 * follows it — so an empty answer is a call PHP makes, and anything else
+	 * is the ArgumentCountError it would throw.
+	 *
+	 * @return string[]
+	 */
+	public static function missingActionParams(
+		ReflectionFunctionAbstract $function,
+		array $actionParams,
+	): array
+	{
+		$positional = count(array_filter(array_keys($actionParams), is_int(...)));
+		
+		$missing = [];
+		foreach($function->getParameters() as $parameter)
+		{
+			if($parameter->isOptional()
+				|| $parameter->getPosition() < $positional
+				|| array_key_exists($parameter->getName(), $actionParams))
+			{
+				continue;
+			}
+			
+			$missing[] = $parameter->getName();
+		}
+		
+		return $missing;
 	}
 	
 	/**
