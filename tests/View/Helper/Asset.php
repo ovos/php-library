@@ -11,13 +11,16 @@ use Ovos\Test\Internal;
 use Ovos\View\Helper\Asset as AssetHelper;
 use Override;
 
+use function clearstatcache;
 use function date;
 use function file_put_contents;
 use function filemtime;
 use function is_dir;
 use function is_file;
 use function mkdir;
+use function mktime;
 use function str_contains;
+use function touch;
 use function uniqid;
 use function unlink;
 
@@ -52,7 +55,22 @@ class Asset extends Test
 		
 		$url = (string)(new AssetHelper)->asset($relative);
 		
-		return $relative . '?' . date('Ymdhis', $mTime) === $url;
+		return $relative . '?' . date('YmdHis', $mTime) === $url;
+	}
+	
+	/**
+	 * Regression: the stamp ran on a 12-hour clock (`h`, no AM/PM), so a file
+	 * written at 07:28 and again at 19:28 the same day kept one URL and a
+	 * browser its morning copy. Pinned as a literal: the test above compares
+	 * against the same date() call as the helper and passes with either clock.
+	 */
+	public function stampsOnATwentyFourHourClock()
+	{
+		$relative = $this->makeAsset();
+		touch(BASE_DIR . 'public' . DIRECTORY_SEPARATOR . $relative, mktime(19, 28, 16, 10, 7, 2026));
+		clearstatcache();
+		
+		return (string)(new AssetHelper)->asset($relative) === $relative . '?20261007192816';
 	}
 	
 	public function versionsUrlFromCachedMtime()

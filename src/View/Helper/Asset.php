@@ -69,7 +69,9 @@ class Asset extends Helper
 		{
 			$mTime = filemtime($filename);
 			
-			$mDate = date('Ymdhis', $mTime);
+			// H, not h: on a 12-hour clock a file written at 07:16 and again at
+			// 19:16 the same day kept one URL, and the browser its morning copy
+			$mDate = date('YmdHis', $mTime);
 			$store->set($cacheId, $mDate);
 			
 			// return the versioned url on the miss too — falling through to
