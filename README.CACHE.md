@@ -50,6 +50,37 @@ $store = $cacheService->getStore();                         // Redis/Redisearch
 $store = $cacheService->getStore(persistent: false);        // APCu
 ```
 
+## One call, and which option for which problem
+
+The call worth knowing is `get()` with a resolver. It reads the value; on a
+miss it runs the resolver, stores what it returns and hands it back. While one
+process computes, the others wait for its result (MemoLock, see
+[Stampede protection](#stampede-protection-memolock)), and a write computed
+before a `delete()` or `invalidateTags()` never lands after it (see
+[Invalidation guard](#invalidation-guard-stale-writes)). None of this needs
+configuring:
+
+```php
+$categories = $store->get('categories', fn() => $this->loadCategories(), ttl: 3600, tags: ['categories']);
+
+// when a category changes
+$store->invalidateTags(['categories']);
+```
+
+| You want… | Pass | What happens | See |
+|---|---|---|---|
+| nobody to wait when a value expires | `stale: 60` | past its TTL the old value is served for 60 s while **one** process refreshes it, after the response | Pattern 5 |
+| nobody to wait after an edit either | `stale: 60, soft: true` | a tag invalidation ages the value instead of removing it: served for 60 s while one process recomputes it | Soft invalidation |
+| the last good value through an outage | `staleIfError: 3600` | kept 1 h past its stale time — a miss then, but when the computation throws, it is returned | Stale-if-error |
+| the TTL or the tags from the computed value | the resolver's `&$ttl`, `&$tags` | what the resolver leaves in them is what is stored | Pattern 3 |
+| not to keep an incomplete value | the resolver's `&$save = false` | the value is handed back, nothing is stored, the lock is freed at once | Pattern 3 |
+| a new value now (a warm-up, a "refresh" button) | `refresh: true` | recomputed and stored, whatever is cached | Forced refresh |
+| an edit to show at once, soft values too | `invalidateTags(..., hard: true)` | a miss at once, also for a value written with `soft: true` | Via tags |
+| a value gone for sure | `delete()`, `clear()` | always a miss at once — nothing is ever served stale after them | |
+
+The options are per call: a `get()` that does not pass them behaves as it
+always did. APCu has no tags, so `soft:` and `hard:` mean nothing there.
+
 ## Store differences
 
 The four persistent stores split into two families by **what `invalidateTags()`
