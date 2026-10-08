@@ -3,10 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Store\KeyValue;
 
-use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue;
 use Override;
-use Closure;
 
 /**
  * Tags
@@ -19,48 +17,18 @@ abstract class Tags extends KeyValue
 	public const string MATCHING_ANY = 'any';
 	public const string MATCHING_ALL = 'all';
 	
+	/**
+	 * What setFromResolver() computed, stored with its tags
+	 */
 	#[Override]
-	abstract public function get(
+	protected function storeComputed(
 		string $key,
-		?Closure $resolver = null,
-		int $ttl = 0,
-		array $tags = [],
-	): mixed;
-	
-	#[Override]
-	public function setFromResolver(
-		string $key,
-		?Closure $resolver,
-		int $ttl = 0,
-		array $tags = [],
-		int $stale = 0,
-		bool $soft = false,
-		int $staleIfError = 0,
-	): mixed
+		mixed $value,
+		int $ttl,
+		array $tags,
+	): bool
 	{
-		if($resolver === null)
-		{
-			return null;
-		}
-		
-		// the order of arguments is compatible with backends which do not
-		// support tags; the resolver may change $ttl, $tags and $save by
-		// reference from what it computed (see KeyValue::setFromResolver())
-		$save = true;
-		$value = $resolver($this, $key, $ttl, $tags, $save);
-		
-		if($save === false)
-		{
-			// nothing written: the lock goes now, not at its TTL
-			$this->releaseActiveLock($key);
-		}
-		else if($value !== null)
-		{
-			[$stored, $storedTtl] = Stale::wrap($value, $ttl, $stale, $soft, $staleIfError);
-			$this->set($key, $stored, $storedTtl, $tags);
-		}
-		
-		return $value;
+		return $this->set($key, $value, $ttl, $tags);
 	}
 	
 	#[Override]

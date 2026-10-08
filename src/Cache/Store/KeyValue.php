@@ -5,8 +5,10 @@ namespace Ovos\Cache\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Cache\Compressor;
+use Ovos\Cache\Computed;
 use Ovos\Invoker;
 use Ovos\Cache\MemoLock;
+use Ovos\Cache\Policy;
 use Ovos\Cache\Prefixer;
 use Ovos\Cache\Serializer;
 use Ovos\Cache\Stale;
@@ -550,24 +552,38 @@ abstract class KeyValue
 		string $key,
 	): bool;
 	
+	/**
+	 * The value under $key - on a miss computed by $resolver (one process
+	 * computes, the others wait for its result: MemoLock) and stored for $ttl
+	 * seconds with $tags (a store with tags). The resolver is called as
+	 * function(KeyValue $store, string $key) and returns the value or a
+	 * Computed (see setFromResolver()). The options come by name after $tags,
+	 * read into a Policy - queue:, queueLockTtlMs:, stale:, soft:, refresh:,
+	 * staleIfError: - and an unknown one throws. The one signature of every
+	 * store: an override copies it once, a new option never changes it
+	 */
 	abstract public function get(
 		string $key,
 		?Closure $resolver = null,
 		int $ttl = 0,
+		array $tags = [],
+		mixed ...$options,
 	): mixed;
 	
 	/**
-	 * Computes and stores - the resolver is called as
-	 * function(KeyValue $store, string $key, int &$ttl, array &$tags, bool &$save):
-	 * it may change the TTL, the tags (a store with tags) and whether the value
-	 * is stored at all from what it computed ($save false: nothing is written,
-	 * the lock is freed); a resolver that takes fewer arguments is called the
-	 * same way
+	 * Computes and stores: the resolver is called as
+	 * function(KeyValue $store, string $key) and returns the value - stored
+	 * as the call says - or a Computed: its own TTL, its own tags, or nothing
+	 * to store (save: false hands the value back, nothing is written and the
+	 * lock is freed at once). With the policy's stale time or time kept for
+	 * errors the value is stored as a Stale record (Stale::wrap())
 	 */
 	public function setFromResolver(
 		string $key,
 		?Closure $resolver,
 		int $ttl = 0,
+		array $tags = [],
+		?Policy $policy = null,
 	): mixed
 	{
 		if($resolver === null)
@@ -575,9 +591,15 @@ abstract class KeyValue
 			return null;
 		}
 		
-		$tags = [];
+		$value = $resolver($this, $key);
 		$save = true;
-		$value = $resolver($this, $key, $ttl, $tags, $save);
+		if($value instanceof Computed)
+		{
+			$ttl = $value->ttl ?? $ttl;
+			$tags = $value->tags ?? $tags;
+			$save = $value->save;
+			$value = $value->value;
+		}
 		
 		if($save === false)
 		{
@@ -586,10 +608,26 @@ abstract class KeyValue
 		}
 		else if($value !== null)
 		{
-			$this->set($key, $value, $ttl);
+			$policy ??= new Policy();
+			[$stored, $storedTtl] = Stale::wrap($value, $ttl, $policy->stale, $policy->soft, $policy->staleIfError);
+			$this->storeComputed($key, $stored, $storedTtl, $tags);
 		}
 		
 		return $value;
+	}
+	
+	/**
+	 * Stores what setFromResolver() computed - a store with tags stores the
+	 * tags with it (see Tags)
+	 */
+	protected function storeComputed(
+		string $key,
+		mixed $value,
+		int $ttl,
+		array $tags,
+	): bool
+	{
+		return $this->set($key, $value, $ttl);
 	}
 	
 	abstract public function set(

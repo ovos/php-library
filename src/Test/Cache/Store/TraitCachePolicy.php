@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 namespace Ovos\Test\Cache\Store;
 
+use Ovos\Cache\Computed;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
+use ArgumentCountError;
+use InvalidArgumentException;
 use RuntimeException;
 
 use function count;
@@ -18,9 +21,10 @@ use function usleep;
  * TraitCachePolicy
  *
  * What a resolver and an invalidation decide, the rules every store shares:
- * a resolver may change its TTL, its tags, or whether anything is stored, by
- * reference (function($store, $key, &$ttl, &$tags, &$save)); get(refresh:
- * true) recomputes whatever is cached;
+ * a resolver is called as function($store, $key) and may return a Computed
+ * - its own TTL, its own tags, or nothing to store; get()'s options come as
+ * named arguments, an unknown one throws; get(refresh: true) recomputes
+ * whatever is cached;
  * get(staleIfError:) keeps a value past its stale time, served only when the
  * computation fails; invalidateTags(hard: true) is a miss at once, a soft
  * value too. Used with TraitStaleWhileRevalidate (its helpers)
@@ -32,21 +36,16 @@ trait TraitCachePolicy
 	protected const string POLICY_TAG = 'policy-tag';
 	
 	/**
-	 * RULE: a resolver may change its TTL by reference - the value expires
-	 * when the resolver said
+	 * RULE: a Computed's TTL replaces the call's - the value expires when the
+	 * resolver said, and the caller gets the value, never the Computed
 	 */
-	public function aResolverSetsItsOwnTtl(): bool
+	public function aComputedTtlReplacesTheCallsTtl(): bool
 	{
 		$store = $this->staleStore();
-		$key = $this->staleKey('resolver-ttl');
+		$key = $this->staleKey('computed-ttl');
 		$store->delete($key);
 		
-		$value = $store->get($key, function(KeyValue $store, string $key, int &$ttl): string
-		{
-			$ttl = 1;
-			
-			return 'short-lived';
-		}, 60);
+		$value = $store->get($key, fn() => new Computed('short-lived', ttl: 1), 60);
 		$hit = $this->staleStore()->get($key, queue: false);
 		usleep(2100000);
 		$expired = $this->staleStore()->get($key, queue: false);
@@ -58,21 +57,16 @@ trait TraitCachePolicy
 	}
 	
 	/**
-	 * RULE: a resolver may change its tags by reference - a tag invalidation
-	 * reaches the value by the resolver's tags, not by the call's
+	 * RULE: a Computed's tags replace the call's - a tag invalidation reaches
+	 * the value by the resolver's tags, not by the call's
 	 */
-	public function aResolverSetsItsOwnTags(): bool
+	public function aComputedsTagsReplaceTheCallsTags(): bool
 	{
 		$store = $this->policyTagStore();
-		$key = $this->staleKey('resolver-tags');
+		$key = $this->staleKey('computed-tags');
 		$store->delete($key);
 		
-		$store->get($key, function(KeyValue $store, string $key, int &$ttl, array &$tags): string
-		{
-			$tags = ['policy-resolver'];
-			
-			return 'tagged';
-		}, 60, [self::POLICY_TAG]);
+		$store->get($key, fn() => new Computed('tagged', tags: ['policy-resolver']), 60, [self::POLICY_TAG]);
 		$this->staleStore()->invalidateTags([self::POLICY_TAG]);
 		$byCallTag = $this->staleStore()->get($key, queue: false);
 		$this->staleStore()->invalidateTags(['policy-resolver']);
@@ -84,22 +78,17 @@ trait TraitCachePolicy
 	}
 	
 	/**
-	 * RULE: a resolver that sets $save to false hands the value back, stores
-	 * nothing and frees the lock - the next caller computes at once, not after
-	 * the lock's TTL
+	 * RULE: a Computed with save: false hands the value back, stores nothing
+	 * and frees the lock - the next caller computes at once, not after the
+	 * lock's TTL
 	 */
-	public function aResolverMayStoreNothingAndTheLockIsFreed(): bool
+	public function aComputedWithSaveFalseStoresNothingAndFreesTheLock(): bool
 	{
 		$store = $this->staleStore();
-		$key = $this->staleKey('resolver-unsaved');
+		$key = $this->staleKey('computed-unsaved');
 		$store->delete($key);
 		
-		$value = $store->get($key, function(KeyValue $store, string $key, int &$ttl, array &$tags, bool &$save): string
-		{
-			$save = false;
-			
-			return 'not stored';
-		}, 60);
+		$value = $store->get($key, fn() => new Computed('not stored', save: false), 60);
 		$stored = $this->staleStore()->get($key, queue: false);
 		$calls = 0;
 		$started = microtime(true);
@@ -111,6 +100,73 @@ trait TraitCachePolicy
 			&& $stored === null
 			&& $next === 'computed' && $calls === 1
 			&& $waited < 1.0;
+	}
+	
+	/**
+	 * RULE: a resolver is called with the store and the key alone - one still
+	 * declaring the references it was once given fails loudly, never silently
+	 */
+	public function aResolverDeclaringReferencesFailsLoudly(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->staleKey('resolver-references');
+		$store->delete($key);
+		
+		try
+		{
+			$store->get($key, function(KeyValue $store, string $key, int &$ttl): string
+			{
+				$ttl = 1;
+				
+				return 'never';
+			}, 60);
+			
+			return false;
+		}
+		catch(ArgumentCountError)
+		{
+			return $this->staleStore()->get($key, queue: false) === null;
+		}
+		finally
+		{
+			$store->delete($key);
+		}
+	}
+	
+	/**
+	 * RULE: get() takes its options by name - a misspelt one throws, it is
+	 * never silently ignored
+	 */
+	public function anUnknownOptionThrowsThroughGet(): bool
+	{
+		try
+		{
+			$this->staleStore()->get($this->staleKey('unknown-option'), fn() => 'v', 60, [], stal: 60);
+			
+			return false;
+		}
+		catch(InvalidArgumentException)
+		{
+			return true;
+		}
+	}
+	
+	/**
+	 * RULE: options passed by position after $tags are read in the documented
+	 * order (queue, queueLockTtlMs, stale, ...) - the same on every store
+	 */
+	public function positionalOptionsAreReadInOrder(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->staleKey('positional');
+		$store->delete($key);
+		
+		$store->get($key, fn() => 'v', 60, [], null, null, 45);
+		$stored = $this->staleStore()->peek($key);
+		$store->delete($key);
+		
+		return $stored instanceof Stale
+			&& $stored->staleFor === 45;
 	}
 	
 	/**

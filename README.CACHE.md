@@ -73,8 +73,8 @@ $store->invalidateTags(['categories']);
 | nobody to wait when a value expires | `stale: 60` | past its TTL the old value is served for 60 s while **one** process refreshes it, after the response | Pattern 5 |
 | nobody to wait after an edit either | `stale: 60, soft: true` | a tag invalidation ages the value instead of removing it: served for 60 s while one process recomputes it | Soft invalidation |
 | the last good value through an outage | `staleIfError: 3600` | kept 1 h past its stale time — a miss then, but when the computation throws, it is returned | Stale-if-error |
-| the TTL or the tags from the computed value | the resolver's `&$ttl`, `&$tags` | what the resolver leaves in them is what is stored | Pattern 3 |
-| not to keep an incomplete value | the resolver's `&$save = false` | the value is handed back, nothing is stored, the lock is freed at once | Pattern 3 |
+| the TTL or the tags from the computed value | the resolver returns `new Computed($value, ttl: ..., tags: ...)` | the Computed's TTL and tags are what is stored | Pattern 3 |
+| not to keep an incomplete value | the resolver returns `new Computed($value, save: false)` | the value is handed back, nothing is stored, the lock is freed at once | Pattern 3 |
 | a new value now (a warm-up, a "refresh" button) | `refresh: true` | recomputed and stored, whatever is cached | Forced refresh |
 | an edit to show at once, soft values too | `invalidateTags(..., hard: true)` | a miss at once, also for a value written with `soft: true` | Via tags |
 | a value gone for sure | `delete()`, `clear()` | always a miss at once — nothing is ever served stale after them | |
@@ -453,31 +453,37 @@ $value = $store->get(
 $store->invalidateTags(['user:42']);
 ```
 
-The resolver can also decide, from what it computed, how the value is kept -
-its TTL, its tags (the stores with tags), or not to keep it at all. Every store
-calls it as `function($store, $key, &$ttl, &$tags, &$save)`; a resolver that
-takes fewer arguments is called the same way:
+Every store calls the resolver as `function(KeyValue $store, string $key)`.
+To decide, from what it computed, how the value is kept - its TTL, its tags
+(the stores with tags), or not to keep it at all - it returns a
+`Ovos\Cache\Computed` instead of the bare value:
 
 ```php
+use Ovos\Cache\Computed;
+
 $value = $store->get(
     'key',
-    resolver: function($store, $key, &$ttl, &$tags, &$save)
+    resolver: function()
     {
         $data = $this->computeExpensiveResult();
-        $tags[] = 'computed:' . $data->category;
-        $ttl = $data->isVolatile ? 60 : 3600;
-        // an incomplete answer from the origin: hand it back, keep nothing
-        $save = $data->isComplete;
-        return $data;
+
+        return new Computed(
+            $data,
+            ttl: $data->isVolatile ? 60 : 3600,       // replaces the call's ttl
+            tags: ['base-tag', 'computed:' . $data->category], // replaces the call's tags
+            save: $data->isComplete,                  // false: hand it back, keep nothing
+        );
     },
     ttl: 300,
     tags: ['base-tag'],
 );
 ```
 
-With `$save = false` the value is returned and nothing is written; the
-stampede lock is freed at once, so the next caller computes without waiting
-for it to expire.
+The caller always gets the value, never the Computed. With `save: false`
+nothing is written and the stampede lock is freed at once, so the next caller
+computes without waiting for it to expire. A resolver that still declares the
+references it was once given (`&$ttl`) fails with an `ArgumentCountError` -
+loudly, rather than having its changes silently ignored.
 
 ### Pattern 4: Traditional get/set
 
@@ -538,8 +544,12 @@ $value = $store->get(
   A soft invalidation is the store's verdict at read time, never stored.
   A library older than this reading such a key gets that object back -
   possible only across hosts during a rolling deploy.
-- A subclass that overrides a store's `get()` must add the `int $stale = 0`
-  parameter (and `bool $soft = false`, below).
+- Every store has the one `get()` signature - `get(string $key,
+  ?Closure $resolver = null, int $ttl = 0, array $tags = [], mixed ...$options)`
+  - and reads the options (`stale:`, `soft:`, `refresh:`, `staleIfError:`,
+  `queue:`, `queueLockTtlMs:`) into an `Ovos\Cache\Policy`; an unknown option
+  throws. A subclass that overrides `get()` copies those five parameters once,
+  and a new option never changes them.
 
 #### Soft invalidation (`soft: true`)
 
@@ -587,7 +597,7 @@ $store->get('menu:main', fn() => $this->buildMenu(), ttl: 0, tags: ['menu'], sta
 
 `get(..., refresh: true)` recomputes whatever is cached - for a warm-up or a
 "refresh now" action - and stores the new value as any computation would
-(`stale:`, `soft:`, `staleIfError:` and the resolver's references apply):
+(`stale:`, `soft:`, `staleIfError:` and a `Computed` the resolver returns apply):
 
 ```php
 $offers = $store->get('offers', $this->loadOffers(...), ttl: 300, refresh: true);

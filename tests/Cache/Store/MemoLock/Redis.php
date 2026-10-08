@@ -5,6 +5,7 @@ namespace Tests\Cache\Store\MemoLock;
 
 use Ovos\ArrayObject;
 use Ovos\Container\Inject;
+use Ovos\Cache\Computed;
 use Ovos\Cache\MemoLock\Redis as RedisMemoLock;
 use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\Redis as Store;
@@ -168,18 +169,13 @@ class Redis extends Test
 		try
 		{
 			$value = $this->store->get(self::KEY_ITEM,
-				resolver: function($store, $key, &$ttl, &$tags) use ($value)
-				{
-					$tags[] = 'tag3';
-					
-					return $value;
-				},
+				resolver: fn() => new Computed($value, tags: [...$tags, 'tag3']),
 				tags: $tags,
 			);
 			
 			$result = $this->store->getTags(self::KEY_ITEM);
 			
-			return $result !== $tags; // have the same key/value pairs in the same order and of the same types.
+			return $result === ['tag1', 'tag2', 'tag3']; // the Computed's tags, not the call's
 		}
 		finally
 		{
