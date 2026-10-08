@@ -13,7 +13,7 @@ use Attribute;
  * dispatched action, builds a key from the route (plus any vary axes) and
  * serves a stored body on a hit / captures it on a miss.
  *
- *   #[Cache\Page(ttl: 300, tags: ['articles'], vary: ['locale'])]
+ *   #[Cache\Page(ttl: 300, tags: ['articles'], vary: ['locale'], query: ['page'])]
  *   public function view(Article $article): Response
  *
  * @author Marcin Gil <mg@ovos.at>
@@ -32,6 +32,11 @@ final readonly class Page
 	 *   front of Redis - zero network round trips on the hottest shells. Keep
 	 *   it SHORT (single-digit seconds): a tag invalidation reaches this tier
 	 *   only when the APCu ttl runs out
+	 * @param ?string[] $query the query parameters that change the page - only
+	 *   they are part of the key, every other one (utm_*, fbclid, a cache-
+	 *   buster's ?x=random) is left out, so it neither splits the cache nor
+	 *   forces a render; an array parameter (filter[a]=1) counts by its name.
+	 *   [] leaves the query out; null (the default) keeps every parameter
 	 */
 	public function __construct(
 		public int $ttl = 0,
@@ -39,6 +44,7 @@ final readonly class Page
 		public array $vary = [],
 		public int $stale = 0,
 		public int $apcu = 0,
+		public ?array $query = null,
 	)
 	{
 	}

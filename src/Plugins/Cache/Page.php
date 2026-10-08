@@ -18,9 +18,10 @@ use ReflectionException;
 use ReflectionMethod;
 use Throwable;
 
-use function Ovos\config;
 use function apcu_fetch;
 use function apcu_store;
+use function array_flip;
+use function array_intersect_key;
 use function array_key_exists;
 use function function_exists;
 use function hash;
@@ -29,6 +30,7 @@ use function implode;
 use function in_array;
 use function is_array;
 use function ksort;
+use function Ovos\config;
 use function parse_str;
 use function str_contains;
 use function strcasecmp;
@@ -603,6 +605,7 @@ class Page extends Plugin
 			$this->app->getInterface(),
 			(string)$this->request->getServer('REQUEST_URI'),
 			$this->varyValues($this->attribute->vary),
+			$this->attribute->query,
 		);
 	}
 	
@@ -734,9 +737,10 @@ class Page extends Plugin
 		string $interface,
 		string $uri,
 		array $vary = [],
+		?array $query = null,
 	): string
 	{
-		$canonical = $interface . ' ' . self::canonicalUri($uri);
+		$canonical = $interface . ' ' . self::canonicalUri($uri, $query);
 		foreach($vary as $axis => $value)
 		{
 			$canonical.= '|' . $axis . '=' . $value;
@@ -747,10 +751,12 @@ class Page extends Plugin
 	
 	/**
 	 * Drop the fragment and sort the query so ?a=1&b=2 and ?b=2&a=1 share a
-	 * key instead of fragmenting the cache
+	 * key instead of fragmenting the cache; with $query (the action's
+	 * allowlist, see Cache\Page) only the parameters it names are kept
 	 */
 	public static function canonicalUri(
 		string $uri,
+		?array $query = null,
 	): string
 	{
 		$fragment = strpos($uri, '#');
@@ -767,6 +773,10 @@ class Page extends Plugin
 		
 		$path = substr($uri, 0, $mark);
 		parse_str(substr($uri, $mark + 1), $params);
+		if($query !== null)
+		{
+			$params = array_intersect_key($params, array_flip($query));
+		}
 		ksort($params);
 		
 		$query = http_build_query($params);
