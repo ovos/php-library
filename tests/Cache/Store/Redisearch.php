@@ -9,6 +9,7 @@ use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
+use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Override;
 
@@ -22,6 +23,7 @@ class Redisearch extends Test
 	use TraitRedis;
 	use TraitInvalidationGuard;
 	use TraitStaleWhileRevalidate;
+	use TraitStoredStrings;
 	
 	public const string KEY_ITEM = 'item';
 	
