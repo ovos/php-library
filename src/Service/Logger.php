@@ -765,8 +765,13 @@ class Logger extends Service implements Writer
 		// that knew only dots and dashes.
 		$name = '(["\']?)([A-Za-z0-9_.\-\[\]]{0,24}(?:' . implode('|', $names)
 			. ')[A-Za-z0-9_.\-\[\]]{0,24})\1';
-		$separator = '(\s*(?:=>|[:=])\s*)';
-		$scheme = '(?:(?:bearer|basic|token|digest)\s+)?';
+		// a `:` that is half of `::` separates nothing: PHP's scope resolution
+		// operator. `Controllers\User::unlock()` read as the username pair
+		// `User` : `:unlock(` and `Ovos\Password::generate()` lost its method
+		// to [redacted] — codesafe's Scrubber::SEPARATOR, which this mirrors
+		// (codesafe docs/plans/scope-operator-is-no-separator.md)
+		$separator = '(\s*(?:=>|:(?!:)|=)\s*)';
+		$scheme ='(?:(?:bearer|basic|token|digest)\s+)?';
 		
 		// a QUOTED value, running to its own closing quote — whitespace and
 		// escapes included. The single pass this replaced excluded whitespace
