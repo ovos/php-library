@@ -29,7 +29,6 @@ use function implode;
 use function in_array;
 use function is_array;
 use function ksort;
-use function microtime;
 use function parse_str;
 use function str_contains;
 use function strcasecmp;
@@ -166,9 +165,9 @@ class Page extends Plugin
 		// per-worker front tier first: the hottest shells serve without a
 		// network round trip; a redis hit backfills it. peek() hands back a
 		// page past its ttl too - get() would take it for a miss
-		$record = $this->fromApcu();
+		$record = $this->servable($this->fromApcu());
 		if($record === null
-			&& ($record = $store->peek($this->key)) !== null)
+			&& ($record = $this->servable($store->peek($this->key))) !== null)
 		{
 			$this->toApcu($record);
 		}
@@ -402,14 +401,8 @@ class Page extends Plugin
 		Html $response,
 	): void
 	{
-		$record = $this->record($response);
-		$ttl = $this->attribute->ttl;
-		
-		if($this->attribute->stale > 0 && $ttl > 0)
-		{
-			$record = new Stale($record, microtime(true) + $ttl);
-			$ttl += $this->attribute->stale;
-		}
+		// with a stale time: a record carrying it, stored that much longer
+		[$record, $ttl] = Stale::wrap($this->record($response), $this->attribute->ttl, $this->attribute->stale);
 		
 		$this->getStore()?->set(
 			$this->key,
@@ -452,6 +445,27 @@ class Page extends Plugin
 		}
 		
 		return [...$record, 'body' => $body];
+	}
+	
+	/**
+	 * A stored page as it may be served: a page past its stale time is a
+	 * miss, whatever is left of its item - the record's times decide, not the
+	 * store's TTL (nor the worker copy's)
+	 */
+	protected function servable(
+		mixed $record,
+	): array|Stale|null
+	{
+		if($record instanceof Stale)
+		{
+			return $record->isServable()
+				? $record
+				: null;
+		}
+		
+		return is_array($record) === true
+			? $record
+			: null;
 	}
 	
 	/**

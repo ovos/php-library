@@ -264,13 +264,52 @@ trait TraitCachePolicy
 	}
 	
 	/**
-	 * RULE: a stale value written without staleIfError is served while it is
-	 * there, as it always was - its TTL ends its stale time, not a clock
+	 * RULE: a value past the time kept for errors is no fallback while its
+	 * item is still there - the computation's exception goes to the caller
 	 */
-	public function anAgedValueWithoutStaleIfErrorIsServedWhileItIsThere(): bool
+	public function aValuePastTheTimeKeptForErrorsIsNoFallback(): bool
 	{
 		$store = $this->staleStore();
-		$key = $this->staleKey('aged-no-error');
+		$key = $this->staleKey('past-error-time');
+		$store->delete($key);
+		$expired = new Stale('old', microtime(true) - 100, 1, false, errorFor: 10);
+		if($store instanceof Tags)
+		{
+			$store->set($key, $expired, 60, [self::POLICY_TAG]);
+		}
+		else
+		{
+			$store->set($key, $expired, 60);
+		}
+		
+		try
+		{
+			$this->staleStore()->get($key, function(): never
+			{
+				throw new RuntimeException('the origin is down');
+			}, 60, stale: 1, staleIfError: 10);
+			
+			return false;
+		}
+		catch(RuntimeException)
+		{
+			return true;
+		}
+		finally
+		{
+			$store->delete($key);
+		}
+	}
+	
+	/**
+	 * RULE: a value past its stale time is a miss while its item is still
+	 * there - the value's own times end its stale window, not the store's TTL
+	 * (computed at once, nothing served stale, nothing deferred)
+	 */
+	public function aValuePastItsStaleTimeIsAMissWhileItIsStillThere(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->staleKey('past-stale');
 		$store->delete($key);
 		$aged = new Stale('old', microtime(true) - 100, 1);
 		if($store instanceof Tags)
@@ -288,7 +327,7 @@ trait TraitCachePolicy
 		$store->delete($key);
 		$store->setDeferrer(null);
 		
-		return $served === 'old' && $calls === 0 && count($deferred) === 1;
+		return $served === 'new' && $calls === 1 && $deferred === [];
 	}
 	
 	/**

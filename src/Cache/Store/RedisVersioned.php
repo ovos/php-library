@@ -823,8 +823,7 @@ class RedisVersioned extends Store
 		$value = $this->serializer
 			->unserialize($this->compressor->decompress($item[static::KEY_DATA]));
 		if($value instanceof Stale === false
-			|| $value->soft === false
-			|| $value->staleFor <= 0)
+			|| $value->isSoft() === false)
 		{
 			return null;
 		}
@@ -842,7 +841,7 @@ class RedisVersioned extends Store
 		}
 		
 		return $now - $invalidatedAt < $value->staleFor * 1000
-			? $value->aged()
+			? $value->invalidated()
 			: null;
 	}
 	
