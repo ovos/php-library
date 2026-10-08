@@ -13,6 +13,7 @@ use Closure;
 use RuntimeException;
 
 use function count;
+use function is_array;
 use function microtime;
 use function usleep;
 
@@ -417,6 +418,46 @@ trait TraitStaleWhileRevalidate
 			&& count($deferred) === 1
 			&& $calls === 1
 			&& $after === 'v2';
+	}
+	
+	/**
+	 * RULE: on the tag-index stores a soft value kept without a ttl stays
+	 * without one after its refresh - the soft mark gave the key and the data
+	 * the window's expiry, and the write over the marked item must not keep it
+	 * (it did: the old data made the write an overwrite, and an overwrite
+	 * without a ttl keeps the expiry it finds)
+	 */
+	public function aRefreshedSoftValueWithoutATtlKeepsNoExpiry(): bool
+	{
+		$store = $this->softStore();
+		if($store instanceof RedisVersioned
+			|| $store instanceof KeyValueRedis === false)
+		{
+			throw new SkipException('the soft mark is the tag-index stores\'');
+		}
+		
+		$key = $this->staleKey('soft-forever-kept');
+		$id = $this->staleId($store, $key);
+		$client = $store->getClient();
+		$this->capture($store, $deferred);
+		$this->writeSoft($key, 'v1', ttl: 0);
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		
+		$store->get($key, fn() => 'v2', 0, [self::SOFT_TAG], stale: 60, soft: true);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$keyTtl = (int)$client->pTtl($id);
+		$dataTtl = $client->rawCommand('HPTTL', $id, 'FIELDS', 1, KeyValueRedis::KEY_DATA);
+		$read = $this->staleStore()->get($key, queue: false);
+		$store->delete($key);
+		
+		return count($deferred) === 1
+			&& $read === 'v2'
+			&& $keyTtl === -1
+			&& is_array($dataTtl)
+			&& (int)$dataTtl[0] === -1;
 	}
 	
 	/**
