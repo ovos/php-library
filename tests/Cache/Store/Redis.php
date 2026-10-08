@@ -285,6 +285,39 @@ class Redis extends Test
 		}
 	}
 	
+	/**
+	 * With clean_tags on, an item a soft invalidation marked stays in its
+	 * tags' index - a hard invalidation after it still reaches it
+	 */
+	public function cleanTagsKeepASoftValueForAHardInvalidation(): bool
+	{
+		$this->store->setCleanTags(true);
+		$this->capture($this->store, $deferred);
+		$key = 'soft-clean-tags';
+		$tagId = $this->store
+			->prefix('soft-tag', $this->store->getType($this->store::TYPE_TAGS));
+		
+		try
+		{
+			$this->store->get($key, fn() => 'old', 60, ['soft-tag'], stale: 60, soft: true);
+			$this->store->invalidateTags(['soft-tag']);
+			$kept = $this->store->getClient()
+				->hExists($tagId, $key);
+			$this->store->invalidateTags(['soft-tag'], hard: true);
+			$read = $this->store->get($key, fn() => 'new', 60, ['soft-tag'], stale: 60, soft: true);
+			
+			return $kept === true
+				&& $read === 'new'
+				&& $deferred === [];
+		}
+		finally
+		{
+			$this->store->setCleanTags(false);
+			$this->store->setDeferrer(null);
+			$this->store->delete($key);
+		}
+	}
+	
 	public function cleanTagsMatchingAll(): bool
 	{
 		$this->store->setCleanTags(true);
