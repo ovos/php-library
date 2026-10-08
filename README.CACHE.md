@@ -69,6 +69,7 @@ $store->invalidateTags(['categories']);
 
 | You want… | Pass | What happens | See |
 |---|---|---|---|
+| no stampede: one computation per miss, not one per request | nothing — `get()` with a resolver | one process computes while the others wait for its result (MemoLock), across every server; `queue: false` skips the lock (a read that never computes) | Stampede protection |
 | nobody to wait when a value expires | `stale: 60` | past its TTL the old value is served for 60 s while **one** process refreshes it, after the response | Pattern 5 |
 | nobody to wait after an edit either | `stale: 60, soft: true` | a tag invalidation ages the value instead of removing it: served for 60 s while one process recomputes it | Soft invalidation |
 | the last good value through an outage | `staleIfError: 3600` | kept 1 h past its stale time — a miss then, but when the computation throws, it is returned | Stale-if-error |
