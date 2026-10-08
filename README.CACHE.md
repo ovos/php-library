@@ -141,8 +141,11 @@ is constant no matter how many items match.
   the set turns stale, one worker is elected to refresh it and the others keep
   it for that read; on a server whose APCu was just emptied, one worker loads
   the stream and the others wait for it, briefly, instead of loading it too.
-  Switched off, each process loads the rules of the whole retention window
-  once, before its first hit.
+  An invalidation made on a server is seen there at once - the next request
+  included: it leaves an "invalidated at" mark in APCu, and a set fetched
+  before the mark is never fresh; `rules_cache_ms` bounds only the staleness
+  between servers. Switched off, each process loads the rules of the whole
+  retention window once, before its first hit.
 - `clear()` is logical as well (one rule matching everything);
   `clearPhysical()` wipes the whole group for maintenance.
 - `rules_retention_s` (default 30 days) is the default **and maximum** item

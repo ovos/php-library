@@ -75,12 +75,10 @@ class Compressor
 			return null;
 		}
 		
-		if($this->compressionEnabled !== true)
-		{
-			return $value;
-		}
-		
-		if(strlen($value) < $this->compressionThreshold)
+		// off: stored as it is - escaped where it looks compressed, so a read
+		// (which decodes whatever the write setting) gives it back as it is
+		if($this->compressionEnabled !== true
+			|| strlen($value) < $this->compressionThreshold)
 		{
 			return $this->raw($value);
 		}
@@ -121,11 +119,8 @@ class Compressor
 			return null;
 		}
 		
-		if($this->compressionEnabled !== true)
-		{
-			return $value;
-		}
-		
+		// decoded whatever the write setting: a value stored while it was on
+		// is never handed out as its compressed bytes
 		$prefix = substr($value, 2, 3);
 		if($prefix === static::PREFIX_COMPRESS) // compressed
 		{
@@ -143,7 +138,8 @@ class Compressor
 					case 'zs':
 						if(Zstd::isAvailable() === false)
 						{
-							return $value;
+							// a host without zstd cannot read it: a miss
+							return null;
 						}
 						
 						$value = zstd_uncompress($compressed);

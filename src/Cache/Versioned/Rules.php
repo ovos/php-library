@@ -112,6 +112,11 @@ class Rules
 	/**
 	 * @param int $retentionMs how long a rule can matter, being the longest an item may live
 	 */
+	/**
+	 * The last absorb() reset the set (see wasReset())
+	 */
+	protected bool $reset = false;
+	
 	public function __construct(
 		protected int $retentionMs,
 	)
@@ -121,6 +126,16 @@ class Rules
 	public function last(): string
 	{
 		return $this->last;
+	}
+	
+	/**
+	 * Whether the last absorb() found the stream moved from under the set (lost,
+	 * rebuilt): what it holds then replaces any set held elsewhere, even one
+	 * with a newer last id (see SharedRules::store())
+	 */
+	public function wasReset(): bool
+	{
+		return $this->reset;
 	}
 	
 	public function isEmpty(): bool
@@ -138,6 +153,8 @@ class Rules
 		array $entries,
 	): static
 	{
+		$this->reset = false;
+		
 		if($this->last !== self::NONE)
 		{
 			$start = array_key_first($entries);
@@ -150,6 +167,7 @@ class Rules
 			{
 				// the stream moved from under us: whatever it holds now is
 				// the whole truth, and what we held is not part of it
+				$this->reset = true;
 				$this->tags = [];
 				$this->hard = [];
 				$this->all = [];
@@ -442,7 +460,9 @@ class Rules
 		$hard = is_scalar($fields[static::FIELD_HARD] ?? null)
 			&& (string)$fields[static::FIELD_HARD] === '1';
 		
-		if($mode === static::MODE_ALL)
+		// an 'all' rule naming one tag means what an 'any' rule on it means:
+		// held per tag (compacted), not in the list every read walks
+		if($mode === static::MODE_ALL && count($tags) !== 1)
 		{
 			$this->all[] = [$ms, $sequence, $tags, $hard];
 		}

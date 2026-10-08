@@ -150,7 +150,7 @@ class Functions
 		{
 			$list = $client
 				->function('list', 'libraryname', $libraryName);
-				
+			
 			if($list !== false
 				&& isset($list[0])
 				&& $list[0]['library_name'] === $libraryName
@@ -176,11 +176,11 @@ class Functions
 		
 		$library = $this->buildLibrary($libraryName, $libraryFile);
 		
-		$libraryLoaded = $replace
-			? $client
-				->function('load', 'replace', $library)
-			: $client
-				->function('load', $library);
+		// always REPLACE: on a missing library it loads, and a process that
+		// loaded the same library since this one looked is no error ("already
+		// exists" would fail this call - and a lock release riding on it)
+		$libraryLoaded = $client
+			->function('load', 'replace', $library);
 		
 		if($error = $client->getLastError())
 		{
@@ -293,7 +293,7 @@ class Functions
 	{
 		$list = $client->rawCommand($master,
 			'FUNCTION', 'LIST', 'LIBRARYNAME', $libraryName);
-			
+		
 		if(is_array($list) === false)
 		{
 			return false;
@@ -492,65 +492,48 @@ class Functions
 				->toggleReadTimeout(Connection::TIMEOUT_READ_LONG);
 		}
 		
-		$functionName = $this->functionsPrefix($function);
-		
-		// phpredis marshals integer arguments through a platform "long"
-		// (32 bits on Windows) on both the cluster rawCommand and the
-		// standalone fcall paths - a value like a 30-day millisecond
-		// retention silently truncates to a negative number; the protocol
-		// is strings anyway, so send strings on either path
-		foreach($args as $index => $arg)
+		try
 		{
-			$args[$index] = (string)$arg;
-		}
-		
-		// phpredis RedisCluster has no fcall()/fcall_ro() methods,
-		// route the call by the first key instead (a single-key call
-		// is executed by the node owning the key's hash slot)
-		if($client instanceof RedisClusterClient)
-		{
-			$call = function(string $function, array $keys, array $args)
-				use ($client, $readOnly): mixed
+			$functionName = $this->functionsPrefix($function);
+			
+			// phpredis marshals integer arguments through a platform "long"
+			// (32 bits on Windows) on both the cluster rawCommand and the
+			// standalone fcall paths - a value like a 30-day millisecond
+			// retention silently truncates to a negative number; the protocol
+			// is strings anyway, so send strings on either path
+			foreach($args as $index => $arg)
 			{
-				return $client->rawCommand(
-					$keys[0] ?? $client->_masters()[0],
-					$readOnly ? 'FCALL_RO' : 'FCALL',
-					$function,
-					(string)count($keys),
-					...$keys,
-					...$args,
-				);
-			};
-		}
-		else
-		{
-			$call = [$client, $readOnly
-				? 'fcall_ro'
-				: 'fcall'
-			];
-		}
-		
-		// clear any stale error so getLastError() after the call reflects only this
-		// FCALL - the reload-and-retry below keys off it
-		$client->clearLastError();
-		
-		$result = $this->connection
-			->slowLog(
-				$call,
-				$functionName,
-				$keys,
-				$args,
-			);
-		
-		// self-heal: a function/library can vanish from a node mid-process (a server
-		// FUNCTION FLUSH, a restart without function persistence, a failover or a new
-		// master, or an FCALL_RO served by a lagging replica); the in-process
-		// "loaded" flag then masks the gap and the call fails with "Function not
-		// found". Force a full reload (replace bypasses the stale flag) and retry
-		// once so the miss never surfaces; a failed reload throws RedisException
-		if($this->isFunctionMissing($client->getLastError())
-			&& $this->loadLibraries(true))
-		{
+				$args[$index] = (string)$arg;
+			}
+			
+			// phpredis RedisCluster has no fcall()/fcall_ro() methods,
+			// route the call by the first key instead (a single-key call
+			// is executed by the node owning the key's hash slot)
+			if($client instanceof RedisClusterClient)
+			{
+				$call = function(string $function, array $keys, array $args)
+					use ($client, $readOnly): mixed
+				{
+					return $client->rawCommand(
+						$keys[0] ?? $client->_masters()[0],
+						$readOnly ? 'FCALL_RO' : 'FCALL',
+						$function,
+						(string)count($keys),
+						...$keys,
+						...$args,
+					);
+				};
+			}
+			else
+			{
+				$call = [$client, $readOnly
+					? 'fcall_ro'
+					: 'fcall'
+				];
+			}
+			
+			// clear any stale error so getLastError() after the call reflects only this
+			// FCALL - the reload-and-retry below keys off it
 			$client->clearLastError();
 			
 			$result = $this->connection
@@ -560,15 +543,39 @@ class Functions
 					$keys,
 					$args,
 				);
+			
+			// self-heal: a function/library can vanish from a node mid-process (a server
+			// FUNCTION FLUSH, a restart without function persistence, a failover or a new
+			// master, or an FCALL_RO served by a lagging replica); the in-process
+			// "loaded" flag then masks the gap and the call fails with "Function not
+			// found". Force a full reload (replace bypasses the stale flag) and retry
+			// once so the miss never surfaces; a failed reload throws RedisException
+			if($this->isFunctionMissing($client->getLastError())
+				&& $this->loadLibraries(true))
+			{
+				$client->clearLastError();
+				
+				$result = $this->connection
+					->slowLog(
+						$call,
+						$functionName,
+						$keys,
+						$args,
+					);
+			}
+			
+			return $result;
 		}
-		
-		if($long)
+		finally
 		{
-			$this->connection
-				->toggleReadTimeout();
+			// restored on a throw too: the long timeout - and the server's
+			// busy-reply threshold it sets - must not outlive this call
+			if($long)
+			{
+				$this->connection
+					->toggleReadTimeout();
+			}
 		}
-		
-		return $result;
 	}
 	
 	public function batchCall(
@@ -590,16 +597,21 @@ class Functions
 		$countKeys = count($keys);
 		$totalBatches = (int)ceil($countKeys / $batchSize);
 		
-		for($batch = 0; $batch < $totalBatches; $batch++)
+		try
 		{
-			$keysBatch = array_slice($keys, $batch * $batchSize, $batchSize);
-			$this->call($function, $keysBatch, $args, $readOnly);
+			for($batch = 0; $batch < $totalBatches; $batch++)
+			{
+				$keysBatch = array_slice($keys, $batch * $batchSize, $batchSize);
+				$this->call($function, $keysBatch, $args, $readOnly);
+			}
 		}
-		
-		if($long)
+		finally
 		{
-			$this->connection
-				->toggleReadTimeout();
+			if($long)
+			{
+				$this->connection
+					->toggleReadTimeout();
+			}
 		}
 	}
 }

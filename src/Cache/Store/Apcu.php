@@ -206,7 +206,7 @@ class Apcu extends KeyValue
 			? $compute
 			: null;
 		$data = $this->fetch($id);
-		if(($served = $this->served($id, $data, $revalidate)) !== null)
+		if(($served = $this->served($id, $data, $revalidate, $policy->queueLockTtlMs)) !== null)
 		{
 			return $served;
 		}

@@ -4,10 +4,12 @@ declare(strict_types=1);
 namespace Tests\Cache;
 
 use Ovos\Cache\Serializer as Subject;
+use Ovos\Cache\Stale;
 use Ovos\Test;
 use stdClass;
 
 use function serialize;
+use function str_replace;
 use function str_starts_with;
 
 /**
@@ -42,6 +44,27 @@ class Serializer extends Test
 		}
 		
 		return true;
+	}
+	
+	/**
+	 * A serialized payload that does not decode is no value - a miss, never
+	 * false - and so is an object of a class that is gone (a rolling deploy
+	 * renamed it), on its own or inside a Stale record
+	 */
+	public function aPayloadThatDoesNotDecodeIsNoValue(): bool
+	{
+		$serializer = new Subject;
+		$gone = 'O:18:"NoSuchClassAnyMore":0:{}';
+		$stale = serialize(new Stale(['kept'], 1.5, 30));
+		$staleGone = str_replace('a:1:{i:0;s:4:"kept";}', $gone, $stale);
+		
+		// false needs no warning: this class never serializes a bare boolean
+		return $serializer->unserialize(Subject::PREFIX_SERIALIZE . 'b:0;') === null
+			&& $serializer->unserialize(Subject::PREFIX_SERIALIZE . 'a:1:{garbage') === null
+			&& $serializer->unserialize(Subject::PREFIX_SERIALIZE . $gone) === null
+			&& $staleGone !== $stale
+			&& $serializer->unserialize(Subject::PREFIX_SERIALIZE . $staleGone) === null
+			&& $serializer->unserialize(Subject::PREFIX_SERIALIZE . $stale) instanceof Stale;
 	}
 	
 	public function aPlainStringIsStoredAsItIs(): bool

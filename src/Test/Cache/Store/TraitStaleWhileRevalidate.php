@@ -156,6 +156,37 @@ trait TraitStaleWhileRevalidate
 	}
 	
 	/**
+	 * RULE: the refresh holds its lock for the call's queueLockTtlMs - a
+	 * refresh slower than the default lock TTL is not started a second time
+	 */
+	public function aRefreshHoldsItsLockForTheCallsLockTtl(): bool
+	{
+		$store = $this->staleStore();
+		$rival = $this->staleStore();
+		$key = $this->staleKey('refresh-lock-ttl');
+		$id = $this->staleId($store, $key);
+		$taken = null;
+		$this->writeAged($store, $key, 'old');
+		
+		$served = $store->get($key, function() use ($rival, $id, &$taken): string
+		{
+			// past the default lock TTL (2 s on Redis, 1 s on APCu)
+			usleep(2200000);
+			$taken = $rival->getMemoLock()->tryLock($id);
+			
+			return 'new';
+		}, 60, stale: 60, queueLockTtlMs: 6000);
+		if($taken === true)
+		{
+			$rival->getMemoLock()->releaseActiveLock($id);
+		}
+		$store->delete($key);
+		
+		return $served === 'new'
+			&& $taken === false;
+	}
+	
+	/**
 	 * RULE: a refresh looks once more after it took the lock - another
 	 * process refreshed the item meanwhile, so it computes nothing
 	 */
