@@ -195,24 +195,43 @@ trait TraitCachePolicy
 	}
 	
 	/**
-	 * RULE: staleIfError keeps the value past its stale time - it is still
-	 * there for the failure that comes after it
+	 * RULE: a value written with staleIfError is kept past its stale time -
+	 * there for the failure that comes after it, a miss to a computation that
+	 * succeeds (computed at once, not served stale); with a stale time and
+	 * without one
 	 */
 	public function staleIfErrorKeepsTheValuePastItsStaleTime(): bool
 	{
 		$store = $this->staleStore();
-		$key = $this->staleKey('stale-if-error-kept');
-		$store->delete($key);
-		
-		$store->get($key, fn() => 'kept', 1, stale: 1, staleIfError: 60);
-		usleep(2600000);
-		$served = $this->staleStore()->get($key, function(): never
+		$kept = $this->staleKey('stale-if-error-kept');
+		$missed = $this->staleKey('stale-if-error-missed');
+		$noStale = $this->staleKey('stale-if-error-no-stale');
+		$store->delete($kept);
+		$store->delete($missed);
+		$store->delete($noStale);
+		$failing = function(): never
 		{
 			throw new RuntimeException('the origin is down');
-		}, 1, stale: 1, staleIfError: 60);
-		$store->delete($key);
+		};
 		
-		return $served === 'kept';
+		$store->get($kept, fn() => 'kept', 1, stale: 1, staleIfError: 60);
+		$store->get($missed, fn() => 'old', 1, stale: 1, staleIfError: 60);
+		$store->get($noStale, fn() => 'kept without stale', 1, staleIfError: 60);
+		usleep(2600000);
+		$served = $this->staleStore()->get($kept, $failing, 1, stale: 1, staleIfError: 60);
+		$reader = $this->staleStore();
+		$this->capture($reader, $deferred);
+		$calls = 0;
+		$computed = $reader->get($missed, $this->counting($calls, 'new'), 1, stale: 1, staleIfError: 60);
+		$reader->setDeferrer(null);
+		$servedWithoutStale = $this->staleStore()->get($noStale, $failing, 1, staleIfError: 60);
+		$store->delete($kept);
+		$store->delete($missed);
+		$store->delete($noStale);
+		
+		return $served === 'kept'
+			&& $computed === 'new' && $calls === 1 && $deferred === []
+			&& $servedWithoutStale === 'kept without stale';
 	}
 	
 	/**
