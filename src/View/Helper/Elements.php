@@ -132,6 +132,19 @@ class Elements extends Helper
 	}
 	
 	/**
+	 * Forgets every class and every nested element: the page a new layout
+	 * starts from (Plugins\Layout), so the body and element classes a failed
+	 * controller set do not carry over onto the error page
+	 */
+	public function clear(): static
+	{
+		$this->elements = [];
+		$this->classes = [];
+		
+		return $this;
+	}
+	
+	/**
 	 * Returns classes
 	 */
 	public function getClasses(): array
