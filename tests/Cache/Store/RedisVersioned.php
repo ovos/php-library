@@ -19,8 +19,11 @@ use Ovos\Test\Exception\SkipException;
 use Override;
 
 use function array_keys;
+use function bin2hex;
 use function count;
+use function end;
 use function microtime;
+use function random_bytes;
 use function usleep;
 
 /**
@@ -271,6 +274,94 @@ class RedisVersioned extends Test
 		finally
 		{
 			$this->store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	/**
+	 * An invalidation the server refused (an error reply, not an exception)
+	 * is logged - never lost quietly - and reported false
+	 */
+	public function aRefusedInvalidationIsLogged(): bool
+	{
+		// a group of its own: its rules key is broken on purpose
+		$group = $this->group;
+		$this->group = 'tests-refused-' . bin2hex(random_bytes(4));
+		try
+		{
+			$probe = $this->probe();
+		}
+		finally
+		{
+			$this->group = $group;
+		}
+		$client = $probe->getClient();
+		$client->set($probe->getRulesKey(), 'not a stream');
+		
+		try
+		{
+			return $probe->invalidateTags(['tag1']) === false
+				&& count($probe->logged) === 1;
+		}
+		finally
+		{
+			$client->del($probe->getRulesKey());
+		}
+	}
+	
+	/**
+	 * An 'all' rule naming one tag means what an 'any' rule on that tag means:
+	 * it is held per tag (compacted), not in the list every read walks
+	 */
+	public function aOneTagAllRuleIsHeldAsAnAnyRule(): bool
+	{
+		$rules = new Rules(3600000);
+		$rules->absorb([
+			'1000-0' => ['mode' => 'all', 'tags' => 'tag1', 'first' => '1'],
+			'2000-0' => ['mode' => 'all', 'tags' => 'tag1', 'first' => '0'],
+			'3000-0' => ['mode' => 'all', 'tags' => 'tag1,tag2', 'first' => '0'],
+		]);
+		$held = $rules->toArray();
+		
+		return count($held['all']) === 1
+			&& ($held['tags']['tag1'] ?? null) === [2000, 0]
+			&& $rules->isStale(['tag1'], '1500-0') === true
+			&& $rules->isStale(['tag2'], '1500-0') === false
+			&& $rules->isStale(['tag1', 'tag2'], '2500-0') === true
+			&& $rules->isStale(['tag1'], '2500-0') === false;
+	}
+	
+	/**
+	 * After the stream was lost with nothing appended since, the refresh that
+	 * finds it gone shares the reset set: the workers stop adopting the lost
+	 * one (and refreshing from it on every request)
+	 */
+	public function sharedRulesFollowALostStream(): bool
+	{
+		$this->requireSharedRules();
+		
+		$first = $this->probe(['rules_cache_ms' => 100]);
+		$first->set('item1', 'test', tags: ['tag1']);
+		$first->invalidateTags(['tag2']);
+		// shares a set holding the rule
+		$first->get('item1', queue: false);
+		
+		$this->store->getClient()
+			->del($first->getRulesKey());
+		usleep(150_000);
+		
+		$second = $this->probe(['rules_cache_ms' => 100]);
+		$second->get('item1', queue: false);
+		$shared = $second->sharedRules()
+			?->load(3600000);
+		
+		try
+		{
+			return $shared !== null
+				&& $shared[0]->last() === Rules::NONE;
+		}
+		finally
+		{
+			$first->delete('item1');
 		}
 	}
 	
@@ -642,6 +733,158 @@ class RedisVersioned extends Test
 	}
 	
 	/**
+	 * An invalidation is seen by the next request on this server even when the
+	 * request that made it read nothing afterwards: a set fetched before it is
+	 * not fresh, the next read fetches the delta
+	 */
+	public function sharedRulesSeeThisServersInvalidationOnTheNextRequest(): bool
+	{
+		$this->requireSharedRules();
+		
+		$first = $this->probe();
+		$first->set('item1', 'test', tags: ['tag1']);
+		$first->set('item2', 'test', tags: ['tag2']);
+		// the shared set is stored here, fresh, without the rule below
+		$first->get('item2', queue: false);
+		$last = $first->rules()
+			->last();
+		
+		// the request invalidates and ends - it reads nothing afterwards
+		$first->invalidateTags(['tag1']);
+		
+		// the next request on this server, inside the shared set's freshness
+		$second = $this->probe();
+		$item1 = $second->get('item1', queue: false);
+		
+		try
+		{
+			return $item1 === null
+				&& $second->fetchedFrom === [$last];
+		}
+		finally
+		{
+			$first->delete('item1');
+			$first->delete('item2');
+		}
+	}
+	
+	/**
+	 * A worker holding a fresh set sees an invalidation another process of
+	 * this server made at once: the held set is behind it, one delta fetch
+	 */
+	public function aHeldSetIsBehindThisServersInvalidation(): bool
+	{
+		$this->requireSharedRules();
+		
+		$worker = $this->probe();
+		$worker->set('item1', 'test', tags: ['tag1']);
+		$before = $worker->get('item1', queue: false);
+		$last = $worker->rules()
+			->last();
+		$fetches = count($worker->fetchedFrom);
+		
+		$this->probe()
+			->invalidateTags(['tag1']);
+		$after = $worker->get('item1', queue: false);
+		
+		try
+		{
+			return $before === 'test'
+				&& $after === null
+				&& count($worker->fetchedFrom) === $fetches + 1
+				&& end($worker->fetchedFrom) === $last;
+		}
+		finally
+		{
+			$worker->delete('item1');
+		}
+	}
+	
+	/**
+	 * A worker behind an invalidation made on this server does not leave the
+	 * refresh to a leader in flight - that leader may have started before the
+	 * rule: it fetches the delta itself
+	 */
+	public function aWorkerBehindThisServersInvalidationFetchesDespiteALeader(): bool
+	{
+		$this->requireSharedRules();
+		
+		$worker = $this->probe();
+		$worker->set('item1', 'test', tags: ['tag1']);
+		// holds a fresh set, and shares it
+		$before = $worker->get('item1', queue: false);
+		$last = $worker->rules()
+			->last();
+		
+		$this->probe()
+			->invalidateTags(['tag1']);
+		// a leader is refreshing right now
+		$flag = $worker->sharedRules();
+		$flag->lead();
+		
+		try
+		{
+			$after = $worker->get('item1', queue: false);
+			
+			return $before === 'test'
+				&& $after === null
+				&& end($worker->fetchedFrom) === $last;
+		}
+		finally
+		{
+			$flag->release();
+			$worker->delete('item1');
+		}
+	}
+	
+	/**
+	 * A cold worker waiting for the elected loader does not take a set the
+	 * leader fetched before an invalidation made on this server - it waits
+	 * the budget out, then fetches the delta from it
+	 */
+	public function aColdWaiterDoesNotTakeASetFetchedBeforeThisServersInvalidation(): bool
+	{
+		$this->requireSharedRules();
+		
+		$first = $this->probe();
+		$first->set('item1', 'test', tags: ['tag1']);
+		// the leader's load, begun before the invalidation below
+		$beganMs = microtime(true) * 1000;
+		$early = $first->rules();
+		$last = $early->last();
+		$first->invalidateTags(['tag1']);
+		
+		// nothing shared yet, and the flag says a loader is at work
+		$flag = $first->sharedRules();
+		$flag->forget();
+		$flag->lead();
+		
+		$second = $this->probe();
+		$adoptions = 0;
+		$second->beforeAdopt = function(SharedRules $shared) use (&$adoptions, $early, $beganMs): void
+		{
+			// the leader shares its set while the second one waits
+			if($adoptions++ === 1)
+			{
+				$shared->store($early, $beganMs);
+			}
+		};
+		$item1 = $second->get('item1', queue: false);
+		
+		try
+		{
+			return $adoptions > 2
+				&& $item1 === null
+				&& $second->fetchedFrom === [$last];
+		}
+		finally
+		{
+			$flag->release();
+			$first->delete('item1');
+		}
+	}
+	
+	/**
 	 * A rule appended by another process - another worker, another server -
 	 * reaches a worker that adopted a fresh shared set within rules_cache_ms:
 	 * the refresh after the window is a delta fetch from the id held, and the
@@ -924,7 +1167,7 @@ class RedisVersioned extends Test
 	{
 		return $this->guardStore();
 	}
-
+	
 	/**
 	 * A fresh store - another process (TraitInvalidationGuard); its rules read
 	 * exactly, so a reader sees an invalidation at once rather than within

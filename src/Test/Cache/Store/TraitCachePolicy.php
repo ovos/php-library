@@ -103,6 +103,28 @@ trait TraitCachePolicy
 	}
 	
 	/**
+	 * RULE: a resolver that returns null stores nothing and frees the lock at
+	 * once - the next caller computes without waiting for the lock's TTL
+	 */
+	public function aNullResultStoresNothingAndFreesTheLock(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->staleKey('resolver-null');
+		$store->delete($key);
+		
+		$value = $store->get($key, fn() => null, 60);
+		$calls = 0;
+		$started = microtime(true);
+		$next = $this->staleStore()->get($key, $this->counting($calls, 'computed'), 60);
+		$waited = microtime(true) - $started;
+		$store->delete($key);
+		
+		return $value === null
+			&& $next === 'computed' && $calls === 1
+			&& $waited < 0.5;
+	}
+	
+	/**
 	 * RULE: a resolver is called with the store and the key alone - one still
 	 * declaring the references it was once given fails loudly, never silently
 	 */

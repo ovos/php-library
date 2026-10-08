@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ovos\Test\Cache\Store;
 
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
+use Ovos\Cache\Store\RedisVersioned;
+use Ovos\Test\Exception\SkipException;
 
 use function array_keys;
 use function bin2hex;
@@ -343,6 +345,36 @@ trait TraitInvalidationGuard
 		$writer->delete(self::GUARD_KEY);
 		
 		return $written && $read === 'late';
+	}
+	
+	/**
+	 * RULE: a versioned recomputation that outlives the window keeps the
+	 * rules stamp its miss took - an invalidation made while it computed
+	 * reaches its write (the epoch is the window's, the stamp holds for the
+	 * rules' retention)
+	 */
+	public function aRecomputationPastTheWindowSeesTheRulesItMissed(): bool
+	{
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
+		if($reader instanceof RedisVersioned === false)
+		{
+			throw new SkipException('only the versioned stores stamp a miss with their rules');
+		}
+		$writer = $this->guardStore();
+		$writer->delete(self::GUARD_KEY);
+		
+		$computed = $reader->get(self::GUARD_KEY, function() use ($writer): string
+		{
+			$writer->invalidateTags([self::GUARD_TAG]);
+			usleep(250000);
+			
+			return 'computed before the invalidation';
+		}, 60, [self::GUARD_TAG]);
+		$read = $writer->get(self::GUARD_KEY, queue: false);
+		$writer->delete(self::GUARD_KEY);
+		
+		return $computed === 'computed before the invalidation'
+			&& $read === null;
 	}
 	
 	/**

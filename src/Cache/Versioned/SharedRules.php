@@ -4,11 +4,13 @@ declare(strict_types=1);
 namespace Ovos\Cache\Versioned;
 
 use function apcu_add;
+use function apcu_cas;
 use function apcu_delete;
 use function apcu_enabled;
 use function apcu_exists;
 use function apcu_fetch;
 use function apcu_store;
+use function ceil;
 use function function_exists;
 use function hash;
 use function is_array;
@@ -54,6 +56,8 @@ class SharedRules
 	protected const string SEPARATOR_IDENTITY = '@';
 	protected const string SUFFIX_REFRESH = ':refresh';
 	
+	protected const string SUFFIX_WRITTEN = ':written';
+	
 	// Entry shape
 	protected const string KEY_RULES = 'rules';
 	protected const string KEY_FETCHED_AT_MS = 'fetched_at_ms';
@@ -65,6 +69,8 @@ class SharedRules
 	 * keeps what they hold until the refresh lands
 	 */
 	protected string $refreshKey;
+	
+	protected string $writtenKey;
 	
 	/**
 	 * @param string $rulesKey the stream key, already carrying the prefix and the group
@@ -79,6 +85,7 @@ class SharedRules
 			. static::SEPARATOR_IDENTITY
 			. hash('xxh64', $identity);
 		$this->refreshKey = $this->key . static::SUFFIX_REFRESH;
+		$this->writtenKey = $this->key . static::SUFFIX_WRITTEN;
 	}
 	
 	/**
@@ -133,6 +140,7 @@ class SharedRules
 	public function store(
 		Rules $rules,
 		float $fetchedAtMs,
+		bool $replace = false,
 	): bool
 	{
 		$current = apcu_fetch($this->key, $success);
@@ -140,7 +148,10 @@ class SharedRules
 			? Rules::fromArray($current[static::KEY_RULES] ?? null, 0)
 			: null;
 		
-		if($held !== null
+		// a set reset by a lost stream replaces the held one ($replace): its
+		// newer last id belongs to the stream that is gone
+		if($replace === false
+			&& $held !== null
 			&& Rules::isNewerId($held->last(), $rules->last()))
 		{
 			return false;
@@ -150,6 +161,53 @@ class SharedRules
 			static::KEY_RULES => $rules->toArray(),
 			static::KEY_FETCHED_AT_MS => $fetchedAtMs,
 		], static::TTL_S) === true;
+	}
+	
+	/**
+	 * Records that a process of this server appended a rule at $atMs (its
+	 * clock, after the append returned): a set fetched before it may not hold
+	 * the rule, so no worker here takes it for fresh (see writtenAtMs()). Kept
+	 * in whole microseconds, rounded up (apcu_cas() takes integers); the
+	 * newest time wins, it is never lowered
+	 */
+	public function written(
+		float $atMs,
+	): void
+	{
+		$atUs = (int)ceil($atMs * 1000);
+		if(apcu_add($this->writtenKey, $atUs, static::TTL_S) === true)
+		{
+			return;
+		}
+		
+		for($attempt = 0; $attempt < 3; $attempt++)
+		{
+			$current = apcu_fetch($this->writtenKey, $success);
+			if($success !== true || is_int($current) === false)
+			{
+				apcu_store($this->writtenKey, $atUs, static::TTL_S);
+				
+				return;
+			}
+			
+			if($current >= $atUs || apcu_cas($this->writtenKey, $current, $atUs) === true)
+			{
+				return;
+			}
+		}
+	}
+	
+	/**
+	 * When a process of this server last appended a rule (ms, this server's
+	 * clock); null: none recorded
+	 */
+	public function writtenAtMs(): ?float
+	{
+		$atUs = apcu_fetch($this->writtenKey, $success);
+		
+		return $success === true && is_int($atUs)
+			? $atUs / 1000
+			: null;
 	}
 	
 	public function forget(): bool

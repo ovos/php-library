@@ -239,23 +239,30 @@ abstract class KeyValue
 	
 	/**
 	 * The miss a write follows - taken, so it guards one write only; none
-	 * when it is older than the window
+	 * when it is older than the window, unless $late: then it comes back
+	 * flagged 'late' - its epoch guards nothing any more, a versioned store's
+	 * rules stamp still does (see RedisVersioned::set())
 	 *
-	 * @return array{epoch: string, stamp: ?string, at: float}|null
+	 * @return array{epoch: string, stamp: ?string, at: float, late: bool}|null
 	 */
 	protected function takeMiss(
 		string $id,
+		bool $late = false,
 	): ?array
 	{
 		$miss = $this->misses[$id] ?? null;
 		unset($this->misses[$id]);
 		
-		if($miss === null || (microtime(true) - $miss['at']) * 1000 > $this->invalidationWindowMs)
+		if($miss === null)
 		{
 			return null;
 		}
 		
-		return $miss;
+		$miss['late'] = (microtime(true) - $miss['at']) * 1000 > $this->invalidationWindowMs;
+		
+		return $miss['late'] === true && $late === false
+			? null
+			: $miss;
 	}
 	
 	/**
@@ -308,6 +315,19 @@ abstract class KeyValue
 	}
 	
 	/**
+	 * Says that this process computes $key's value now, outside get() - it
+	 * holds the lock itself (the page cache's refresh): the read it made
+	 * (peek()) is stamped as the miss its write follows, so an invalidation
+	 * made while it computes reaches that write
+	 */
+	public function startComputing(
+		string $key,
+	): void
+	{
+		$this->stampMiss($this->itemId($key));
+	}
+	
+	/**
 	 * What fetch() found: a value past its fresh time (written with a stale
 	 * time, see Stale) is a miss to the guard - the write that refreshes it
 	 * follows this read - so it is remembered with the epoch the item
@@ -355,13 +375,16 @@ abstract class KeyValue
 	/**
 	 * What get() serves from a read: a value, or a fresh one written with a
 	 * stale time, as it is; one past its fresh time while it is refreshed,
-	 * when the caller asked for it ($refresh, see revalidate()). Null: a
-	 * miss - a value past its fresh time to a read without stale: included
+	 * when the caller asked for it ($refresh, see revalidate()), the refresh
+	 * holding its lock for $lockTtlMs (the call's queueLockTtlMs; null: the
+	 * MemoLock's own). Null: a miss - a value past its fresh time to a read
+	 * without stale: included
 	 */
 	protected function served(
 		string $id,
 		mixed $data,
 		?Closure $refresh,
+		?int $lockTtlMs = null,
 	): mixed
 	{
 		if($data instanceof Stale === false || $data->isFresh())
@@ -377,7 +400,7 @@ abstract class KeyValue
 		}
 		
 		return $refresh !== null
-			? $this->revalidate($id, $data->value, $refresh)
+			? $this->revalidate($id, $data->value, $refresh, $lockTtlMs)
 			: null;
 	}
 	
@@ -463,12 +486,15 @@ abstract class KeyValue
 		string $id,
 		mixed $stale,
 		Closure $refresh,
+		?int $lockTtlMs = null,
 	): mixed
 	{
-		$run = function() use ($id, $refresh): mixed
+		$run = function() use ($id, $refresh, $lockTtlMs): mixed
 		{
 			$memoLock = $this->getMemoLock();
-			if($memoLock->tryLock($id) === false)
+			// held as long as the call said a computation may take - a lock
+			// gone before the refresh ends would elect a second one
+			if($memoLock->tryLock($id, $lockTtlMs) === false)
 			{
 				// another process refreshes it
 				return null;
@@ -601,12 +627,13 @@ abstract class KeyValue
 			$value = $value->value;
 		}
 		
-		if($save === false)
+		if($save === false || $value === null)
 		{
-			// nothing written: the lock goes now, not at its TTL
+			// nothing written (save: false, or nothing to keep): the lock goes
+			// now, not at its TTL - the waiters compute instead of waiting
 			$this->releaseActiveLock($key);
 		}
-		else if($value !== null)
+		else
 		{
 			$policy ??= new Policy();
 			[$stored, $storedTtl] = Stale::wrap($value, $ttl, $policy->stale, $policy->soft, $policy->staleIfError);

@@ -179,6 +179,7 @@ class Page extends Plugin
 			// this request holds the lock and renders
 			$record = $store->lockAndQueue($this->key, queueLockTtlMs: static::LOCK_TTL_MS);
 			$this->locked = $record === null;
+			$this->releaseAtTheEnd($store);
 		}
 		
 		if($record instanceof Stale && $record->isFresh() === false)
@@ -239,6 +240,7 @@ class Page extends Plugin
 		}
 		
 		$this->locked = true;
+		$this->releaseAtTheEnd($store);
 		
 		$current = $store->peek($this->key);
 		if(($current instanceof Stale && $current->isFresh()) || is_array($current) === true)
@@ -256,6 +258,10 @@ class Page extends Plugin
 			return;
 		}
 		
+		// the render starts now: that read is the miss the page's write
+		// follows - an invalidation landing while it renders reaches it
+		$store->startComputing($this->key);
+		
 		// still past its ttl: its visitor gets it now, the render goes on;
 		// gone (invalidated): no stale page - the visitor waits for the render
 		$response = $current instanceof Stale && is_array($current->value) === true
@@ -268,6 +274,31 @@ class Page extends Plugin
 		
 		// the render: the action runs, postDispatch stores the fresh page
 		$this->holes()->capturing(true);
+	}
+	
+	/**
+	 * An action that throws never reaches postDispatch(): the lock this
+	 * request holds is let go once the request has ended (its error page
+	 * sent), not at its TTL. A stored page or postDispatch() released it
+	 * before - then this does nothing
+	 */
+	protected function releaseAtTheEnd(
+		Tags $store,
+	): void
+	{
+		if($this->locked === false)
+		{
+			return;
+		}
+		
+		$this->app->afterResponse(function() use ($store): void
+		{
+			if($this->locked === true)
+			{
+				$store->releaseActiveLock($this->key);
+				$this->locked = false;
+			}
+		});
 	}
 	
 	#[Override]
@@ -404,13 +435,17 @@ class Page extends Plugin
 		// with a stale time: a record carrying it, stored that much longer
 		[$record, $ttl] = Stale::wrap($this->record($response), $this->attribute->ttl, $this->attribute->stale);
 		
-		$this->getStore()?->set(
+		// a page the guard refused (an invalidation while it rendered) is
+		// not this worker's copy either
+		if($this->getStore()?->set(
 			$this->key,
 			$record,
 			$ttl,
 			$this->attribute->tags,
-		);
-		$this->toApcu($record);
+		) === true)
+		{
+			$this->toApcu($record);
+		}
 	}
 	
 	/**

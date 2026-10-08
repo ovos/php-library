@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Cache;
 
+use Ovos\ArrayObject;
 use Ovos\Cache\Compressor as Subject;
 use Ovos\Cache\Serializer;
 use Ovos\Compression\Zstd;
@@ -55,6 +56,34 @@ class Compressor extends Test
 		
 		return $compressor->compress('plain') === 'plain'
 			&& $compressor->decompress('plain') === 'plain';
+	}
+	
+	/**
+	 * Compression is a write setting: a reader with it off decodes what a
+	 * writer with it on stored, and a writer with it off escapes a value that
+	 * looks compressed, as one with it on does
+	 */
+	public function framedValuesDecodeWhateverTheWriteSetting(): bool
+	{
+		$on = new Subject;
+		$off = (new Subject)->setCompression(new ArrayObject(['enabled' => false]));
+		$long = str_repeat('compressible ', 400);
+		$looking = 'gz' . Subject::PREFIX_COMPRESS . 'not compressed';
+		
+		return $off->decompress($on->compress($long)) === $long
+			&& $off->decompress($off->compress($looking)) === $looking
+			&& $on->decompress($off->compress($looking)) === $looking;
+	}
+	
+	/**
+	 * Framed bytes that do not decode are no value: a miss, never the bytes
+	 */
+	public function aValueThatDoesNotDecodeIsNoValue(): bool
+	{
+		$compressor = new Subject;
+		
+		return $compressor->decompress('gz' . Subject::PREFIX_COMPRESS . 'garbage') === null
+			&& $compressor->decompress('xx' . Subject::PREFIX_COMPRESS . 'garbage') === null;
 	}
 	
 	public function aLongValueIsCompressedAndReadsBack(): bool

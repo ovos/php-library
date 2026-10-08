@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Test\Cache\Store;
 
+use Closure;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
@@ -27,6 +28,15 @@ class RedisVersionedProbe extends RedisVersioned
 	 */
 	public array $fetchedFrom = [];
 	
+	/**
+	 * Called with the shared set before each adoption of it - a test plants
+	 * what a leader would share meanwhile
+	 */
+	public ?Closure $beforeAdopt = null;
+	
+	/** what the store logged */
+	public array $logged = [];
+	
 	#[Override]
 	protected function fetchRuleEntries(
 		string $from,
@@ -35,6 +45,29 @@ class RedisVersionedProbe extends RedisVersioned
 		$this->fetchedFrom[] = $from;
 		
 		return parent::fetchRuleEntries($from);
+	}
+	
+	#[Override]
+	protected function adoptSharedRules(
+		SharedRules $shared,
+	): bool
+	{
+		if($this->beforeAdopt !== null)
+		{
+			($this->beforeAdopt)($shared);
+		}
+		
+		return parent::adoptSharedRules($shared);
+	}
+	
+	#[Override]
+	public function log(
+		...$event,
+	): static
+	{
+		$this->logged[] = $event;
+		
+		return parent::log(...$event);
 	}
 	
 	public function rules(): Rules

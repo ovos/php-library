@@ -205,14 +205,19 @@ class Redisearch extends Store
 			// the stamp first covers the values being computed now; the items
 			// found leave tombstones
 			$this->stamp($tags);
-			$this->functions
+			if($this->functions
 				->call('cache_search_unlink_by_tags', [], [
 					$type,
 					$query,
 					$this->newEpoch(),
 					$this->invalidationWindowMs,
 					$hard ? '1' : '0',
-				]);
+				]) === false)
+			{
+				$this->logRefused('cache_search_unlink_by_tags');
+				
+				return false;
+			}
 			
 			return true;
 		}

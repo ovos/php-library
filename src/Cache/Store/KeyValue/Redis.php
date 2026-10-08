@@ -320,7 +320,7 @@ abstract class Redis extends Tags
 			? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $policy)
 			: null;
 		$data = $this->fetch($id);
-		if(($served = $this->served($id, $data, $revalidate)) !== null)
+		if(($served = $this->served($id, $data, $revalidate, $policy->queueLockTtlMs)) !== null)
 		{
 			return $served;
 		}
@@ -609,10 +609,32 @@ abstract class Redis extends Tags
 			$keys[] = $this->stampKey();
 		}
 		
-		return $this->functions
+		if($this->functions
 			->call('cache_stamp', $keys, [
 				$this->invalidationWindowMs,
-			]) !== false;
+			]) === false)
+		{
+			$this->logRefused('cache_stamp');
+			
+			return false;
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * Logs a call the server refused: an error reply (WRONGTYPE, OOM, a
+	 * read-only replica) answers false, it throws nothing - an invalidation
+	 * lost that way would go unnoticed
+	 */
+	protected function logRefused(
+		string $function,
+	): void
+	{
+		$this->log(new RedisException(sprintf('Cache call %s was refused: %s',
+			$function,
+			$this->getClient()?->getLastError() ?? 'no reply',
+		)));
 	}
 	
 	/**

@@ -8,6 +8,7 @@ use Ovos\Cache\Page as PageAttribute;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Cache\Store\Redis as Store;
+use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Controller;
 use Ovos\Plugins\Cache\Page as Subject;
 use Ovos\Request;
@@ -20,6 +21,7 @@ use Closure;
 use Override;
 
 use function apcu_delete;
+use function apcu_fetch;
 use function apcu_store;
 use function count;
 use function microtime;
@@ -194,6 +196,83 @@ class PageFlow extends Test
 	}
 	
 	/**
+	 * RULE: an action that throws leaves no lock behind - on a miss and on
+	 * an aged page's render alike, the request's end (once its error page is
+	 * out) releases it, so the next request renders at once rather than after
+	 * the lock's TTL
+	 */
+	public function aThrowingActionReleasesThePagesLock(): bool
+	{
+		$store = $this->pageStore();
+		$free = [];
+		foreach([null, false] as $fresh)
+		{
+			$this->clean($store);
+			if($fresh !== null)
+			{
+				$this->writePage($store, 'old', fresh: $fresh);
+			}
+			
+			$request = $this->request($store);
+			$request->plugin->preDispatch();
+			$taken = $this->lockFree() === false;
+			// the action throws: postDispatch() never runs, the error page goes out
+			$request->app->endRequest();
+			$free[] = $taken && $this->lockFree();
+		}
+		$this->clean($store);
+		
+		return $free === [true, true];
+	}
+	
+	/**
+	 * RULE: on a versioned store a tag invalidation landing while the elected
+	 * request renders an aged page reaches the page it stores - the refresh's
+	 * read is stamped before the render, not when the page is written
+	 */
+	public function anInvalidationDuringTheRefreshReachesTheVersionedPage(): bool
+	{
+		$store = $this->versionedStore();
+		$this->clean($store);
+		$this->writePage($store, 'old', fresh: false, tags: ['page']);
+		
+		$request = $this->request($store, tags: ['page']);
+		$this->dispatch($request, 'rendered before the edit', function(): void
+		{
+			// an editor saves while the action renders
+			$this->versionedStore()->invalidateTags(['page']);
+		});
+		$read = $this->versionedStore()->get(self::KEY, queue: false);
+		$this->clean($store);
+		
+		return $request->rendered === true
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE: a page the guard refused is not copied to the worker's APCu tier
+	 * either - the page rendered before the edit is served from nowhere
+	 */
+	public function aRefusedPageIsNotCopiedToTheWorker(): bool
+	{
+		$store = $this->pageStore();
+		$this->deleteApcu();
+		$this->writePage($store, 'old', fresh: false);
+		
+		$request = $this->request($store, apcu: 5);
+		$this->dispatch($request, 'rendered before the edit', function(): void
+		{
+			$this->pageStore()->delete(self::KEY);
+		});
+		$copy = apcu_fetch(Subject::KEY_PREFIX . 'apcu:' . self::KEY);
+		$this->deleteApcu();
+		$this->clean($store);
+		
+		return $request->rendered === true
+			&& ($copy instanceof Stale ? $copy->value['body'] ?? null : null) !== 'rendered before the edit';
+	}
+	
+	/**
 	 * RULE: the elected request looks in the store once more - a page an
 	 * invalidation removed behind this worker's APCu copy is not served stale
 	 * but rendered, its visitor waiting for it
@@ -332,12 +411,24 @@ class PageFlow extends Test
 	}
 	
 	/**
+	 * A fresh versioned store - another process, reading the rules exactly
+	 */
+	protected function versionedStore(): RedisVersioned
+	{
+		return $this->getStore(RedisVersioned::class, [
+			'rules_cache_ms' => 0,
+			'rules_shared_cache' => false,
+		]);
+	}
+	
+	/**
 	 * Writes a stored page, fresh or past its ttl
 	 */
 	protected function writePage(
-		Store $store,
+		Tags $store,
 		string $body,
 		bool $fresh,
+		array $tags = [],
 	): void
 	{
 		// as the plugin stores it: with its stale time (see Page::store())
@@ -346,7 +437,7 @@ class PageFlow extends Test
 			'headers' => [],
 			'savedAt' => time(),
 			'body' => $body,
-		], microtime(true) + ($fresh ? 60 : -1), 60), 120);
+		], microtime(true) + ($fresh ? 60 : -1), 60), 120, $tags);
 	}
 	
 	/**
@@ -381,7 +472,7 @@ class PageFlow extends Test
 	}
 	
 	protected function clean(
-		Store $store,
+		Tags $store,
 	): void
 	{
 		$store->getClient()->del($store->itemId(self::KEY));
@@ -422,10 +513,11 @@ class PageFlow extends Test
 	 * @return object{plugin: Subject, app: Application, controller: Controller, rendered: bool}
 	 */
 	protected function request(
-		Store $store,
+		Tags $store,
 		bool $canFinish = true,
 		int $stale = 60,
 		int $apcu = 0,
+		array $tags = [],
 	): object
 	{
 		$app = new class($canFinish) extends Application
@@ -473,6 +565,19 @@ class PageFlow extends Test
 				
 				return true;
 			}
+			
+			/**
+			 * What handleShutdown() does once the response is out: the
+			 * callbacks registered with afterResponse()
+			 */
+			public function endRequest(): void
+			{
+				foreach($this->afterResponse as $callback)
+				{
+					$callback();
+				}
+				$this->afterResponse = [];
+			}
 		};
 		$controller = new class extends Controller
 		{
@@ -490,7 +595,7 @@ class PageFlow extends Test
 				return $name === 'REQUEST_METHOD' ? 'GET' : null;
 			}
 		};
-		$plugin = new class($app, $http, $controller, $store, new PageAttribute(ttl: 60, stale: $stale, apcu: $apcu), self::KEY) extends Subject
+		$plugin = new class($app, $http, $controller, $store, new PageAttribute(ttl: 60, tags: $tags, stale: $stale, apcu: $apcu), self::KEY) extends Subject
 		{
 			public function __construct(
 				Application $app,

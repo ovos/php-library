@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace Ovos\Cache;
 
+use Throwable;
+use __PHP_Incomplete_Class;
+
 use function is_array;
 use function is_object;
 use function is_string;
@@ -70,6 +73,25 @@ class Serializer
 		}
 		$value = substr($value, 2);
 		
-		return unserialize($value, ['allowed_classes' => true]);
+		// what this class serialized is an array, an object or a string -
+		// never false: false, or an object of a class that is gone (a rolling
+		// deploy renamed it), is a payload that does not decode - no value
+		try
+		{
+			$value = unserialize($value, ['allowed_classes' => true]);
+		}
+		catch(Throwable)
+		{
+			return null;
+		}
+		
+		if($value === false
+			|| $value instanceof __PHP_Incomplete_Class
+			|| ($value instanceof Stale && $value->value instanceof __PHP_Incomplete_Class))
+		{
+			return null;
+		}
+		
+		return $value;
 	}
 }

@@ -194,8 +194,9 @@ class RedisVersioned extends Store
 			->prefix($key, $this->getType());
 		// the miss this write follows, if any: refused when the key was
 		// deleted (or written through) since, stamped with the watermark the
-		// miss saw (see KeyValue::rememberMiss())
-		$miss = $this->takeMiss($id);
+		// miss saw (see KeyValue::rememberMiss()) - also past the window, where
+		// only the watermark still guards
+		$miss = $this->takeMiss($id, late: true);
 		
 		// a negative TTL expired the item at once - a delete it is
 		if($ttl < 0)
@@ -229,6 +230,28 @@ class RedisVersioned extends Store
 				->serialize($value);
 			$value = $this->compressor
 				->compress($value);
+			
+			// a miss past the window: its epoch guards nothing any more, but the
+			// watermark it took holds for the rules' retention - written as a
+			// write-through stamped with it, so an invalidation made while it
+			// computed still reaches the value (unstamped: a plain write-through)
+			if($miss !== null && $miss['late'] === true)
+			{
+				$result = $miss['stamp'] === null
+					? $this->setCall($id, $value, $tags, $ttl, $this->writeThroughEpoch())
+					: $this->functions
+						->call('cache_versioned_set_stamped', [$id], [
+							$value,
+							implode(',', $tags),
+							$ttl * 1000, // ms
+							$this->rulesRetentionS * 1000, // ms
+							$miss['stamp'],
+							$this->writeThroughEpoch(),
+							$this->invalidationWindowMs,
+						]);
+				
+				return (int)$result === 1;
+			}
 			
 			// the watermark the miss saw - taken right before the computation
 			// (stampMiss()); a miss nobody stamped takes the one held now, which
@@ -528,9 +551,18 @@ class RedisVersioned extends Store
 					$hard ? '1' : '0',
 				]);
 			
+			if($result === false)
+			{
+				$this->logRefused('cache_versioned_invalidate');
+			}
+			
 			// the held set is behind the rule just written: the next read
 			// fetches it (and whatever anyone else appended) in one range
 			$this->rulesDirty = true;
+			// and so is every set fetched before it on this server: the next
+			// request here sees the rule too, not only this one
+			$this->getSharedRules()
+				?->written(microtime(true) * 1000);
 			
 			return (int)$result === 1;
 		}
@@ -590,7 +622,11 @@ class RedisVersioned extends Store
 				return $this->rules;
 			}
 			
-			if($this->rulesCacheMs > 0)
+			// behind an invalidation made on this server, the set may lack it
+			// and a refresh in flight may have started before it: no election,
+			// this read fetches the delta itself
+			if($this->rulesCacheMs > 0
+				&& $this->behindLocalInvalidation() === false)
 			{
 				$leading = $shared->lead();
 				
@@ -657,7 +693,7 @@ class RedisVersioned extends Store
 			$this->rulesDirty = false;
 			
 			$this->getSharedRules()
-				?->store($rules, $nowMs);
+				?->store($rules, $nowMs, $rules->wasReset());
 			
 			return $rules;
 		}
@@ -714,7 +750,11 @@ class RedisVersioned extends Store
 		{
 			usleep(static::COLD_POLL_MS * 1000);
 			
-			if($this->adoptSharedRules($shared))
+			// a leader that loaded before an invalidation made on this server
+			// shares a set that may lack it: not taken - waited past, or
+			// refreshed from once the wait is over
+			if($this->adoptSharedRules($shared)
+				&& $this->behindLocalInvalidation() === false)
 			{
 				return true;
 			}
@@ -753,7 +793,29 @@ class RedisVersioned extends Store
 	): bool
 	{
 		return $this->rulesFetchedAtMs !== null
-			&& $nowMs - $this->rulesFetchedAtMs < $this->rulesCacheMs;
+			&& $nowMs - $this->rulesFetchedAtMs < $this->rulesCacheMs
+			&& $this->behindLocalInvalidation() === false;
+	}
+	
+	/**
+	 * Whether the set held was fetched before the latest invalidation a
+	 * process of this server made (SharedRules::written()) - it may lack that
+	 * rule, so it is never fresh. The fetch time is taken before the stream
+	 * is read, so a set fetched after the mark holds the rule. Holding no set
+	 * is not behind: there is nothing to serve from (see awaitSharedRules())
+	 */
+	protected function behindLocalInvalidation(): bool
+	{
+		if($this->rulesFetchedAtMs === null)
+		{
+			return false;
+		}
+		
+		$writtenAtMs = $this->getSharedRules()
+			?->writtenAtMs();
+		
+		return $writtenAtMs !== null
+			&& $this->rulesFetchedAtMs <= $writtenAtMs;
 	}
 	
 	/**
