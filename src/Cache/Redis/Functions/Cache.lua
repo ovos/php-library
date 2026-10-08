@@ -218,13 +218,25 @@ local function cache_write_allowed(item_key, epoch, since_us, stamp_keys)
 	return true
 end
 
+-- Whether a write finds a value of the item's own: a softly invalidated item's
+-- data is the old value kept for the stale window, under the mark's expiry
+local function cache_had_data(item_key)
+	if redis.call('HEXISTS', item_key, 'data') == 0 then
+		return 0
+	end
+	if redis.call('HEXISTS', item_key, CACHE_INVALIDATED) == 1 then
+		return 0
+	end
+	return 1
+end
+
 -- An item's expiry after a write. Its TTL when one is asked - unless the key
 -- carries an epoch whose window outlives it: then the data fields expire at
 -- the TTL, the key (and its epoch) at the window's end - a full window when
 -- the key had no expiry of its own - so a short-lived item cannot take the
 -- invalidation mark with it. No TTL: none for a key that held no data (fresh,
--- or a tombstone whose window must not become the item's); an overwrite
--- without a TTL keeps the one it had
+-- a tombstone whose window must not become the item's, or a soft mark's);
+-- an overwrite without a TTL keeps the one it had
 local function cache_write_expiry(item_key, ttl_s, had_data, rem_ms, window_ms, fields)
 	if ttl_s > 0 then
 		local ttl_ms = ttl_s * 1000
@@ -290,7 +302,7 @@ local function cache_guarded_hset(keys, args)
 		end
 	end
 	
-	local had_data = redis.call('HEXISTS', item_key, 'data')
+	local had_data = cache_had_data(item_key)
 	local rem_ms = redis.call('PTTL', item_key)
 	local pairs_list = {}
 	local names = {}
@@ -353,7 +365,7 @@ local function cache_set_item(keys, args, soft_ms)
 	end
 	
 	local ttl = tonumber(args[3])
-	local had_data = redis.call('HEXISTS', item_key, 'data')
+	local had_data = cache_had_data(item_key)
 	local rem_ms = redis.call('PTTL', item_key)
 	local current_csv = redis.call('HGET', item_key, 'tags')
 	local current = {}
