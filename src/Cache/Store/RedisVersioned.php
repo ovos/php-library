@@ -4,16 +4,19 @@ declare(strict_types=1);
 namespace Ovos\Cache\Store;
 
 use Ovos\ArrayObject;
+use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
 use Override;
+use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
 use function count;
 use function explode;
 use function implode;
+use function intdiv;
 use function is_array;
 use function json_encode;
 use function microtime;
@@ -135,6 +138,11 @@ class RedisVersioned extends Store
 	protected bool $rulesDirty = false;
 	
 	protected ?SharedRules $sharedRules = null;
+	
+	/**
+	 * The server clock minus the local one, in ms (see serverNowMs())
+	 */
+	protected ?float $clockOffsetMs = null;
 	
 	/**
 	 * The TTL-above-retention warning is logged once per instance
@@ -310,6 +318,15 @@ class RedisVersioned extends Store
 				(string)$item[static::KEY_MARK],
 			))
 			{
+				// a soft value inside its stale time after the invalidation:
+				// handed out aged - served while it is refreshed, a miss to a
+				// read without stale: - and left in place, the refresh overwrites
+				// it (see softly())
+				if(($aged = $this->softly($item)) !== null)
+				{
+					return $this->found($id, $aged, $item[static::KEY_EPOCH]);
+				}
+				
 				// lazily remove the stale item - only while it is still that item
 				// (Lua cache_versioned_drop_stale): a delete() between this read
 				// and the removal left a tombstone, and an UNLINK would erase its
@@ -780,6 +797,86 @@ class RedisVersioned extends Store
 			$config->database ?? null,
 			$config->seeds ?? null,
 		]);
+	}
+	
+	/**
+	 * Soft invalidation: the item a rule invalidated, aged, when it holds a
+	 * soft value (get(stale:, soft: true)) and the newest rule that reached it
+	 * is younger than the value's stale time - null otherwise (a hard verdict;
+	 * also when the rules lost what the item saw, or the server's time cannot
+	 * be read). The data is read only here, for an invalidated item
+	 *
+	 * @param array<string, mixed> $item the HMGET fetch() made
+	 */
+	protected function softly(
+		array $item,
+	): ?Stale
+	{
+		$value = $this->serializer
+			->unserialize($this->compressor->decompress($item[static::KEY_DATA]));
+		if($value instanceof Stale === false
+			|| $value->soft === false
+			|| $value->staleFor <= 0)
+		{
+			return null;
+		}
+		
+		$tags = (string)$item[static::KEY_TAGS];
+		$invalidatedAt = $this->getRules()
+			->invalidatedAt(
+				$tags === '' ? [] : explode(',', $tags),
+				(string)$item[static::KEY_MARK],
+			);
+		if($invalidatedAt === null
+			|| ($now = $this->serverNowMs()) === null)
+		{
+			return null;
+		}
+		
+		return $now - $invalidatedAt < $value->staleFor * 1000
+			? $value->aged()
+			: null;
+	}
+	
+	/**
+	 * The server's time in ms - the clock the rules' ids come from, the
+	 * stream's own node on a cluster - read once per instance and then kept
+	 * as an offset to the local clock (a host and a container drift apart by
+	 * seconds; a soft window must not)
+	 */
+	protected function serverNowMs(): ?int
+	{
+		if($this->clockOffsetMs === null)
+		{
+			if(($client = $this->getClient()) === null)
+			{
+				return null;
+			}
+			
+			try
+			{
+				$time = $client instanceof RedisClusterClient
+					? $client->time($this->getRulesKey())
+					: $client->time();
+			}
+			catch(RedisException|RedisClusterException $exception)
+			{
+				$this->log($exception);
+				
+				return null;
+			}
+			
+			if(is_array($time) === false
+				|| isset($time[0], $time[1]) === false)
+			{
+				return null;
+			}
+			
+			$this->clockOffsetMs = (int)$time[0] * 1000 + intdiv((int)$time[1], 1000)
+				- microtime(true) * 1000;
+		}
+		
+		return (int)(microtime(true) * 1000 + $this->clockOffsetMs);
 	}
 	
 	/**

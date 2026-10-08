@@ -10,6 +10,7 @@ use function is_array;
 use function is_bool;
 use function is_scalar;
 use function is_string;
+use function max;
 
 /**
  * Rules
@@ -213,6 +214,77 @@ class Rules
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * When the item was invalidated: the time (ms, the server's - a rule's id)
+	 * of the NEWEST rule it has not seen that invalidates it - only the newest
+	 * rule per tag is kept, so that is what can be told. Null when no rule
+	 * invalidates it, when a clear it has not seen does (a clear stays hard),
+	 * and when the stream lost rules it saw: those verdicts stand hard (soft
+	 * invalidation cannot time them)
+	 *
+	 * @param string[] $itemTags
+	 */
+	public function invalidatedAt(
+		array $itemTags,
+		string $mark,
+	): ?int
+	{
+		if($this->lostSince($mark))
+		{
+			return null;
+		}
+		
+		[$markMs, $markSequence] = static::split($mark);
+		
+		$tags = [];
+		foreach($itemTags as $tag)
+		{
+			$tags[$tag] = true;
+		}
+		
+		$at = null;
+		foreach($tags as $tag => $_)
+		{
+			if(isset($this->tags[$tag])
+				&& static::isNewer($this->tags[$tag][0], $this->tags[$tag][1], $markMs, $markSequence))
+			{
+				$at = max($at ?? 0, $this->tags[$tag][0]);
+			}
+		}
+		
+		foreach($this->all as [$ms, $sequence, $ruleTags])
+		{
+			if(static::isNewer($ms, $sequence, $markMs, $markSequence) === false)
+			{
+				continue;
+			}
+			
+			// a clear: hard, whatever else invalidated the item
+			if($ruleTags === [])
+			{
+				return null;
+			}
+			
+			$matched = true;
+			foreach($ruleTags as $tag)
+			{
+				if(isset($tags[$tag]) === false)
+				{
+					$matched = false;
+					
+					break;
+				}
+			}
+			
+			if($matched)
+			{
+				$at = max($at ?? 0, $ms);
+			}
+		}
+		
+		return $at;
 	}
 	
 	/**

@@ -6,6 +6,7 @@ namespace Ovos\Cache\Store\KeyValue;
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
 use Ovos\Cache\Redis\Functions;
+use Ovos\Cache\Stale;
 use Ovos\Connection\RedisCommon as Connection;
 use Override;
 use Closure;
@@ -40,6 +41,16 @@ abstract class Redis extends Tags
 	 * KeyValue::rememberMiss())
 	 */
 	public const string KEY_EPOCH = 'epoch';
+	
+	/**
+	 * Soft invalidation on the tag-index stores (Store\Redis, Redisearch): a
+	 * soft value's item carries its stale time (ms); a tag invalidation then
+	 * marks it - a new epoch, this field, both expiring with the window -
+	 * instead of tombstoning it, and a read inside the window serves it aged
+	 */
+	public const string KEY_SOFT = 'soft';
+	
+	public const string KEY_INVALIDATED = 'invalidated';
 	
 	/**
 	 * What a write passes in place of an epoch when it is not guarded - no
@@ -212,10 +223,12 @@ abstract class Redis extends Tags
 		
 		try
 		{
-			// the data and the guard's epoch in the one round trip a read makes
+			// the data, the guard's epoch and a soft invalidation's mark in the
+			// one round trip a read makes
 			$item = $client->hMGet($id, [
 				static::KEY_DATA,
 				static::KEY_EPOCH,
+				static::KEY_INVALIDATED,
 			]);
 			$value = is_array($item) ? ($item[static::KEY_DATA] ?? false) : false;
 			
@@ -223,11 +236,24 @@ abstract class Redis extends Tags
 			{
 				$value = $this->compressor
 					->decompress($value);
+				$value = $this->serializer
+					->unserialize($value);
 				
-				return $this->found($id,
-					$this->serializer->unserialize($value),
-					$item[static::KEY_EPOCH],
-				);
+				// softly invalidated, inside its window (the mark and the data
+				// expire with it): the value is handed out aged - served while
+				// it is refreshed, a miss to a read without stale: (only a soft
+				// value is ever marked; anything else marked is a miss)
+				if(($item[static::KEY_INVALIDATED] ?? false) !== false)
+				{
+					$value = $value instanceof Stale
+						? $value->aged()
+						: null;
+				}
+				
+				if($value !== null)
+				{
+					return $this->found($id, $value, $item[static::KEY_EPOCH]);
+				}
 			}
 			
 			$this->rememberMiss($id, is_array($item) ? $item[static::KEY_EPOCH] : false);
@@ -259,12 +285,13 @@ abstract class Redis extends Tags
 		?bool $queue = null, // override of the config switch
 		?int $queueLockTtlMs = null, // override of the config value
 		int $stale = 0, // seconds past the ttl a value is served while it is refreshed
+		bool $soft = false, // ... and past a tag invalidation (soft invalidation)
 	): mixed
 	{
 		if($this->getClient() === null)
 		{
 			// no connection (fast path)
-			return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale);
+			return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft);
 		}
 		
 		$id = $this->prefixer
@@ -273,7 +300,7 @@ abstract class Redis extends Tags
 		// initial hit check (fast path); past its ttl, a value written with a
 		// stale time is served while it is refreshed (see revalidate())
 		$refresh = $stale > 0 && $resolver !== null
-			? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $stale)
+			? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft)
 			: null;
 		if(($data = $this->served($id, $this->fetch($id), $refresh)) !== null)
 		{
@@ -284,13 +311,13 @@ abstract class Redis extends Tags
 			->lockAndQueue(
 				$id,
 				fn() => $this->fresh($this->fetch($id)),
-				function() use ($id, $key, $resolver, $ttl, $tags, $stale): mixed
+				function() use ($id, $key, $resolver, $ttl, $tags, $stale, $soft): mixed
 				{
 					// the miss is stamped now, right before the value is computed
 					// (the caller's own computation, too, when there is no resolver)
 					$this->stampMiss($id);
 					
-					return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale);
+					return $this->setFromResolver($key, $resolver, $ttl, $tags, $stale, $soft);
 				},
 				$queue,
 				$queueLockTtlMs,

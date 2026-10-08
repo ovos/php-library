@@ -33,6 +33,7 @@ abstract class Tags extends KeyValue
 		int $ttl = 0,
 		array $tags = [],
 		int $stale = 0,
+		bool $soft = false,
 	): mixed
 	{
 		if($resolver === null)
@@ -46,7 +47,7 @@ abstract class Tags extends KeyValue
 		
 		if($value !== null)
 		{
-			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale);
+			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale, $soft);
 			$this->set($key, $stored, $storedTtl, $tags);
 		}
 		

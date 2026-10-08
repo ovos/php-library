@@ -486,7 +486,49 @@ $value = $store->get(
   (`Ovos\Cache\Stale`). A library older than this reading such a key gets
   that object back - possible only across hosts during a rolling deploy.
 - A subclass that overrides a store's `get()` must add the `int $stale = 0`
-  parameter.
+  parameter (and `bool $soft = false`, below).
+
+#### Soft invalidation (`soft: true`)
+
+Stale-while-revalidate covers a value whose life ends by its `ttl`. Most
+values end by an invalidation instead - an edit, a tag - and then every
+reader waits for the recomputation. With `soft: true` the same stale time
+also covers a TAG invalidation: the value is served for `stale` seconds after
+an invalidation reached it, while ONE process recomputes it.
+
+```php
+// fresh for 5 minutes; then, or after a tag invalidation, served up to 60 s
+// more while it is refreshed
+$store->get('page:home', fn() => $this->render(), ttl: 300, tags: ['menu'], stale: 60, soft: true);
+
+// kept as long as before (no ttl): fresh until an invalidation reaches it,
+// then served up to 30 s while it is recomputed
+$store->get('menu:main', fn() => $this->buildMenu(), ttl: 0, tags: ['menu'], stale: 30, soft: true);
+```
+
+![Soft invalidation - a value's life with and without soft, and the visitors after an edit](docs/cache/soft-invalidation.png)
+
+- `stale:` alone: past the `ttl` only - an invalidation is a miss, as before.
+  `stale:` + `soft: true`: past the `ttl`, and past a tag invalidation.
+- Stays hard: `delete()` (an explicit "this key is wrong"), `clear()`, and a
+  value written without `soft`. A read without `stale:` takes a softly
+  invalidated value for a miss.
+- The window: the versioned stores count it from the NEWEST invalidation that
+  reached the item (their rules keep the newest per tag); the tag-index stores
+  (Redis, Redisearch) from the first - the soft mark takes the item out of its
+  tags' indexes, its data and the mark expire with the window. The first stale
+  read starts the refresh either way, so the window matters only when nobody
+  reads or the refresh keeps failing.
+- The guard still holds: a value computed before the invalidation never reads
+  as fresh. The tag-index stores refuse its write - the soft mark renews the
+  item's epoch and the tag's stamp refuses it too; the versioned stores let it
+  land under the watermark it saw, older than the rule, so it can only be
+  served stale, as the old value would be.
+- APCu has no tags: nothing to soften, the parameter is accepted.
+- Redis: a soft value's item carries its stale time in a `soft` field, written
+  by the new Lua function `cache_set_soft` (`cache_set` keeps the argument
+  shape older callers send); the tag invalidation marks it (`invalidated`)
+  instead of tombstoning it.
 
 ## Cache invalidation
 

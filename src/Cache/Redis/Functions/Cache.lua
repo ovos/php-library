@@ -103,6 +103,12 @@ end
 -- token is refused
 local CACHE_EPOCH = 'epoch'
 
+-- soft invalidation: a soft value's item carries its stale time (ms) in
+-- CACHE_SOFT; a tag invalidation then marks it (CACHE_INVALIDATED) instead
+-- of tombstoning it, and a read inside the window serves it aged
+local CACHE_SOFT = 'soft'
+local CACHE_INVALIDATED = 'invalidated'
+
 -- Replaces a key with its tombstone: DEL, the token, the window - one step,
 -- or a tombstone landing on a fresh write would leave its data behind. Only a
 -- cache item (a hash) or an absent key gets one: a key holding anything else
@@ -110,9 +116,9 @@ local CACHE_EPOCH = 'epoch'
 -- and is removed as before - a tombstone would turn it into a hash, and the
 -- caller's next INCR into a WRONGTYPE error. A window of 0 (the guard off)
 -- removes as before too. Answers whether an ITEM was there - a tombstone an
--- earlier delete left is none
-local function cache_tombstone_key(key, token, window_ms)
-	local kind = redis.call('TYPE', key)['ok']
+-- earlier delete left is none. kind: the key's TYPE when the caller read it
+local function cache_tombstone_key(key, token, window_ms, kind)
+	kind = kind or redis.call('TYPE', key)['ok']
 	if kind ~= 'none' and kind ~= 'hash' then
 		return redis.call('DEL', key)
 	end
@@ -130,17 +136,53 @@ local function cache_tombstone_key(key, token, window_ms)
 	return existed
 end
 
+-- Soft invalidation: a soft value's item a tag invalidation reached is
+-- marked, not tombstoned - a new epoch (a recomputation that missed before
+-- it is refused, as a tombstone would refuse it), the CACHE_INVALIDATED
+-- mark; the mark and the data expire at the end of its stale time, never
+-- later than the item would have (LT), the key - and its epoch - not before
+-- the guard's window ends
+local function cache_soft_mark(key, token, window_ms, soft_ms)
+	local ttl_ms = redis.call('PTTL', key)
+	local left_ms = soft_ms
+	if ttl_ms > 0 and ttl_ms < left_ms then
+		left_ms = ttl_ms
+	end
+	
+	redis.call('HSET', key, CACHE_EPOCH, token, CACHE_INVALIDATED, '1')
+	local fields = {'data', CACHE_INVALIDATED, CACHE_SOFT}
+	if redis.call('HEXISTS', key, 'tags') == 1 then
+		table.insert(fields, 'tags')
+	end
+	redis.call('HPEXPIRE', key, left_ms, 'LT', 'FIELDS', #fields, unpack(fields))
+	
+	local keep_ms = math.max(left_ms, window_ms)
+	if ttl_ms < 0 or ttl_ms < keep_ms then
+		redis.call('PEXPIRE', key, keep_ms)
+	end
+	
+	return 1
+end
+
 -- Removes an item a tag invalidation reached: its tombstone when the caller
 -- passed one - a key already gone gets none (the tag's stamp covers the
--- values being computed for it) - a plain UNLINK for a caller from before
--- the guard
+-- values being computed for it), a soft value's item its soft mark (the
+-- guard on) - a plain UNLINK for a caller from before the guard
 local function cache_remove_item(key, token, window_ms)
 	if token and window_ms then
-		if redis.call('EXISTS', key) == 0 then
+		local kind = redis.call('TYPE', key)['ok']
+		if kind == 'none' then
 			return 0
 		end
 		
-		return cache_tombstone_key(key, token, window_ms)
+		if window_ms > 0 and kind == 'hash' then
+			local soft_ms = tonumber(redis.call('HGET', key, CACHE_SOFT) or '')
+			if soft_ms and soft_ms > 0 and redis.call('HEXISTS', key, 'data') == 1 then
+				return cache_soft_mark(key, token, window_ms, soft_ms)
+			end
+		end
+		
+		return cache_tombstone_key(key, token, window_ms, kind)
 	end
 	
 	return redis.call('UNLINK', key)
@@ -252,14 +294,24 @@ local function cache_guarded_hset(keys, args)
 	local rem_ms = redis.call('PTTL', item_key)
 	local pairs_list = {}
 	local names = {}
+	local soft = false
 	for i = 6, #args, 2 do
 		table.insert(pairs_list, args[i])
 		table.insert(pairs_list, args[i + 1])
 		table.insert(names, args[i])
+		if args[i] == CACHE_SOFT then
+			soft = true
+		end
 	end
 	redis.call('HSET', item_key, unpack(pairs_list))
 	if args[1] == '*' and args[4] ~= '' then
 		redis.call('HSET', item_key, CACHE_EPOCH, args[4])
+	end
+	-- a write ends a soft invalidation, and a value written without a stale
+	-- time leaves none behind
+	redis.call('HDEL', item_key, CACHE_INVALIDATED)
+	if soft == false then
+		redis.call('HDEL', item_key, CACHE_SOFT)
 	end
 	cache_write_expiry(item_key, tonumber(args[3]), had_data, rem_ms, tonumber(args[5]), names)
 	
@@ -281,7 +333,7 @@ redis.register_function
 -- prefix, [7] the write-through's epoch | '', [8] window (ms), [9] data,
 -- [10..] tags
 -- standalone-only: the tag hashes and stamps are of any slot
-local function cache_set(keys, args)
+local function cache_set_item(keys, args, soft_ms)
 	local item_key = keys[1]
 	local key = args[4]
 	local tag_prefix = args[5]
@@ -323,6 +375,15 @@ local function cache_set(keys, args)
 	if args[1] == '*' and args[7] ~= '' then
 		redis.call('HSET', item_key, CACHE_EPOCH, args[7])
 	end
+	-- a write ends a soft invalidation; a soft value's item carries its stale
+	-- time (it expires with the data), any other leaves none behind
+	redis.call('HDEL', item_key, CACHE_INVALIDATED)
+	if soft_ms then
+		redis.call('HSET', item_key, CACHE_SOFT, soft_ms)
+		table.insert(fields, CACHE_SOFT)
+	else
+		redis.call('HDEL', item_key, CACHE_SOFT)
+	end
 	cache_write_expiry(item_key, ttl, had_data, rem_ms, tonumber(args[8]), fields)
 	
 	-- the tag index: the key joins its new tags; on a write with a TTL every
@@ -347,10 +408,29 @@ local function cache_set(keys, args)
 	
 	return 1
 end
+local function cache_set(keys, args)
+	return cache_set_item(keys, args, nil)
+end
 redis.register_function
 {
 	function_name = '[prefix]cache_set',
 	callback = cache_set,
+	flags = {'no-cluster'}
+}
+
+-- cache_set for a soft value (get(stale:, soft: true)): args [1] its stale
+-- time (ms), then cache_set's - a function of its own, so cache_set keeps
+-- the argument shape every caller sends
+local function cache_set_soft(keys, args)
+	local soft_ms = args[1]
+	table.remove(args, 1)
+	
+	return cache_set_item(keys, args, soft_ms)
+end
+redis.register_function
+{
+	function_name = '[prefix]cache_set_soft',
+	callback = cache_set_soft,
 	flags = {'no-cluster'}
 }
 

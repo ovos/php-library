@@ -5,6 +5,7 @@ namespace Ovos\Cache\Store;
 
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
+use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Override;
 use Redis as RedisClient;
@@ -215,6 +216,11 @@ class Redis extends Store
 		
 		try
 		{
+			// a soft value's item carries its stale time, so a tag invalidation
+			// marks it instead of tombstoning it (see KeyValue\Redis::KEY_SOFT)
+			$soft = $value instanceof Stale && $value->soft
+				? $value->staleFor * 1000
+				: null;
 			$value = $this->serializer->serialize($value);
 			$value = $this->compressor->compress($value);
 			
@@ -224,13 +230,15 @@ class Redis extends Store
 			// tags it no longer has release it - a guarded write is refused
 			// when the key was invalidated, a tag of it stamped or the store
 			// cleared since its miss (an unstamped miss: the epoch only), and a
-			// write-through marks the key with a fresh epoch
+			// write-through marks the key with a fresh epoch; a soft value goes
+			// through cache_set_soft - the same write, its stale time first
 			$client->clearLastError();
 			$result = $this->functions
-				->call('cache_set', [
+				->call($soft === null ? 'cache_set' : 'cache_set_soft', [
 					$id,
 					$this->stampKey(),
 				], [
+					...($soft === null ? [] : [$soft]),
 					$miss['epoch'] ?? static::UNGUARDED,
 					$miss === null ? '' : ($miss['stamp'] ?? ''),
 					$ttl,

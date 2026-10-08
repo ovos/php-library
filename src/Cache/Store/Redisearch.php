@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Store;
 
+use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Override;
 use RedisClusterException;
@@ -70,6 +71,11 @@ class Redisearch extends Store
 		
 		try
 		{
+			// a soft value's item carries its stale time, so a tag invalidation
+			// marks it instead of tombstoning it (see KeyValue\Redis::KEY_SOFT)
+			$soft = $value instanceof Stale && $value->soft
+				? [static::KEY_SOFT, $value->staleFor * 1000]
+				: [];
 			$value = $this->serializer
 				->serialize($value);
 			$value = $this->compressor
@@ -100,6 +106,7 @@ class Redisearch extends Store
 					$value,
 					static::KEY_TAGS,
 					implode(', ', $tags),
+					...$soft,
 				]);
 			if($result === false && ($error = $client->getLastError()))
 			{
