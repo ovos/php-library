@@ -12,6 +12,7 @@ use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
+use Closure;
 use Override;
 
 use function Ovos\config;
@@ -307,7 +308,7 @@ class Apcu extends Test
 	{
 		return $this->newStore();
 	}
-
+	
 	/**
 	 * A fresh store - another process sharing this APCu
 	 */
@@ -318,6 +319,55 @@ class Apcu extends Test
 			$this->config->perishable,
 			KeyValue::GROUP_TESTS,
 		);
+	}
+	
+	/**
+	 * RULE: the lock TTL is in milliseconds, as on every store - what get()
+	 * and lockAndQueue() are given reaches APCu's lock as it is (it was taken
+	 * for seconds and handed on as milliseconds: 5 s became 5 ms)
+	 */
+	public function theLockTtlReachesTheLockInMilliseconds(): bool
+	{
+		$lock = new class($this->config->prefix, $this->config->perishable) extends ApcuMemoLock
+		{
+			/** @var list<?int> what each lockAndQueue() was given */
+			public array $ttls = [];
+			
+			#[Override]
+			public function lockAndQueue(
+				string $id,
+				?Closure $fetcher = null,
+				?Closure $resolver = null,
+				?bool $queue = null,
+				?int $queueLockTtlMs = null,
+			): mixed
+			{
+				$this->ttls[] = $queueLockTtlMs;
+				
+				return parent::lockAndQueue($id, $fetcher, $resolver, $queue, $queueLockTtlMs);
+			}
+		};
+		$store = new class($this->config->prefix, $this->config->perishable, KeyValue::GROUP_TESTS) extends Store
+		{
+			public ?ApcuMemoLock $lock = null;
+			
+			#[Override]
+			public function getMemoLock(): ApcuMemoLock
+			{
+				return $this->lock;
+			}
+		};
+		$store->lock = $lock;
+		$key = 'lock-ttl-ms';
+		$store->delete($key);
+		
+		$store->get($key, fn() => 'v', 60, [], queueLockTtlMs: 2500);
+		$store->delete($key);
+		$store->lockAndQueue($key, fn() => 'w', queueLockTtlMs: 3500);
+		$store->releaseActiveLock($key);
+		$store->delete($key);
+		
+		return $lock->ttls === [2500, 3500];
 	}
 	
 	/**

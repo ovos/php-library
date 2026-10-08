@@ -118,16 +118,16 @@
 	<path d="M28,576 H924 V678 L912,690 H16 V588 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
 	<path d="M28,576 H924 V604 H16 V588 Z" fill="#00f0ff" opacity="0.1"/>
 	<line x1="16" y1="604" x2="924" y2="604" stroke="#00f0ff" stroke-width="1" opacity="0.7"/>
-	<text x="470" y="595" class="panelHead" fill="#00f0ff">THE RESOLVER DECIDES &#8212; function($store, $key, &amp;$ttl, &amp;$tags, &amp;$save)</text>
+	<text x="470" y="595" class="panelHead" fill="#00f0ff">THE RESOLVER DECIDES &#8212; return new Computed($value, ttl: ..., tags: ..., save: ...)</text>
 	<g>
 		<path d="M30,620 H310 V660 L304,666 H30 Z" fill="#11111c" stroke="#00f0ff" opacity="0.9"/>
-		<text x="170" y="639" class="code">$ttl = $response-&gt;secondsValid;</text>
+		<text x="170" y="639" class="code">ttl: $response-&gt;secondsValid</text>
 		<text x="170" y="656" class="note">the TTL from what it computed</text>
 		<path d="M330,620 H610 V660 L604,666 H330 Z" fill="#11111c" stroke="#00f0ff" opacity="0.9"/>
-		<text x="470" y="639" class="code">$tags[] = 'route_' . $response-&gt;routeId;</text>
+		<text x="470" y="639" class="code">tags: ['route_' . $response-&gt;routeId]</text>
 		<text x="470" y="656" class="note">the tags an invalidation reaches it by</text>
 		<path d="M630,620 H910 V660 L904,666 H630 Z" fill="#11111c" stroke="#00f0ff" opacity="0.9"/>
-		<text x="770" y="639" class="code">$save = $response-&gt;isComplete();</text>
+		<text x="770" y="639" class="code">save: $response-&gt;isComplete()</text>
 		<text x="770" y="656" class="note">false: handed back, nothing kept, the lock freed</text>
 	</g>
 	

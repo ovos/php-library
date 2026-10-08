@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Cache\Store;
 
 use Ovos\Cache\MemoLock\Apcu as MemoLock;
-use Ovos\Cache\Stale;
+use Ovos\Cache\Policy;
 use APCUIterator;
 use Closure;
 use Override;
@@ -172,35 +172,37 @@ class Apcu extends KeyValue
 			->prefix($key, $this->getGroup());
 	}
 	
+	/**
+	 * See KeyValue::get() - APCu has no tags: $tags and soft: are accepted
+	 * for the one signature's sake and mean nothing here
+	 */
+	#[Override]
 	public function get(
 		string $key,
 		?Closure $resolver = null,
 		int $ttl = 0,
-		?bool $queue = null, // override of the config switch
-		?int $queueLockTtlS = null, // override of the config value
-		int $stale = 0, // seconds past the ttl a value is served while it is refreshed
-		bool $soft = false, // APCu has no tags: no invalidation to soften, accepted for the API's sake
-		bool $refresh = false, // recompute whatever is cached - guarded like a miss
-		int $staleIfError = 0, // seconds past the stale time a value is kept, served when the computation fails
+		array $tags = [],
+		mixed ...$options,
 	): mixed
 	{
+		$policy = Policy::from($options);
 		$id = $this->prefixer
 			->prefix($key, $this->getGroup());
-		$compute = fn() => $this->setFromResolver($key, $resolver, $ttl, $stale, $soft, $staleIfError);
+		$compute = fn() => $this->setFromResolver($key, $resolver, $ttl, [], $policy);
 		
 		// a forced refresh: no hit, and no second look at the lock - a refresh
 		// in flight is waited for, then this one computes too (lock-only)
-		if($refresh)
+		if($policy->refresh)
 		{
 			$this->forceMiss($id);
 			
 			return $this->getMemoLock()
-				->lockAndQueue($id, null, $compute, $queue, $queueLockTtlS);
+				->lockAndQueue($id, null, $compute, $policy->queue, $policy->queueLockTtlMs);
 		}
 		
 		// initial hit check (fast path); past its ttl, a value written with a
 		// stale time is served while it is refreshed (see revalidate())
-		$revalidate = $stale > 0 && $resolver !== null
+		$revalidate = $policy->stale > 0 && $resolver !== null
 			? $compute
 			: null;
 		$data = $this->fetch($id);
@@ -209,55 +211,16 @@ class Apcu extends KeyValue
 			return $served;
 		}
 		
-		$fallback = $this->errorFallback($data, $staleIfError);
+		$fallback = $this->errorFallback($data, $policy->staleIfError);
 		
 		return $this->getMemoLock()
 			->lockAndQueue(
 				$id,
 				fn() => $this->fresh($this->fetch($id)),
 				fn() => $this->computeOrFallback($id, $compute, $fallback),
-				$queue,
-				$queueLockTtlS,
+				$policy->queue,
+				$policy->queueLockTtlMs,
 			);
-	}
-	
-	/**
-	 * The resolver's value, stored - with a stale time (get(stale:)) as the
-	 * value and its fresh time, kept that long past it
-	 */
-	#[Override]
-	public function setFromResolver(
-		string $key,
-		?Closure $resolver,
-		int $ttl = 0,
-		int $stale = 0,
-		bool $soft = false,
-		int $staleIfError = 0,
-	): mixed
-	{
-		if($resolver === null)
-		{
-			return null;
-		}
-		
-		// the resolver may change $ttl and $save by reference (no tags here -
-		// see KeyValue::setFromResolver())
-		$tags = [];
-		$save = true;
-		$value = $resolver($this, $key, $ttl, $tags, $save);
-		
-		if($save === false)
-		{
-			// nothing written: the lock goes now, not at its TTL
-			$this->releaseActiveLock($key);
-		}
-		else if($value !== null)
-		{
-			[$stored, $storedTtl] = Stale::wrap($value, $ttl, $stale, $soft, $staleIfError);
-			$this->set($key, $stored, $storedTtl);
-		}
-		
-		return $value;
 	}
 	
 	/**
@@ -270,7 +233,7 @@ class Apcu extends KeyValue
 	public function lockAndQueue(
 		string $key,
 		?Closure $resolver = null,
-		?int $queueLockTtlS = null, // override of the config value
+		?int $queueLockTtlMs = null, // override of the config value, in ms as on every store
 	): mixed
 	{
 		$id = $this->prefixer
@@ -282,7 +245,7 @@ class Apcu extends KeyValue
 				fn() => $this->fresh($this->fetch($id)),
 				$resolver,
 				true,
-				$queueLockTtlS,
+				$queueLockTtlMs,
 			);
 	}
 	

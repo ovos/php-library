@@ -111,11 +111,11 @@ $value = $cache->get(
     queueLockTtlMs: 10000,   // 10 seconds
 );
 
-// APCu: lock TTL in seconds
+// APCu: the same milliseconds - its lock rounds them up to whole seconds
 $value = $cache->get(
     'key',
     resolver: fn() => $this->computation(),
-    queueLockTtlS: 5,
+    queueLockTtlMs: 5000,
 );
 ```
 
@@ -302,14 +302,15 @@ $memoLock->releaseActiveLock($id);
 
 ### APCu MemoLock
 
-Same pattern, but lock TTL uses seconds:
+Same pattern, the lock TTL in milliseconds too (rounded up to whole seconds
+by APCu's lock):
 
 ```php
 $memoLock->lockAndQueue(
     $id,
     fetcher: $fetcher,
     resolver: $resolver,
-    queueLockTtlS: 2,
+    queueLockTtlMs: 2000,
 );
 $memoLock->releaseActiveLock($id);
 ```
