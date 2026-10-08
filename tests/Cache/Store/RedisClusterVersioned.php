@@ -9,6 +9,7 @@ use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
+use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedisCluster;
 use Override;
 
@@ -29,6 +30,7 @@ class RedisClusterVersioned extends Test
 	use TraitRedisCluster;
 	use TraitInvalidationGuard;
 	use TraitStaleWhileRevalidate;
+	use TraitStoredStrings;
 	
 	public const string KEY_ITEM = 'item';
 	

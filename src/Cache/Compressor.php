@@ -82,7 +82,7 @@ class Compressor
 		
 		if(strlen($value) < $this->compressionThreshold)
 		{
-			return $value;
+			return $this->raw($value);
 		}
 		
 		// use zstd if available, gzip otherwise
@@ -91,7 +91,7 @@ class Compressor
 			if(($compressed = zstd_compress($value, 4)) === false)
 			{
 				// compression failed
-				return $value;
+				return $this->raw($value);
 			}
 			
 			$value = 'zs' . static::PREFIX_COMPRESS . $compressed;
@@ -102,7 +102,7 @@ class Compressor
 			if(($compressed = gzcompress($value, 3)) === false)
 			{
 				// compression failed
-				return $value;
+				return $this->raw($value);
 			}
 			
 			$value = 'gz' . static::PREFIX_COMPRESS . $compressed;
@@ -136,6 +136,10 @@ class Compressor
 			{
 				switch($method)
 				{
+					case 'rw':
+						$value = $compressed;
+						
+						break;
 					case 'zs':
 						if(Zstd::isAvailable() === false)
 						{
@@ -165,5 +169,21 @@ class Compressor
 		}
 		
 		return $value;
+	}
+	
+	/**
+	 * A value stored uncompressed: as it is, unless it carries the marker
+	 * where a compressed value does - then marked as stored raw ('rw'), so a
+	 * read never "decompresses" a short string into what it packs (an
+	 * outsider's string could carry serialized objects that way). A reader
+	 * before 'rw' takes it for gzip, fails and misses
+	 */
+	protected function raw(
+		string $value,
+	): string
+	{
+		return substr($value, 2, 3) === static::PREFIX_COMPRESS
+			? 'rw' . static::PREFIX_COMPRESS . $value
+			: $value;
 	}
 }
