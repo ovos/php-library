@@ -20,6 +20,8 @@ use function is_scalar;
 use function max;
 use function microtime;
 
+use const INF;
+
 /**
  * KeyValue
  *
@@ -430,7 +432,10 @@ abstract class KeyValue
 	
 	/**
 	 * What a resolver's value is stored as: with a stale time (get(stale:))
-	 * the value and its fresh time, kept that long past it - only with a TTL
+	 * the value and its fresh time, kept that long past it - with a TTL; a
+	 * soft one (soft: true) may also be served that long after a tag
+	 * invalidation, and needs no TTL: without one it is fresh until an
+	 * invalidation reaches it, and kept as long as before
 	 *
 	 * @return array{0: mixed, 1: int} the value to store and its TTL
 	 */
@@ -438,17 +443,25 @@ abstract class KeyValue
 		mixed $value,
 		int $ttl,
 		int $stale,
+		bool $soft = false,
 	): array
 	{
-		if($stale <= 0 || $ttl <= 0)
+		if($stale <= 0)
 		{
 			return [$value, $ttl];
 		}
 		
-		return [
-			new Stale($value, microtime(true) + $ttl),
-			$ttl + $stale,
-		];
+		if($ttl > 0)
+		{
+			return [
+				new Stale($value, microtime(true) + $ttl, $stale, $soft),
+				$ttl + $stale,
+			];
+		}
+		
+		return $soft
+			? [new Stale($value, INF, $stale, true), $ttl]
+			: [$value, $ttl];
 	}
 	
 	/**

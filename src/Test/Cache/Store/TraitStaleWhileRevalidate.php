@@ -7,11 +7,14 @@ use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\KeyValue\Tags;
+use Ovos\Cache\Store\RedisVersioned;
+use Ovos\Test\Exception\SkipException;
 use Closure;
 use RuntimeException;
 
 use function count;
 use function microtime;
+use function usleep;
 
 /**
  * TraitStaleWhileRevalidate
@@ -26,6 +29,8 @@ use function microtime;
 trait TraitStaleWhileRevalidate
 {
 	protected const string STALE_TAG = 'stale-tag';
+	
+	protected const string SOFT_TAG = 'soft-tag';
 	
 	/**
 	 * A fresh instance of the store under test - another process
@@ -307,6 +312,335 @@ trait TraitStaleWhileRevalidate
 	}
 	
 	/**
+	 * RULE: soft invalidation - a soft value a tag invalidation reached is
+	 * served at once, and ONE refresh is handed to the deferrer; run, it
+	 * stores the new value, which a strict read takes as fresh
+	 */
+	public function aSoftValueIsServedAfterAnInvalidationWhileOneRefreshRuns(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-deferred');
+		$this->capture($store, $deferred);
+		$calls = 0;
+		$this->writeSoft($key, 'old');
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		
+		$served = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG], stale: 60, soft: true);
+		$before = $calls;
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$after = $this->staleStore()->get($key, queue: false);
+		$store->delete($key);
+		
+		return $served === 'old'
+			&& $before === 0
+			&& count($deferred) === 1
+			&& $calls === 1
+			&& $after === 'new';
+	}
+	
+	/**
+	 * RULE: without a deferrer the refresh after a soft invalidation runs
+	 * inline, and the caller gets the new value
+	 */
+	public function withoutADeferrerASoftInvalidationRefreshesInline(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-inline');
+		$calls = 0;
+		$this->writeSoft($key, 'old');
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		
+		$served = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG], stale: 60, soft: true);
+		$after = $this->staleStore()->get($key, queue: false);
+		$store->delete($key);
+		
+		return $served === 'new'
+			&& $calls === 1
+			&& $after === 'new';
+	}
+	
+	/**
+	 * RULE: past its stale time after the invalidation a soft value is a
+	 * miss - computed, not served - with a ttl or without one (its data then
+	 * has no expiry of its own until the invalidation sets one)
+	 */
+	public function aSoftValuePastItsWindowIsAMiss(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-window');
+		$forever = $this->staleKey('soft-window-forever');
+		$this->capture($store, $deferred);
+		$calls = 0;
+		$this->writeSoft($key, 'old', stale: 1);
+		$this->writeSoft($forever, 'old', ttl: 0, stale: 1);
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		usleep(1300000);
+		
+		$served = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG], stale: 1, soft: true);
+		$servedForever = $store->get($forever, $this->counting($calls, 'new'), 0, [self::SOFT_TAG], stale: 1, soft: true);
+		$store->delete($key);
+		$store->delete($forever);
+		
+		return $served === 'new'
+			&& $servedForever === 'new'
+			&& $calls === 2
+			&& $deferred === [];
+	}
+	
+	/**
+	 * RULE: a soft value written without a ttl is fresh until an invalidation
+	 * reaches it - only then served stale while it is refreshed
+	 */
+	public function aSoftValueWithoutATtlAgesByAnInvalidationOnly(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-forever');
+		$this->capture($store, $deferred);
+		$calls = 0;
+		$this->writeSoft($key, 'v1', ttl: 0);
+		
+		$fresh = $store->get($key, $this->counting($calls, 'unused'), 0, [self::SOFT_TAG], stale: 60, soft: true);
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		$served = $store->get($key, $this->counting($calls, 'v2'), 0, [self::SOFT_TAG], stale: 60, soft: true);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$after = $this->staleStore()->get($key, queue: false);
+		$store->delete($key);
+		
+		return $fresh === 'v1'
+			&& $served === 'v1'
+			&& count($deferred) === 1
+			&& $calls === 1
+			&& $after === 'v2';
+	}
+	
+	/**
+	 * RULE: delete() stays hard for a soft value - the next read computes
+	 */
+	public function aDeleteStaysHardForASoftValue(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-delete');
+		$this->capture($store, $deferred);
+		$calls = 0;
+		$this->writeSoft($key, 'old');
+		$this->staleStore()->delete($key);
+		
+		$served = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG], stale: 60, soft: true);
+		$store->delete($key);
+		
+		return $served === 'new'
+			&& $calls === 1
+			&& $deferred === [];
+	}
+	
+	/**
+	 * RULE: clear() stays hard for a soft value - the next read computes
+	 */
+	public function aClearStaysHardForASoftValue(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-clear');
+		$this->capture($store, $deferred);
+		$calls = 0;
+		$this->writeSoft($key, 'old');
+		$this->staleStore()->clear();
+		
+		$served = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG], stale: 60, soft: true);
+		$store->delete($key);
+		
+		return $served === 'new'
+			&& $calls === 1
+			&& $deferred === [];
+	}
+	
+	/**
+	 * RULE: a recomputation that started before a soft invalidation never
+	 * reads as fresh - the tag stores refuse its write (the soft mark renewed
+	 * the epoch), the versioned stores let it land under the watermark it
+	 * saw, older than the rule; either way a strict read misses, and what
+	 * stays may only be served stale, as the old value would be
+	 */
+	public function aRecomputationAcrossASoftInvalidationIsRefused(): bool
+	{
+		$store = $this->softStore();
+		$other = $this->staleStore();
+		$key = $this->staleKey('soft-raced');
+		$this->capture($store, $deferred);
+		$this->writeAged($store, $key, 'old', [self::SOFT_TAG], soft: true);
+		
+		$store->get($key, function() use ($other): string
+		{
+			// the source changed and another process invalidated the tag
+			// (softly) after this refresh read it
+			$other->invalidateTags([self::SOFT_TAG]);
+			
+			return 'computed before the edit';
+		}, 60, [self::SOFT_TAG], stale: 60, soft: true);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$strict = $this->staleStore()->get($key, queue: false);
+		$stored = $this->staleStore()->peek($key);
+		$store->delete($key);
+		
+		return count($deferred) === 1
+			&& $strict === null
+			&& ($stored === null || ($stored instanceof Stale && $stored->isFresh() === false));
+	}
+	
+	/**
+	 * RULE: a refresh that started from a softly invalidated read is guarded
+	 * too - a second invalidation landing while it computes leaves its value
+	 * reading as anything but fresh (the read was remembered as a miss)
+	 */
+	public function aRefreshAcrossASecondInvalidationIsRefused(): bool
+	{
+		$store = $this->softStore();
+		$other = $this->staleStore();
+		$key = $this->staleKey('soft-second');
+		$this->capture($store, $deferred);
+		$this->writeSoft($key, 'old');
+		$other->invalidateTags([self::SOFT_TAG]);
+		
+		$store->get($key, function() use ($other): string
+		{
+			// another edit lands while the refresh computes
+			$other->invalidateTags([self::SOFT_TAG]);
+			
+			return 'computed before the second edit';
+		}, 60, [self::SOFT_TAG], stale: 60, soft: true);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$strict = $this->staleStore()->get($key, queue: false);
+		$store->delete($key);
+		
+		return count($deferred) === 1
+			&& $strict === null;
+	}
+	
+	/**
+	 * RULE: on the tag-index stores the soft mark renews the epoch - a
+	 * recomputation whose miss carries no stamp, guarded by the epoch alone,
+	 * is refused as a tombstone would refuse it. peek() is that read (the
+	 * page cache's): it remembers the miss without a stamp - get() stamps it
+	 * right before the computation, so the tag's stamp would refuse it too
+	 */
+	public function anUnstampedRecomputationAcrossASoftInvalidationIsRefused(): bool
+	{
+		$store = $this->softStore();
+		if($store instanceof RedisVersioned
+			|| $store instanceof KeyValueRedis === false)
+		{
+			throw new SkipException('the soft mark is the tag-index stores\'');
+		}
+		
+		$key = $this->staleKey('soft-unstamped');
+		$this->writeAged($store, $key, 'old', [self::SOFT_TAG], soft: true);
+		
+		// peek(), a computation, set() - the aged read is an unstamped miss
+		$peeked = $store->peek($key);
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		$store->set($key, 'computed before the edit', 60, [self::SOFT_TAG]);
+		$strict = $this->staleStore()->get($key, queue: false);
+		$store->delete($key);
+		
+		return $peeked instanceof Stale
+			&& $peeked->isFresh() === false
+			&& $strict === null;
+	}
+	
+	/**
+	 * RULE: a read without stale: takes a softly invalidated value for a miss
+	 */
+	public function aStrictReadMissesASoftlyInvalidatedValue(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-strict');
+		$calls = 0;
+		$this->writeSoft($key, 'old');
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		
+		$plain = $this->staleStore()->get($key, queue: false);
+		$computed = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG]);
+		$store->delete($key);
+		
+		return $plain === null
+			&& $computed === 'new'
+			&& $calls === 1;
+	}
+	
+	/**
+	 * RULE: on the tag-index stores a tag invalidation MARKS a soft value's
+	 * item (the data kept, expiring with the window) instead of tombstoning
+	 * it, and the next write ends the mark - its fields go
+	 */
+	public function aWriteEndsASoftInvalidation(): bool
+	{
+		$store = $this->softStore();
+		if($store instanceof RedisVersioned
+			|| $store instanceof KeyValueRedis === false)
+		{
+			throw new SkipException('the soft mark is the tag-index stores\'');
+		}
+		
+		$key = $this->staleKey('soft-mark');
+		$id = $this->staleId($store, $key);
+		$client = $store->getClient();
+		$this->writeSoft($key, 'old');
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		
+		$marked = (int)$client->hExists($id, KeyValueRedis::KEY_INVALIDATED) === 1
+			&& (int)$client->hExists($id, KeyValueRedis::KEY_DATA) === 1;
+		$this->staleStore()->set($key, 'plain', 60, [self::SOFT_TAG]);
+		$cleared = (int)$client->hExists($id, KeyValueRedis::KEY_INVALIDATED) === 0
+			&& (int)$client->hExists($id, KeyValueRedis::KEY_SOFT) === 0;
+		$read = $this->staleStore()->get($key, queue: false);
+		$store->delete($key);
+		
+		return $marked
+			&& $cleared
+			&& $read === 'plain';
+	}
+	
+	/**
+	 * Writes $value as a soft value (get(stale:, soft: true)) from another
+	 * process, tagged SOFT_TAG
+	 */
+	protected function writeSoft(
+		string $key,
+		mixed $value,
+		int $ttl = 60,
+		int $stale = 60,
+	): void
+	{
+		$this->staleStore()->get($key, fn() => $value, $ttl, [self::SOFT_TAG], stale: $stale, soft: true);
+	}
+	
+	/**
+	 * The store under test when it has tags - soft invalidation softens a tag
+	 * invalidation; APCu has none
+	 */
+	protected function softStore(): Tags
+	{
+		$store = $this->staleStore();
+		if($store instanceof Tags === false)
+		{
+			throw new SkipException('no tags: soft invalidation has nothing to soften');
+		}
+		
+		return $store;
+	}
+	
+	/**
 	 * Writes $value as a value past its ttl, inside its stale time
 	 */
 	protected function writeAged(
@@ -314,9 +648,10 @@ trait TraitStaleWhileRevalidate
 		string $key,
 		mixed $value,
 		array $tags = [],
+		bool $soft = false,
 	): void
 	{
-		$aged = new Stale($value, microtime(true) - 1);
+		$aged = new Stale($value, microtime(true) - 1, 60, $soft);
 		
 		if($store instanceof Tags)
 		{

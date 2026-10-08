@@ -178,6 +178,7 @@ class Apcu extends KeyValue
 		?bool $queue = null, // override of the config switch
 		?int $queueLockTtlS = null, // override of the config value
 		int $stale = 0, // seconds past the ttl a value is served while it is refreshed
+		bool $soft = false, // APCu has no tags: no invalidation to soften, accepted for the API's sake
 	): mixed
 	{
 		$id = $this->prefixer
@@ -186,7 +187,7 @@ class Apcu extends KeyValue
 		// initial hit check (fast path); past its ttl, a value written with a
 		// stale time is served while it is refreshed (see revalidate())
 		$refresh = $stale > 0 && $resolver !== null
-			? fn() => $this->setFromResolver($key, $resolver, $ttl, $stale)
+			? fn() => $this->setFromResolver($key, $resolver, $ttl, $stale, $soft)
 			: null;
 		if(($data = $this->served($id, $this->fetch($id), $refresh)) !== null)
 		{
@@ -197,7 +198,7 @@ class Apcu extends KeyValue
 			->lockAndQueue(
 				$id,
 				fn() => $this->fresh($this->fetch($id)),
-				fn() => $this->setFromResolver($key, $resolver, $ttl, $stale),
+				fn() => $this->setFromResolver($key, $resolver, $ttl, $stale, $soft),
 				$queue,
 				$queueLockTtlS,
 			);
@@ -213,6 +214,7 @@ class Apcu extends KeyValue
 		?Closure $resolver,
 		int $ttl = 0,
 		int $stale = 0,
+		bool $soft = false,
 	): mixed
 	{
 		$value = $this->invoker
@@ -220,7 +222,7 @@ class Apcu extends KeyValue
 		
 		if($value !== null)
 		{
-			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale);
+			[$stored, $storedTtl] = $this->withStale($value, $ttl, $stale, $soft);
 			$this->set($key, $stored, $storedTtl);
 		}
 		

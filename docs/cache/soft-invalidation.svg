@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="688" viewBox="0 0 940 688" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+	<defs>
+		<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+			<rect width="4" height="1" fill="#ffffff" opacity="0.025"/>
+		</pattern>
+		<filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+			<feGaussianBlur stdDeviation="4" result="halo"/>
+			<feComponentTransfer in="halo" result="dim">
+				<feFuncA type="linear" slope="0.45"/>
+			</feComponentTransfer>
+			<feMerge>
+				<feMergeNode in="dim"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+		<marker id="aBad" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ff003c"/></marker>
+		<marker id="aTime" markerWidth="9" markerHeight="9" refX="4" refY="7" orient="0"><path d="M0,0 L4,8 L8,0 z" fill="#8b8ba7"/></marker>
+		<style>
+			.title{font-size:17px;font-weight:700;fill:#fcee0a;letter-spacing:2px}
+			.subtitle{font-size:12px;fill:#8b8ba7;letter-spacing:0.5px}
+			.panelHead{font-size:12.5px;font-weight:700;letter-spacing:1.5px;text-anchor:middle}
+			.req{font-family:Consolas,'Courier New',monospace;font-size:10.5px;fill:#e8e8f0;text-anchor:middle}
+			.rowHead{font-family:Consolas,'Courier New',monospace;font-size:10.5px;font-weight:700;text-anchor:end}
+			.seg{font-family:Consolas,'Courier New',monospace;font-size:11px;font-weight:700;text-anchor:middle;letter-spacing:1px}
+			.lblC{font-size:11px;fill:#8b8ba7;text-anchor:middle}
+			.em{font-size:11px;font-weight:700;fill:#e8e8f0;text-anchor:middle}
+			.cost{font-family:Consolas,'Courier New',monospace;font-size:13px;font-weight:700;text-anchor:middle;letter-spacing:1px}
+			.costSub{font-size:9.5px;text-anchor:middle;fill:#8b8ba7}
+			.foot{font-size:11px;fill:#8b8ba7}
+		</style>
+	</defs>
+	
+	<!-- canvas: chamfered plate -->
+	<path d="M14,0 H926 L940,14 V674 L926,688 H14 L0,674 V14 Z" fill="#0a0a12"/>
+	<path d="M14,0 H926 L940,14 V674 L926,688 H14 L0,674 V14 Z" fill="url(#scan)"/>
+	<path d="M14,0.5 H926 L939.5,14 V674 L926,687.5 H14 L0.5,674 V14 Z" fill="none" stroke="#fcee0a" stroke-width="1" opacity="0.8"/>
+	<path d="M0,40 V14 L14,0.5 H40" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	<path d="M940,648 V674 L926,687.5 H900" fill="none" stroke="#00f0ff" stroke-width="2.5"/>
+	
+	<!-- header -->
+	<text x="24" y="28" class="title" filter="url(#glow)">SOFT INVALIDATION &#8212; get(stale:, soft: true)</text>
+	<text x="24" y="47" class="subtitle">After a tag invalidation the old value is served for the stale window, while ONE process recomputes it</text>
+	<rect x="24" y="55" width="160" height="2" fill="#ff003c"/>
+	<rect x="192" y="55" width="10" height="2" fill="#ff003c" opacity="0.55"/>
+	<rect x="210" y="55" width="4" height="2" fill="#ff003c" opacity="0.3"/>
+	
+	<!-- ============ A VALUE'S LIFE ============ -->
+	<path d="M28,74 H924 V244 L912,256 H16 V86 Z" fill="#0d0d17" stroke="#fcee0a" stroke-width="1" opacity="0.9"/>
+	<path d="M28,74 H924 V102 H16 V86 Z" fill="#fcee0a" opacity="0.1"/>
+	<line x1="16" y1="102" x2="924" y2="102" stroke="#fcee0a" stroke-width="1" opacity="0.7"/>
+	<text x="470" y="93" class="panelHead" fill="#fcee0a">A VALUE&#8217;S LIFE &#8212; get($key, $resolver, ttl: 0, stale: 60, soft: true)</text>
+	<g>
+		<line x1="420" y1="134" x2="420" y2="214" stroke="#ff003c" stroke-width="1.6" stroke-dasharray="5 3"/>
+		<text x="420" y="126" class="req" style="fill:#ff003c">invalidateTags([&#8217;news&#8217;])</text>
+		<text x="140" y="155" class="rowHead" fill="#8b8ba7">without soft</text>
+		<rect x="150" y="140" width="270" height="22" fill="#00f0ff" fill-opacity="0.16" stroke="#00f0ff"/>
+		<text x="285" y="155" class="seg" fill="#00f0ff">FRESH</text>
+		<rect x="420" y="140" width="470" height="22" fill="#ff003c" fill-opacity="0.1" stroke="#ff003c"/>
+		<text x="655" y="155" class="seg" fill="#ff003c">MISS &#8212; one recomputes, the rest wait</text>
+		<text x="140" y="199" class="rowHead" fill="#fcee0a">soft: true</text>
+		<rect x="150" y="184" width="270" height="22" fill="#00f0ff" fill-opacity="0.16" stroke="#00f0ff"/>
+		<text x="285" y="199" class="seg" fill="#00f0ff">FRESH</text>
+		<rect x="420" y="184" width="230" height="22" fill="#fcee0a" fill-opacity="0.14" stroke="#fcee0a"/>
+		<text x="535" y="199" class="seg" fill="#fcee0a">STALE &#8212; the old value</text>
+		<rect x="650" y="184" width="240" height="22" fill="#00f0ff" fill-opacity="0.16" stroke="#00f0ff"/>
+		<text x="770" y="199" class="seg" fill="#00f0ff">FRESH &#8212; the new value</text>
+		<path d="M420,212 V218 H650 V212" fill="none" stroke="#fcee0a" opacity="0.8"/>
+		<text x="535" y="232" class="lblC" style="fill:#fcee0a">stale: 60 &#8212; ONE refresh runs, everyone gets the old value</text>
+		<text x="285" y="232" class="lblC">no ttl needed: fresh until an invalidation</text>
+		<text x="770" y="232" class="lblC" style="fill:#00f0ff">the refresh&#8217;s value</text>
+	</g>
+	
+	<!-- ============ WITHOUT ============ -->
+	<path d="M28,270 H460 V592 L448,604 H16 V282 Z" fill="#0d0d17" stroke="#ff003c" stroke-width="1" opacity="0.9"/>
+	<path d="M28,270 H460 V298 H16 V282 Z" fill="#ff003c" opacity="0.13"/>
+	<line x1="16" y1="298" x2="460" y2="298" stroke="#ff003c" stroke-width="1" opacity="0.7"/>
+	<text x="238" y="289" class="panelHead" fill="#ff003c">WITHOUT soft &#8212; AFTER AN EDIT, VISITORS WAIT</text>
+	
+	<g>
+		<path d="M22,308 H150 V325 L145,330 H22 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="86" y="323" class="req">visitor A</text>
+		<line x1="86" y1="334" x2="86" y2="510" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M174,308 H302 V325 L297,330 H174 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="238" y="323" class="req">visitor B</text>
+		<line x1="238" y1="334" x2="238" y2="510" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M326,308 H454 V325 L449,330 H326 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="390" y="323" class="req">visitor C</text>
+		<line x1="390" y1="334" x2="390" y2="510" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M22,344 H150 V370 L144,376 H22 Z" fill="#11111c"/>
+		<path d="M22,344 H150 V370 L144,376 H22 Z" fill="#ff003c" fill-opacity="0.08" stroke="#ff003c" opacity="0.9"/>
+		<text x="86" y="357" class="req">get() &#8594; miss</text>
+		<text x="86" y="370" class="costSub" style="fill:#ff003c">wins the lock</text>
+		<path d="M174,344 H302 V370 L296,376 H174 Z" fill="#11111c"/>
+		<path d="M174,344 H302 V370 L296,376 H174 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="238" y="357" class="req">get() &#8594; miss</text>
+		<text x="238" y="370" class="costSub" style="fill:#fcee0a">waits (MemoLock)</text>
+		<path d="M326,344 H454 V370 L448,376 H326 Z" fill="#11111c"/>
+		<path d="M326,344 H454 V370 L448,376 H326 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="390" y="357" class="req">get() &#8594; miss</text>
+		<text x="390" y="370" class="costSub" style="fill:#fcee0a">waits (MemoLock)</text>
+		<path d="M22,386 H150 V452 L144,458 H22 Z" fill="#11111c"/>
+		<path d="M22,386 H150 V452 L144,458 H22 Z" fill="#ff003c" fill-opacity="0.08" stroke="#ff003c" opacity="0.9"/>
+		<text x="86" y="412" class="req" style="fill:#ff003c">recomputes</text>
+		<text x="86" y="425" class="costSub" style="fill:#ff003c">the visitor</text>
+		<text x="86" y="438" class="costSub" style="fill:#ff003c">waits for it</text>
+		<path d="M174,386 H302 V452 L296,458 H174 Z" fill="#11111c"/>
+		<path d="M174,386 H302 V452 L296,458 H174 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="238" y="426" class="req" style="fill:#fcee0a">waiting&#8230;</text>
+		<path d="M326,386 H454 V452 L448,458 H326 Z" fill="#11111c"/>
+		<path d="M326,386 H454 V452 L448,458 H326 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="390" y="426" class="req" style="fill:#fcee0a">waiting&#8230;</text>
+		<path d="M22,470 H150 V492 L144,498 H22 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="86" y="488" class="req">the new value</text>
+		<path d="M174,470 H302 V492 L296,498 H174 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="238" y="488" class="req">A&#8217;s value</text>
+		<path d="M326,470 H454 V492 L448,498 H326 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="390" y="488" class="req">A&#8217;s value</text>
+	</g>
+	<text x="238" y="534" class="em">The invalidation empties the key: one request</text>
+	<text x="238" y="550" class="em">recomputes, every request behind it waits.</text>
+	<path d="M138,560 H346 V588 L338,596 H130 V568 Z" fill="#ff003c" fill-opacity="0.07" stroke="#ff003c" opacity="0.9"/>
+	<text x="238" y="578" class="cost" fill="#ff003c">3 visitors wait</text>
+	<text x="238" y="591" class="costSub">per invalidated key - an edit can hit hundreds</text>
+	
+	<!-- ============ WITH ============ -->
+	<path d="M492,270 H924 V592 L912,604 H480 V282 Z" fill="#0d0d17" stroke="#00f0ff" stroke-width="1" opacity="0.9"/>
+	<path d="M492,270 H924 V298 H480 V282 Z" fill="#00f0ff" opacity="0.1"/>
+	<line x1="480" y1="298" x2="924" y2="298" stroke="#00f0ff" stroke-width="1" opacity="0.7"/>
+	<text x="702" y="289" class="panelHead" fill="#00f0ff">WITH soft &#8212; NOBODY WAITS</text>
+	
+	<g>
+		<path d="M486,308 H614 V325 L609,330 H486 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="550" y="323" class="req">visitor A</text>
+		<line x1="550" y1="334" x2="550" y2="510" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M638,308 H766 V325 L761,330 H638 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="702" y="323" class="req">visitor B</text>
+		<line x1="702" y1="334" x2="702" y2="510" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M790,308 H918 V325 L913,330 H790 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="854" y="323" class="req">visitor C</text>
+		<line x1="854" y1="334" x2="854" y2="510" stroke="#8b8ba7" stroke-width="1" stroke-dasharray="2 4" opacity="0.6" marker-end="url(#aTime)"/>
+		<path d="M486,344 H614 V370 L608,376 H486 Z" fill="#11111c"/>
+		<path d="M486,344 H614 V370 L608,376 H486 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="550" y="357" class="req">get() &#8594; invalidated</text>
+		<text x="550" y="370" class="costSub" style="fill:#00f0ff">the old value at once</text>
+		<path d="M638,344 H766 V370 L760,376 H638 Z" fill="#11111c"/>
+		<path d="M638,344 H766 V370 L760,376 H638 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="702" y="357" class="req">get() &#8594; invalidated</text>
+		<text x="702" y="370" class="costSub" style="fill:#00f0ff">the old value at once</text>
+		<path d="M790,344 H918 V370 L912,376 H790 Z" fill="#11111c"/>
+		<path d="M790,344 H918 V370 L912,376 H790 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="854" y="357" class="req">get() &#8594; invalidated</text>
+		<text x="854" y="370" class="costSub" style="fill:#00f0ff">the old value at once</text>
+		<path d="M486,386 H614 V452 L608,458 H486 Z" fill="#11111c"/>
+		<path d="M486,386 H614 V452 L608,458 H486 Z" fill="#fcee0a" fill-opacity="0.08" stroke="#fcee0a" opacity="0.9"/>
+		<text x="550" y="412" class="req" style="fill:#fcee0a">after the response:</text>
+		<text x="550" y="425" class="costSub" style="fill:#fcee0a">tryLock &#8594; elected</text>
+		<text x="550" y="438" class="costSub" style="fill:#fcee0a">recompute, guarded set</text>
+		<path d="M638,386 H766 V452 L760,458 H638 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="702" y="412" class="req">after the response:</text>
+		<text x="702" y="425" class="costSub">tryLock lost</text>
+		<text x="702" y="438" class="costSub">nothing to do</text>
+		<path d="M790,386 H918 V452 L912,458 H790 Z" fill="#11111c" stroke="#8b8ba7" opacity="0.9"/>
+		<text x="854" y="412" class="req">after the response:</text>
+		<text x="854" y="425" class="costSub">tryLock lost</text>
+		<text x="854" y="438" class="costSub">nothing to do</text>
+		<path d="M486,470 H614 V492 L608,498 H486 Z" fill="#11111c"/>
+		<path d="M486,470 H614 V492 L608,498 H486 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="550" y="488" class="req" style="fill:#00f0ff">next read: new</text>
+		<path d="M638,470 H766 V492 L760,498 H638 Z" fill="#11111c"/>
+		<path d="M638,470 H766 V492 L760,498 H638 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="702" y="488" class="req" style="fill:#00f0ff">next read: new</text>
+		<path d="M790,470 H918 V492 L912,498 H790 Z" fill="#11111c"/>
+		<path d="M790,470 H918 V492 L912,498 H790 Z" fill="#00f0ff" fill-opacity="0.08" stroke="#00f0ff" opacity="0.9"/>
+		<text x="854" y="488" class="req" style="fill:#00f0ff">next read: new</text>
+	</g>
+	<text x="702" y="534" class="em">Everyone gets the old value at once; one</text>
+	<text x="702" y="550" class="em">recomputation runs after its response.</text>
+	<path d="M602,560 H810 V588 L802,596 H594 V568 Z" fill="#00f0ff" fill-opacity="0.07" stroke="#00f0ff" opacity="0.9"/>
+	<text x="702" y="578" class="cost" fill="#00f0ff">0 visitors wait</text>
+	<text x="702" y="591" class="costSub">1 recomputation per key, after the response</text>
+	
+	<line x1="16" y1="624" x2="924" y2="624" stroke="#8b8ba7" opacity="0.3"/>
+	<text x="16" y="643" class="foot"><tspan font-weight="700" fill="#e8e8f0">Stays hard:</tspan> delete(), clear() and every value written without soft &#8212; a miss at once. A read without stale: misses too.</text>
+	<text x="16" y="658" class="foot"><tspan font-weight="700" fill="#e8e8f0">The guard holds:</tspan> a recomputation that started before the invalidation never lands as the fresh value.</text>
+	<text x="16" y="673" class="foot"><tspan font-weight="700" fill="#e8e8f0">The window</tspan> counts from the newest invalidation (versioned stores) or the first (Redis, Redisearch).</text>
+</svg>
