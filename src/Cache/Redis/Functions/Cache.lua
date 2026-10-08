@@ -109,6 +109,11 @@ local CACHE_EPOCH = 'epoch'
 local CACHE_SOFT = 'soft'
 local CACHE_INVALIDATED = 'invalidated'
 
+-- what cache_remove_item() answers for an item it marked softly: the item
+-- stays, served aged for its stale time - and stays in its tags' index, so a
+-- hard invalidation after the soft one still reaches it
+local CACHE_SOFT_MARKED = 2
+
 -- Replaces a key with its tombstone: DEL, the token, the window - one step,
 -- or a tombstone landing on a fresh write would leave its data behind. Only a
 -- cache item (a hash) or an absent key gets one: a key holding anything else
@@ -161,7 +166,7 @@ local function cache_soft_mark(key, token, window_ms, soft_ms)
 		redis.call('PEXPIRE', key, keep_ms)
 	end
 	
-	return 1
+	return CACHE_SOFT_MARKED
 end
 
 -- Removes an item a tag invalidation reached: its tombstone when the caller
@@ -578,21 +583,22 @@ local function cache_unlink_clean_tags(keys, args)
 	local hard = args[7] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
 	
 	for _, id in ipairs(ids) do
-		
-		-- first remove the id all tags where this id is present
+	
 		local item_tags = redis.call('HGET', prefix_ids .. id, field_tags)
 		
 		if item_tags then -- not false = item & hash field exist
-			if item_tags ~= '' then -- not an empty string
+			-- the item itself: its tombstone, so a write computed before this
+			-- invalidation cannot land after it - or its soft mark, and then
+			-- it stays in its tags' index (a hard invalidation still reaches it)
+			if cache_remove_item(prefix_ids .. id, token, window_ms, hard) ~= CACHE_SOFT_MARKED
+				and item_tags ~= '' -- not an empty string
+			then
+				-- the id leaves every tag it is present in
 				local tags = cache_split_string(item_tags, ',')
 				for i, tag in ipairs(tags) do
 					redis.call('HDEL', prefix_tag_ids .. tag, id)
 				end
 			end
-			
-			-- the item itself: its tombstone, so a write computed before this
-			-- invalidation cannot land after it
-			cache_remove_item(prefix_ids .. id, token, window_ms, hard)
 		end
 	
 	end
@@ -643,10 +649,12 @@ local function cache_unlink_ids_by_tag(keys, args)
 	local rems = {}
 	for _, id in ipairs(all_tag_ids) do
 		if lookup[id] then
-			-- save for removal after the loop
-			table.insert(rems, id)
-			-- the item itself: its tombstone
-			cache_remove_item(prefix_ids .. id, token, window_ms, hard)
+			-- the item itself: its tombstone, and the id leaves the tag after
+			-- the loop - or its soft mark, and the id stays (a hard
+			-- invalidation still reaches it)
+			if cache_remove_item(prefix_ids .. id, token, window_ms, hard) ~= CACHE_SOFT_MARKED then
+				table.insert(rems, id)
+			end
 		end
 	end
 	
@@ -689,10 +697,12 @@ local function cache_unlink_by_tag(keys, args)
 		cursor,
 		7500,
 		function(id)
-			-- save for removal after the loop (within this batch)
-			table.insert(rems, id)
-			-- the item itself: its tombstone
-			cache_remove_item(prefix_ids .. id, token, window_ms, hard)
+			-- the item itself: its tombstone, and the id leaves the tag after
+			-- the loop (within this batch) - or its soft mark, and the id
+			-- stays (a hard invalidation still reaches it)
+			if cache_remove_item(prefix_ids .. id, token, window_ms, hard) ~= CACHE_SOFT_MARKED then
+				table.insert(rems, id)
+			end
 		end
 	)
 	

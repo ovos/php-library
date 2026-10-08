@@ -492,6 +492,49 @@ trait TraitStaleWhileRevalidate
 	}
 	
 	/**
+	 * RULE: a hard invalidation after a soft one reaches the soft value - an
+	 * emergency purge is not left waiting for the stale time to run out
+	 */
+	public function aHardInvalidationAfterASoftOneReachesTheSoftValue(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-then-hard');
+		$this->capture($store, $deferred);
+		$calls = 0;
+		$this->writeSoft($key, 'old');
+		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
+		$this->staleStore()->invalidateTags([self::SOFT_TAG], hard: true);
+		
+		$served = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG], stale: 60, soft: true);
+		$store->delete($key);
+		
+		return $served === 'new'
+			&& $calls === 1
+			&& $deferred === [];
+	}
+	
+	/**
+	 * RULE: the same when the soft invalidation matched all of its tags
+	 */
+	public function aHardInvalidationAfterASoftMatchingAllOneReachesTheSoftValue(): bool
+	{
+		$store = $this->softStore();
+		$key = $this->staleKey('soft-all-then-hard');
+		$this->capture($store, $deferred);
+		$calls = 0;
+		$this->writeSoft($key, 'old');
+		$this->staleStore()->invalidateTags([self::SOFT_TAG], Tags::MATCHING_ALL);
+		$this->staleStore()->invalidateTags([self::SOFT_TAG], hard: true);
+		
+		$served = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG], stale: 60, soft: true);
+		$store->delete($key);
+		
+		return $served === 'new'
+			&& $calls === 1
+			&& $deferred === [];
+	}
+	
+	/**
 	 * RULE: delete() stays hard for a soft value - the next read computes
 	 */
 	public function aDeleteStaysHardForASoftValue(): bool

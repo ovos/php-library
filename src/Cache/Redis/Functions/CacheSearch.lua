@@ -28,10 +28,11 @@ redis.register_function('[prefix]cache_search_batches', cache_search_batches)
 -- match at once - the loop below ends as it did with UNLINK.
 -- A soft value's item (its "soft" field holds its stale time, ms) is marked
 -- instead - soft invalidation, as Cache.lua's cache_soft_mark: a new epoch,
--- the "invalidated" mark, the data and the mark expiring with the window
--- (never later than the item would have); its tags go, so it leaves every
--- tag match too. A hard invalidation (invalidateTags(hard: true))
--- tombstones a soft value's item like any other
+-- the "invalidated" mark, the data, the mark and its tags expiring with the
+-- window (never later than the item would have). It keeps its tags until
+-- then, so a hard invalidation (invalidateTags(hard: true)) after the soft
+-- one still matches it - and tombstones it like any other; a write after the
+-- mark sets its tags again (an HSET drops a field's expiry)
 local function cache_search_remove(key, token, window_ms, hard)
 	if token and window_ms and window_ms > 0 then
 		local soft_ms = hard ~= true and tonumber(redis.call('HGET', key, 'soft') or '') or nil
@@ -42,9 +43,8 @@ local function cache_search_remove(key, token, window_ms, hard)
 				left_ms = ttl_ms
 			end
 			
-			redis.call('HDEL', key, 'tags')
 			redis.call('HSET', key, 'epoch', token, 'invalidated', '1')
-			redis.call('HPEXPIRE', key, left_ms, 'LT', 'FIELDS', 3, 'data', 'invalidated', 'soft')
+			redis.call('HPEXPIRE', key, left_ms, 'LT', 'FIELDS', 4, 'data', 'invalidated', 'soft', 'tags')
 			
 			local keep_ms = math.max(left_ms, window_ms)
 			if ttl_ms < 0 or ttl_ms < keep_ms then
@@ -79,31 +79,27 @@ local function cache_search_unlink_by_tags(keys, args)
 	local batch_size = 10000
 	local offset = 0
 	
+	-- the matches first, page by page (NOCONTENT: the keys alone, not their
+	-- data), then their removal: a soft value's item stays matched (its tags
+	-- stay - see cache_search_remove()), so a search from the start after
+	-- each batch would find it again and again
+	local matched = {}
 	while true do
-		-- Perform the FT.SEARCH with batching
-		local search_command = {'FT.SEARCH', index, tags, 'LIMIT', offset, batch_size}
-		local result = redis.call(unpack(search_command))
+		local result = redis.call('FT.SEARCH', index, tags, 'NOCONTENT', 'LIMIT', offset, batch_size)
+		for i = 2, #result do
+			table.insert(matched, result[i])
+		end
 		
-		-- quit if there are no more matches
-		local total_results = tonumber(result[1])
-		if total_results == 0 then
+		offset = offset + batch_size
+		if #result - 1 < batch_size or offset >= tonumber(result[1]) then
 			break
 		end
-		
-		local rems = {}
-		
-		-- loop every second item, skipping the first which is total_results
-		for i = 2, #result, 2 do
-			-- local id = result[i] -- The document ID/key
-			-- local fields = result[i+1] -- The document's fields and values (array)
-			
-			table.insert(rems, result[i]) -- save for removal after the loop
-		end
-		
-		-- remove the matched items (one by one: each leaves its tombstone)
-		for _, key in ipairs(rems) do
-			cache_search_remove(key, token, window_ms, hard)
-		end
+	end
+	
+	-- remove the matched items (one by one: each leaves its tombstone, or its
+	-- soft mark)
+	for _, key in ipairs(matched) do
+		cache_search_remove(key, token, window_ms, hard)
 	end
 end
 redis.register_function('[prefix]cache_search_unlink_by_tags', cache_search_unlink_by_tags)	
