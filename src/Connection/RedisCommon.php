@@ -118,12 +118,15 @@ abstract class RedisCommon extends Connection
 	}
 	
 	/**
-	 * Can be used to extend and restore timeout to the original value
+	 * Extends this connection's read timeout (a long Lua call, a MemoLock
+	 * wait) and restores it. The server's busy-reply-threshold is left
+	 * alone: it only decides what other clients get while a script runs (a
+	 * BUSY reply past it, a wait before), never the caller's reply - the
+	 * caller gets it when its own read timeout outlasts the script
 	 */
 	abstract public function toggleReadTimeout(
 		string $timeout = self::TIMEOUT_READ,
 		?float $timeoutValue = null,
-		bool $luaScript = true,
 	): bool;
 	
 	public function slowLog(
