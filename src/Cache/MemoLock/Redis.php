@@ -307,7 +307,6 @@ class Redis extends MemoLock
 		$this->queueConnection->toggleReadTimeout(
 			Connection::TIMEOUT_READ_CUSTOM,
 			$waitTimeMs / 1000, // milliseconds to seconds
-			false,
 		);
 		
 		try

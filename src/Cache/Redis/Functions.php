@@ -665,8 +665,8 @@ class Functions
 		}
 		finally
 		{
-			// restored on a throw too: the long timeout - and the server's
-			// busy-reply threshold it sets - must not outlive this call
+			// restored on a throw too: the long timeout must not outlive this
+			// call
 			if($long)
 			{
 				$this->connection

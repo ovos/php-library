@@ -166,7 +166,6 @@ class Redis extends RedisCommon
 	public function toggleReadTimeout(
 		string $timeout = self::TIMEOUT_READ,
 		?float $timeoutValue = null,
-		bool $luaScript = true,
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
@@ -182,15 +181,6 @@ class Redis extends RedisCommon
 		};
 		
 		$client->setOption(RedisClient::OPT_READ_TIMEOUT, $readTimeout);
-		
-		if($luaScript)
-		{
-			// the Redis 7+ name of "lua-time-limit"
-			$client->config('SET',
-				'busy-reply-threshold',
-				(string)($readTimeout * 1000) // ms
-			);
-		}
 		
 		return true;
 	}

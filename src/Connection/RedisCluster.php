@@ -131,7 +131,6 @@ class RedisCluster extends RedisCommon
 	public function toggleReadTimeout(
 		string $timeout = self::TIMEOUT_READ,
 		?float $timeoutValue = null,
-		bool $luaScript = true,
 	): bool
 	{
 		if(($client = $this->getClient()) === null)
@@ -147,19 +146,6 @@ class RedisCluster extends RedisCommon
 		};
 		
 		$client->setOption(RedisClient::OPT_READ_TIMEOUT, $readTimeout);
-		
-		if($luaScript)
-		{
-			// CONFIG is a per-node command on a cluster;
-			// "busy-reply-threshold" is the Redis 7+ name of "lua-time-limit"
-			foreach($this->getMasters() as $master)
-			{
-				$client->config($master, 'SET',
-					'busy-reply-threshold',
-					(string)($readTimeout * 1000) // ms
-				);
-			}
-		}
 		
 		return true;
 	}
