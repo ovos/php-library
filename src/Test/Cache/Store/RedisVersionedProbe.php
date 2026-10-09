@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Test\Cache\Store;
 
 use Closure;
+use Ovos\Cache\Stale;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
@@ -37,6 +38,12 @@ class RedisVersionedProbe extends RedisVersioned
 	/** what the store logged */
 	public array $logged = [];
 	
+	/** the stale items it dropped */
+	public int $dropped = 0;
+	
+	/** the invalidated items it decoded for the soft verdict */
+	public int $softlyCalls = 0;
+	
 	#[Override]
 	protected function fetchRuleEntries(
 		string $from,
@@ -68,6 +75,27 @@ class RedisVersionedProbe extends RedisVersioned
 		$this->logged[] = $event;
 		
 		return parent::log(...$event);
+	}
+	
+	#[Override]
+	protected function dropStale(
+		string $id,
+		string $mark,
+	): void
+	{
+		$this->dropped++;
+		
+		parent::dropStale($id, $mark);
+	}
+	
+	#[Override]
+	protected function softly(
+		array $item,
+	): ?Stale
+	{
+		$this->softlyCalls++;
+		
+		return parent::softly($item);
 	}
 	
 	public function rules(): Rules

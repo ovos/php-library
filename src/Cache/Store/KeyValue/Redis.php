@@ -304,37 +304,46 @@ abstract class Redis extends Tags
 			return $this->setFromResolver($key, $resolver, $ttl, $tags, $policy);
 		};
 		
-		// a forced refresh: no hit, and no second look at the lock - a refresh
-		// in flight is waited for, then this one computes too (lock-only)
-		if($policy->refresh)
+		try
 		{
-			$this->forceMiss($id);
+			// a forced refresh: no hit, and no second look at the lock - a
+			// refresh in flight is waited for, then this one computes too
+			// (lock-only)
+			if($policy->refresh)
+			{
+				$this->forceMiss($id);
+				
+				return $this->getMemoLock()
+					->lockAndQueue($id, null, $compute, $policy->queue, $policy->queueLockTtlMs);
+			}
+			
+			// initial hit check (fast path); past its ttl, a value written with
+			// a stale time is served while it is refreshed (see revalidate())
+			$revalidate = $policy->stale > 0 && $resolver !== null
+				? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $policy)
+				: null;
+			$data = $this->fetch($id);
+			if(($served = $this->served($id, $data, $revalidate, $policy->queueLockTtlMs)) !== null)
+			{
+				return $served;
+			}
+			
+			$fallback = $this->errorFallback($data, $policy->staleIfError);
 			
 			return $this->getMemoLock()
-				->lockAndQueue($id, null, $compute, $policy->queue, $policy->queueLockTtlMs);
+				->lockAndQueue(
+					$id,
+					fn() => $this->fresh($this->fetch($id)),
+					fn() => $this->computeOrFallback($id, $compute, $fallback),
+					$policy->queue,
+					$policy->queueLockTtlMs,
+				);
 		}
-		
-		// initial hit check (fast path); past its ttl, a value written with a
-		// stale time is served while it is refreshed (see revalidate())
-		$revalidate = $policy->stale > 0 && $resolver !== null
-			? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $policy)
-			: null;
-		$data = $this->fetch($id);
-		if(($served = $this->served($id, $data, $revalidate, $policy->queueLockTtlMs)) !== null)
+		finally
 		{
-			return $served;
+			// what the read left to do (see KeyValue::afterRead())
+			$this->afterRead($id);
 		}
-		
-		$fallback = $this->errorFallback($data, $policy->staleIfError);
-		
-		return $this->getMemoLock()
-			->lockAndQueue(
-				$id,
-				fn() => $this->fresh($this->fetch($id)),
-				fn() => $this->computeOrFallback($id, $compute, $fallback),
-				$policy->queue,
-				$policy->queueLockTtlMs,
-			);
 	}
 	
 	/**
