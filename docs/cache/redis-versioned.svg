@@ -80,12 +80,14 @@
 		<path d="M320,216 H486 L496,226 V300 H320 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
 		<circle cx="481" cy="231" r="11" fill="#00f0ff"/><text x="481" y="235" text-anchor="middle" class="stepNum">2</text>
 		<text x="334" y="256" class="stepMain">Read watermark</text>
-		<text x="334" y="274" class="stepSub">FCALL ..._set (item+rules)</text>
+		<text x="334" y="274" class="stepSub">from the held rules</text>
+		<text x="334" y="290" class="stepSub" fill="#00f0ff">no extra round trip</text>
 
 		<path d="M524,216 H690 L700,226 V300 H524 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
 		<circle cx="685" cy="231" r="11" fill="#00f0ff"/><text x="685" y="235" text-anchor="middle" class="stepNum">3</text>
 		<text x="538" y="256" class="stepMain">Stamp + write item</text>
-		<text x="538" y="274" class="stepSub">HSET data,tags,mark</text>
+		<text x="538" y="274" class="stepSub">FCALL ..._set_stamped</text>
+		<text x="538" y="290" class="stepSub">HSET data,tags,mark</text>
 
 		<path d="M728,216 H894 L904,226 V300 H728 Z" fill="#11111c" stroke="#00f0ff" stroke-opacity="0.75"/>
 		<circle cx="889" cy="231" r="11" fill="#00f0ff"/><text x="889" y="235" text-anchor="middle" class="stepNum">4</text>
@@ -152,5 +154,5 @@
 
 	<line x1="16" y1="518" x2="924" y2="518" stroke="#8b8ba7" stroke-opacity="0.3"/>
 	<text x="16" y="538" class="foot"><tspan font-weight="700" fill="#e8e8f0">Invalidation:</tspan> O(1) rule append &#183; lazy unlink on read, else TTL expiry  &#183;  <tspan font-weight="700" fill="#e8e8f0">clear():</tspan> logical (one "all" rule); clearPhysical() wipes the group</text>
-	<text x="16" y="556" class="foot"><tspan font-weight="700" fill="#e8e8f0">Lua:</tspan> cache_versioned_set / _invalidate  &#183;  <tspan font-weight="700" fill="#e8e8f0">retention_s</tspan> = default AND max item lifetime  &#183;  <tspan font-weight="700" fill="#e8e8f0">Cluster:</tspan> no (2-key write)</text>
+	<text x="16" y="556" class="foot"><tspan font-weight="700" fill="#e8e8f0">Lua:</tspan> _set_stamped / _set_guarded / _invalidate  &#183;  <tspan font-weight="700" fill="#e8e8f0">retention_s</tspan> = default AND max item lifetime  &#183;  <tspan font-weight="700" fill="#e8e8f0">Cluster:</tspan> RedisClusterVersioned, the same write</text>
 </svg>

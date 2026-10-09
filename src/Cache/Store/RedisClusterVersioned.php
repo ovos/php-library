@@ -10,18 +10,15 @@ use Override;
 use RedisClusterException;
 use RedisException;
 
-use function implode;
-
 /**
  * RedisClusterVersioned
  *
  * The versioned (rule based) store on a Redis Cluster. The read path is
  * inherited unchanged - both stores fetch the item with one HMGET and
- * evaluate the cached rules in PHP. Only the write differs: the standalone
- * pairs the item and rules keys in one Lua call (two keys, illegal on a
- * cluster), so this store reads the watermark from the cached rules and
- * uses the single-key stamped set instead. Invalidation is inherited
- * untouched (a single-slot FCALL on the rules key).
+ * evaluate the cached rules in PHP - and so is the write: one single-key
+ * stamped set, the watermark taken from the cached rules. Invalidation is
+ * inherited untouched (a single-slot FCALL on the rules key); clearing runs
+ * per master.
  *
  * No RediSearch module is required - the tags live in the item hash.
  *
@@ -49,51 +46,6 @@ class RedisClusterVersioned extends RedisVersioned
 	public function getConnection(): ClusterConnection
 	{
 		return $this->connection;
-	}
-	
-	/**
-	 * cache_versioned_set reads the watermark from the rules stream in the
-	 * same call (two keys - illegal on a cluster). Pass the watermark into
-	 * the single-key stamped variant instead, read from the locally cached
-	 * rules (see watermark()) so a write reuses the read path's cache and
-	 * avoids a separate XREVRANGE round trip.
-	 */
-	#[Override]
-	protected function setCall(
-		string $id,
-		string $value,
-		array $tags,
-		int $ttl,
-		string $epoch = '', // a write-through's: marks the key (see KeyValue::rememberMiss())
-		string $soft = '', // '1' a soft value, '0' not (see RedisVersioned::fetch()); '' says nothing
-	): mixed
-	{
-		return $this->functions
-			->call('cache_versioned_set_stamped', [$id], [
-				$value,
-				implode(',', $tags),
-				$ttl * 1000, // ms
-				$this->rulesRetentionS * 1000, // ms
-				$this->watermark(),
-				$epoch,
-				$this->invalidationWindowMs,
-				$soft,
-			]);
-	}
-	
-	/**
-	 * The rules stream's last entry id ("<ms>-<seq>", "0-0" when empty),
-	 * read from the held rules (rules_cache_ms) instead of a dedicated
-	 * XREVRANGE - the read path already keeps them, so a write batch skips a
-	 * round trip per write. A rule appended within the cache window leaves
-	 * the watermark slightly behind: at worst this item is marked one or two
-	 * rules too old - over-invalidation of a racing write, never stale data
-	 * (the same trade the read cache already makes).
-	 */
-	protected function watermark(): string
-	{
-		return $this->getRules()
-			->last();
 	}
 	
 	/**
