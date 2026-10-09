@@ -759,7 +759,10 @@ What callers may notice:
   clock (`TIME`): a clock stepped backwards can let a raced write through.
 - During a rolling deploy, old and new code reload each other's Lua library
   (the source-hash check); correctness holds, the reloads stop once one
-  version runs.
+  version runs. A host checks a library it confirmed on a server at most once
+  per `Functions::CONFIRMED_TTL_S` (60 s, APCu): until then it calls what the
+  server holds, the other release's build included (a function that build
+  lacks still self-heals: "Function not found" reloads and retries).
 - Bounds: a recomputation longer than the window is not covered (the mark is
   gone); `invalidation_window_ms: 0` switches the guard off.
 

@@ -37,13 +37,23 @@ end
 -- write-through (new_epoch given) also sets the fresh epoch it brings, so a
 -- recomputation that missed before it is refused (see Cache.lua's
 -- invalidation guard)
-local function cache_versioned_write(item_key, mark, data, tags, ttl_ms, retention_ms, new_epoch, window_ms)
+local function cache_versioned_write(item_key, mark, data, tags, ttl_ms, retention_ms, new_epoch, window_ms, soft)
 	local rem_ms = redis.call('PTTL', item_key)
 	redis.call('HSET', item_key,
 		'data', data,
 		'tags', tags,
 		'mark', mark
 	)
+	-- whether the value is soft ('1', '0'): a read judges an invalidated hard
+	-- value without decoding it; an older caller says nothing (the read then
+	-- decodes it to tell)
+	local fields = {'data', 'tags', 'mark'}
+	if soft == '1' or soft == '0' then
+		redis.call('HSET', item_key, 'soft', soft)
+		table.insert(fields, 'soft')
+	else
+		redis.call('HDEL', item_key, 'soft')
+	end
 	if new_epoch and new_epoch ~= '' then
 		redis.call('HSET', item_key, 'epoch', new_epoch)
 	end
@@ -67,7 +77,7 @@ local function cache_versioned_write(item_key, mark, data, tags, ttl_ms, retenti
 	end
 	if keep_ms > ttl_ms then
 		redis.call('PEXPIRE', item_key, keep_ms)
-		redis.call('HPEXPIRE', item_key, ttl_ms, 'FIELDS', 3, 'data', 'tags', 'mark')
+		redis.call('HPEXPIRE', item_key, ttl_ms, 'FIELDS', #fields, unpack(fields))
 	else
 		redis.call('PEXPIRE', item_key, ttl_ms)
 	end
@@ -85,7 +95,8 @@ local function cache_versioned_set(keys, args)
 		tonumber(args[3]), -- ttl ms
 		tonumber(args[4]), -- retention ms
 		args[5], -- the write-through's epoch (optional)
-		tonumber(args[6] or 0) -- window ms (optional)
+		tonumber(args[6] or 0), -- window ms (optional)
+		args[7] -- whether the value is soft (optional)
 	)
 end
 -- standalone-only: the item and the rules keys hash to different slots,
@@ -108,7 +119,8 @@ local function cache_versioned_set_stamped(keys, args)
 		tonumber(args[3]), -- ttl ms
 		tonumber(args[4]), -- retention ms
 		args[6], -- the write-through's epoch (optional)
-		tonumber(args[7] or 0) -- window ms (optional)
+		tonumber(args[7] or 0), -- window ms (optional)
+		args[8] -- whether the value is soft (optional)
 	)
 end
 redis.register_function('[prefix]cache_versioned_set_stamped', cache_versioned_set_stamped)
@@ -133,7 +145,8 @@ local function cache_versioned_set_guarded(keys, args)
 		tonumber(args[3]), -- ttl ms
 		tonumber(args[4]), -- retention ms
 		nil, -- a guarded write keeps the epoch it compared
-		tonumber(args[7] or 0) -- window ms
+		tonumber(args[7] or 0), -- window ms
+		args[8] -- whether the value is soft (optional)
 	)
 end
 redis.register_function('[prefix]cache_versioned_set_guarded', cache_versioned_set_guarded)
@@ -151,7 +164,7 @@ local function cache_versioned_drop_stale(keys, args)
 		return 0
 	end
 	if redis.call('HEXISTS', keys[1], 'epoch') == 1 then
-		redis.call('HDEL', keys[1], 'data', 'tags', 'mark')
+		redis.call('HDEL', keys[1], 'data', 'tags', 'mark', 'soft')
 		-- the epoch guards a miss for the window only: a miss older than that
 		-- goes unguarded, so beyond it the key is memory and nothing else (an
 		-- item's TTL runs up to the retention)

@@ -137,6 +137,14 @@ class RedisVersioned extends Store
 	 */
 	protected bool $rulesDirty = false;
 	
+	/**
+	 * Stale items a read found, by id: the mark each was read with - dropped
+	 * once the read is over, unless a write overwrote them (see afterRead())
+	 *
+	 * @var array<string, string>
+	 */
+	protected array $staleDrops = [];
+	
 	protected ?SharedRules $sharedRules = null;
 	
 	/**
@@ -192,6 +200,8 @@ class RedisVersioned extends Store
 		
 		$id = $this->prefixer
 			->prefix($key, $this->getType());
+		// a stale item this process read is overwritten here: nothing to drop
+		unset($this->staleDrops[$id]);
 		// the miss this write follows, if any: refused when the key was
 		// deleted (or written through) since, stamped with the watermark the
 		// miss saw (see KeyValue::rememberMiss()) - also past the window, where
@@ -226,6 +236,9 @@ class RedisVersioned extends Store
 		
 		try
 		{
+			// whether the value is soft rides with it: a read judges an
+			// invalidated hard value without decoding it (see fetch())
+			$soft = $value instanceof Stale && $value->isSoft() ? '1' : '0';
 			$value = $this->serializer
 				->serialize($value);
 			$value = $this->compressor
@@ -238,7 +251,7 @@ class RedisVersioned extends Store
 			if($miss !== null && $miss['late'] === true)
 			{
 				$result = $miss['stamp'] === null
-					? $this->setCall($id, $value, $tags, $ttl, $this->writeThroughEpoch())
+					? $this->setCall($id, $value, $tags, $ttl, $this->writeThroughEpoch(), $soft)
 					: $this->functions
 						->call('cache_versioned_set_stamped', [$id], [
 							$value,
@@ -248,6 +261,7 @@ class RedisVersioned extends Store
 							$miss['stamp'],
 							$this->writeThroughEpoch(),
 							$this->invalidationWindowMs,
+							$soft,
 						]);
 				
 				return (int)$result === 1;
@@ -262,7 +276,7 @@ class RedisVersioned extends Store
 				: ($miss['stamp'] ?? $this->missStamp());
 			
 			$result = $mark === null
-				? $this->setCall($id, $value, $tags, $ttl, $miss === null ? $this->writeThroughEpoch() : '')
+				? $this->setCall($id, $value, $tags, $ttl, $miss === null ? $this->writeThroughEpoch() : '', $soft)
 				: $this->functions
 					->call('cache_versioned_set_guarded', [$id], [
 						$value,
@@ -272,6 +286,7 @@ class RedisVersioned extends Store
 						$mark,
 						$miss['epoch'],
 						$this->invalidationWindowMs,
+						$soft,
 					]);
 			
 			return (int)$result === 1;
@@ -320,6 +335,7 @@ class RedisVersioned extends Store
 				static::KEY_TAGS,
 				static::KEY_MARK,
 				static::KEY_EPOCH,
+				static::KEY_SOFT,
 			]);
 			
 			// a missing "tags" field means the hash does not exist (an untagged
@@ -344,22 +360,21 @@ class RedisVersioned extends Store
 				// a soft value inside its stale time after the invalidation:
 				// handed out aged - served while it is refreshed, a miss to a
 				// read without stale: - and left in place, the refresh overwrites
-				// it (see softly())
-				if(($aged = $this->softly($item)) !== null)
+				// it (see softly()); a value its write said is not soft is a hard
+				// verdict without decoding it (an item written before the field
+				// is decoded to tell)
+				if(($item[static::KEY_SOFT] ?? false) !== '0'
+					&& ($aged = $this->softly($item)) !== null)
 				{
 					return $this->found($id, $aged, $item[static::KEY_EPOCH]);
 				}
 				
-				// lazily remove the stale item - only while it is still that item
-				// (Lua cache_versioned_drop_stale): a delete() between this read
-				// and the removal left a tombstone, and an UNLINK would erase its
-				// epoch. The epoch the item carries stays for the window, so the
-				// miss remembers it
-				$this->functions
-					->call('cache_versioned_drop_stale', [$id], [
-						(string)$item[static::KEY_MARK],
-						(string)$this->invalidationWindowMs,
-					]);
+				// the stale item is dropped once the read is over - unless a
+				// write overwrote it meanwhile, the miss's own recomputation as a
+				// rule: no second round trip for the read (see afterRead()). The
+				// epoch the item carries stays for the window, so the miss
+				// remembers it
+				$this->staleDrops[$id] = (string)$item[static::KEY_MARK];
 				$this->rememberMiss($id, $item[static::KEY_EPOCH]);
 				
 				return null;
@@ -392,6 +407,7 @@ class RedisVersioned extends Store
 		array $tags,
 		int $ttl,
 		string $epoch = '', // a write-through's: marks the key (see KeyValue::rememberMiss())
+		string $soft = '', // '1' a soft value, '0' not (see fetch()); '' says nothing
 	): mixed
 	{
 		return $this->functions
@@ -405,6 +421,7 @@ class RedisVersioned extends Store
 				$this->rulesRetentionS * 1000, // ms
 				$epoch,
 				$this->invalidationWindowMs,
+				$soft,
 			]);
 	}
 	
@@ -421,6 +438,8 @@ class RedisVersioned extends Store
 		{
 			$id = $this->prefixer
 				->prefix($key, $this->getType());
+			// its tombstone replaces a stale item this process read
+			unset($this->staleDrops[$id]);
 			
 			// its tombstone (see KeyValue\Redis::rememberMiss())
 			return $this->tombstone($id) > 0;
@@ -786,6 +805,64 @@ class RedisVersioned extends Store
 		return is_array($entries)
 			? $entries
 			: [];
+	}
+	
+	/**
+	 * The read of $id is over: a stale item it found and nothing overwrote
+	 * (no resolver, a null result, save: false, a throw, peek()) is dropped
+	 * now
+	 */
+	#[Override]
+	protected function afterRead(
+		string $id,
+	): void
+	{
+		if(isset($this->staleDrops[$id]) === false)
+		{
+			return;
+		}
+		
+		$mark = $this->staleDrops[$id];
+		unset($this->staleDrops[$id]);
+		$this->dropStale($id, $mark);
+	}
+	
+	/**
+	 * Removes a stale item - only while it is still that item (Lua
+	 * cache_versioned_drop_stale, by the mark the read saw): a delete()
+	 * between the read and the removal left a tombstone, and an UNLINK would
+	 * erase its epoch; the epoch the item carries stays for the window
+	 */
+	protected function dropStale(
+		string $id,
+		string $mark,
+	): void
+	{
+		try
+		{
+			$this->functions
+				->call('cache_versioned_drop_stale', [$id], [
+					$mark,
+					(string)$this->invalidationWindowMs,
+				]);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+		}
+	}
+	
+	/**
+	 * Drops what a read left that no afterRead() reached (a manual
+	 * lockAndQueue() nothing was written after)
+	 */
+	public function __destruct()
+	{
+		foreach($this->staleDrops as $id => $mark)
+		{
+			$this->dropStale($id, $mark);
+		}
+		$this->staleDrops = [];
 	}
 	
 	protected function rulesAreFresh(

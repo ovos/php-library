@@ -311,7 +311,27 @@ abstract class KeyValue
 		string $key,
 	): mixed
 	{
-		return $this->fetch($this->itemId($key));
+		$id = $this->itemId($key);
+		
+		try
+		{
+			return $this->fetch($id);
+		}
+		finally
+		{
+			$this->afterRead($id);
+		}
+	}
+	
+	/**
+	 * Called once a read of $id is over - the value served, the miss
+	 * computed and written, or nothing written: what the read left to do
+	 * last (RedisVersioned drops a stale item nothing overwrote)
+	 */
+	protected function afterRead(
+		string $id,
+	): void
+	{
 	}
 	
 	/**

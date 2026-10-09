@@ -9,10 +9,15 @@ use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
 use RedisException;
 
+use function apcu_enabled;
+use function apcu_fetch;
+use function apcu_store;
 use function array_slice;
 use function ceil;
 use function count;
 use function file_get_contents;
+use function filemtime;
+use function function_exists;
 use function hash;
 use function is_array;
 use function is_file;
@@ -31,6 +36,17 @@ use const DIRECTORY_SEPARATOR;
 class Functions
 {
 	public const string SEPARATOR_FUNCTION = '_';
+	
+	/**
+	 * How long a library confirmed on a server counts as loaded there for
+	 * every process of this host (APCu) before it is listed again
+	 */
+	public const int CONFIRMED_TTL_S = 60;
+	
+	/**
+	 * The confirmations' APCu prefix (see isConfirmed())
+	 */
+	public const string KEY_CONFIRMED = 'ovos:cache:functions:';
 	
 	public array $libraries;
 	
@@ -145,6 +161,17 @@ class Functions
 			return true;
 		}
 		
+		// another process of this host confirmed it on this server lately: no
+		// LIST, no build - every request paid them before (see isConfirmed())
+		$server = $client->getHost() . ':' . $client->getPort();
+		if($replace === false
+			&& $this->isConfirmed($libraryName, $libraryFile, $server))
+		{
+			$this->librariesLoaded[$libraryName] = true;
+			
+			return true;
+		}
+		
 		// if we force a replacement, no need to detect if a library is loaded
 		if($replace === false)
 		{
@@ -164,6 +191,7 @@ class Functions
 						$this->buildSource($libraryFile))) === true)
 				{
 					$this->librariesLoaded[$libraryName] = true;
+					$this->confirm($libraryName, $libraryFile, $server);
 					
 					return true;
 				}
@@ -190,6 +218,7 @@ class Functions
 		if($libraryLoaded === $libraryName)
 		{
 			$this->librariesLoaded[$libraryName] = true;
+			$this->confirm($libraryName, $libraryFile, $server);
 			
 			return true;
 		}
@@ -216,11 +245,15 @@ class Functions
 		{
 			$masterKey = $master[0] . ':' . $master[1];
 			
-			// already loaded on this master in this process: skip the network
-			// round trip (a forced replacement always re-uploads)
+			// already loaded on this master in this process, or confirmed on it
+			// lately by another process of this host: skip the network round
+			// trip (a forced replacement always re-uploads)
 			if($replace === false
-				&& isset($this->clusterLibrariesLoaded[$libraryName][$masterKey]))
+				&& (isset($this->clusterLibrariesLoaded[$libraryName][$masterKey])
+					|| $this->isConfirmed($libraryName, $libraryFile, $masterKey)))
 			{
+				$this->clusterLibrariesLoaded[$libraryName][$masterKey] = true;
+				
 				continue;
 			}
 			
@@ -233,6 +266,7 @@ class Functions
 						$this->buildSource($libraryFile))))
 			{
 				$this->clusterLibrariesLoaded[$libraryName][$masterKey] = true;
+				$this->confirm($libraryName, $libraryFile, $masterKey);
 				
 				continue;
 			}
@@ -265,6 +299,7 @@ class Functions
 			}
 			
 			$this->clusterLibrariesLoaded[$libraryName][$masterKey] = true;
+			$this->confirm($libraryName, $libraryFile, $masterKey);
 		}
 		
 		return $loaded;
@@ -339,6 +374,75 @@ class Functions
 	}
 	
 	/**
+	 * The library file's path - a bare name is one of this class's own
+	 * libraries (Functions/*.lua)
+	 */
+	protected function libraryPath(
+		string $libraryFile,
+	): string
+	{
+		return is_file($libraryFile) === false
+			? __DIR__ . DIRECTORY_SEPARATOR . 'Functions' . DIRECTORY_SEPARATOR . $libraryFile
+			: $libraryFile;
+	}
+	
+	/**
+	 * Whether a process of this host confirmed $libraryName, built from
+	 * $libraryFile as it is now (its mtime), on $server within
+	 * CONFIRMED_TTL_S: its LIST and its build are skipped then. A library that
+	 * vanished since (a FUNCTION FLUSH, a failover, a restart without
+	 * persistence) is reloaded by call()'s "Function not found" self-heal
+	 */
+	protected function isConfirmed(
+		string $libraryName,
+		string $libraryFile,
+		string $server,
+	): bool
+	{
+		$key = $this->confirmedKey($libraryName, $libraryFile, $server);
+		
+		return $key !== null
+			&& apcu_fetch($key) === true;
+	}
+	
+	/**
+	 * Records that $libraryName is loaded on $server, from $libraryFile as it
+	 * is now (see isConfirmed())
+	 */
+	protected function confirm(
+		string $libraryName,
+		string $libraryFile,
+		string $server,
+	): void
+	{
+		if(($key = $this->confirmedKey($libraryName, $libraryFile, $server)) !== null)
+		{
+			apcu_store($key, true, static::CONFIRMED_TTL_S);
+		}
+	}
+	
+	/**
+	 * The confirmation's APCu key - null without APCu (every process checks,
+	 * as before)
+	 */
+	protected function confirmedKey(
+		string $libraryName,
+		string $libraryFile,
+		string $server,
+	): ?string
+	{
+		if(function_exists('apcu_enabled') === false
+			|| apcu_enabled() === false)
+		{
+			return null;
+		}
+		
+		$path = $this->libraryPath($libraryFile);
+		
+		return static::KEY_CONFIRMED . hash('xxh64', $server . '|' . $libraryName . '|' . $path . '|' . (string)filemtime($path));
+	}
+	
+	/**
 	 * Builds the prefixed source of a library from a file
 	 * A bare filename is resolved against this directory's "Functions";
 	 * callers outside the cache (e.g. the json session handler) pass a
@@ -348,14 +452,7 @@ class Functions
 		string $libraryFile,
 	): string
 	{
-		if(is_file($libraryFile) === false)
-		{
-			$libraryFile = __DIR__
-				. DIRECTORY_SEPARATOR . 'Functions'
-				. DIRECTORY_SEPARATOR . $libraryFile;
-		}
-		
-		$functions = file_get_contents($libraryFile);
+		$functions = file_get_contents($this->libraryPath($libraryFile));
 		
 		return str_replace('[prefix]',
 			$this->functionsPrefix

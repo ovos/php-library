@@ -309,6 +309,132 @@ class RedisVersioned extends Test
 	}
 	
 	/**
+	 * An invalidated hard value is not decoded to learn that it is not soft:
+	 * the write stores whether it is, read with the item. A soft value is
+	 * still decoded for its verdict, and so is an item written before the
+	 * field
+	 */
+	public function anInvalidatedHardValueIsNotDecodedForTheSoftVerdict(): bool
+	{
+		$probe = $this->probe(['rules_cache_ms' => 0]);
+		$probe->set('hard', 'old', tags: ['tag1']);
+		$probe->get('soft', fn() => 'old', 60, ['tag1'], stale: 60, soft: true);
+		$probe->get('legacy', fn() => 'old', 60, ['tag1'], stale: 60, soft: true);
+		$probe->getClient()
+			->hDel($probe->prefix('legacy', $probe->getType()), $probe::KEY_SOFT);
+		$probe->invalidateTags(['tag1']);
+		
+		$probe->get('hard', queue: false);
+		$hard = $probe->softlyCalls;
+		$probe->get('soft', queue: false);
+		$soft = $probe->softlyCalls;
+		$probe->get('legacy', queue: false);
+		$legacy = $probe->softlyCalls;
+		
+		try
+		{
+			return $hard === 0
+				&& $soft === 1
+				&& $legacy === 2;
+		}
+		finally
+		{
+			foreach(['hard', 'soft', 'legacy'] as $item)
+			{
+				$probe->delete($item);
+			}
+		}
+	}
+	
+	/**
+	 * A recomputation after an invalidation reads in one round trip: the
+	 * stale item is not dropped first - the write that follows overwrites it.
+	 * A read nothing is written after (no resolver, a null result) still
+	 * drops it, as before
+	 */
+	public function aStaleItemIsDroppedOnlyWhenNothingOverwritesIt(): bool
+	{
+		$probe = $this->probe(['rules_cache_ms' => 0]);
+		foreach(['item1', 'item2', 'item3', 'item4'] as $item)
+		{
+			$probe->set($item, 'old', tags: ['tag1']);
+		}
+		$probe->invalidateTags(['tag1']);
+		
+		$recomputed = $probe->get('item1', fn() => 'new', 60, ['tag1']);
+		$afterWrite = $probe->dropped;
+		$plain = $probe->get('item2', queue: false);
+		$afterRead = $probe->dropped;
+		$null = $probe->get('item3', fn() => null, 60, ['tag1']);
+		$afterNull = $probe->dropped;
+		$peeked = $probe->peek('item4');
+		$afterPeek = $probe->dropped;
+		$dataLeft = $probe->getClient()
+			->hExists($probe->prefix('item2', $probe->getType()), 'data');
+		
+		try
+		{
+			return $recomputed === 'new'
+				&& $probe->get('item1', queue: false) === 'new'
+				&& $afterWrite === 0
+				&& $plain === null && $afterRead === 1
+				&& $null === null && $afterNull === 2
+				&& $peeked === null && $afterPeek === 3
+				&& $dataLeft === false;
+		}
+		finally
+		{
+			foreach(['item1', 'item2', 'item3', 'item4'] as $item)
+			{
+				$probe->delete($item);
+			}
+		}
+	}
+	
+	/**
+	 * A read no afterRead() ends (lockAndQueue(), a critical section nothing
+	 * is written after) leaves its stale item to the store's end, the
+	 * request's - unless a delete() replaced the item with its tombstone
+	 * meanwhile
+	 */
+	public function whatAReadLeavesWithoutItsEndIsDroppedWhenTheStoreGoes(): bool
+	{
+		$probe = $this->probe(['rules_cache_ms' => 0]);
+		foreach(['item1', 'item2'] as $item)
+		{
+			$probe->set($item, 'old', tags: ['tag1']);
+		}
+		$probe->invalidateTags(['tag1']);
+		$client = $probe->getClient();
+		$id = $probe->prefix('item1', $probe->getType());
+		
+		try
+		{
+			$probe->lockAndQueue('item1');
+			$probe->releaseActiveLock('item1');
+			$probe->lockAndQueue('item2');
+			$probe->delete('item2');
+			$probe->releaseActiveLock('item2');
+			$pending = $probe->dropped;
+			$present = $client->hExists($id, 'data');
+			// the end of the request
+			$probe->__destruct();
+			
+			return $pending === 0
+				&& $present === true
+				&& $probe->dropped === 1
+				&& $client->hExists($id, 'data') === false;
+		}
+		finally
+		{
+			foreach(['item1', 'item2'] as $item)
+			{
+				$probe->delete($item);
+			}
+		}
+	}
+	
+	/**
 	 * An 'all' rule naming one tag means what an 'any' rule on that tag means:
 	 * it is held per tag (compacted), not in the list every read walks
 	 */
