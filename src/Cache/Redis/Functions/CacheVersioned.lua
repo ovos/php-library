@@ -12,26 +12,13 @@
 	stream, so no clock comparison happens anywhere - cluster nodes do
 	not need synchronized clocks for correctness.
 	
-	Cluster compatibility, by function flags:
-	- cluster-safe (no special flag): every key is declared and hashes to
-	  one slot (cache_versioned_set_stamped, cache_versioned_invalidate).
-	- standalone-only ('no-cluster'): cache_versioned_set declares two keys
-	  of different slots (item + rules); the cluster store reads the
-	  watermark separately and uses cache_versioned_set_stamped instead.
+	Cluster compatibility: every function declares its keys, and they hash
+	to one slot - a write is stamped with the watermark its writer holds
+	(the held rule set's last id, see RedisVersioned::watermark()), never
+	one read from the rules stream in the same call.
 	
 	@author Marcin Gil <mg@ovos.at>
 ]]
-
--- the rules stream's last entry id, '0-0' when there are no rules yet
--- (every real id is newer, and an exclusive XRANGE starts past it)
-local function cache_versioned_watermark(rules_key)
-	local last = redis.call('XREVRANGE', rules_key, '+', '-', 'COUNT', 1)
-	if #last == 0 then
-		return '0-0'
-	end
-	
-	return last[1][1]
-end
 
 -- shared write: stamp the item with the rules watermark it has seen; a
 -- write-through (new_epoch given) also sets the fresh epoch it brings, so a
@@ -85,30 +72,9 @@ local function cache_versioned_write(item_key, mark, data, tags, ttl_ms, retenti
 	return 1
 end
 
--- Store an item, reading the current watermark from the rules stream
-local function cache_versioned_set(keys, args)
-	return cache_versioned_write(
-		keys[1],
-		cache_versioned_watermark(keys[2]),
-		args[1], -- data
-		args[2], -- tags
-		tonumber(args[3]), -- ttl ms
-		tonumber(args[4]), -- retention ms
-		args[5], -- the write-through's epoch (optional)
-		tonumber(args[6] or 0), -- window ms (optional)
-		args[7] -- whether the value is soft (optional)
-	)
-end
--- standalone-only: the item and the rules keys hash to different slots,
--- the cluster store reads the watermark separately (see _stamped)
-redis.register_function
-{
-	function_name = '[prefix]cache_versioned_set',
-	callback = cache_versioned_set,
-	flags = {'no-cluster'}
-}
-
--- Store an item with a watermark the caller has already read
+-- Store an item stamped with the watermark its writer holds - the held rule
+-- set's last id for a write-through, the one a miss past the guard's window
+-- took for its late write: every versioned write that follows no miss
 -- cluster-safe: one declared key
 local function cache_versioned_set_stamped(keys, args)
 	return cache_versioned_write(

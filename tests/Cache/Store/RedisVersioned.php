@@ -435,6 +435,39 @@ class RedisVersioned extends Test
 	}
 	
 	/**
+	 * A write that follows no miss is stamped with the watermark its writer
+	 * holds, never the stream's head: a rule another server appended within
+	 * the writer's rules_cache_ms is one it never held, and a value computed
+	 * before it must not count as having seen it. The writer's own
+	 * invalidation is held at once - its own write after it stays fresh
+	 */
+	public function aWriteThroughIsStampedWithTheRulesItsWriterHolds(): bool
+	{
+		$writer = $this->probe(['rules_cache_ms' => 60000]);
+		$reader = $this->probe(['rules_cache_ms' => 0]);
+		// the writer holds the rule set as it is now
+		$writer->rules();
+		// another server invalidates tag1: straight into the stream, no mark on
+		// this host (an invalidation made here would make the writer refresh)
+		$writer->getClient()
+			->xAdd($writer->getRulesKey(), '*', ['mode' => 'any', 'tags' => 'tag1', 'first' => '0']);
+		$writer->set('item1', 'computed before', tags: ['tag1']);
+		$writer->invalidateTags(['tag2']);
+		$writer->set('item2', 'computed after', tags: ['tag2']);
+		
+		try
+		{
+			return $reader->get('item1', queue: false) === null
+				&& $reader->get('item2', queue: false) === 'computed after';
+		}
+		finally
+		{
+			$writer->delete('item1');
+			$writer->delete('item2');
+		}
+	}
+	
+	/**
 	 * An 'all' rule naming one tag means what an 'any' rule on that tag means:
 	 * it is held per tag (compacted), not in the list every read walks
 	 */

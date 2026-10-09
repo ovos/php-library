@@ -48,7 +48,7 @@ use function usleep;
  * longest item TTL in use.
  *
  * Ordering is causal, not clock based: every item is stamped with the
- * rules stream's last entry id at write time (its watermark), and only
+ * rules stream's last entry id its writer holds (its watermark), and only
  * rules with a newer id can invalidate it - no clock comparison happens
  * anywhere (stream ids are generated monotonically by the rules node).
  *
@@ -106,8 +106,8 @@ class RedisVersioned extends Store
 	
 	/**
 	 * How long a fetched rule set may be reused before it is refreshed - the
-	 * read path (and the cluster write watermark) evaluate against this
-	 * held set, a bounded staleness window. Set to 0 to refresh on every
+	 * read path evaluates against this held set, and a write takes its
+	 * watermark from it - a bounded staleness window. Set to 0 to refresh on every
 	 * read (exact, at a round trip each; the refresh is incremental, so it
 	 * carries only what was appended since).
 	 * Unit: milliseconds
@@ -247,22 +247,11 @@ class RedisVersioned extends Store
 			// a miss past the window: its epoch guards nothing any more, but the
 			// watermark it took holds for the rules' retention - written as a
 			// write-through stamped with it, so an invalidation made while it
-			// computed still reaches the value (unstamped: a plain write-through)
+			// computed still reaches the value (unstamped: with the watermark held
+			// now, as any write-through)
 			if($miss !== null && $miss['late'] === true)
 			{
-				$result = $miss['stamp'] === null
-					? $this->setCall($id, $value, $tags, $ttl, $this->writeThroughEpoch(), $soft)
-					: $this->functions
-						->call('cache_versioned_set_stamped', [$id], [
-							$value,
-							implode(',', $tags),
-							$ttl * 1000, // ms
-							$this->rulesRetentionS * 1000, // ms
-							$miss['stamp'],
-							$this->writeThroughEpoch(),
-							$this->invalidationWindowMs,
-							$soft,
-						]);
+				$result = $this->setCall($id, $value, $tags, $ttl, $miss['stamp'] ?? $this->watermark(), $this->writeThroughEpoch(), $soft);
 				
 				return (int)$result === 1;
 			}
@@ -276,7 +265,7 @@ class RedisVersioned extends Store
 				: ($miss['stamp'] ?? $this->missStamp());
 			
 			$result = $mark === null
-				? $this->setCall($id, $value, $tags, $ttl, $miss === null ? $this->writeThroughEpoch() : '', $soft)
+				? $this->setCall($id, $value, $tags, $ttl, $this->watermark(), $miss === null ? $this->writeThroughEpoch() : '', $soft)
 				: $this->functions
 					->call('cache_versioned_set_guarded', [$id], [
 						$value,
@@ -397,28 +386,29 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * The write call: one Lua call reads the current watermark from the
-	 * rules stream and stamps the item with it (two keys - the cluster
-	 * store overrides this with a separate watermark read)
+	 * The write that follows no miss (a write-through, a miss past the
+	 * guard's window): stamped with $mark, the watermark its writer holds -
+	 * never the stream's head, which can hold rules the writer never saw (a
+	 * value computed before them would count as having seen them). One key:
+	 * cluster-safe
 	 */
 	protected function setCall(
 		string $id,
 		string $value,
 		array $tags,
 		int $ttl,
+		string $mark,
 		string $epoch = '', // a write-through's: marks the key (see KeyValue::rememberMiss())
 		string $soft = '', // '1' a soft value, '0' not (see fetch()); '' says nothing
 	): mixed
 	{
 		return $this->functions
-			->call('cache_versioned_set', [
-				$id,
-				$this->getRulesKey(),
-			], [
+			->call('cache_versioned_set_stamped', [$id], [
 				$value,
 				implode(',', $tags),
 				$ttl * 1000, // ms
 				$this->rulesRetentionS * 1000, // ms
+				$mark,
 				$epoch,
 				$this->invalidationWindowMs,
 				$soft,
@@ -453,9 +443,9 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * A miss stamps the rules watermark it saw - the held set's last id (the
-	 * cluster store stamped its writes with it before the guard). It lags the
-	 * stream's head by at most rules_cache_ms, which only judges the item stale
+	 * A miss stamps the rules watermark it saw - the held set's last id (see
+	 * watermark(), what every write is stamped with). It lags the stream's
+	 * head by at most rules_cache_ms, which only judges the item stale
 	 * sooner, never fresh wrongly; and it is consistent with what readers hold:
 	 * the stream's head is not - a reader whose held set is momentarily empty
 	 * (just after a physical clear) takes any real mark for a lost stream and
@@ -469,8 +459,7 @@ class RedisVersioned extends Store
 	{
 		try
 		{
-			return $this->getRules()
-				->last();
+			return $this->watermark();
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{
@@ -478,6 +467,19 @@ class RedisVersioned extends Store
 		}
 		
 		return null;
+	}
+	
+	/**
+	 * The rules stream's last entry id ("<ms>-<seq>", "0-0" when empty) as
+	 * this process holds it (rules_cache_ms) - what readers judge an item by,
+	 * so a write is stamped with it: a rule appended within the window leaves
+	 * it behind, and the item is judged stale sooner - one extra miss, never a
+	 * value served past a rule its writer did not hold
+	 */
+	protected function watermark(): string
+	{
+		return $this->getRules()
+			->last();
 	}
 	
 	/**

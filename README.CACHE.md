@@ -176,7 +176,7 @@ lazily unlinks a stale item:
 - The RedisVersioned store on a **Redis Cluster**: same data model and
   semantics; reads evaluate the invalidation rules on the PHP side against
   the same held, shared rule set (`rules_cache_ms`, `rules_shared_cache`),
-  and writes take their watermark from it instead of a round trip.
+  and writes take their watermark from it, as on a standalone server.
 - Requires a `redis_cluster` connection (a `seeds` list) plus a standalone
   queue connection **pointed at a node of the same cluster** for MemoLock
   pub/sub (see the configuration reference below).
