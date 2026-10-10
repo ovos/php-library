@@ -363,7 +363,7 @@ class Sender extends Service
 	
 	/**
 	 * How much of a request BODY leaves this application (codesafe.request_body):
-	 * off | structure | full, defaulting to `structure`.
+	 * off | structure, defaulting to `structure` (`full` reads as `structure`).
 	 *
 	 * There was no switch at all before 2026-09-21 — the body was read on every
 	 * non-GET report, 16 KB of it, at every log level, and nothing could turn it
