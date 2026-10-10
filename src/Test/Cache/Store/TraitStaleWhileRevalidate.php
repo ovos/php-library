@@ -693,7 +693,7 @@ trait TraitStaleWhileRevalidate
 	
 	/**
 	 * RULE: on the tag-index stores a tag invalidation MARKS a soft value's
-	 * item (the data kept, expiring with the window) instead of tombstoning
+	 * item (the data kept, expiring with the window) instead of removing
 	 * it, and the next write ends the mark - its fields go
 	 */
 	public function aWriteEndsASoftInvalidation(): bool

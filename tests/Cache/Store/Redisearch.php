@@ -5,6 +5,7 @@ namespace Tests\Cache\Store;
 
 use Ovos\Cache\Store\Redisearch as Store;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
+use Ovos\Cache\Store\KeyValue\TagIndex;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
@@ -12,6 +13,8 @@ use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedis;
+use Ovos\Test\Cache\Store\TraitTagIndexMiss;
+use Ovos\Test\Cache\Store\TagIndexCounting;
 use Override;
 
 /**
@@ -26,6 +29,7 @@ class Redisearch extends Test
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
 	use TraitCachePolicy;
+	use TraitTagIndexMiss;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -209,5 +213,16 @@ class Redisearch extends Test
 	): KeyValueRedis
 	{
 		return $this->getStore(Store::class, $storeOptions);
+	}
+	
+	/**
+	 * A fresh store that counts its round trips (TraitTagIndexMiss)
+	 */
+	protected function countingStore(): TagIndex
+	{
+		return new class(...$this->storeArguments()) extends Store
+		{
+			use TagIndexCounting;
+		};
 	}
 }

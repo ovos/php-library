@@ -224,11 +224,12 @@ same O(N) eager delete, with a smaller constant.
   server round trip (Lua / pipeline); the versioned read refreshes its rule set
   at most once per `rules_cache_ms`, incrementally, and shares it with the
   other workers of the server through APCu, so a fresh process starts from the
-  shared set rather than from the whole stream. A versioned miss with a
-  resolver costs three: the read, the lock with its second look (`SET NX` and
-  the `HMGET`) and the write with the lock's release (both `FCALL`s), each pair
-  pipelined - five on a cluster, where the lock and the item are of different
-  slots. A round trip is ~0.1-1 ms on a LAN; an in-process APCu hit is ~1 µs
+  shared set rather than from the whole stream. A miss with a resolver costs
+  three on every Redis store: the read, the lock with its second look (`SET NX`
+  and the `HMGET`, the tag-index stores' `TIME` for the miss's stamp with them)
+  and the write with the lock's release (both `FCALL`s), each step pipelined -
+  five on a cluster, where the lock and the item are of different slots. A
+  round trip is ~0.1-1 ms on a LAN; an in-process APCu hit is ~1 µs
   &mdash; big-O only starts to bite once N or R is large.
 
 Bottom line: reads are O(1)-ish on every backend, so the choice comes down to
@@ -597,7 +598,7 @@ $store->get('menu:main', fn() => $this->buildMenu(), ttl: 0, tags: ['menu'], sta
 - Redis: a soft value's item carries its stale time in a `soft` field, written
   by the new Lua function `cache_set_soft` (`cache_set` keeps the argument
   shape older callers send); the tag invalidation marks it (`invalidated`)
-  instead of tombstoning it.
+  instead of removing it.
 
 #### Forced refresh (`refresh: true`)
 
@@ -759,7 +760,11 @@ What callers may notice:
   checks and the Redisearch index see it. A key holding a non-hash value (a raw
   counter kept under the prefix) is removed as before - never tombstoned.
 - The tag stamps of the Redis and Redisearch stores compare the Redis server
-  clock (`TIME`): a clock stepped backwards can let a raced write through.
+  clock (`TIME`): a clock stepped backwards can let a raced write through. A
+  tag invalidation removes the items it reaches (no tombstone each - the stamps
+  refuse a raced write), so a miss whose time could not be read (`peek()`
+  without `startComputing()`, a failed `TIME`) is refused while any stamp of
+  its write lives: the next reader recomputes.
 - During a rolling deploy, old and new code reload each other's Lua library
   (the source-hash check); correctness holds, the reloads stop once one
   version runs. A host checks a library it confirmed on a server at most once

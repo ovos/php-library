@@ -38,7 +38,7 @@ abstract class Redis extends Tags
 	
 	/**
 	 * A soft value's field: the tag-index stores keep its stale time (ms)
-	 * there, so a tag invalidation marks the item instead of tombstoning it
+	 * there, so a tag invalidation marks the item instead of removing it
 	 * (see TagIndex::KEY_INVALIDATED); the versioned stores whether a record
 	 * is soft ('1' or '0')
 	 */
@@ -305,6 +305,66 @@ abstract class Redis extends Tags
 		));
 		
 		return $this->unlink($id);
+	}
+	
+	/**
+	 * Sends the write $function makes of $id ($keys: the call's keys) - with
+	 * the release of the lock this process holds for $id, if any, in the same
+	 * round trip (a standalone client): its waiters are told as the value
+	 * lands. A write whose reply is an error goes again through call(), which
+	 * self-heals a library gone; a release whose reply is one is left to
+	 * releaseActiveLock() (see set())
+	 *
+	 * @param list<string> $keys
+	 * @param list<mixed> $args
+	 */
+	protected function writeWithRelease(
+		string $id,
+		string $function,
+		array $keys,
+		array $args,
+	): mixed
+	{
+		// a lock is held only where a miss made the MemoLock - a write-through
+		// makes none
+		$memoLock = $this->memoLock;
+		$release = $memoLock instanceof MemoLock
+			? $memoLock->releaseCall($id)
+			: null;
+		$replies = $release === null
+			? null
+			: $this->sendAll([
+				[$this->functions->functionsPrefix($function), $keys, $args],
+				$release,
+			]);
+		if($replies === null)
+		{
+			return $this->functions
+				->call($function, $keys, $args);
+		}
+		
+		if(($replies[1] ?? false) !== false)
+		{
+			$memoLock->released($id);
+		}
+		
+		return ($replies[0] ?? false) === false
+			? $this->functions->call($function, $keys, $args)
+			: $replies[0];
+	}
+	
+	/**
+	 * Several calls in one round trip (see Functions::callAll())
+	 *
+	 * @param list<array{0: string, 1: list<string>, 2: list<mixed>}> $calls
+	 * @return list<mixed>|null
+	 */
+	protected function sendAll(
+		array $calls,
+	): ?array
+	{
+		return $this->functions
+			->callAll($calls);
 	}
 	
 	/**

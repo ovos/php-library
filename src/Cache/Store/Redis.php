@@ -217,7 +217,7 @@ class Redis extends TagIndex
 		try
 		{
 			// a soft value's item carries its stale time, so a tag invalidation
-			// marks it instead of tombstoning it (see KeyValue\Redis::KEY_SOFT)
+			// marks it instead of removing it (see KeyValue\Redis::KEY_SOFT)
 			$soft = $value instanceof Stale && $value->isSoft()
 				? $value->staleFor * 1000
 				: null;
@@ -229,12 +229,13 @@ class Redis extends TagIndex
 			// the field, every tag field's HEXPIRE follows the item's TTL, the
 			// tags it no longer has release it - a guarded write is refused
 			// when the key was invalidated, a tag of it stamped or the store
-			// cleared since its miss (an unstamped miss: the epoch only), and a
-			// write-through marks the key with a fresh epoch; a soft value goes
-			// through cache_set_soft - the same write, its stale time first
+			// cleared since its miss (an unstamped miss: when any of them carries a
+			// stamp), and a write-through marks the key with a fresh epoch; a soft
+			// value goes through cache_set_soft - the same write, its stale time
+			// first. With the release of the lock a miss took, in one round trip
 			$client->clearLastError();
-			$result = $this->functions
-				->call($soft === null ? 'cache_set' : 'cache_set_soft', [
+			$result = $this
+				->writeWithRelease($id, $soft === null ? 'cache_set' : 'cache_set_soft', [
 					$id,
 					$this->stampKey(),
 				], [
@@ -302,8 +303,9 @@ class Redis extends TagIndex
 		$group = $this->getKeyBase();
 		$typeItems = static::TYPE_ITEMS . Prefixer::SEPARATOR_PREFIX;
 		$typeTags = static::TYPE_TAGS . Prefixer::SEPARATOR_PREFIX;
-		// the items invalidated leave tombstones; the stamp first covers the
-		// ones being computed now, not in the tag index yet
+		// the stamps first: they refuse a value computed for the items before
+		// this invalidation, those in the tag index and those not yet - the
+		// items go, a soft one is marked (the epoch: its mark's)
 		$epoch = $this->newEpoch();
 		
 		try

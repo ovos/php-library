@@ -5,7 +5,6 @@ namespace Ovos\Cache\Store;
 
 use Closure;
 use Ovos\ArrayObject;
-use Ovos\Cache\MemoLock\Redis as MemoLockRedis;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Ovos\Cache\Versioned\Rules;
@@ -269,7 +268,7 @@ class RedisVersioned extends Store
 			
 			$result = $mark === null
 				? $this->setCall($id, $value, $tags, $ttl, $this->watermark(), $miss === null ? $this->writeThroughEpoch() : '', $soft)
-				: $this->writeWithRelease($id, 'cache_versioned_set_guarded', [
+				: $this->writeWithRelease($id, 'cache_versioned_set_guarded', [$id], [
 					$value,
 					implode(',', $tags),
 					$ttl * 1000, // ms
@@ -424,7 +423,7 @@ class RedisVersioned extends Store
 		string $soft = '', // '1' a soft value, '0' not (see fetch()); '' says nothing
 	): mixed
 	{
-		return $this->writeWithRelease($id, 'cache_versioned_set_stamped', [
+		return $this->writeWithRelease($id, 'cache_versioned_set_stamped', [$id], [
 			$value,
 			implode(',', $tags),
 			$ttl * 1000, // ms
@@ -461,64 +460,6 @@ class RedisVersioned extends Store
 		}
 		
 		return false;
-	}
-	
-	/**
-	 * Sends the write $function makes of $id - with the release of the lock
-	 * this process holds for $id, if any, in the same round trip (a
-	 * standalone client): its waiters are told as the value lands. A write
-	 * whose reply is an error goes again through call(), which self-heals a
-	 * library gone; a release whose reply is one is left to
-	 * releaseActiveLock() (see set())
-	 *
-	 * @param list<mixed> $args
-	 */
-	protected function writeWithRelease(
-		string $id,
-		string $function,
-		array $args,
-	): mixed
-	{
-		// a lock is held only where a miss made the MemoLock - a write-through
-		// makes none
-		$memoLock = $this->memoLock;
-		$release = $memoLock instanceof MemoLockRedis
-			? $memoLock->releaseCall($id)
-			: null;
-		$replies = $release === null
-			? null
-			: $this->sendAll([
-				[$this->functions->functionsPrefix($function), [$id], $args],
-				$release,
-			]);
-		if($replies === null)
-		{
-			return $this->functions
-				->call($function, [$id], $args);
-		}
-		
-		if(($replies[1] ?? false) !== false)
-		{
-			$memoLock->released($id);
-		}
-		
-		return ($replies[0] ?? false) === false
-			? $this->functions->call($function, [$id], $args)
-			: $replies[0];
-	}
-	
-	/**
-	 * Several calls in one round trip (see Functions::callAll())
-	 *
-	 * @param list<array{0: string, 1: list<string>, 2: list<mixed>}> $calls
-	 * @return list<mixed>|null
-	 */
-	protected function sendAll(
-		array $calls,
-	): ?array
-	{
-		return $this->functions
-			->callAll($calls);
 	}
 	
 	/**

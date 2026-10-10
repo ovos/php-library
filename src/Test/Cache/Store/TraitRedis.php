@@ -39,19 +39,32 @@ trait TraitRedis
 		array $storeOptions = [],
 	): KeyValueRedis
 	{
+		/** @var KeyValueRedis $storeClass */
+		return new $storeClass(...$this->storeArguments($storeOptions));
+	}
+	
+	/**
+	 * What getStore() builds a store with - for a test that builds a
+	 * subclass of its own
+	 *
+	 * @return list<mixed>
+	 */
+	protected function storeArguments(
+		array $storeOptions = [],
+	): array
+	{
 		$persistent = $this->container
 			->getClass(Persistent::class, parameters: [
 				'config' => $this->cacheConfig,
 			]);
 		
-		/** @var KeyValueRedis $storeClass */
-		return new $storeClass(
+		return [
 			$persistent->getConnection(),
 			$persistent->getQueueConnection(),
 			$this->cacheConfig->prefix,
 			$this->storeConfig($storeOptions),
 			$this->group,
-		);
+		];
 	}
 	
 	/**
