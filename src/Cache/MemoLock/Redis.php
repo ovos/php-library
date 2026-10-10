@@ -126,6 +126,7 @@ class Redis extends MemoLock
 		?Closure $resolver = null,
 		?bool $queue = null,
 		?int $queueLockTtlMs = null,
+		?Closure $lockAndLook = null,
 	): mixed
 	{
 		if(($this->queueEnabled === false && $queue !== true)
@@ -156,10 +157,21 @@ class Redis extends MemoLock
 		// break the host application - degrade to resolving the value directly
 		try
 		{
-			$lockAcquired = $client->set($lockKey, $lockValue, [
-				'NX',
-				'PX' => $queueLockTtlMs,
-			]);
+			// with the second look in the same round trip when the store can
+			// (a pipeline of SET NX and its read)
+			$look = null;
+			if($lockAndLook !== null
+				&& $fetcher !== null)
+			{
+				[$lockAcquired, $look] = $lockAndLook($lockKey, $lockValue, $queueLockTtlMs);
+			}
+			else
+			{
+				$lockAcquired = $client->set($lockKey, $lockValue, [
+					'NX',
+					'PX' => $queueLockTtlMs,
+				]);
+			}
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{
@@ -178,6 +190,8 @@ class Redis extends MemoLock
 				$lockValue,
 				$resolver,
 				$fetcher,
+				$lockAndLook !== null && $fetcher !== null,
+				$look,
 			);
 		}
 		
@@ -474,6 +488,59 @@ class Redis extends MemoLock
 		);
 		
 		return $released;
+	}
+	
+	/**
+	 * The call that releases this process's lock on $id and tells its
+	 * waiters, for a caller that sends it with its own write in one round trip
+	 * (see RedisVersioned::set()): [function name with its prefix, keys, args]
+	 * - this library loaded first; null when no lock is held, or the library
+	 * does not load (the caller releases with releaseActiveLock() then). The
+	 * lock stays this process's until released() says the call went out
+	 *
+	 * @return array{0: string, 1: list<string>, 2: list<string>}|null
+	 */
+	public function releaseCall(
+		string $id,
+	): ?array
+	{
+		if(array_key_exists($id, $this->queueLocks) === false)
+		{
+			return null;
+		}
+		
+		try
+		{
+			if($this->functions->loadLibraries() === false)
+			{
+				return null;
+			}
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->connection->log($exception);
+			
+			return null;
+		}
+		
+		return [
+			$this->functions->functionsPrefix('memolock_release_lock_and_publish'),
+			[$this->prefixer->prefix(static::TYPE_LOCK, $id)],
+			[$this->queueLocks[$id], $this->prefixer->prefix(static::TYPE_CHANNEL, $id)],
+		];
+	}
+	
+	/**
+	 * The release releaseCall() handed out went out with the caller's write:
+	 * the lock is no longer this process's to release
+	 */
+	public function released(
+		string $id,
+	): void
+	{
+		unset($this->queueLocks[$id]);
+		
+		$this->debug('lock released with the write: ' . $id);
 	}
 	
 	/**

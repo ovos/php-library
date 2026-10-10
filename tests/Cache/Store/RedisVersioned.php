@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Cache\Store;
 
+use Ovos\Cache\MemoLock\Redis as MemoLock;
 use Ovos\Cache\Store\RedisVersioned as Store;
 use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
@@ -24,6 +25,7 @@ use function count;
 use function end;
 use function microtime;
 use function random_bytes;
+use function str_ends_with;
 use function usleep;
 
 /**
@@ -464,6 +466,111 @@ class RedisVersioned extends Test
 		{
 			$writer->delete('item1');
 			$writer->delete('item2');
+		}
+	}
+	
+	/**
+	 * A miss takes the lock with its second look in one round trip (SET NX and
+	 * the HMGET, pipelined), and the value it computed goes out with the
+	 * lock's release in another (both FCALLs) - three round trips instead of
+	 * five; the waiters are told as the value lands
+	 */
+	public function aMissTakesTheLockWithItsLookAndReleasesItWithTheWrite(): bool
+	{
+		$probe = $this->probe();
+		$key = 'p2_' . bin2hex(random_bytes(4));
+		$lockKey = $probe->getMemoLock()
+			->getPrefixer()
+			->prefix(MemoLock::TYPE_LOCK, $probe->prefix($key, $probe->getType()));
+		
+		try
+		{
+			$value = $probe->get($key, fn() => 'computed', 60);
+			$sent = $probe->sentTogether;
+			
+			return $value === 'computed'
+				// the first read, then the lock with its look - no second fetch()
+				&& $probe->fetches === 1
+				&& $probe->lookedWithLock === 1
+				// the write and the release together, no release on its own
+				&& count($sent) === 1
+				&& str_ends_with($sent[0][0], 'cache_versioned_set_guarded')
+				&& str_ends_with($sent[0][1], 'memolock_release_lock_and_publish')
+				&& $probe->releasesAlone === 0
+				&& $probe->getClient()->exists($lockKey) === 0
+				&& $probe->get($key, queue: false) === 'computed';
+		}
+		finally
+		{
+			$probe->delete($key);
+		}
+	}
+	
+	/**
+	 * A value another process wrote between this one's miss and its lock is
+	 * found by the look made with the lock: nothing is computed, the lock is
+	 * released at once
+	 */
+	public function aValueLandingBeforeTheLockIsFoundByTheLookMadeWithIt(): bool
+	{
+		$probe = $this->probe();
+		$key = 'p2_' . bin2hex(random_bytes(4));
+		$computed = false;
+		$probe->beforeLock = function() use ($key): void
+		{
+			$this->store->set($key, 'landed');
+		};
+		
+		try
+		{
+			$value = $probe->get($key, function() use (&$computed): string
+			{
+				$computed = true;
+				
+				return 'computed';
+			}, 60);
+			
+			return $value === 'landed'
+				&& $computed === false
+				&& $probe->fetches === 1
+				&& $probe->lookedWithLock === 1
+				&& $probe->releasesAlone === 1;
+		}
+		finally
+		{
+			$probe->delete($key);
+		}
+	}
+	
+	/**
+	 * A write sent with the lock's release whose call fails - its library
+	 * gone meanwhile (a FUNCTION FLUSH, a restart) - goes again through
+	 * call(), which reloads the library: the value lands all the same
+	 */
+	public function aFailedWriteSentWithTheReleaseGoesAgainThroughCall(): bool
+	{
+		$probe = $this->probe();
+		$key = 'p2_' . bin2hex(random_bytes(4));
+		$library = $probe->getFunctions()
+			->functionsPrefix('cache_versioned');
+		
+		try
+		{
+			$value = $probe->get($key, function() use ($probe, $library): string
+			{
+				// the library goes while the value is computed
+				$probe->getClient()->function('delete', $library);
+				
+				return 'computed';
+			}, 60);
+			
+			return $value === 'computed'
+				&& count($probe->sentTogether) === 1
+				&& $this->store->get($key, queue: false) === 'computed';
+		}
+		finally
+		{
+			$probe->delete($key);
 		}
 	}
 	

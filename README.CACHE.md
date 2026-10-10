@@ -224,9 +224,12 @@ same O(N) eager delete, with a smaller constant.
   server round trip (Lua / pipeline); the versioned read refreshes its rule set
   at most once per `rules_cache_ms`, incrementally, and shares it with the
   other workers of the server through APCu, so a fresh process starts from the
-  shared set rather than from the whole stream. A round trip is ~0.1-1 ms on a
-  LAN; an in-process APCu hit is ~1 µs &mdash; big-O only starts to bite once N
-  or R is large.
+  shared set rather than from the whole stream. A versioned miss with a
+  resolver costs three: the read, the lock with its second look (`SET NX` and
+  the `HMGET`) and the write with the lock's release (both `FCALL`s), each pair
+  pipelined - five on a cluster, where the lock and the item are of different
+  slots. A round trip is ~0.1-1 ms on a LAN; an in-process APCu hit is ~1 µs
+  &mdash; big-O only starts to bite once N or R is large.
 
 Bottom line: reads are O(1)-ish on every backend, so the choice comes down to
 **invalidation** &mdash; pick a versioned store when tags match many items or you

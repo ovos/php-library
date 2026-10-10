@@ -4,11 +4,15 @@ declare(strict_types=1);
 namespace Ovos\Test\Cache\Store;
 
 use Closure;
+use Ovos\Cache\MemoLock\Redis as MemoLock;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
 use Override;
+
+use function array_column;
+use function array_key_exists;
 
 /**
  * RedisVersionedProbe
@@ -43,6 +47,103 @@ class RedisVersionedProbe extends RedisVersioned
 	
 	/** the invalidated items it decoded for the soft verdict */
 	public int $softlyCalls = 0;
+	
+	/** its fetch() calls - the second look made with the lock is none */
+	public int $fetches = 0;
+	
+	/** the locks taken with their second look, in one round trip */
+	public int $lookedWithLock = 0;
+	
+	/** run right before the lock with its look - a test lands a value meanwhile */
+	public ?Closure $beforeLock = null;
+	
+	/**
+	 * The function names each sendAll() sent in one round trip
+	 *
+	 * @var list<list<string>>
+	 */
+	public array $sentTogether = [];
+	
+	/** the releases its MemoLock sent on their own, not with a write */
+	public int $releasesAlone = 0;
+	
+	#[Override]
+	protected function fetch(
+		string $id,
+	): mixed
+	{
+		$this->fetches++;
+		
+		return parent::fetch($id);
+	}
+	
+	#[Override]
+	protected function lockAndLook(
+		string $id,
+	): ?Closure
+	{
+		if(($lockAndLook = parent::lockAndLook($id)) === null)
+		{
+			return null;
+		}
+		
+		return function(string $lockKey, string $lockValue, int $ttlMs) use ($lockAndLook): array
+		{
+			if($this->beforeLock !== null)
+			{
+				($this->beforeLock)();
+			}
+			$this->lookedWithLock++;
+			
+			return $lockAndLook($lockKey, $lockValue, $ttlMs);
+		};
+	}
+	
+	#[Override]
+	protected function sendAll(
+		array $calls,
+	): ?array
+	{
+		$this->sentTogether[] = array_column($calls, 0);
+		
+		return parent::sendAll($calls);
+	}
+	
+	/**
+	 * Its MemoLock counts the releases it sends on their own
+	 */
+	#[Override]
+	public function getMemoLock(): MemoLock
+	{
+		if($this->memoLock === null)
+		{
+			$memoLock = new class($this->connection, $this->queueConnection, $this->prefixer->getPrefix(), $this->config, $this) extends MemoLock
+			{
+				public ?Closure $onRelease = null;
+				
+				#[Override]
+				public function releaseActiveLock(
+					string $id,
+				): bool
+				{
+					if($this->onRelease !== null
+						&& array_key_exists($id, $this->queueLocks))
+					{
+						($this->onRelease)();
+					}
+					
+					return parent::releaseActiveLock($id);
+				}
+			};
+			$memoLock->onRelease = function(): void
+			{
+				$this->releasesAlone++;
+			};
+			$this->memoLock = $memoLock;
+		}
+		
+		return $this->memoLock;
+	}
 	
 	#[Override]
 	protected function fetchRuleEntries(

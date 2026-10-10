@@ -87,6 +87,7 @@ class Apcu extends MemoLock
 		?Closure $resolver = null,
 		?bool $queue = null,
 		?int $queueLockTtlMs = null,
+		?Closure $lockAndLook = null, // a Redis store's - APCu has no round trip to save
 	): mixed
 	{
 		if(($this->queueEnabled === false && $queue !== true)
