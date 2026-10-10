@@ -664,7 +664,7 @@ class Application
 	 * The Services container class to instantiate. An explicit "container"
 	 * (a leading "\" is absolute, else it is taken under Ovos\) wins, for
 	 * back-compat and the rare custom class name; otherwise "namespace:
-	 * Console" yields the conventional Console\Services; otherwise the base
+	 * Codesafe" yields the conventional Codesafe\Services; otherwise the base
 	 * Services. The bare-name service cascade later derives its root from
 	 * whatever class this returns, so "namespace" alone configures both.
 	 */
@@ -692,9 +692,9 @@ class Application
 	 * A configured service name to its class: a leading "\" is an absolute
 	 * FQCN; a bare name resolves in the PROJECT'S Service\ namespace first
 	 * (derived from the custom services container class - so with
-	 * "container: \Console\Services", "Auth" finds Console\Service\Auth),
+	 * "container: \Codesafe\Services", "Auth" finds Codesafe\Service\Auth),
 	 * then falls back to the framework's Ovos\Service\ - the same cascade
-	 * plugins use. Projects no longer need "\Console\Service\Auth" spelled
+	 * plugins use. Projects no longer need "\Codesafe\Service\Auth" spelled
 	 * out.
 	 */
 	public static function resolveServiceClass(
@@ -716,7 +716,7 @@ class Application
 		}
 		
 		// the project namespace comes from its Services container class:
-		// \Console\Services -> Console\Service\<name>
+		// \Codesafe\Services -> Codesafe\Service\<name>
 		$application = null;
 		if($servicesContainer !== null
 			&& $servicesContainer !== Services::class
