@@ -7,6 +7,7 @@ use Ovos\Cache\MemoLock\Redis as RedisMemoLock;
 use Ovos\Cache\Prefixer;
 use Ovos\Cache\Store\Redis as Store;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
+use Ovos\Cache\Store\KeyValue\TagIndex;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
@@ -14,7 +15,8 @@ use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedis;
-use Ovos\Service\Cache\Persistent;
+use Ovos\Test\Cache\Store\TraitTagIndexMiss;
+use Ovos\Test\Cache\Store\TagIndexCounting;
 use Override;
 use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
@@ -38,6 +40,7 @@ class Redis extends Test
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
 	use TraitCachePolicy;
+	use TraitTagIndexMiss;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -496,11 +499,7 @@ class Redis extends Test
 	 */
 	public function withoutAClientTheResolverRunsWithoutTheLock(): bool
 	{
-		$persistent = $this->container
-			->getClass(Persistent::class, parameters: [
-				'config' => $this->cacheConfig,
-			]);
-		$store = new class($persistent->getConnection(), $persistent->getQueueConnection(), $this->cacheConfig->prefix, $this->cacheConfig->persistent, $this->group) extends Store
+		$store = new class(...$this->storeArguments()) extends Store
 		{
 			#[Override]
 			public function getClient(): RedisClient|RedisClusterClient|null
@@ -530,5 +529,16 @@ class Redis extends Test
 		{
 			$client->del($lockKey);
 		}
+	}
+	
+	/**
+	 * A fresh store that counts its round trips (TraitTagIndexMiss)
+	 */
+	protected function countingStore(): TagIndex
+	{
+		return new class(...$this->storeArguments()) extends Store
+		{
+			use TagIndexCounting;
+		};
 	}
 }

@@ -107,7 +107,7 @@ local CACHE_EPOCH = 'epoch'
 
 -- soft invalidation: a soft value's item carries its stale time (ms) in
 -- CACHE_SOFT; a tag invalidation then marks it (CACHE_INVALIDATED) instead
--- of tombstoning it, and a read inside the window serves it aged
+-- of removing it, and a read inside the window serves it aged
 local CACHE_SOFT = 'soft'
 local CACHE_INVALIDATED = 'invalidated'
 
@@ -171,26 +171,18 @@ local function cache_soft_mark(key, token, window_ms, soft_ms)
 	return CACHE_SOFT_MARKED
 end
 
--- Removes an item a tag invalidation reached: its tombstone when the caller
--- passed one - a key already gone gets none (the tag's stamp covers the
--- values being computed for it), a soft value's item its soft mark (the
--- guard on, the invalidation not hard) - a plain UNLINK for a caller from
--- before the guard
+-- Removes an item a tag invalidation reached: a soft value's item gets its
+-- soft mark (the guard on, the invalidation not hard), any other goes - no
+-- tombstone: the invalidation stamped its tags first, and a write carrying a
+-- stamped tag whose miss came before is refused (cache_write_allowed()), so a
+-- tombstone per item would only cost a write per item
 local function cache_remove_item(key, token, window_ms, hard)
-	if token and window_ms then
-		local kind = redis.call('TYPE', key)['ok']
-		if kind == 'none' then
-			return 0
+	if token and window_ms and window_ms > 0 and hard ~= true
+		and redis.call('TYPE', key)['ok'] == 'hash' then
+		local soft_ms = tonumber(redis.call('HGET', key, CACHE_SOFT) or '')
+		if soft_ms and soft_ms > 0 and redis.call('HEXISTS', key, 'data') == 1 then
+			return cache_soft_mark(key, token, window_ms, soft_ms)
 		end
-		
-		if window_ms > 0 and kind == 'hash' and hard ~= true then
-			local soft_ms = tonumber(redis.call('HGET', key, CACHE_SOFT) or '')
-			if soft_ms and soft_ms > 0 and redis.call('HEXISTS', key, 'data') == 1 then
-				return cache_soft_mark(key, token, window_ms, soft_ms)
-			end
-		end
-		
-		return cache_tombstone_key(key, token, window_ms, kind)
 	end
 	
 	return redis.call('UNLINK', key)
@@ -206,20 +198,20 @@ local function cache_now_us()
 end
 
 -- Whether a write may land: the key's epoch is still the one its miss saw
--- ('' = none), and - when the miss stamped its time - no stamp key given was
--- set after it (a tag invalidated, or the store cleared, meanwhile)
+-- ('' = none), and no stamp key given was set after the miss (a tag
+-- invalidated, or the store cleared, meanwhile) - a miss without its time
+-- cannot be ordered against a stamp: any stamp within the window refuses it
+-- (a tag invalidation leaves no tombstone that would)
 local function cache_write_allowed(item_key, epoch, since_us, stamp_keys)
 	local current = redis.call('HGET', item_key, CACHE_EPOCH) or ''
 	if current ~= epoch then
 		return false
 	end
-	if since_us ~= '' then
-		local since = tonumber(since_us)
-		for _, stamp_key in ipairs(stamp_keys) do
-			local stamp = redis.call('GET', stamp_key)
-			if stamp and tonumber(stamp) > since then
-				return false
-			end
+	local since = since_us ~= '' and tonumber(since_us) or nil
+	for _, stamp_key in ipairs(stamp_keys) do
+		local stamp = redis.call('GET', stamp_key)
+		if stamp and (since == nil or tonumber(stamp) > since) then
+			return false
 		end
 	end
 	
@@ -580,18 +572,18 @@ local function cache_unlink_clean_tags(keys, args)
 	local prefix_ids = prefix .. args[2]
 	local prefix_tag_ids = prefix .. args[3]
 	local field_tags = args[4]
-	local token = args[5] -- the tombstone (KeyValue\Redis), absent from an older caller
+	local token = args[5] -- a soft mark's epoch (KeyValue\Redis), absent from an older caller
 	local window_ms = tonumber(args[6])
-	local hard = args[7] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
+	local hard = args[7] == '1' -- invalidateTags(hard: true): soft values are removed too
 	
 	for _, id in ipairs(ids) do
 	
 		local item_tags = redis.call('HGET', prefix_ids .. id, field_tags)
 		
 		if item_tags then -- not false = item & hash field exist
-			-- the item itself: its tombstone, so a write computed before this
-			-- invalidation cannot land after it - or its soft mark, and then
-			-- it stays in its tags' index (a hard invalidation still reaches it)
+			-- the item itself goes (the tags' stamps refuse a write computed
+			-- before this invalidation) - or gets its soft mark, and then it
+			-- stays in its tags' index (a hard invalidation still reaches it)
 			if cache_remove_item(prefix_ids .. id, token, window_ms, hard) ~= CACHE_SOFT_MARKED
 				and item_tags ~= '' -- not an empty string
 			then
@@ -623,7 +615,7 @@ local function cache_unlink_ids_by_tag(keys, args)
 	local prefix_tag_ids = prefix .. args[4]
 	local token = args[5]
 	local window_ms = tonumber(args[6])
-	local hard = args[7] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
+	local hard = args[7] == '1' -- invalidateTags(hard: true): soft values are removed too
 	
 	if #ids == 0 then
 		return 1
@@ -651,9 +643,9 @@ local function cache_unlink_ids_by_tag(keys, args)
 	local rems = {}
 	for _, id in ipairs(all_tag_ids) do
 		if lookup[id] then
-			-- the item itself: its tombstone, and the id leaves the tag after
-			-- the loop - or its soft mark, and the id stays (a hard
-			-- invalidation still reaches it)
+			-- the item itself goes, and the id leaves the tag after the loop -
+			-- or it gets its soft mark, and the id stays (a hard invalidation
+			-- still reaches it)
 			if cache_remove_item(prefix_ids .. id, token, window_ms, hard) ~= CACHE_SOFT_MARKED then
 				table.insert(rems, id)
 			end
@@ -685,7 +677,7 @@ local function cache_unlink_by_tag(keys, args)
 	local cursor = args[5] or '0' -- cursor for HSCAN, '0' for initial call
 	local token = args[6]
 	local window_ms = tonumber(args[7])
-	local hard = args[8] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
+	local hard = args[8] == '1' -- invalidateTags(hard: true): soft values are removed too
 	
 	if redis.call('EXISTS', prefix_tag_ids .. tag) == 0 then
 		return {0, '0'} -- tag does not exist, nothing to unlink, scan complete
@@ -699,9 +691,9 @@ local function cache_unlink_by_tag(keys, args)
 		cursor,
 		7500,
 		function(id)
-			-- the item itself: its tombstone, and the id leaves the tag after
-			-- the loop (within this batch) - or its soft mark, and the id
-			-- stays (a hard invalidation still reaches it)
+			-- the item itself goes, and the id leaves the tag after the loop
+			-- (within this batch) - or it gets its soft mark, and the id stays
+			-- (a hard invalidation still reaches it)
 			if cache_remove_item(prefix_ids .. id, token, window_ms, hard) ~= CACHE_SOFT_MARKED then
 				table.insert(rems, id)
 			end
@@ -811,10 +803,10 @@ redis.register_function
 --]] ------------------------------------------------------------------
 
 -- Unlinks the items a RediSearch query matches - the Redisearch store's tag
--- invalidation. Each goes through cache_remove_item(): its tombstone, or a
--- soft value's soft mark, which keeps its tags until the mark ends - so a
--- hard invalidation after the soft one still matches it; a write after the
--- mark sets them again (an HSET drops a field's expiry).
+-- invalidation. Each goes through cache_remove_item(): it goes, or a soft
+-- value's item gets its soft mark, which keeps its tags until the mark
+-- ends - so a hard invalidation after the soft one still matches it; a
+-- write after the mark sets them again (an HSET drops a field's expiry).
 -- Removes every ID that references any or all of the given tags,
 -- depending on the syntax passed to "tags": 
 -- * any: @tags:{New York|Los Angeles|Barcelona}
@@ -825,7 +817,7 @@ local function cache_unlink_by_search(keys, args)
 	local tags = args[2]
 	local token = args[3]
 	local window_ms = tonumber(args[4])
-	local hard = args[5] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
+	local hard = args[5] == '1' -- invalidateTags(hard: true): soft values are removed too
 	local batch_size = 10000
 	local offset = 0
 	

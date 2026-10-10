@@ -71,7 +71,7 @@ class Redisearch extends TagIndex
 		try
 		{
 			// a soft value's item carries its stale time, so a tag invalidation
-			// marks it instead of tombstoning it (see KeyValue\Redis::KEY_SOFT)
+			// marks it instead of removing it (see KeyValue\Redis::KEY_SOFT)
 			$soft = $value instanceof Stale && $value->isSoft()
 				? [static::KEY_SOFT, $value->staleFor * 1000]
 				: [];
@@ -82,17 +82,18 @@ class Redisearch extends TagIndex
 			
 			// one step (Lua cache_guarded_hset): refused when the key was
 			// invalidated, one of its tags stamped or the store cleared since
-			// the miss (an unstamped miss: the epoch only); a write-through
-			// marks the key with a fresh epoch; a key that held no data (a
-			// tombstone) gets no expiry but the item's
+			// the miss (an unstamped miss: when any of them carries a stamp);
+			// a write-through marks the key with a fresh epoch; a key that held
+			// no data (a tombstone) gets no expiry but the item's. With the
+			// release of the lock a miss took, in one round trip
 			$stampKeys = [$this->stampKey()];
 			foreach($tags as $tag)
 			{
 				$stampKeys[] = $this->stampKey((string)$tag);
 			}
 			$client->clearLastError();
-			$result = $this->functions
-				->call('cache_guarded_hset', [
+			$result = $this
+				->writeWithRelease($id, 'cache_guarded_hset', [
 					$id,
 					...$stampKeys,
 				], [
@@ -201,8 +202,9 @@ class Redisearch extends TagIndex
 				: '@tags:{' . implode('|', $queryTags) . '}' // matches any of the tags
 			;
 			
-			// the stamp first covers the values being computed now; the items
-			// found leave tombstones
+			// the stamps first: they refuse a value computed for the items
+			// before this invalidation; the items found go, a soft one is
+			// marked
 			$this->stamp($tags);
 			if($this->functions
 				->call('cache_unlink_by_search', [], [

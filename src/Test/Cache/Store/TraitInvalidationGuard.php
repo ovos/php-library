@@ -403,6 +403,53 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
+	 * RULE: a tag invalidation while a locked miss computes - get() with a
+	 * resolver, the stampede lock taken - refuses its write, or reads it stale
+	 */
+	public function aTagInvalidationWhileALockedMissComputesIsNeverServed(): bool
+	{
+		$reader = $this->guardStore();
+		$writer = $this->guardStore();
+		$key = $this->guardKey('locked');
+		
+		$value = $reader->get($key, function() use ($writer): string
+		{
+			$writer->invalidateTags([self::GUARD_TAG]);
+			
+			return 'computed before the invalidation';
+		}, 60, [self::GUARD_TAG]);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'computed before the invalidation'
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE: a clear while a locked miss computes refuses its write too - for a
+	 * key no process wrote, which no tombstone marks (the store's "cleared"
+	 * stamp refuses it, sent with the write and the lock's release)
+	 */
+	public function aClearWhileALockedMissComputesIsNeverServed(): bool
+	{
+		$reader = $this->guardStore();
+		$writer = $this->guardStore();
+		$key = $this->guardKey('locked-clear');
+		
+		$value = $reader->get($key, function() use ($writer): string
+		{
+			$writer->clear();
+			
+			return 'computed before the clear';
+		}, 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'computed before the clear'
+			&& $read === null;
+	}
+	
+	/**
 	 * RULE: a miss taken by hand - lockAndQueue(), the caller computes and
 	 * sets - is stamped like get()'s: a tag invalidation while it computes
 	 * refuses its write, or reads it stale (the key's own mark cannot show
