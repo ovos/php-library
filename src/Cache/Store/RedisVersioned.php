@@ -21,6 +21,7 @@ use function implode;
 use function intdiv;
 use function is_array;
 use function json_encode;
+use function max;
 use function microtime;
 use function sprintf;
 use function usleep;
@@ -123,6 +124,18 @@ class RedisVersioned extends Store
 	protected ?bool $rulesSharedCache = null;
 	
 	/**
+	 * How many rules the held set keeps before a floor takes the place of the
+	 * oldest (see Rules) - store option "rules_max_tags", 0: no bound
+	 */
+	protected int $rulesMaxTags = Rules::MAX_TAGS;
+	
+	/**
+	 * How many stream entries one fetch reads: a load from the beginning goes
+	 * batch by batch, never more than one in memory beside the set
+	 */
+	protected int $rulesBatch = 10000;
+	
+	/**
 	 * The rule set this instance holds
 	 */
 	protected ?Rules $rules = null;
@@ -177,6 +190,10 @@ class RedisVersioned extends Store
 		if(($shared = $options->offsetGet('rules_shared_cache')) !== null)
 		{
 			$this->rulesSharedCache = (bool)$shared;
+		}
+		if(($maxTags = $options->offsetGet('rules_max_tags')) !== null)
+		{
+			$this->rulesMaxTags = (int)$maxTags;
 		}
 		
 		return $this;
@@ -737,11 +754,23 @@ class RedisVersioned extends Store
 				throw new RedisException('Cannot load invalidation rules: no Redis client.');
 			}
 			
-			$rules = $this->rules ?? new Rules($this->rulesRetentionS * 1000);
+			$rules = $this->rules ?? new Rules($this->rulesRetentionS * 1000, $this->rulesMaxTags);
+			$reset = false;
 			
 			try
 			{
-				$entries = $this->fetchRuleEntries($rules->last());
+				// batch by batch, each from the last id held (inclusively, as a
+				// refresh): a load from the beginning never holds more than one
+				// beside the set; a batch that brings nothing new ends it
+				do
+				{
+					$before = $rules->last();
+					$entries = $this->fetchRuleEntries($before);
+					$rules->absorb($entries);
+					$reset = $reset || $rules->wasReset();
+				}
+				while(count($entries) >= max(2, $this->rulesBatch)
+					&& $rules->last() !== $before);
 			}
 			catch(RedisException|RedisClusterException $exception)
 			{
@@ -760,14 +789,12 @@ class RedisVersioned extends Store
 				throw $exception;
 			}
 			
-			$rules->absorb($entries);
-			
 			$this->rules = $rules;
 			$this->rulesFetchedAtMs = $nowMs;
 			$this->rulesDirty = false;
 			
 			$this->getSharedRules()
-				?->store($rules, $nowMs, $rules->wasReset());
+				?->store($rules, $nowMs, $reset);
 			
 			return $rules;
 		}
@@ -789,7 +816,7 @@ class RedisVersioned extends Store
 		SharedRules $shared,
 	): bool
 	{
-		if(($loaded = $shared->load($this->rulesRetentionS * 1000)) === null)
+		if(($loaded = $shared->load($this->rulesRetentionS * 1000, $this->rulesMaxTags)) === null)
 		{
 			return false;
 		}
@@ -853,6 +880,7 @@ class RedisVersioned extends Store
 				$this->getRulesKey(),
 				$from === Rules::NONE ? '-' : $from,
 				'+',
+				max(2, $this->rulesBatch),
 			);
 		
 		// anything but a list of entries reads as an empty stream, which the

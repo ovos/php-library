@@ -110,6 +110,7 @@ class SharedRules
 	 */
 	public function load(
 		int $retentionMs,
+		int $maxTags = Rules::MAX_TAGS,
 	): ?array
 	{
 		$entry = apcu_fetch($this->key, $success);
@@ -121,7 +122,7 @@ class SharedRules
 		}
 		
 		$fetchedAtMs = $entry[static::KEY_FETCHED_AT_MS] ?? null;
-		$rules = Rules::fromArray($entry[static::KEY_RULES] ?? null, $retentionMs);
+		$rules = Rules::fromArray($entry[static::KEY_RULES] ?? null, $retentionMs, $maxTags);
 		
 		if($rules === null
 			|| (is_float($fetchedAtMs) === false && is_int($fetchedAtMs) === false))
