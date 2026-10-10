@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Cache\Store;
 
 use Ovos\Cache\Stale;
-use Ovos\Cache\Store\KeyValue\Redis as Store;
+use Ovos\Cache\Store\KeyValue\TagIndex;
 use Override;
 use RedisClusterException;
 use RedisException;
@@ -25,7 +25,7 @@ use function trim;
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redisearch extends Store
+class Redisearch extends TagIndex
 {
 	// Libraries
 	/**
@@ -238,28 +238,6 @@ class Redisearch extends Store
 		}
 		
 		return $this->indexRebuild();
-	}
-	
-	/**
-	 * A miss stamps the server time: a tag stamped (or the store cleared)
-	 * after it refuses the write that follows
-	 */
-	#[Override]
-	protected function missStamp(): ?string
-	{
-		return $this->serverTime();
-	}
-	
-	/**
-	 * The physical wipe stamps "cleared" in the same step: a value computed
-	 * before the wipe and written after it is refused (its miss came first)
-	 */
-	#[Override]
-	protected function clearedStamp(): array
-	{
-		return $this->isGuarded()
-			? [$this->stampKey(), $this->invalidationWindowMs]
-			: [];
 	}
 	
 	/**

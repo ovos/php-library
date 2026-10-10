@@ -6,7 +6,7 @@ namespace Ovos\Cache\Store;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
 use Ovos\Cache\Stale;
-use Ovos\Cache\Store\KeyValue\Redis as Store;
+use Ovos\Cache\Store\KeyValue\TagIndex;
 use Override;
 use Redis as RedisClient;
 use RedisException;
@@ -26,7 +26,7 @@ use function sprintf;
  *
  * @author Marcin Gil <mg@ovos.at>
  */
-class Redis extends Store
+class Redis extends TagIndex
 {
 	// Types
 	public const string TYPE_TAGS = 'tags';
@@ -468,28 +468,6 @@ class Redis extends Store
 		}
 		
 		return false;
-	}
-	
-	/**
-	 * The physical wipe stamps "cleared" in the same step: a value computed
-	 * before the wipe and written after it is refused (its miss came first)
-	 */
-	#[Override]
-	protected function clearedStamp(): array
-	{
-		return $this->isGuarded()
-			? [$this->stampKey(), $this->invalidationWindowMs]
-			: [];
-	}
-	
-	/**
-	 * A miss stamps the server time: a tag stamped (or the store cleared)
-	 * after it refuses the write that follows
-	 */
-	#[Override]
-	protected function missStamp(): ?string
-	{
-		return $this->serverTime();
 	}
 	
 	public function getIdsMatchingAnyTags(

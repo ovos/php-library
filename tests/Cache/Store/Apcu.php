@@ -6,6 +6,7 @@ namespace Tests\Cache\Store;
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Apcu as ApcuMemoLock;
 use Ovos\Cache\Store\KeyValue;
+use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\Apcu as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
@@ -14,11 +15,13 @@ use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Closure;
 use Override;
+use ReflectionMethod;
 
 use function Ovos\config;
 
 use function apcu_fetch;
 use function is_string;
+use function method_exists;
 
 /**
  * Apcu
@@ -422,5 +425,27 @@ class Apcu extends Test
 		$second = apcu_fetch($id . Store::EPOCH_SUFFIX);
 		
 		return is_string($first) && is_string($second) && $first !== $second;
+	}
+	
+	/**
+	 * One get() and one lock API for every store (KeyValue): neither APCu nor
+	 * the Redis stores' base keeps a copy that an option or a parameter would
+	 * have to reach twice
+	 */
+	public function everyStoreSharesOneGetAndOneLockApi(): bool
+	{
+		foreach(['get', 'lockAndQueue', 'releaseActiveLock', 'renewLock', 'lockAndLook'] as $method)
+		{
+			foreach([Store::class, KeyValueRedis::class] as $class)
+			{
+				if(method_exists($class, $method) === false
+					|| (new ReflectionMethod($class, $method))->getDeclaringClass()->getName() !== KeyValue::class)
+				{
+					return false;
+				}
+			}
+		}
+		
+		return true;
 	}
 }

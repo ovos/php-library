@@ -586,17 +586,15 @@ abstract class KeyValue
 			->isQueueEnabled();
 	}
 	
-	abstract public function lockAndQueue(
-		string $key,
-	): mixed;
-	
-	abstract public function releaseActiveLock(
-		string $key,
-	): bool;
-	
-	abstract public function renewLock(
-		string $key,
-	): bool;
+	/**
+	 * Whether the store reaches what it stores in - a Redis store without a
+	 * connection computes every get() and runs a lockAndQueue() resolver
+	 * without the lock (KeyValue\Redis)
+	 */
+	protected function isConnected(): bool
+	{
+		return true;
+	}
 	
 	/**
 	 * The value under $key - on a miss computed by $resolver (one process
@@ -608,13 +606,148 @@ abstract class KeyValue
 	 * staleIfError: - and an unknown one throws. The one signature of every
 	 * store: an override copies it once, a new option never changes it
 	 */
-	abstract public function get(
+	public function get(
 		string $key,
 		?Closure $resolver = null,
 		int $ttl = 0,
 		array $tags = [],
 		mixed ...$options,
-	): mixed;
+	): mixed
+	{
+		$policy = Policy::from($options);
+		if($this->isConnected() === false)
+		{
+			// no connection (fast path)
+			return $this->setFromResolver($key, $resolver, $ttl, $tags, $policy);
+		}
+		
+		$id = $this->itemId($key);
+		$compute = function() use ($id, $key, $resolver, $ttl, $tags, $policy): mixed
+		{
+			// the miss is stamped now, right before the value is computed
+			// (the caller's own computation, too, when there is no resolver)
+			$this->stampMiss($id);
+			
+			return $this->setFromResolver($key, $resolver, $ttl, $tags, $policy);
+		};
+		
+		try
+		{
+			// a forced refresh: no hit, and no second look at the lock - a
+			// refresh in flight is waited for, then this one computes too
+			// (lock-only)
+			if($policy->refresh)
+			{
+				$this->forceMiss($id);
+				
+				return $this->getMemoLock()
+					->lockAndQueue($id, null, $compute, $policy->queue, $policy->queueLockTtlMs);
+			}
+			
+			// initial hit check (fast path); past its ttl, a value written with
+			// a stale time is served while it is refreshed (see revalidate())
+			$revalidate = $policy->stale > 0 && $resolver !== null
+				? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $policy)
+				: null;
+			$data = $this->fetch($id);
+			if(($served = $this->served($id, $data, $revalidate, $policy->queueLockTtlMs)) !== null)
+			{
+				return $served;
+			}
+			
+			$fallback = $this->errorFallback($data, $policy->staleIfError);
+			
+			return $this->getMemoLock()
+				->lockAndQueue(
+					$id,
+					fn() => $this->fresh($this->fetch($id)),
+					fn() => $this->computeOrFallback($id, $compute, $fallback),
+					$policy->queue,
+					$policy->queueLockTtlMs,
+					$this->lockAndLook($id),
+				);
+		}
+		finally
+		{
+			// what the read left to do (see afterRead())
+			$this->afterRead($id);
+		}
+	}
+	
+	/**
+	 * Manual lock control: returns the cached value when another process
+	 * produced it meanwhile (this one holds NO lock then), otherwise what the
+	 * resolver returns - null without one - while this process holds the
+	 * lock: compute, then set() (or releaseActiveLock()). The cache is read
+	 * after waiting and once more right after the lock is taken, as in get().
+	 * A key that is never set (a critical section) reads as nothing, so every
+	 * caller takes the lock in turn
+	 */
+	public function lockAndQueue(
+		string $key,
+		?Closure $resolver = null,
+		?int $queueLockTtlMs = null, // override of the config value
+	): mixed
+	{
+		if($this->isConnected() === false)
+		{
+			// no connection (fast path)
+			return $this->invoker
+				->invoke($resolver);
+		}
+		
+		$id = $this->itemId($key);
+		
+		return $this->getMemoLock()
+			->lockAndQueue(
+				$id,
+				fn() => $this->fresh($this->fetch($id)),
+				function() use ($id, $resolver): mixed
+				{
+					// the miss is stamped now, right before this process
+					// computes (see get())
+					$this->stampMiss($id);
+					
+					return $this->invoker
+						->invoke($resolver);
+				},
+				true,
+				$queueLockTtlMs,
+				$this->lockAndLook($id),
+			);
+	}
+	
+	/**
+	 * The lock and the second look in one round trip, for the MemoLock (see
+	 * MemoLock::lockAndQueue()) - none here: a store that can pipeline its
+	 * read with the lock says so (RedisVersioned)
+	 */
+	protected function lockAndLook(
+		string $id,
+	): ?Closure
+	{
+		return null;
+	}
+	
+	public function releaseActiveLock(
+		string $key,
+	): bool
+	{
+		$id = $this->itemId($key);
+		
+		return $this->getMemoLock()
+			->releaseActiveLock($id);
+	}
+	
+	public function renewLock(
+		string $key,
+	): bool
+	{
+		$id = $this->itemId($key);
+		
+		return $this->getMemoLock()
+			->renewLock($id);
+	}
 	
 	/**
 	 * Computes and stores: the resolver is called as

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Cache\Store;
 
+use Ovos\Cache\MemoLock\Redis as RedisMemoLock;
 use Ovos\Cache\Prefixer;
 use Ovos\Cache\Store\Redis as Store;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
@@ -13,12 +14,17 @@ use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedis;
+use Ovos\Service\Cache\Persistent;
 use Override;
+use Redis as RedisClient;
+use RedisCluster as RedisClusterClient;
 use ReflectionMethod;
 
 use function count;
 use function array_diff;
+use function bin2hex;
 use function in_array;
+use function random_bytes;
 
 /**
  * Redis
@@ -432,7 +438,7 @@ class Redis extends Test
 	{
 		return $this->guardStore();
 	}
-
+	
 	/**
 	 * A fresh store - another process (TraitInvalidationGuard)
 	 */
@@ -481,5 +487,48 @@ class Redis extends Test
 		]);
 		
 		return (int)$this->store->getClient()->exists($id) === 0;
+	}
+	
+	/**
+	 * RULE: a store whose connection has no client runs the resolver without
+	 * the lock - get() and lockAndQueue() alike - instead of taking a lock its
+	 * write could never release
+	 */
+	public function withoutAClientTheResolverRunsWithoutTheLock(): bool
+	{
+		$persistent = $this->container
+			->getClass(Persistent::class, parameters: [
+				'config' => $this->cacheConfig,
+			]);
+		$store = new class($persistent->getConnection(), $persistent->getQueueConnection(), $this->cacheConfig->prefix, $this->cacheConfig->persistent, $this->group) extends Store
+		{
+			#[Override]
+			public function getClient(): RedisClient|RedisClusterClient|null
+			{
+				return null;
+			}
+		};
+		$key = 'no-client-' . bin2hex(random_bytes(4));
+		$lockKey = $store->getMemoLock()
+			->getPrefixer()
+			->prefix(RedisMemoLock::TYPE_LOCK, $store->itemId($key));
+		$client = $this->store->getClient();
+		
+		try
+		{
+			$value = $store->get($key, fn(): string => 'computed', 60);
+			$lockedByGet = (int)$client->exists($lockKey);
+			$section = $store->lockAndQueue($key, fn(): string => 'section');
+			$lockedBySection = (int)$client->exists($lockKey);
+			
+			return $value === 'computed'
+				&& $section === 'section'
+				&& $lockedByGet === 0
+				&& $lockedBySection === 0;
+		}
+		finally
+		{
+			$client->del($lockKey);
+		}
 	}
 }
