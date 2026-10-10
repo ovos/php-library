@@ -145,6 +145,18 @@ class RedisVersionedProbe extends RedisVersioned
 		return $this->memoLock;
 	}
 	
+	/**
+	 * Loads the stream $count rules at a time (see rulesBatch)
+	 */
+	public function batchRulesBy(
+		int $count,
+	): static
+	{
+		$this->rulesBatch = $count;
+		
+		return $this;
+	}
+	
 	#[Override]
 	protected function fetchRuleEntries(
 		string $from,

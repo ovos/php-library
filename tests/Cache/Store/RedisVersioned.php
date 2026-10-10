@@ -603,6 +603,149 @@ class RedisVersioned extends Test
 	}
 	
 	/**
+	 * Past its cap the set keeps its newest rules and a floor in place of the
+	 * rest - a clear at the newest rule it dropped: an item a dropped rule
+	 * invalidated stays stale, an item stamped at or after the floor keeps
+	 * its per-tag verdicts, one stamped before it reads stale (a miss, never
+	 * a stale hit); the floor crosses requests in the shared shape; 0 caps
+	 * nothing
+	 */
+	public function aRuleSetPastItsCapKeepsItsNewestRulesAndAFloor(): bool
+	{
+		$entries = [];
+		for($i = 0; $i < 15; $i++)
+		{
+			$entries[(1000 + $i) . '-0'] = ['mode' => 'any', 'tags' => 't' . $i, 'first' => '0'];
+		}
+		$rules = (new Rules(3600000, 10))->absorb($entries);
+		$held = $rules->toArray();
+		$shared = Rules::fromArray($held, 3600000, 10);
+		// a set taken over from another worker keeps the bound as rules arrive
+		$more = ['1014-0' => $entries['1014-0']];
+		for($i = 15; $i < 20; $i++)
+		{
+			$more[(1000 + $i) . '-0'] = ['mode' => 'any', 'tags' => 't' . $i, 'first' => '0'];
+		}
+		$grown = Rules::fromArray($held, 3600000, 10)?->absorb($more);
+		$unbounded = (new Rules(3600000, 0))->absorb($entries);
+		
+		return count($held['tags']) <= 10
+			// t0's rule (1000) invalidated an item stamped before it: still stale
+			&& $rules->isStale(['t0'], '999-0') === true
+			// stamped after the floor: the per-tag verdicts stand
+			&& $rules->isStale(['t14'], '1012-0') === true
+			&& $rules->isStale(['t0'], '1012-0') === false
+			// stamped at the floor (the newest rule dropped, 1005): fresh; before it: stale
+			&& $rules->isStale(['other'], '1005-0') === false
+			&& $rules->isStale(['other'], '1004-0') === true
+			&& $shared !== null
+			&& $shared->isStale(['other'], '1004-0') === true
+			&& $shared->isStale(['t14'], '1012-0') === true
+			&& count($grown?->toArray()['tags'] ?? []) <= 10
+			&& $grown?->isStale(['t19'], '1018-0') === true
+			&& count($unbounded->toArray()['tags']) === 15;
+	}
+	
+	/**
+	 * rules_max_tags caps the set a store holds: an item a rule invalidated
+	 * stays stale once that rule went with the cap, a value written after
+	 * the floor is a hit
+	 */
+	public function rulesMaxTagsCapsTheHeldSet(): bool
+	{
+		$options = ['rules_max_tags' => 5, 'rules_cache_ms' => 0];
+		$probe = $this->probe($options);
+		$key = 'cap_' . bin2hex(random_bytes(4));
+		$fresh = 'cap_fresh_' . bin2hex(random_bytes(4));
+		$tag = 'cap-' . bin2hex(random_bytes(4));
+		
+		try
+		{
+			$probe->set($key, 'value', 60, [$tag]);
+			$probe->invalidateTags([$tag]);
+			for($i = 0; $i < 10; $i++)
+			{
+				$probe->invalidateTags([$tag . '-' . $i]);
+			}
+			$probe->set($fresh, 'value', 60, [$tag]);
+			
+			return count($probe->rules()->toArray()['tags']) <= 5
+				&& $this->probe($options)->get($key, queue: false) === null
+				&& $this->probe($options)->get($fresh, queue: false) === 'value';
+		}
+		finally
+		{
+			$probe->delete($key);
+			$probe->delete($fresh);
+		}
+	}
+	
+	/**
+	 * A set taken over from another worker of the server keeps the store's
+	 * bound as rules arrive: rules_max_tags reaches what SharedRules loads
+	 */
+	public function anAdoptedRuleSetKeepsTheStoresBound(): bool
+	{
+		$this->requireSharedRules();
+		
+		$options = ['rules_max_tags' => 5];
+		$tag = 'adopt-' . bin2hex(random_bytes(4));
+		$first = $this->probe($options);
+		$first->invalidateTags([$tag . '-0']);
+		// shares the set it holds
+		$first->rules();
+		$second = $this->probe($options);
+		// takes it over
+		$second->rules();
+		$adopted = $second->fetchedFrom === [];
+		for($i = 1; $i < 12; $i++)
+		{
+			$this->probe($options)->invalidateTags([$tag . '-' . $i]);
+		}
+		// behind this server's invalidations: a delta into the set it took over
+		$held = $second->rules()->toArray();
+		
+		return $adopted
+			&& count($second->fetchedFrom) === 1
+			&& count($held['tags']) <= 5;
+	}
+	
+	/**
+	 * A cold load reads the stream in batches, each from the last id held:
+	 * never more than a batch in memory beside the set, every rule held at
+	 * the end
+	 */
+	public function aColdLoadReadsTheStreamInBatches(): bool
+	{
+		$options = ['rules_cache_ms' => 0, 'rules_shared_cache' => false];
+		$writer = $this->probe($options);
+		$key = 'batch_' . bin2hex(random_bytes(4));
+		$tag = 'batch-' . bin2hex(random_bytes(4));
+		
+		try
+		{
+			$writer->set($key, 'value', 60, [$tag . '-24']);
+			for($i = 0; $i < 25; $i++)
+			{
+				$writer->invalidateTags([$tag . '-' . $i]);
+			}
+			$cold = $this->probe($options)
+				->batchRulesBy(10);
+			$read = $cold->get($key, queue: false);
+			
+			return count($cold->fetchedFrom) >= 3
+				&& $cold->fetchedFrom[0] === Rules::NONE
+				&& $cold->fetchedFrom[1] !== Rules::NONE
+				&& $cold->rules()->last() === $writer->rules()->last()
+				&& $read === null;
+		}
+		finally
+		{
+			$writer->delete($key);
+		}
+	}
+	
+	/**
 	 * After the stream was lost with nothing appended since, the refresh that
 	 * finds it gone shares the reset set: the workers stop adopting the lost
 	 * one (and refreshing from it on every request)

@@ -146,6 +146,16 @@ is constant no matter how many items match.
   before the mark is never fresh; `rules_cache_ms` bounds only the staleness
   between servers. Switched off, each process loads the rules of the whole
   retention window once, before its first hit.
+- The set is **bounded** (`rules_max_tags`, default 15 000; 0: no bound): a
+  request copies it out of APCu, about 0.16 ms and 0.45 KB per thousand rules,
+  and what grows it is the number of *distinct* tags invalidated within the
+  retention - not how often one tag is. Past the bound it keeps its newest
+  90 % and puts a floor in place of the rest, as a clear at the newest rule
+  it dropped: an item stamped before the floor is a miss (recomputed once,
+  never served stale), one stamped after it keeps its verdicts. Size it so
+  the floor stays behind the longest TTL in the group - a per-customer tag
+  invalidated on every login moves it by one rule per customer. A load from
+  the beginning reads the stream 10 000 entries at a time.
 - `clear()` is logical as well (one rule matching everything);
   `clearPhysical()` wipes the whole group for maintenance.
 - `rules_retention_s` (default 30 days) is the default **and maximum** item
@@ -838,6 +848,7 @@ cache:
       rules_retention_s: 2592000       # Versioned stores: rules + maximum item lifetime (s)
       rules_cache_ms: 1000             # Versioned stores: how long a held rule set is reused (ms)
       rules_shared_cache: yes          # Versioned stores: share the rule set across the server's workers (APCu; default: on when available)
+      rules_max_tags: 15000            # Versioned stores: rules held before a floor replaces the oldest (default 15000, 0: no bound)
       invalidation_window_ms: 60000    # Invalidation guard: how long an invalidation is remembered; 0 = off (see above)
     compression:
       enabled: yes

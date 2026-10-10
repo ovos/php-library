@@ -4,13 +4,16 @@ declare(strict_types=1);
 namespace Ovos\Cache\Versioned;
 
 use function array_key_first;
+use function array_unshift;
 use function count;
 use function explode;
+use function intdiv;
 use function is_array;
 use function is_bool;
 use function is_scalar;
 use function is_string;
 use function max;
+use function usort;
 
 /**
  * Rules
@@ -43,6 +46,15 @@ use function max;
  * then, whatever its tags: the one verdict that cannot serve a value past
  * its invalidation. An item stamped 0-0 saw no rule and is exempt.
  *
+ * The set is bounded: past maxTags rules (per tag and 'all' together; 0: no
+ * bound) it keeps its newest 90 % and puts a floor in place of the rest - a
+ * clear at the newest rule it dropped. An item stamped before the floor reads
+ * stale, a miss, never a stale hit; one stamped at or after it keeps its
+ * verdicts, no rule dropped being newer than it. The price: under a stream of
+ * new tags the floor moves forward, and what is older is recomputed once. The
+ * bound keeps the copy a request makes of the set, and the set in APCu,
+ * small (see SharedRules).
+ *
  * A rule may be hard (invalidateTags(hard: true)): a soft value it reaches is
  * a miss at once. Besides the newest rule per tag the set keeps the newest
  * HARD rule per tag, so a soft rule that follows a hard one does not soften
@@ -61,6 +73,13 @@ class Rules
 	 * it, so an item stamped with it has seen nothing.
 	 */
 	public const string NONE = '0-0';
+	
+	/**
+	 * How many rules a set holds before it puts a floor in place of its oldest
+	 * (see the class doc) - a request copies the set: about 0.45 KB and 0.16 ms
+	 * per thousand rules
+	 */
+	public const int MAX_TAGS = 15000;
 	
 	// Fields, as cache_versioned_invalidate writes them
 	public const string FIELD_MODE = 'mode';
@@ -119,6 +138,7 @@ class Rules
 	
 	public function __construct(
 		protected int $retentionMs,
+		protected int $maxTags = self::MAX_TAGS,
 	)
 	{
 	}
@@ -354,6 +374,7 @@ class Rules
 	public static function fromArray(
 		mixed $state,
 		int $retentionMs,
+		int $maxTags = self::MAX_TAGS,
 	): ?static
 	{
 		if(is_array($state) === false
@@ -367,7 +388,7 @@ class Rules
 		
 		$firstOpened = $state[static::KEY_FIRST_OPENED] ?? null;
 		
-		$rules = new static($retentionMs);
+		$rules = new static($retentionMs, $maxTags);
 		$rules->tags = $state[static::KEY_TAGS];
 		// a set shared before the hard rules were kept: none
 		$rules->hard = is_array($state[static::KEY_HARD] ?? null)
@@ -496,7 +517,8 @@ class Rules
 	/**
 	 * Drops what can no longer decide anything: rules older than the longest
 	 * possible item lifetime, having nothing left alive to match, and rules
-	 * older than a clear, which says everything they could say
+	 * older than a clear, which says everything they could say - and, past
+	 * maxTags, the oldest rules, a floor taking their place (see capFloor())
 	 */
 	protected function trim(): void
 	{
@@ -520,6 +542,19 @@ class Rules
 			}
 		}
 		
+		// past its bound the set keeps its newest rules: the newest rule to go
+		// is the floor, a clear there taking the place of the rest
+		$capped = $this->capFloor();
+		if($capped !== null
+			&& static::isNewer($capped[0], $capped[1], $floorMs, $floorSequence))
+		{
+			[$floorMs, $floorSequence] = $capped;
+		}
+		else
+		{
+			$capped = null;
+		}
+		
 		foreach($this->tags as $tag => [$ms, $sequence])
 		{
 			if(static::isNewer($ms, $sequence, $floorMs, $floorSequence) === false)
@@ -540,14 +575,52 @@ class Rules
 		foreach($this->all as $rule)
 		{
 			// the clear that set the floor stays: it is the one still matching
-			if(($rule[0] === $floorMs && $rule[1] === $floorSequence)
+			if(($capped === null && $rule[0] === $floorMs && $rule[1] === $floorSequence)
 				|| static::isNewer($rule[0], $rule[1], $floorMs, $floorSequence))
 			{
 				$kept[] = $rule;
 			}
 		}
 		
+		// the floor the bound set: a clear at the newest rule dropped, oldest
+		// in the list (hard - what it stands for may have been)
+		if($capped !== null)
+		{
+			array_unshift($kept, [$floorMs, $floorSequence, [], true]);
+		}
+		
 		$this->all = $kept;
+	}
+	
+	/**
+	 * Where the bound puts the floor when the set holds more than maxTags
+	 * rules, per tag and 'all' together: the newest rule beyond the newest
+	 * 90 %, so that a set at its bound is not cut again by every rule that
+	 * follows. Null within the bound, or with none (maxTags 0)
+	 *
+	 * @return array{int, int}|null
+	 */
+	protected function capFloor(): ?array
+	{
+		if($this->maxTags <= 0
+			|| count($this->tags) + count($this->all) <= $this->maxTags)
+		{
+			return null;
+		}
+		
+		$ids = [];
+		foreach($this->tags as [$ms, $sequence])
+		{
+			$ids[] = [$ms, $sequence];
+		}
+		foreach($this->all as [$ms, $sequence])
+		{
+			$ids[] = [$ms, $sequence];
+		}
+		// newest first
+		usort($ids, static fn(array $a, array $b): int => $b <=> $a);
+		
+		return $ids[intdiv($this->maxTags * 9, 10)];
 	}
 	
 	protected static function isNewer(
