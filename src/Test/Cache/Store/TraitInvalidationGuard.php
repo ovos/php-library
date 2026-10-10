@@ -403,21 +403,50 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
+	 * RULE: a miss taken by hand - lockAndQueue(), the caller computes and
+	 * sets - is stamped like get()'s: a tag invalidation while it computes
+	 * refuses its write, or reads it stale (the key's own mark cannot show
+	 * it: the invalidation reaches no item, the key holds none)
+	 */
+	public function aManuallyLockedWriteAfterATagInvalidationIsNeverServed(): bool
+	{
+		$reader = $this->guardStore();
+		$writer = $this->guardStore();
+		$key = $this->guardKey('manual');
+		$writer->delete($key);
+		
+		$locked = $reader->lockAndQueue($key) === null;
+		$writer->invalidateTags([self::GUARD_TAG]);
+		$reader->set($key, 'stale', 60, [self::GUARD_TAG]);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $locked && $read === null;
+	}
+	
+	/**
 	 * RULE: a value computed before another process cleared the store is
-	 * never served after it
+	 * never served after it - also for a key no process ever wrote, which
+	 * no tombstone marks (the wipe's own stamp refuses it)
 	 */
 	public function aWriteAfterAClearIsNeverServed(): bool
 	{
 		$reader = $this->guardStore();
 		$writer = $this->guardStore();
 		$writer->delete(self::GUARD_KEY);
+		$never = $this->guardKey('cleared');
 		
 		$reader->get(self::GUARD_KEY, queue: false);
+		$reader->get($never, queue: false);
 		$writer->clear();
 		$reader->set(self::GUARD_KEY, 'stale', 60);
+		$reader->set($never, 'stale', 60);
 		$read = $this->guardStore()->get(self::GUARD_KEY, queue: false);
+		$readNever = $this->guardStore()->get($never, queue: false);
 		$writer->delete(self::GUARD_KEY);
+		$writer->delete($never);
 		
-		return $read === null;
+		return $read === null
+			&& $readNever === null;
 	}
 }

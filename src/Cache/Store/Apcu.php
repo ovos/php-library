@@ -4,9 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Cache\Store;
 
 use Ovos\Cache\MemoLock\Apcu as MemoLock;
-use Ovos\Cache\Policy;
 use APCUIterator;
-use Closure;
 use Override;
 
 use function apcu_cache_info;
@@ -170,105 +168,6 @@ class Apcu extends KeyValue
 	{
 		return $this->prefixer
 			->prefix($key, $this->getGroup());
-	}
-	
-	/**
-	 * See KeyValue::get() - APCu has no tags: $tags and soft: are accepted
-	 * for the one signature's sake and mean nothing here
-	 */
-	#[Override]
-	public function get(
-		string $key,
-		?Closure $resolver = null,
-		int $ttl = 0,
-		array $tags = [],
-		mixed ...$options,
-	): mixed
-	{
-		$policy = Policy::from($options);
-		$id = $this->prefixer
-			->prefix($key, $this->getGroup());
-		$compute = fn() => $this->setFromResolver($key, $resolver, $ttl, [], $policy);
-		
-		// a forced refresh: no hit, and no second look at the lock - a refresh
-		// in flight is waited for, then this one computes too (lock-only)
-		if($policy->refresh)
-		{
-			$this->forceMiss($id);
-			
-			return $this->getMemoLock()
-				->lockAndQueue($id, null, $compute, $policy->queue, $policy->queueLockTtlMs);
-		}
-		
-		// initial hit check (fast path); past its ttl, a value written with a
-		// stale time is served while it is refreshed (see revalidate())
-		$revalidate = $policy->stale > 0 && $resolver !== null
-			? $compute
-			: null;
-		$data = $this->fetch($id);
-		if(($served = $this->served($id, $data, $revalidate, $policy->queueLockTtlMs)) !== null)
-		{
-			return $served;
-		}
-		
-		$fallback = $this->errorFallback($data, $policy->staleIfError);
-		
-		return $this->getMemoLock()
-			->lockAndQueue(
-				$id,
-				fn() => $this->fresh($this->fetch($id)),
-				fn() => $this->computeOrFallback($id, $compute, $fallback),
-				$policy->queue,
-				$policy->queueLockTtlMs,
-			);
-	}
-	
-	/**
-	 * Manual lock control: returns the cached value when another process
-	 * produced it meanwhile (this one holds NO lock then), otherwise what the
-	 * resolver returns - null without one - while this process holds the
-	 * lock: compute, then set() (or releaseActiveLock()). See
-	 * KeyValue\Redis::lockAndQueue()
-	 */
-	public function lockAndQueue(
-		string $key,
-		?Closure $resolver = null,
-		?int $queueLockTtlMs = null, // override of the config value, in ms as on every store
-	): mixed
-	{
-		$id = $this->prefixer
-			->prefix($key, $this->getGroup());
-		
-		return $this->getMemoLock()
-			->lockAndQueue(
-				$id,
-				fn() => $this->fresh($this->fetch($id)),
-				$resolver,
-				true,
-				$queueLockTtlMs,
-			);
-	}
-	
-	public function releaseActiveLock(
-		string $key,
-	): bool
-	{
-		$id = $this->prefixer
-			->prefix($key, $this->getGroup());
-		
-		return $this->getMemoLock()
-			->releaseActiveLock($id);
-	}
-	
-	public function renewLock(
-		string $key,
-	): bool
-	{
-		$id = $this->prefixer
-			->prefix($key, $this->getGroup());
-		
-		return $this->getMemoLock()
-			->renewLock($id);
 	}
 	
 	public function delete(

@@ -5,25 +5,18 @@ namespace Ovos\Cache\Store\KeyValue;
 
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
-use Ovos\Cache\Policy;
 use Ovos\Cache\Redis\Functions;
-use Ovos\Cache\Stale;
 use Ovos\Connection\RedisCommon as Connection;
 use Override;
-use Closure;
 use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
 use function bin2hex;
-use function is_array;
 use function is_int;
 use function random_bytes;
 use function sprintf;
-use function str_pad;
-
-use const STR_PAD_LEFT;
 
 /**
  * Redis
@@ -44,14 +37,12 @@ abstract class Redis extends Tags
 	public const string KEY_EPOCH = 'epoch';
 	
 	/**
-	 * Soft invalidation on the tag-index stores (Store\Redis, Redisearch): a
-	 * soft value's item carries its stale time (ms); a tag invalidation then
-	 * marks it - a new epoch, this field, both expiring with the window -
-	 * instead of tombstoning it, and a read inside the window serves it aged
+	 * A soft value's field: the tag-index stores keep its stale time (ms)
+	 * there, so a tag invalidation marks the item instead of tombstoning it
+	 * (see TagIndex::KEY_INVALIDATED); the versioned stores whether a record
+	 * is soft ('1' or '0')
 	 */
 	public const string KEY_SOFT = 'soft';
-	
-	public const string KEY_INVALIDATED = 'invalidated';
 	
 	/**
 	 * What a write passes in place of an epoch when it is not guarded - no
@@ -69,12 +60,6 @@ abstract class Redis extends Tags
 	
 	// Types
 	public const string TYPE_ITEMS = 'items';
-	
-	/**
-	 * The stamps the tag-index stores (Store\Redis, Redisearch) leave for the
-	 * window: one per invalidated tag, and the type key itself for a clear
-	 */
-	public const string TYPE_INVALIDATED = 'invalidated';
 	
 	// Libraries
 	/**
@@ -213,61 +198,6 @@ abstract class Redis extends Tags
 			->prefix($type, $this->getGroup());
 	}
 	
-	protected function fetch(
-		string $id,
-	): mixed
-	{
-		if(($client = $this->getClient()) === null)
-		{
-			return null;
-		}
-		
-		try
-		{
-			// the data, the guard's epoch and a soft invalidation's mark in the
-			// one round trip a read makes
-			$item = $client->hMGet($id, [
-				static::KEY_DATA,
-				static::KEY_EPOCH,
-				static::KEY_INVALIDATED,
-			]);
-			$value = is_array($item) ? ($item[static::KEY_DATA] ?? false) : false;
-			
-			if($value !== false)
-			{
-				$value = $this->compressor
-					->decompress($value);
-				$value = $this->serializer
-					->unserialize($value);
-				
-				// softly invalidated, inside its window (the mark and the data
-				// expire with it): the value is handed out invalidated - served
-				// while it is refreshed, a miss to a read without stale: (only a
-				// soft value is ever marked; anything else marked is a miss)
-				if(($item[static::KEY_INVALIDATED] ?? false) !== false)
-				{
-					$value = $value instanceof Stale
-						? $value->invalidated()
-						: null;
-				}
-				
-				if($value !== null)
-				{
-					return $this->found($id, $value, $item[static::KEY_EPOCH]);
-				}
-			}
-			
-			$this->rememberMiss($id, is_array($item) ? $item[static::KEY_EPOCH] : false);
-		}
-		// RedisClusterException does not extend RedisException, catch both
-		catch(RedisException|RedisClusterException $exception)
-		{
-			$this->log($exception);
-		}
-		
-		return null;
-	}
-	
 	#[Override]
 	public function itemId(
 		string $key,
@@ -277,152 +207,14 @@ abstract class Redis extends Tags
 			->prefix($key, $this->getType());
 	}
 	
+	/**
+	 * Without a connection get() computes, a lockAndQueue() resolver runs
+	 * without the lock
+	 */
 	#[Override]
-	public function get(
-		string $key,
-		?Closure $resolver = null,
-		int $ttl = 0,
-		array $tags = [],
-		mixed ...$options,
-	): mixed
+	protected function isConnected(): bool
 	{
-		$policy = Policy::from($options);
-		if($this->getClient() === null)
-		{
-			// no connection (fast path)
-			return $this->setFromResolver($key, $resolver, $ttl, $tags, $policy);
-		}
-		
-		$id = $this->prefixer
-			->prefix($key, $this->getType());
-		$compute = function() use ($id, $key, $resolver, $ttl, $tags, $policy): mixed
-		{
-			// the miss is stamped now, right before the value is computed
-			// (the caller's own computation, too, when there is no resolver)
-			$this->stampMiss($id);
-			
-			return $this->setFromResolver($key, $resolver, $ttl, $tags, $policy);
-		};
-		
-		try
-		{
-			// a forced refresh: no hit, and no second look at the lock - a
-			// refresh in flight is waited for, then this one computes too
-			// (lock-only)
-			if($policy->refresh)
-			{
-				$this->forceMiss($id);
-				
-				return $this->getMemoLock()
-					->lockAndQueue($id, null, $compute, $policy->queue, $policy->queueLockTtlMs);
-			}
-			
-			// initial hit check (fast path); past its ttl, a value written with
-			// a stale time is served while it is refreshed (see revalidate())
-			$revalidate = $policy->stale > 0 && $resolver !== null
-				? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $policy)
-				: null;
-			$data = $this->fetch($id);
-			if(($served = $this->served($id, $data, $revalidate, $policy->queueLockTtlMs)) !== null)
-			{
-				return $served;
-			}
-			
-			$fallback = $this->errorFallback($data, $policy->staleIfError);
-			
-			return $this->getMemoLock()
-				->lockAndQueue(
-					$id,
-					fn() => $this->fresh($this->fetch($id)),
-					fn() => $this->computeOrFallback($id, $compute, $fallback),
-					$policy->queue,
-					$policy->queueLockTtlMs,
-					$this->lockAndLook($id),
-				);
-		}
-		finally
-		{
-			// what the read left to do (see KeyValue::afterRead())
-			$this->afterRead($id);
-		}
-	}
-	
-	/**
-	 * Manual lock control: returns the cached value when another process
-	 * produced it meanwhile (this one holds NO lock then), otherwise what the
-	 * resolver returns - null without one - while this process holds the
-	 * lock: compute, then set() (or releaseActiveLock()). The cache is read
-	 * after waiting and once more right after the lock is taken, as in get().
-	 * A key that is never set (a critical section) reads as nothing, so every
-	 * caller takes the lock in turn
-	 */
-	public function lockAndQueue(
-		string $key,
-		?Closure $resolver = null,
-		?int $queueLockTtlMs = null, // override of the config value
-	): mixed
-	{
-		if($this->getClient() === null)
-		{
-			// no connection (fast path)
-			return $this->invoker
-				->invoke($resolver);
-		}
-		
-		$id = $this->prefixer
-			->prefix($key, $this->getType());
-		
-		return $this->getMemoLock()
-			->lockAndQueue(
-				$id,
-				fn() => $this->fresh($this->fetch($id)),
-				function() use ($id, $resolver): mixed
-				{
-					// the miss is stamped now, right before this process
-					// computes (see get())
-					$this->stampMiss($id);
-					
-					return $this->invoker
-						->invoke($resolver);
-				},
-				true,
-				$queueLockTtlMs,
-				$this->lockAndLook($id),
-			);
-	}
-	
-	/**
-	 * The lock and the second look in one round trip, for the MemoLock (see
-	 * MemoLock::lockAndQueue()) - none here: a store that can pipeline its
-	 * read with the lock says so (RedisVersioned)
-	 */
-	protected function lockAndLook(
-		string $id,
-	): ?Closure
-	{
-		return null;
-	}
-	
-	public function releaseActiveLock(
-		string $key,
-	): bool
-	{
-		$id = $this->prefixer
-			->prefix($key, $this->getType());
-		
-		return $this->getMemoLock()
-			->releaseActiveLock($id);
-	}
-	
-	public function renewLock(
-		string $key,
-	): bool
-	{
-		$id = $this->prefixer
-			->prefix($key, $this->getType());
-		
-		return $this->getMemoLock()
-			->renewLock($id);
+		return $this->getClient() !== null;
 	}
 	
 	/**
@@ -560,89 +352,6 @@ abstract class Redis extends Tags
 	protected function newEpoch(): string
 	{
 		return bin2hex(random_bytes(8));
-	}
-	
-	/**
-	 * The server clock in microseconds - the time a miss stamps in the
-	 * tag-index stores, read from the server whose clock their tag stamps
-	 * use; null when it cannot be read
-	 */
-	protected function serverTime(): ?string
-	{
-		// a cluster's TIME needs a node: the tag-index stores run standalone
-		// only (their Lua reaches keys of any slot)
-		if(($client = $this->getClient()) === null
-			|| $client instanceof RedisClusterClient)
-		{
-			return null;
-		}
-		
-		try
-		{
-			$time = $client->time();
-			if(is_array($time) && isset($time[0], $time[1]))
-			{
-				return $time[0] . str_pad((string)$time[1], 6, '0', STR_PAD_LEFT);
-			}
-		}
-		catch(RedisException|RedisClusterException $exception)
-		{
-			$this->log($exception);
-		}
-		
-		return null;
-	}
-	
-	/**
-	 * The key of an invalidation stamp: one tag's, or (no tag) the store's
-	 * "cleared" stamp
-	 */
-	public function stampKey(
-		?string $tag = null,
-	): string
-	{
-		$type = $this->getType(static::TYPE_INVALIDATED);
-		
-		return $tag === null
-			? $type
-			: $this->prefixer->prefix($tag, $type);
-	}
-	
-	/**
-	 * Stamps the given tags (none: the store's "cleared" stamp) with the
-	 * server time, for the window - a guarded write whose miss came before
-	 * refuses
-	 */
-	protected function stamp(
-		array $tags = [],
-	): bool
-	{
-		if($this->isGuarded() === false)
-		{
-			return true;
-		}
-		
-		$keys = [];
-		foreach($tags as $tag)
-		{
-			$keys[] = $this->stampKey((string)$tag);
-		}
-		if($keys === [])
-		{
-			$keys[] = $this->stampKey();
-		}
-		
-		if($this->functions
-			->call('cache_stamp', $keys, [
-				$this->invalidationWindowMs,
-			]) === false)
-		{
-			$this->logRefused('cache_stamp');
-			
-			return false;
-		}
-		
-		return true;
 	}
 	
 	/**

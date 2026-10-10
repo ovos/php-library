@@ -8,6 +8,9 @@ use Ovos\Cache\Store\RedisVersioned as Store;
 use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
+use Ovos\Cache\Store\KeyValue\TagIndex;
+use Ovos\Cache\Store\Redis as RedisStore;
+use Ovos\Cache\Store\Redisearch;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\RedisVersionedProbe;
@@ -22,7 +25,10 @@ use Override;
 use function array_keys;
 use function bin2hex;
 use function count;
+use function defined;
 use function end;
+use function is_subclass_of;
+use function method_exists;
 use function microtime;
 use function random_bytes;
 use function str_ends_with;
@@ -1527,5 +1533,23 @@ class RedisVersioned extends Test
 		$writer->delete($key);
 		
 		return $read === null;
+	}
+	
+	/**
+	 * The versioned store carries none of the tag-index stores' machinery -
+	 * the per-tag stamps, the server-time miss stamp, the soft mark: its rules
+	 * do all of that (KeyValue\TagIndex, which Store\Redis and Redisearch
+	 * extend)
+	 */
+	public function theVersionedStoreCarriesNoTagIndexMember(): bool
+	{
+		return is_subclass_of(RedisStore::class, TagIndex::class)
+			&& is_subclass_of(Redisearch::class, TagIndex::class)
+			&& is_subclass_of(Store::class, TagIndex::class) === false
+			&& method_exists(Store::class, 'stamp') === false
+			&& method_exists(Store::class, 'stampKey') === false
+			&& method_exists(Store::class, 'serverTime') === false
+			&& defined(Store::class . '::KEY_INVALIDATED') === false
+			&& defined(Store::class . '::TYPE_INVALIDATED') === false;
 	}
 }

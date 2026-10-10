@@ -6,8 +6,8 @@ namespace Ovos\Test\Cache\Store;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
+use Ovos\Cache\Store\KeyValue\TagIndex;
 use Ovos\Cache\Store\KeyValue\Tags;
-use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
 use Closure;
 use RuntimeException;
@@ -461,8 +461,7 @@ trait TraitStaleWhileRevalidate
 	public function aRefreshedSoftValueWithoutATtlKeepsNoExpiry(): bool
 	{
 		$store = $this->softStore();
-		if($store instanceof RedisVersioned
-			|| $store instanceof KeyValueRedis === false)
+		if($store instanceof TagIndex === false)
 		{
 			throw new SkipException('the soft mark is the tag-index stores\'');
 		}
@@ -652,8 +651,7 @@ trait TraitStaleWhileRevalidate
 	public function anUnstampedRecomputationAcrossASoftInvalidationIsRefused(): bool
 	{
 		$store = $this->softStore();
-		if($store instanceof RedisVersioned
-			|| $store instanceof KeyValueRedis === false)
+		if($store instanceof TagIndex === false)
 		{
 			throw new SkipException('the soft mark is the tag-index stores\'');
 		}
@@ -701,8 +699,7 @@ trait TraitStaleWhileRevalidate
 	public function aWriteEndsASoftInvalidation(): bool
 	{
 		$store = $this->softStore();
-		if($store instanceof RedisVersioned
-			|| $store instanceof KeyValueRedis === false)
+		if($store instanceof TagIndex === false)
 		{
 			throw new SkipException('the soft mark is the tag-index stores\'');
 		}
@@ -713,10 +710,10 @@ trait TraitStaleWhileRevalidate
 		$this->writeSoft($key, 'old');
 		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
 		
-		$marked = (int)$client->hExists($id, KeyValueRedis::KEY_INVALIDATED) === 1
+		$marked = (int)$client->hExists($id, TagIndex::KEY_INVALIDATED) === 1
 			&& (int)$client->hExists($id, KeyValueRedis::KEY_DATA) === 1;
 		$this->staleStore()->set($key, 'plain', 60, [self::SOFT_TAG]);
-		$cleared = (int)$client->hExists($id, KeyValueRedis::KEY_INVALIDATED) === 0
+		$cleared = (int)$client->hExists($id, TagIndex::KEY_INVALIDATED) === 0
 			&& (int)$client->hExists($id, KeyValueRedis::KEY_SOFT) === 0;
 		$read = $this->staleStore()->get($key, queue: false);
 		$store->delete($key);
