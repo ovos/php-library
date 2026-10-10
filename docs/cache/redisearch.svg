@@ -150,5 +150,5 @@
 
 	<line x1="16" y1="508" x2="924" y2="508" stroke="#8b8ba7" stroke-opacity="0.35"/>
 	<text x="16" y="528" class="foot"><tspan font-weight="700" fill="#e8e8f0">Invalidation:</tspan> O(matched items), eager delete &#8212; but match lookup is index-driven  &#183;  <tspan font-weight="700" fill="#e8e8f0">Tag introspection:</tspan> none</text>
-	<text x="16" y="546" class="foot"><tspan font-weight="700" fill="#e8e8f0">Lua:</tspan> cache_search_unlink_by_tags  &#183;  <tspan font-weight="700" fill="#e8e8f0">Requires:</tspan> RediSearch module + MAXSEARCHRESULTS = -1  &#183;  <tspan font-weight="700" fill="#e8e8f0">Cluster:</tspan> no</text>
+	<text x="16" y="546" class="foot"><tspan font-weight="700" fill="#e8e8f0">Lua:</tspan> cache_unlink_by_search (Cache.lua)  &#183;  <tspan font-weight="700" fill="#e8e8f0">Requires:</tspan> RediSearch module + MAXSEARCHRESULTS = -1  &#183;  <tspan font-weight="700" fill="#e8e8f0">Cluster:</tspan> no</text>
 </svg>
