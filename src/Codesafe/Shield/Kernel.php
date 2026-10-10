@@ -582,22 +582,6 @@ final class Ruleset
 		return $this->fetchedAt + $ceiling <= $now;
 	}
 	
-	/** whether any rule reads this field — the body is touched only when one does */
-	public function reads(
-		string $field,
-	): bool
-	{
-		foreach($this->rules as $rule)
-		{
-			if(($rule['field'] ?? null) === $field)
-			{
-				return true;
-			}
-		}
-		
-		return false;
-	}
-	
 	public static function wellFormed(
 		mixed $rule,
 	): bool
