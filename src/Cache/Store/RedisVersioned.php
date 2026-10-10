@@ -3,12 +3,15 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Store;
 
+use Closure;
 use Ovos\ArrayObject;
+use Ovos\Cache\MemoLock\Redis as MemoLockRedis;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
 use Override;
+use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
@@ -266,17 +269,16 @@ class RedisVersioned extends Store
 			
 			$result = $mark === null
 				? $this->setCall($id, $value, $tags, $ttl, $this->watermark(), $miss === null ? $this->writeThroughEpoch() : '', $soft)
-				: $this->functions
-					->call('cache_versioned_set_guarded', [$id], [
-						$value,
-						implode(',', $tags),
-						$ttl * 1000, // ms
-						$this->rulesRetentionS * 1000, // ms
-						$mark,
-						$miss['epoch'],
-						$this->invalidationWindowMs,
-						$soft,
-					]);
+				: $this->writeWithRelease($id, 'cache_versioned_set_guarded', [
+					$value,
+					implode(',', $tags),
+					$ttl * 1000, // ms
+					$this->rulesRetentionS * 1000, // ms
+					$mark,
+					$miss['epoch'],
+					$this->invalidationWindowMs,
+					$soft,
+				]);
 			
 			return (int)$result === 1;
 		}
@@ -319,63 +321,7 @@ class RedisVersioned extends Store
 		{
 			// one HMGET brings data, tags and the watermark; the data is read
 			// outside any Lua VM and decompressed only on a fresh verdict
-			$item = $client->hMGet($id, [
-				static::KEY_DATA,
-				static::KEY_TAGS,
-				static::KEY_MARK,
-				static::KEY_EPOCH,
-				static::KEY_SOFT,
-			]);
-			
-			// a missing "tags" field means the hash does not exist (an untagged
-			// item still stores tags as an empty string) or is a tombstone;
-			// "data" must be present too, to decompress
-			if(is_array($item) === false
-				|| ($item[static::KEY_TAGS] ?? false) === false
-				|| ($item[static::KEY_DATA] ?? false) === false)
-			{
-				$this->rememberMiss($id, is_array($item) ? $item[static::KEY_EPOCH] : false);
-				
-				return null;
-			}
-			
-			// only the rules newer than the item's mark are evaluated,
-			// against the held rule set
-			if($this->isStale(
-				(string)$item[static::KEY_TAGS],
-				(string)$item[static::KEY_MARK],
-			))
-			{
-				// a soft value inside its stale time after the invalidation:
-				// handed out aged - served while it is refreshed, a miss to a
-				// read without stale: - and left in place, the refresh overwrites
-				// it (see softly()); a value its write said is not soft is a hard
-				// verdict without decoding it (an item written before the field
-				// is decoded to tell)
-				if(($item[static::KEY_SOFT] ?? false) !== '0'
-					&& ($aged = $this->softly($item)) !== null)
-				{
-					return $this->found($id, $aged, $item[static::KEY_EPOCH]);
-				}
-				
-				// the stale item is dropped once the read is over - unless a
-				// write overwrote it meanwhile, the miss's own recomputation as a
-				// rule: no second round trip for the read (see afterRead()). The
-				// epoch the item carries stays for the window, so the miss
-				// remembers it
-				$this->staleDrops[$id] = (string)$item[static::KEY_MARK];
-				$this->rememberMiss($id, $item[static::KEY_EPOCH]);
-				
-				return null;
-			}
-			
-			$value = $this->compressor
-				->decompress($item[static::KEY_DATA]);
-			
-			return $this->found($id,
-				$this->serializer->unserialize($value),
-				$item[static::KEY_EPOCH],
-			);
+			return $this->judge($id, $client->hMGet($id, $this->fetchedFields()));
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{
@@ -383,6 +329,82 @@ class RedisVersioned extends Store
 		}
 		
 		return null;
+	}
+	
+	/**
+	 * The fields fetch() reads with its HMGET
+	 *
+	 * @return list<string>
+	 */
+	protected function fetchedFields(): array
+	{
+		return [
+			static::KEY_DATA,
+			static::KEY_TAGS,
+			static::KEY_MARK,
+			static::KEY_EPOCH,
+			static::KEY_SOFT,
+		];
+	}
+	
+	/**
+	 * fetch()'s verdict on what its HMGET read ($item: the reply) - also the
+	 * second look's, made with the lock (see lockAndLook())
+	 */
+	protected function judge(
+		string $id,
+		mixed $item,
+	): mixed
+	{
+		// a missing "tags" field means the hash does not exist (an untagged
+		// item still stores tags as an empty string) or is a tombstone;
+		// "data" must be present too, to decompress
+		if(is_array($item) === false
+			|| ($item[static::KEY_TAGS] ?? false) === false
+			|| ($item[static::KEY_DATA] ?? false) === false)
+		{
+			$this->rememberMiss($id, is_array($item) ? $item[static::KEY_EPOCH] : false);
+			
+			return null;
+		}
+		
+		// only the rules newer than the item's mark are evaluated,
+		// against the held rule set
+		if($this->isStale(
+			(string)$item[static::KEY_TAGS],
+			(string)$item[static::KEY_MARK],
+		))
+		{
+			// a soft value inside its stale time after the invalidation:
+			// handed out aged - served while it is refreshed, a miss to a
+			// read without stale: - and left in place, the refresh overwrites
+			// it (see softly()); a value its write said is not soft is a hard
+			// verdict without decoding it (an item written before the field
+			// is decoded to tell)
+			if(($item[static::KEY_SOFT] ?? false) !== '0'
+				&& ($aged = $this->softly($item)) !== null)
+			{
+				return $this->found($id, $aged, $item[static::KEY_EPOCH]);
+			}
+			
+			// the stale item is dropped once the read is over - unless a
+			// write overwrote it meanwhile, the miss's own recomputation as a
+			// rule: no second round trip for the read (see afterRead()). The
+			// epoch the item carries stays for the window, so the miss
+			// remembers it
+			$this->staleDrops[$id] = (string)$item[static::KEY_MARK];
+			$this->rememberMiss($id, $item[static::KEY_EPOCH]);
+			
+			return null;
+		}
+		
+		$value = $this->compressor
+			->decompress($item[static::KEY_DATA]);
+		
+		return $this->found($id,
+			$this->serializer->unserialize($value),
+			$item[static::KEY_EPOCH],
+		);
 	}
 	
 	/**
@@ -402,17 +424,16 @@ class RedisVersioned extends Store
 		string $soft = '', // '1' a soft value, '0' not (see fetch()); '' says nothing
 	): mixed
 	{
-		return $this->functions
-			->call('cache_versioned_set_stamped', [$id], [
-				$value,
-				implode(',', $tags),
-				$ttl * 1000, // ms
-				$this->rulesRetentionS * 1000, // ms
-				$mark,
-				$epoch,
-				$this->invalidationWindowMs,
-				$soft,
-			]);
+		return $this->writeWithRelease($id, 'cache_versioned_set_stamped', [
+			$value,
+			implode(',', $tags),
+			$ttl * 1000, // ms
+			$this->rulesRetentionS * 1000, // ms
+			$mark,
+			$epoch,
+			$this->invalidationWindowMs,
+			$soft,
+		]);
 	}
 	
 	public function delete(
@@ -440,6 +461,97 @@ class RedisVersioned extends Store
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * Sends the write $function makes of $id - with the release of the lock
+	 * this process holds for $id, if any, in the same round trip (a
+	 * standalone client): its waiters are told as the value lands. A write
+	 * whose reply is an error goes again through call(), which self-heals a
+	 * library gone; a release whose reply is one is left to
+	 * releaseActiveLock() (see set())
+	 *
+	 * @param list<mixed> $args
+	 */
+	protected function writeWithRelease(
+		string $id,
+		string $function,
+		array $args,
+	): mixed
+	{
+		// a lock is held only where a miss made the MemoLock - a write-through
+		// makes none
+		$memoLock = $this->memoLock;
+		$release = $memoLock instanceof MemoLockRedis
+			? $memoLock->releaseCall($id)
+			: null;
+		$replies = $release === null
+			? null
+			: $this->sendAll([
+				[$this->functions->functionsPrefix($function), [$id], $args],
+				$release,
+			]);
+		if($replies === null)
+		{
+			return $this->functions
+				->call($function, [$id], $args);
+		}
+		
+		if(($replies[1] ?? false) !== false)
+		{
+			$memoLock->released($id);
+		}
+		
+		return ($replies[0] ?? false) === false
+			? $this->functions->call($function, [$id], $args)
+			: $replies[0];
+	}
+	
+	/**
+	 * Several calls in one round trip (see Functions::callAll())
+	 *
+	 * @param list<array{0: string, 1: list<string>, 2: list<mixed>}> $calls
+	 * @return list<mixed>|null
+	 */
+	protected function sendAll(
+		array $calls,
+	): ?array
+	{
+		return $this->functions
+			->callAll($calls);
+	}
+	
+	/**
+	 * The lock and the second look in one round trip on a standalone client
+	 * (see MemoLock::lockAndQueue()): SET NX and the HMGET fetch() makes,
+	 * pipelined, the look judged as fetch() judges it. A cluster: none - the
+	 * lock and the item are of different slots
+	 */
+	#[Override]
+	protected function lockAndLook(
+		string $id,
+	): ?Closure
+	{
+		if(($client = $this->getClient()) instanceof RedisClient === false)
+		{
+			return null;
+		}
+		
+		return function(string $lockKey, string $lockValue, int $ttlMs) use ($client, $id): array
+		{
+			$replies = $client->pipeline()
+				->set($lockKey, $lockValue, ['NX', 'PX' => $ttlMs])
+				->hMGet($id, $this->fetchedFields())
+				->exec();
+			$taken = ($replies[0] ?? false) === true;
+			
+			return [
+				$taken,
+				$taken
+					? $this->fresh($this->judge($id, $replies[1] ?? false))
+					: null,
+			];
+		};
 	}
 	
 	/**

@@ -275,6 +275,10 @@ something you can look up: it is asked after waiting, and once more right
 after the lock is taken - a result that landed just before is returned
 instead of being produced again. Without one, `lockAndQueue()` is a mutex
 (lock-only): each waiter takes the lock in turn, and its caller releases it.
+A caller that can make that look in the lock's round trip passes
+`lockAndLook` - `fn(string $lockKey, string $lockValue, int $ttlMs): array`,
+`[taken, look]` - and the first attempt uses it instead of `SET NX` and the
+fetcher (`RedisVersioned` pipelines `SET NX` with its `HMGET`).
 
 ### Redis MemoLock
 

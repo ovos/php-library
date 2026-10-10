@@ -128,12 +128,20 @@ abstract class MemoLock
 		return $this->prefixer;
 	}
 	
+	/**
+	 * $lockAndLook takes the lock and makes the second look in one round
+	 * trip - fn(string $lockKey, string $lockValue, int $ttlMs):
+	 * array{0: bool, 1: mixed}, whether the lock was taken and, when it was,
+	 * what the look found; the first attempt uses it instead of a plain lock
+	 * and the $fetcher (a store that can pipeline its read with the lock)
+	 */
 	abstract public function lockAndQueue(
 		string $id,
 		?Closure $fetcher = null,
 		?Closure $resolver = null,
 		?bool $queue = null,
 		?int $queueLockTtlMs = null,
+		?Closure $lockAndLook = null,
 	): mixed;
 	
 	abstract public function releaseActiveLock(
@@ -163,14 +171,17 @@ abstract class MemoLock
 	 * publication, takes the free lock next; without the second look it
 	 * computes the value again (the lock orders the computing, not the
 	 * reading - Benchmarks\Cache\Store\MemoLock\RedisCluster counted two
-	 * resolutions). One read more, for the holder only; a lock-only call
-	 * (no fetcher) computes as before
+	 * resolutions). One read more, for the holder only - made with the lock,
+	 * in its round trip, when the store could ($looked: $look is what it
+	 * found); a lock-only call (no fetcher) computes as before
 	 */
 	protected function lockAcquired(
 		string $id,
 		string $lockValue,
 		?Closure $resolver = null,
 		?Closure $fetcher = null,
+		bool $looked = false,
+		mixed $look = null,
 	): mixed
 	{
 		$this->queueLocks[$id] = $lockValue;
@@ -183,7 +194,10 @@ abstract class MemoLock
 			// miss and its lock - the holder wrote and released just before, and
 			// its publication came before our subscription; computing now would
 			// duplicate the work the lock exists to save
-			if($fetcher !== null && ($result = $this->invoker->invoke($fetcher)) !== null)
+			$result = $looked
+				? $look
+				: ($fetcher === null ? null : $this->invoker->invoke($fetcher));
+			if($result !== null)
 			{
 				// released, so the waiters are told (and read it)
 				$this->releaseActiveLock($id);

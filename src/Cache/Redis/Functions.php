@@ -562,6 +562,47 @@ class Functions
 			&& str_contains($error, 'Function not found');
 	}
 	
+	/**
+	 * Several calls in one round trip - FCALLs pipelined on a standalone
+	 * client, each [function name with its prefix, keys, args] (a call of
+	 * another Functions' library is loaded by it). The replies in their
+	 * order, false for an error reply: no self-heal here, the caller sends a
+	 * failed one again through call(). Null on a cluster (the keys may be of
+	 * different slots) or without a connection: the caller calls one by one
+	 *
+	 * @param list<array{0: string, 1: list<string>, 2: list<mixed>}> $calls
+	 * @return list<mixed>|null
+	 */
+	public function callAll(
+		array $calls,
+	): ?array
+	{
+		if(($client = $this->getClient()) instanceof RedisClient === false
+			|| $this->loadLibraries() === false)
+		{
+			return null;
+		}
+		
+		$client->clearLastError();
+		$pipeline = $client->pipeline();
+		foreach($calls as [$function, $keys, $args])
+		{
+			// strings, as call() sends them (a platform "long" truncates)
+			foreach($args as $index => $arg)
+			{
+				$args[$index] = (string)$arg;
+			}
+			$pipeline->fcall($function, $keys, $args);
+		}
+		
+		$replies = $this->connection
+			->slowLog(static fn(): mixed => $pipeline->exec(), 'fcall pipeline', [], []);
+		
+		return is_array($replies)
+			? $replies
+			: null;
+	}
+	
 	public function call(
 		string $function,
 		array $keys = [],

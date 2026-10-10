@@ -340,11 +340,12 @@ class Apcu extends Test
 				?Closure $resolver = null,
 				?bool $queue = null,
 				?int $queueLockTtlMs = null,
+				?Closure $lockAndLook = null,
 			): mixed
 			{
 				$this->ttls[] = $queueLockTtlMs;
 				
-				return parent::lockAndQueue($id, $fetcher, $resolver, $queue, $queueLockTtlMs);
+				return parent::lockAndQueue($id, $fetcher, $resolver, $queue, $queueLockTtlMs, $lockAndLook);
 			}
 		};
 		$store = new class($this->config->prefix, $this->config->perishable, KeyValue::GROUP_TESTS) extends Store

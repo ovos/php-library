@@ -337,6 +337,7 @@ abstract class Redis extends Tags
 					fn() => $this->computeOrFallback($id, $compute, $fallback),
 					$policy->queue,
 					$policy->queueLockTtlMs,
+					$this->lockAndLook($id),
 				);
 		}
 		finally
@@ -386,7 +387,20 @@ abstract class Redis extends Tags
 				},
 				true,
 				$queueLockTtlMs,
+				$this->lockAndLook($id),
 			);
+	}
+	
+	/**
+	 * The lock and the second look in one round trip, for the MemoLock (see
+	 * MemoLock::lockAndQueue()) - none here: a store that can pipeline its
+	 * read with the lock says so (RedisVersioned)
+	 */
+	protected function lockAndLook(
+		string $id,
+	): ?Closure
+	{
+		return null;
 	}
 	
 	public function releaseActiveLock(
