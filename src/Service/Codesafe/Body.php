@@ -61,10 +61,11 @@ final class Body
 	/** parsed, key-scrubbed, re-encoded — the default */
 	public const string MODE_STRUCTURE = 'structure';
 	
-	/** the raw body as text, cut at FULL_MAX — the pre-2026-09-21 behaviour */
-	public const string MODE_FULL = 'full';
-	
-	public const array MODES = [self::MODE_OFF, self::MODE_STRUCTURE, self::MODE_FULL];
+	/**
+	 * The two a site may choose. `full`, the raw text, went on 2026-10-10:
+	 * codesafe stores every body structured, so it only sent more raw data
+	 */
+	public const array MODES = [self::MODE_OFF, self::MODE_STRUCTURE];
 	
 	/**
 	 * What `structure` sends. A document over the cap is SHRUNK — trailing
@@ -72,9 +73,6 @@ final class Body
 	 * to keep parsing to be read or replayed at all.
 	 */
 	public const int STRUCTURE_MAX = 8192;
-	
-	/** what `full` sends — the cap this sender has always applied */
-	public const int FULL_MAX = 16384;
 	
 	/** well under json_decode's 512 default: the key walk caps the depth anyway */
 	public const int JSON_DEPTH = 32;
@@ -147,11 +145,6 @@ final class Body
 			return null;
 		}
 		
-		if($mode === self::MODE_FULL)
-		{
-			return $logger->removeText(mb_substr($raw, 0, self::FULL_MAX));
-		}
-		
 		return self::structure($logger, $raw, $type);
 	}
 	
@@ -184,7 +177,8 @@ final class Body
 	
 	/**
 	 * Whether $mode is one this class knows, so a configured value it does not
-	 * recognise cannot turn into "no mode" and take the decision with it
+	 * recognise cannot turn into "no mode" and take the decision with it — a
+	 * yml still saying `full` reads as `structure`
 	 */
 	public static function mode(
 		string $mode,
