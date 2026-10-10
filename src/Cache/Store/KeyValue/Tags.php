@@ -38,4 +38,15 @@ abstract class Tags extends KeyValue
 		int $ttl = 0,
 		array $tags = [],
 	): bool;
+	
+	/**
+	 * Invalidates the values carrying the tags - any of them, or (MATCHING_ALL)
+	 * all of them; $hard: a soft value is a miss at once too, not served for
+	 * its stale time
+	 */
+	abstract public function invalidateTags(
+		array $tags,
+		string $matching = self::MATCHING_ANY,
+		bool $hard = false,
+	): bool;
 }

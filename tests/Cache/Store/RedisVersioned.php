@@ -9,6 +9,7 @@ use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\KeyValue\TagIndex;
+use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Cache\Store\Redis as RedisStore;
 use Ovos\Cache\Store\Redisearch;
 use Ovos\Test;
@@ -21,6 +22,7 @@ use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Ovos\Test\Exception\SkipException;
 use Override;
+use ReflectionMethod;
 
 use function array_keys;
 use function bin2hex;
@@ -1676,6 +1678,19 @@ class RedisVersioned extends Test
 		$writer->delete($key);
 		
 		return $read === null;
+	}
+	
+	/**
+	 * Every store with tags invalidates them through one declared signature
+	 * (KeyValue\Tags::invalidateTags()): a caller holding "a store with tags"
+	 * - the persistent tier, whichever store it is configured to - can
+	 * invalidate without knowing the class
+	 */
+	public function everyTaggedStoreDeclaresInvalidateTags(): bool
+	{
+		return method_exists(Tags::class, 'invalidateTags')
+			&& (new ReflectionMethod(Tags::class, 'invalidateTags'))->isAbstract()
+			&& is_subclass_of(Store::class, Tags::class);
 	}
 	
 	/**
