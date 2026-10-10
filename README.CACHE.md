@@ -880,8 +880,13 @@ cache:
   pub/sub connection must be a standalone connection to a cluster node.
 - For Redisearch, ensure the RediSearch module is loaded and
   `MAXSEARCHRESULTS` is set to `-1` (the store sets this during index creation).
-- Deploying a changed Lua library (`src/Cache/Redis/Functions/*.lua`) requires
-  a forced reload on the servers (`FUNCTION FLUSH` or loading with REPLACE) -
-  the loader skips libraries that already exist by name, and a function moved
-  between libraries strictly requires a flush.
+- A changed Lua library (`src/Cache/Redis/Functions/*.lua`) reloads itself:
+  each carries a hash of the source it was built from, and the first call
+  after a deploy finds another and loads the new build (REPLACE); a host that
+  confirmed it (APCu, `Functions::CONFIRMED_TTL_S`) checks it again as soon as
+  the file's mtime changes. A function moved between libraries needs a new
+  name or a `FUNCTION FLUSH`: Redis refuses a name another library still
+  registers, and the old library stays loaded until then - so the Redisearch
+  store's `cache_unlink_by_search` (in `Cache.lua`) is the function
+  `CacheSearch.lua` registered as `cache_search_unlink_by_tags`.
 - Use `php cli.php system cache clear` to flush all cache tiers.

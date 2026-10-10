@@ -33,7 +33,6 @@ class Redisearch extends Store
 	 */
 	public const array LIBRARIES = [
 		'cache' => 'Cache.lua',
-		'cache_search' => 'CacheSearch.lua',
 	];
 	
 	#[Override]
@@ -206,7 +205,7 @@ class Redisearch extends Store
 			// found leave tombstones
 			$this->stamp($tags);
 			if($this->functions
-				->call('cache_search_unlink_by_tags', [], [
+				->call('cache_unlink_by_search', [], [
 					$type,
 					$query,
 					$this->newEpoch(),
@@ -214,7 +213,7 @@ class Redisearch extends Store
 					$hard ? '1' : '0',
 				]) === false)
 			{
-				$this->logRefused('cache_search_unlink_by_tags');
+				$this->logRefused('cache_unlink_by_search');
 				
 				return false;
 			}

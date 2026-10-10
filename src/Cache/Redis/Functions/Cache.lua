@@ -9,7 +9,9 @@
 	  undeclared keys across slots and nodes by design and can never run
 	  on a cluster - the flag makes it fail fast with a clear error.
 	
-	The versioned (rule based) functions live in CacheVersioned.lua.
+	The versioned (rule based) functions live in CacheVersioned.lua; the
+	Redisearch store's invalidation is here (cache_unlink_by_search), with
+	the item removal it shares with the tag-hash store.
 	
 	@author Marcin Gil <mg@ovos.at>
 ]]
@@ -800,5 +802,60 @@ redis.register_function
 {
 	function_name = '[prefix]cache_clean_tag',
 	callback = cache_clean_tag,
+	flags = {'no-cluster'}
+}
+
+--[[ ------------------------------------------------------------------
+	RediSearch - the Redisearch store's tag invalidation (the module is
+	needed when it runs, not when the library loads)
+--]] ------------------------------------------------------------------
+
+-- Unlinks the items a RediSearch query matches - the Redisearch store's tag
+-- invalidation. Each goes through cache_remove_item(): its tombstone, or a
+-- soft value's soft mark, which keeps its tags until the mark ends - so a
+-- hard invalidation after the soft one still matches it; a write after the
+-- mark sets them again (an HSET drops a field's expiry).
+-- Removes every ID that references any or all of the given tags,
+-- depending on the syntax passed to "tags": 
+-- * any: @tags:{New York|Los Angeles|Barcelona}
+-- * all: @tags:{New York} @tags:{Los Angeles} @tags:{Barcelona}"
+-- See https://redis.io/docs/latest/develop/interact/search-and-query/advanced-concepts/tags/
+local function cache_unlink_by_search(keys, args)
+	local index = args[1]
+	local tags = args[2]
+	local token = args[3]
+	local window_ms = tonumber(args[4])
+	local hard = args[5] == '1' -- invalidateTags(hard: true): soft values are tombstoned too
+	local batch_size = 10000
+	local offset = 0
+	
+	-- the matches first, page by page (NOCONTENT: the keys alone, not their
+	-- data), then their removal: a soft value's item stays matched (its tags
+	-- stay - see cache_remove_item()), so a search from the start after
+	-- each batch would find it again and again
+	local matched = {}
+	while true do
+		local result = redis.call('FT.SEARCH', index, tags, 'NOCONTENT', 'LIMIT', offset, batch_size)
+		for i = 2, #result do
+			table.insert(matched, result[i])
+		end
+		
+		offset = offset + batch_size
+		if #result - 1 < batch_size or offset >= tonumber(result[1]) then
+			break
+		end
+	end
+	
+	-- remove the matched items (one by one: each leaves its tombstone, or its
+	-- soft mark)
+	for _, key in ipairs(matched) do
+		cache_remove_item(key, token, window_ms, hard)
+	end
+end
+-- standalone-only: the matched keys are undeclared, of any slot
+redis.register_function
+{
+	function_name = '[prefix]cache_unlink_by_search',
+	callback = cache_unlink_by_search,
 	flags = {'no-cluster'}
 }
