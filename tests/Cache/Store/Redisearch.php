@@ -179,8 +179,11 @@ class Redisearch extends Test
 	#[Override]
 	public function finalize(): void
 	{
+		// the wipe leaves a fresh, empty index (clear() rebuilds it), so the
+		// next rule's items are indexed as they are written - dropped, the
+		// rule's first invalidation would create it and search before
+		// RediSearch's background scan reached the items written before it
 		$this->store->clear();
-		$this->store->indexDrop($this->store->getType());
 		// a fresh store for the next rule: this one remembers its misses
 		// (the invalidation guard - see KeyValue::rememberMiss())
 		$this->store = $this->getStore(Store::class);
