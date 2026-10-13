@@ -342,6 +342,22 @@ class Sender extends Test
 		}
 	}
 	
+	/**
+	 * RULE: shieldVersion() reads the `shield` an ingest answer carries and
+	 * nothing else — '' for an answer without one, a version that is not a
+	 * string, a body that is not JSON (codesafe docs/plans/shield-auto-deploy.md P7.d)
+	 */
+	public function shieldVersionIsReadOffAnAnswerAndNothingElse(): bool
+	{
+		$version = str_repeat('a', 64);
+		
+		return CodesafeSender::shieldVersion('{"success":true,"accepted":1,"shield":"' . $version . '"}') === $version
+			&& CodesafeSender::shieldVersion('{"success":true,"accepted":1}') === ''
+			&& CodesafeSender::shieldVersion('{"shield":7}') === ''
+			&& CodesafeSender::shieldVersion('<html>') === ''
+			&& CodesafeSender::shieldVersion('') === '';
+	}
+	
 	public function capturesDistinctThrowables(): bool
 	{
 		$sender = $this->makeSender();

@@ -59,6 +59,7 @@ use function is_readable;
 use function is_scalar;
 use function is_string;
 use function iterator_to_array;
+use function json_decode;
 use function json_encode;
 use function ksort;
 use function max;
@@ -871,7 +872,9 @@ class Sender extends Service
 			// while the shield is off
 			$shield = new Shield($this->config, self::cachePrefix($this->app));
 			(new Rollup($this->config, self::cachePrefix($this->app),
-				static fn(int $minute): array => $shield->hits($minute)))
+				static fn(int $minute): array => $shield->hits($minute),
+				// the answer says the Shield's ruleset version: a changed one is pulled on this tick
+				static fn(string $answer): bool => $shield->nudge(self::shieldVersion($answer))))
 				->observe($this->app);
 		}
 		catch(Throwable)
@@ -1538,8 +1541,12 @@ class Sender extends Service
 			CURLOPT_TIMEOUT_MS => (int)($this->config->timeout_ms ?? 1000),
 		]);
 		
-		curl_exec($handle);
+		$body = curl_exec($handle);
 		$status = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+		if($otlp === '' && $status >= 200 && $status < 300 && is_string($body))
+		{
+			$this->nudgeShield($body);
+		}
 		
 		return [
 			$status,
@@ -1548,6 +1555,34 @@ class Sender extends Service
 			// left nothing it could store
 			$status > 0 || (int)curl_getinfo($handle, CURLINFO_SIZE_UPLOAD_T) >= strlen($json),
 		];
+	}
+	
+	/**
+	 * Pure: the Shield ruleset version an ingest answer carries (`shield`,
+	 * codesafe docs/plans/shield-auto-deploy.md P7.d), '' when it says none
+	 */
+	public static function shieldVersion(
+		string $answer,
+	): string
+	{
+		$decoded = json_decode($answer, true, 4);
+		
+		return is_array($decoded) && is_string($decoded['shield'] ?? null) ? $decoded['shield'] : '';
+	}
+	
+	/** a batch answer's version to the Shield: the kernel pulls on its next tick when it differs */
+	protected function nudgeShield(
+		string $answer,
+	): void
+	{
+		try
+		{
+			(new Shield($this->config, self::cachePrefix($this->app ?? null)))->nudge(self::shieldVersion($answer));
+		}
+		catch(Throwable)
+		{
+			// never break the host application
+		}
 	}
 	
 	/**

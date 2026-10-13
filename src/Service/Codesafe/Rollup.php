@@ -25,6 +25,7 @@ use function array_intersect_key;
 use function base_convert;
 use function crc32;
 use function curl_exec;
+use function curl_getinfo;
 use function curl_init;
 use function curl_setopt_array;
 use function function_exists;
@@ -50,6 +51,7 @@ use function strtolower;
 use function substr;
 use function time;
 
+use const CURLINFO_RESPONSE_CODE;
 use const CURLOPT_CONNECTTIMEOUT_MS;
 use const CURLOPT_HTTPHEADER;
 use const CURLOPT_NOSIGNAL;
@@ -191,14 +193,19 @@ class Rollup
 	 */
 	protected ?Closure $extra;
 	
+	/** what hears the body of a 2xx answer (the Sender hands the Shield's version to the kernel); null = none */
+	protected ?Closure $answered;
+	
 	public function __construct(
 		protected ?ArrayObject $config,
 		?string $prefix = null,
 		?callable $extra = null,
+		?callable $answered = null,
 	)
 	{
 		$this->keyPrefix = self::keyPrefix($prefix);
 		$this->extra = $extra === null ? null : Closure::fromCallable($extra);
+		$this->answered = $answered === null ? null : Closure::fromCallable($answered);
 	}
 	
 	/**
@@ -770,7 +777,11 @@ class Rollup
 				continue;
 			}
 			
-			$this->send($this->payload($entryMinute, self::withExtra($fields, $this->extra, $entryMinute)));
+			$answer = $this->send($this->payload($entryMinute, self::withExtra($fields, $this->extra, $entryMinute)));
+			if($answer !== null && $this->answered !== null)
+			{
+				($this->answered)($answer);
+			}
 			$shipped++;
 		}
 		
@@ -864,12 +875,13 @@ class Rollup
 	
 	/**
 	 * Fire-and-forget POST, the Sender's transport contract: NOSIGNAL for
-	 * poll-based sub-second timeouts, hard bounds, no reading the answer —
-	 * codesafe answers duplicates with a 2xx anyway
+	 * poll-based sub-second timeouts, hard bounds. The body of a 2xx comes
+	 * back for what codesafe says in it (the Shield's ruleset version), null
+	 * for anything else — codesafe answers duplicates with a 2xx anyway
 	 */
 	protected function send(
 		array $payload,
-	): void
+	): ?string
 	{
 		$handle = curl_init(
 			rtrim((string)$this->config?->url, '/') . '/api/v1/ingest/rollup');
@@ -888,6 +900,9 @@ class Rollup
 			CURLOPT_TIMEOUT_MS => (int)($this->config?->timeout_ms ?? 1000),
 		]);
 		
-		curl_exec($handle);
+		$body = curl_exec($handle);
+		$status = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+		
+		return $status >= 200 && $status < 300 && is_string($body) ? $body : null;
 	}
 }

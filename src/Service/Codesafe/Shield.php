@@ -142,6 +142,25 @@ class Shield
 		);
 	}
 	
+	/**
+	 * codesafe's answer said the project's ruleset version (an ingest answer's
+	 * `shield`, codesafe docs/plans/shield-auto-deploy.md P7.d): the kernel
+	 * forces its next pull when it differs. Nothing while the shield is off
+	 */
+	public function nudge(
+		string $version,
+	): bool
+	{
+		try
+		{
+			return $this->isEnabled() && $this->kernel()->nudge($version);
+		}
+		catch(Throwable)
+		{
+			return false;
+		}
+	}
+	
 	/** this install's APCu key prefix, through the same Prefixer the cache stores use */
 	public function keyPrefix(): string
 	{
