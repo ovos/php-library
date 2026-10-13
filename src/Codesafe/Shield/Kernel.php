@@ -61,6 +61,14 @@ declare(strict_types=1);
  * rules only to a kernel that does, so a kernel older than them never reads
  * a rate rule as a match rule.
  *
+ * Virtual patches (kind `vpatch`, docs/plans/shield-p2-conditions.md): an
+ * entry point, a parameter, a typed test and WHO — `{who, conditions:
+ * [{target, decode, test, value, ci}]}`, every condition holding, over the
+ * request as the platform parsed it (Facts' query, form, JSON, cookies,
+ * headers, file names). `who` is anyone, anonymous or lacks:<capability>,
+ * and a nonce test asks the platform: what the adapter cannot answer the
+ * rule may only observe.
+ *
  * Threat addresses (kind `threat`, served to a kernel that names it): a
  * `threats` section beside the rules — `{mode, pass, addresses}`, the
  * addresses codesafe saw send exploits. They are judged first: a request
@@ -97,6 +105,10 @@ use function apcu_enabled;
 use function apcu_fetch;
 use function apcu_inc;
 use function apcu_store;
+use function array_is_list;
+use function array_key_exists;
+use function array_keys;
+use function base64_decode;
 use function ceil;
 use function class_exists;
 use function count;
@@ -120,12 +132,15 @@ use function is_array;
 use function is_bool;
 use function is_file;
 use function is_int;
+use function is_scalar;
 use function is_string;
 use function json_decode;
 use function json_encode;
 use function max;
 use function ord;
+use function parse_str;
 use function preg_match;
+use function preg_match_all;
 use function preg_quote;
 use function preg_replace;
 use function rawurldecode;
@@ -134,6 +149,7 @@ use function rtrim;
 use function sprintf;
 use function str_contains;
 use function str_ends_with;
+use function str_replace;
 use function str_starts_with;
 use function strcasecmp;
 use function stream_context_create;
@@ -142,6 +158,7 @@ use function strlen;
 use function strncasecmp;
 use function strpos;
 use function strtolower;
+use function strtoupper;
 use function substr;
 use function time;
 use function trim;
@@ -172,12 +189,28 @@ final class Facts
 	/** a body rule cannot see past this, and the report says so */
 	public const BODY_CAP = 65536;
 	
+	/** a JSON body past this decodes to nothing — padding past BODY_CAP must not hide a json: target */
+	public const JSON_CAP = 1048576;
+	
 	protected ?string $body = null;
 	
 	protected bool $bodyRead = false;
 	
 	protected bool $bodyCapped = false;
 	
+	protected mixed $json = null;
+	
+	protected bool $jsonRead = false;
+	
+	/**
+	 * @param array<string, mixed> $query the query as the platform parsed it ($_GET)
+	 * @param array<string, mixed> $form the form fields as the platform parsed them ($_POST)
+	 * @param array<string, string> $headers lowercase names
+	 * @param array<string, mixed> $files field => the uploaded file's name (or names)
+	 * @param ?Closure(): mixed $jsonReader a JSON body, decoded
+	 * @param ?Closure(string): ?bool $can whether the signed-in user has a capability; null when the host cannot say
+	 * @param ?Closure(string, string): ?bool $nonce whether a nonce is valid for an action; null when the host cannot say
+	 */
 	public function __construct(
 		public readonly string $method,
 		public readonly string $uri,
@@ -186,6 +219,14 @@ final class Facts
 		public readonly bool $authed = false,
 		protected ?Closure $bodyReader = null,
 		public readonly string $user = '',
+		public readonly array $query = [],
+		public readonly array $form = [],
+		public readonly array $cookies = [],
+		public readonly array $headers = [],
+		public readonly array $files = [],
+		protected ?Closure $jsonReader = null,
+		protected ?Closure $can = null,
+		protected ?Closure $nonce = null,
 	)
 	{
 	}
@@ -195,6 +236,11 @@ final class Facts
 	 * @param array<string, mixed> $post the parsed form fields ($_POST) — files never
 	 * @param ?callable(): string $input the raw body reader (fn() => file_get_contents('php://input'))
 	 * @param string $user who a `user`-keyed rate rule counts: the signed-in identity, or the name a login POST tries ('' = none, the rule is skipped)
+	 * @param ?array<string, mixed> $get the parsed query ($_GET); null = the raw URI's query through parse_str
+	 * @param array<string, mixed> $cookies the parsed cookies ($_COOKIE)
+	 * @param array<string, mixed> $files the uploads ($_FILES) — their names, never their bytes
+	 * @param ?callable(string): ?bool $can whether the signed-in user has a capability (a vpatch's `lacks:`)
+	 * @param ?callable(string, string): ?bool $nonce whether a nonce is valid for an action (a vpatch's nonce test)
 	 */
 	public static function fromServer(
 		array $server,
@@ -203,9 +249,20 @@ final class Facts
 		bool $authed = false,
 		?string $ip = null,
 		string $user = '',
+		?array $get = null,
+		array $cookies = [],
+		array $files = [],
+		?callable $can = null,
+		?callable $nonce = null,
 	): self
 	{
 		$uri = is_string($server['REQUEST_URI'] ?? null) ? $server['REQUEST_URI'] : '/';
+		if($get === null)
+		{
+			// the RAW query, as PHP would have parsed it — the URI is decoded once below
+			parse_str(explode('?', $uri, 2)[1] ?? '', $get);
+		}
+		$contentType = is_string($server['CONTENT_TYPE'] ?? null) ? $server['CONTENT_TYPE'] : '';
 		
 		return new self(
 			is_string($server['REQUEST_METHOD'] ?? null) ? $server['REQUEST_METHOD'] : 'GET',
@@ -213,9 +270,79 @@ final class Facts
 			is_string($server['HTTP_USER_AGENT'] ?? null) ? $server['HTTP_USER_AGENT'] : '',
 			$ip ?? (is_string($server['REMOTE_ADDR'] ?? null) ? $server['REMOTE_ADDR'] : ''),
 			$authed,
-			self::bodyReader(is_string($server['CONTENT_TYPE'] ?? null) ? $server['CONTENT_TYPE'] : '', $post, $input),
+			self::bodyReader($contentType, $post, $input),
 			$user,
+			$get,
+			$post,
+			$cookies,
+			self::headersOf($server),
+			self::fileNames($files),
+			self::jsonReader($contentType, $input),
+			$can === null ? null : Closure::fromCallable($can),
+			$nonce === null ? null : Closure::fromCallable($nonce),
 		);
+	}
+	
+	/** the request headers by lowercase name, off the server's HTTP_* keys */
+	public static function headersOf(
+		array $server,
+	): array
+	{
+		$headers = [];
+		foreach($server as $key => $value)
+		{
+			if(is_string($value) && str_starts_with((string)$key, 'HTTP_'))
+			{
+				$headers[strtolower(str_replace('_', '-', substr((string)$key, 5)))] = $value;
+			}
+		}
+		foreach(['CONTENT_TYPE' => 'content-type', 'CONTENT_LENGTH' => 'content-length'] as $key => $name)
+		{
+			if(is_string($server[$key] ?? null))
+			{
+				$headers[$name] = $server[$key];
+			}
+		}
+		
+		return $headers;
+	}
+	
+	/** $_FILES as names: field => name, a multiple upload's names as a list — the bytes are never read */
+	public static function fileNames(
+		array $files,
+	): array
+	{
+		$names = [];
+		foreach($files as $field => $file)
+		{
+			if(is_array($file) && isset($file['name']))
+			{
+				$names[(string)$field] = $file['name'];
+			}
+		}
+		
+		return $names;
+	}
+	
+	/** a JSON body, decoded — read only when a json: target asks */
+	public static function jsonReader(
+		string $contentType,
+		?callable $input,
+		int $cap = self::JSON_CAP,
+	): ?Closure
+	{
+		$type = strtolower(trim(explode(';', $contentType, 2)[0]));
+		if($input === null || ($type !== 'application/json' && str_ends_with($type, '+json') === false))
+		{
+			return null;
+		}
+		
+		return static function() use ($input, $cap): mixed
+		{
+			$raw = $input();
+			
+			return is_string($raw) && strlen($raw) <= $cap ? json_decode($raw, true, 32) : null;
+		};
 	}
 	
 	/**
@@ -312,6 +439,60 @@ final class Facts
 	public function bodyWasCapped(): bool
 	{
 		return $this->bodyCapped;
+	}
+	
+	/** a JSON body, decoded; null when there is none */
+	public function json(): mixed
+	{
+		if($this->jsonRead === false)
+		{
+			$this->jsonRead = true;
+			try
+			{
+				$this->json = $this->jsonReader === null ? null : ($this->jsonReader)();
+			}
+			catch(Throwable)
+			{
+				$this->json = null;
+			}
+		}
+		
+		return $this->json;
+	}
+	
+	/** whether the signed-in user has a capability; null when the host cannot say */
+	public function can(
+		string $capability,
+	): ?bool
+	{
+		try
+		{
+			$answer = $this->can === null ? null : ($this->can)($capability);
+		}
+		catch(Throwable)
+		{
+			return null;
+		}
+		
+		return is_bool($answer) ? $answer : null;
+	}
+	
+	/** whether a nonce is valid for an action; null when the host cannot say */
+	public function nonceValid(
+		string $action,
+		string $value,
+	): ?bool
+	{
+		try
+		{
+			$answer = $this->nonce === null ? null : ($this->nonce)($action, $value);
+		}
+		catch(Throwable)
+		{
+			return null;
+		}
+		
+		return is_bool($answer) ? $answer : null;
 	}
 	
 	/** the path alone — what a report line names; the query may carry what the body may not */
@@ -488,7 +669,35 @@ final class Ruleset
 	
 	public const KIND_RATE = 'rate';
 	
-	public const KINDS = [self::KIND_MATCH, self::KIND_RATE];
+	public const KIND_VPATCH = 'vpatch';
+	
+	public const KINDS = [self::KIND_MATCH, self::KIND_RATE, self::KIND_VPATCH];
+	
+	/** a vpatch's targets without a name, and the prefixes that take one (`query:file`) */
+	public const TARGETS = ['method', 'path'];
+	
+	/** `request:` is $_REQUEST's reading: the query's values and the body's */
+	public const TARGET_PREFIXES = ['query', 'body', 'request', 'json', 'cookie', 'header', 'file', 'query-keys', 'body-keys'];
+	
+	public const DECODES = ['url', 'base64'];
+	
+	public const TESTS = ['equals', 'in', 'not_in', 'prefix', 'suffix', 'contains', 'regex', 'numeric', 'not_numeric', 'exists',
+		'longer_than', 'nonce_invalid'];
+	
+	/** the tests whose value is a list, and those that take none */
+	public const LIST_TESTS = ['in', 'not_in'];
+	
+	public const BARE_TESTS = ['numeric', 'not_numeric', 'exists'];
+	
+	public const CONDITIONS_MAX = 6;
+	
+	public const LIST_MAX = 50;
+	
+	public const WHO_ANYONE = 'anyone';
+	
+	public const WHO_ANONYMOUS = 'anonymous';
+	
+	public const WHO_LACKS = 'lacks:';
 	
 	/** the threat-address section's kind, named in X-Shield-Kinds — never a rule's */
 	public const KIND_THREAT = 'threat';
@@ -701,6 +910,11 @@ final class Ruleset
 		mixed $rule,
 	): bool
 	{
+		if(is_array($rule) && self::isVpatch($rule))
+		{
+			return self::vpatchWellFormed($rule);
+		}
+		
 		return is_array($rule)
 			&& is_int($rule['id'] ?? null)
 			&& in_array($rule['field'] ?? null, self::FIELDS, true)
@@ -710,6 +924,117 @@ final class Ruleset
 			&& is_string($rule['mode'] ?? null)
 			&& (isset($rule['kind']) === false || in_array($rule['kind'], self::KINDS, true))
 			&& (self::isRate($rule) === false || self::rateWellFormed($rule['rate'] ?? null));
+	}
+	
+	public static function isVpatch(
+		array $rule,
+	): bool
+	{
+		return ($rule['kind'] ?? self::KIND_MATCH) === self::KIND_VPATCH;
+	}
+	
+	/** a vpatch: an int id, a mode, a `who` off the vocabulary, 1 to CONDITIONS_MAX conditions each well formed */
+	public static function vpatchWellFormed(
+		array $rule,
+	): bool
+	{
+		$conditions = $rule['conditions'] ?? null;
+		if(is_int($rule['id'] ?? null) === false || is_string($rule['mode'] ?? null) === false
+			|| self::whoWellFormed($rule['who'] ?? null) === false
+			|| is_array($conditions) === false || array_is_list($conditions) === false
+			|| count($conditions) < 1 || count($conditions) > self::CONDITIONS_MAX)
+		{
+			return false;
+		}
+		foreach($conditions as $condition)
+		{
+			if(self::conditionWellFormed($condition) === false)
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	public static function whoWellFormed(
+		mixed $who,
+	): bool
+	{
+		return $who === self::WHO_ANYONE || $who === self::WHO_ANONYMOUS
+			|| (is_string($who) && preg_match('~^lacks:[a-z0-9_]{1,64}$~D', $who) === 1);
+	}
+	
+	/** a target off the vocabulary; a decode list off its own; a value the test can read — a list, a count, or a bounded string */
+	public static function conditionWellFormed(
+		mixed $condition,
+	): bool
+	{
+		if(is_array($condition) === false || self::targetWellFormed($condition['target'] ?? null) === false
+			|| in_array($condition['test'] ?? null, self::TESTS, true) === false
+			|| (isset($condition['ci']) && is_bool($condition['ci']) === false))
+		{
+			return false;
+		}
+		$decode = $condition['decode'] ?? [];
+		if(is_array($decode) === false || array_is_list($decode) === false || count($decode) > count(self::DECODES))
+		{
+			return false;
+		}
+		foreach($decode as $step)
+		{
+			if(in_array($step, self::DECODES, true) === false)
+			{
+				return false;
+			}
+		}
+		$test = $condition['test'];
+		$value = $condition['value'] ?? null;
+		if(in_array($test, self::BARE_TESTS, true))
+		{
+			return true;
+		}
+		if(in_array($test, self::LIST_TESTS, true))
+		{
+			if(is_array($value) === false || array_is_list($value) === false || $value === [] || count($value) > self::LIST_MAX)
+			{
+				return false;
+			}
+			foreach($value as $item)
+			{
+				if(is_string($item) === false || strlen($item) > self::VALUE_MAX)
+				{
+					return false;
+				}
+			}
+			
+			return true;
+		}
+		if($test === 'longer_than')
+		{
+			return is_int($value) && $value >= 0 && $value <= Facts::BODY_CAP;
+		}
+		
+		return is_string($value) && trim($value) !== '' && strlen($value) <= self::VALUE_MAX;
+	}
+	
+	/** `method`, `path`, or a prefix and a name (`query:file`); the keys targets may name the top level ('') */
+	public static function targetWellFormed(
+		mixed $target,
+	): bool
+	{
+		if(is_string($target) === false || strlen($target) > 200)
+		{
+			return false;
+		}
+		if(in_array($target, self::TARGETS, true))
+		{
+			return true;
+		}
+		[$prefix, $name] = explode(':', $target, 2) + [1 => null];
+		
+		return in_array($prefix, self::TARGET_PREFIXES, true) && is_string($name)
+			&& ($name !== '' || $prefix === 'query-keys' || $prefix === 'body-keys');
 	}
 	
 	/** no `kind` key is a match rule — every rule a kernel older than rate rules ever saw */
@@ -1100,9 +1425,11 @@ final class Kernel
 	/**
 	 * Over the cached ruleset. pass when consent says so, when there is no
 	 * store (and the next tick will pull), when the contract is unknown, when
-	 * the ruleset is past the ceiling; else the first MATCH rule that matches
-	 * — in the door's order, proven first — as block (proven AND enforce) or
-	 * observe; else the first RATE rule whose predicate matches and whose key
+	 * the ruleset is past the ceiling; else the first MATCH or VPATCH rule
+	 * that matches — in the door's order, proven first — as block (proven AND
+	 * enforce, a vpatch's who and nonce answered) or observe; a vpatch that
+	 * could not be answered observes unless a later rule blocks; else the
+	 * first RATE rule whose predicate matches and whose key
 	 * is over its limit, the same way. A rule the engine cannot run matches
 	 * nothing. The one side effect: a rate rule's predicate that matches
 	 * counts the request
@@ -1148,6 +1475,7 @@ final class Kernel
 				return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $threat, $facts->ip);
 			}
 			$rates = [];
+			$held = null;
 			foreach($ruleset->rules as $rule)
 			{
 				if(Ruleset::isRate($rule))
@@ -1156,14 +1484,39 @@ final class Kernel
 					
 					continue;
 				}
+				if(Ruleset::isVpatch($rule))
+				{
+					$hit = self::patched($rule, $facts);
+					if($hit === null)
+					{
+						continue;
+					}
+					$blocks = ($rule['mode'] ?? '') === Ruleset::MODE_PROVEN && $consent->blocks();
+					$verdict = new Verdict($blocks && $hit['resolved'] ? Verdict::BLOCK : Verdict::OBSERVE, $rule,
+						substr($hit['matched'], 0, self::MATCHED_MAX));
+					// what the host could not answer (who, a nonce) only observes — and a proven rule after it may still block
+					if($blocks && $hit['resolved'] === false)
+					{
+						$held ??= $verdict;
+						
+						continue;
+					}
+					
+					return $verdict->isBlock() ? $verdict : ($held ?? $verdict);
+				}
 				$matched = $this->matched($rule, $facts);
 				if($matched === null)
 				{
 					continue;
 				}
 				$blocks = ($rule['mode'] ?? '') === Ruleset::MODE_PROVEN && $consent->blocks();
+				$verdict = new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $rule, substr($matched, 0, self::MATCHED_MAX));
 				
-				return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $rule, substr($matched, 0, self::MATCHED_MAX));
+				return $verdict->isBlock() ? $verdict : ($held ?? $verdict);
+			}
+			if($held !== null)
+			{
+				return $held;
 			}
 			$now ??= time();
 			foreach($rates as $rule)
@@ -1311,13 +1664,14 @@ final class Kernel
 				'finding' => is_string($rule['finding'] ?? null) ? $rule['finding'] : '',
 				'cve' => is_string($rule['cve'] ?? null) ? $rule['cve'] : '',
 				'origin' => is_string($rule['origin'] ?? null) ? $rule['origin'] : '',
-				'field' => (string)$rule['field'],
-				'op' => (string)$rule['op'],
+				// a vpatch has no field or op: its conditions name what it reads, `who` whom
+				'field' => Ruleset::isVpatch($rule) ? Ruleset::KIND_VPATCH : (string)$rule['field'],
+				'op' => Ruleset::isVpatch($rule) ? 'conditions' : (string)$rule['op'],
 				'mode' => (string)$rule['mode'],
 				'matched' => $verdict->matched,
 				'authed' => $facts->authed,
 				'body_capped' => $facts->bodyWasCapped(),
-			]);
+			] + (Ruleset::isVpatch($rule) ? ['who' => (string)($rule['who'] ?? '')] : []));
 		}
 		catch(Throwable $e)
 		{
@@ -1528,6 +1882,365 @@ final class Kernel
 		}
 		
 		return '';
+	}
+	
+	/**
+	 * A vpatch over the request: the value that passed (a parameter's, else
+	 * the frame's) and whether all of it was answered — `who` and any nonce
+	 * test — or null when it does not hold. A request that is not signed in
+	 * lacks every capability; a signed-in one asks Facts::can()
+	 *
+	 * @return ?array{matched: string, resolved: bool}
+	 */
+	public static function patched(
+		array $rule,
+		Facts $facts,
+	): ?array
+	{
+		$resolved = true;
+		$who = (string)($rule['who'] ?? '');
+		if($who === Ruleset::WHO_ANONYMOUS && $facts->authed)
+		{
+			return null;
+		}
+		if(str_starts_with($who, Ruleset::WHO_LACKS) && $facts->authed)
+		{
+			$can = $facts->can(substr($who, strlen(Ruleset::WHO_LACKS)));
+			if($can === true)
+			{
+				return null;
+			}
+			$resolved = $can === false;
+		}
+		$matched = '';
+		$framed = '';
+		foreach((array)($rule['conditions'] ?? []) as $condition)
+		{
+			$hit = self::condition($condition, $facts);
+			if($hit === null)
+			{
+				return null;
+			}
+			$resolved = $resolved && $hit['resolved'];
+			if(in_array($condition['target'], Ruleset::TARGETS, true))
+			{
+				$framed = $framed === '' ? $hit['matched'] : $framed;
+			}
+			else if($matched === '')
+			{
+				$matched = $hit['matched'];
+			}
+		}
+		
+		return ['matched' => $matched !== '' ? $matched : $framed, 'resolved' => $resolved];
+	}
+	
+	/**
+	 * One condition: the value that passed it and whether it was answered, or
+	 * null when none passes. Any value of a target with several (an array, a
+	 * wildcard, the keys) is enough; an absent one never holds — but a nonce
+	 * that is not there is an invalid one, and a present one needs the host
+	 *
+	 * @return ?array{matched: string, resolved: bool}
+	 */
+	public static function condition(
+		array $condition,
+		Facts $facts,
+	): ?array
+	{
+		$values = self::values((string)$condition['target'], $facts);
+		$test = (string)$condition['test'];
+		if($test === 'exists')
+		{
+			return $values === [] ? null : ['matched' => $values[0], 'resolved' => true];
+		}
+		if($test === 'nonce_invalid')
+		{
+			if($values === [])
+			{
+				return ['matched' => '', 'resolved' => true];
+			}
+			$resolved = true;
+			foreach($values as $value)
+			{
+				$valid = $facts->nonceValid((string)$condition['value'], $value);
+				if($valid === true)
+				{
+					return null;
+				}
+				$resolved = $resolved && $valid === false;
+			}
+			
+			return ['matched' => $values[0], 'resolved' => $resolved];
+		}
+		foreach($values as $value)
+		{
+			$decoded = self::decoded($value, (array)($condition['decode'] ?? []));
+			if($decoded !== null && self::passes($test, $decoded, $condition))
+			{
+				return ['matched' => $decoded, 'resolved' => true];
+			}
+		}
+		
+		return null;
+	}
+	
+	/**
+	 * A target's values over the request
+	 *
+	 * @return list<string>
+	 */
+	public static function values(
+		string $target,
+		Facts $facts,
+	): array
+	{
+		if($target === 'method')
+		{
+			return [strtoupper($facts->method)];
+		}
+		if($target === 'path')
+		{
+			return [$facts->path()];
+		}
+		[$prefix, $name] = explode(':', $target, 2) + [1 => ''];
+		$header = strtolower($name);
+		
+		return match($prefix)
+		{
+			'query' => self::pick($facts->query, $name),
+			'request' => [...self::pick($facts->query, $name), ...self::pick($facts->form, $name)],
+			'body' => self::pick($facts->form, $name),
+			'json' => self::pickJson($facts->json(), $name),
+			'cookie' => self::pick($facts->cookies, $name),
+			'header' => isset($facts->headers[$header]) ? [(string)$facts->headers[$header]] : [],
+			'file' => self::pick($facts->files, $name),
+			'query-keys' => self::keys($facts->query, $name),
+			'body-keys' => self::keys($facts->form, $name),
+			default => [],
+		};
+	}
+	
+	/**
+	 * A bag's values at a name: `a[b][c]` walks nested arrays, a segment
+	 * ending in `*` (or empty, `a[]`) takes every key with that prefix; an
+	 * array reached gives every leaf
+	 *
+	 * @return list<string>
+	 */
+	public static function pick(
+		array $bag,
+		string $name,
+	): array
+	{
+		$values = [];
+		foreach(self::walk([$bag], self::segments($name)) as $node)
+		{
+			self::leaves($node, $values);
+		}
+		
+		return $values;
+	}
+	
+	/**
+	 * The keys of the arrays at a name ('' = the bag's own) — a key is input too
+	 *
+	 * @return list<string>
+	 */
+	public static function keys(
+		array $bag,
+		string $name,
+	): array
+	{
+		$keys = [];
+		foreach(self::walk([$bag], self::segments($name)) as $node)
+		{
+			if(is_array($node))
+			{
+				foreach(array_keys($node) as $key)
+				{
+					$keys[] = (string)$key;
+				}
+			}
+		}
+		
+		return $keys;
+	}
+	
+	/**
+	 * A JSON body's values at a dot path, `*` for any key or element
+	 *
+	 * @return list<string>
+	 */
+	public static function pickJson(
+		mixed $json,
+		string $path,
+	): array
+	{
+		if(is_array($json) === false || $path === '')
+		{
+			return [];
+		}
+		$values = [];
+		foreach(self::walk([$json], explode('.', $path)) as $node)
+		{
+			self::leaves($node, $values);
+		}
+		
+		return $values;
+	}
+	
+	/** `a[b][c]` as [a, b, c]; '' as none */
+	public static function segments(
+		string $name,
+	): array
+	{
+		if($name === '')
+		{
+			return [];
+		}
+		$at = strpos($name, '[');
+		if($at === false)
+		{
+			return [$name];
+		}
+		preg_match_all('~\[([^\]]*)\]~', substr($name, $at), $brackets);
+		
+		return [substr($name, 0, $at), ...$brackets[1]];
+	}
+	
+	/** the nodes the segments reach from the given ones; a segment ending in `*`, or empty, takes every key with that prefix */
+	protected static function walk(
+		array $nodes,
+		array $segments,
+	): array
+	{
+		foreach($segments as $segment)
+		{
+			$segment = (string)$segment;
+			$next = [];
+			foreach($nodes as $node)
+			{
+				if(is_array($node) === false)
+				{
+					continue;
+				}
+				if($segment === '' || str_ends_with($segment, '*'))
+				{
+					$prefix = rtrim($segment, '*');
+					foreach($node as $key => $child)
+					{
+						if(str_starts_with((string)$key, $prefix))
+						{
+							$next[] = $child;
+						}
+					}
+				}
+				else if(array_key_exists($segment, $node))
+				{
+					$next[] = $node[$segment];
+				}
+			}
+			$nodes = $next;
+		}
+		
+		return $nodes;
+	}
+	
+	/** every scalar under a node, as the string a test reads */
+	protected static function leaves(
+		mixed $node,
+		array &$values,
+	): void
+	{
+		if(is_array($node))
+		{
+			foreach($node as $child)
+			{
+				self::leaves($child, $values);
+			}
+			
+			return;
+		}
+		$values[] = match(true)
+		{
+			$node === true => '1',
+			$node === false, $node === null => '',
+			is_scalar($node) => (string)$node,
+			default => '',
+		};
+	}
+	
+	/** a value through the decode steps; null when a step cannot read it (base64 that is not) */
+	public static function decoded(
+		string $value,
+		array $steps,
+	): ?string
+	{
+		foreach($steps as $step)
+		{
+			if($step === 'url')
+			{
+				$value = rawurldecode($value);
+			}
+			else if($step === 'base64')
+			{
+				$bytes = base64_decode($value, true);
+				if($bytes === false)
+				{
+					return null;
+				}
+				$value = $bytes;
+			}
+		}
+		
+		return $value;
+	}
+	
+	/** one value under one test — the literal ops fold ASCII, as a match rule's do */
+	public static function passes(
+		string $test,
+		string $value,
+		array $condition,
+	): bool
+	{
+		$ci = ($condition['ci'] ?? true) === true;
+		$expected = $condition['value'] ?? '';
+		$text = is_string($expected) ? $expected : '';
+		
+		return match($test)
+		{
+			'equals' => $ci ? strcasecmp($text, $value) === 0 : $text === $value,
+			'in' => self::among($value, (array)$expected, $ci),
+			'not_in' => self::among($value, (array)$expected, $ci) === false,
+			'prefix' => self::match(['op' => Ruleset::OP_PREFIX, 'value' => $text, 'ci' => $ci], $value) !== null,
+			'suffix' => strlen($value) >= strlen($text)
+				&& ($ci ? strcasecmp(substr($value, strlen($value) - strlen($text)), $text) === 0 : str_ends_with($value, $text)),
+			'contains' => self::match(['op' => Ruleset::OP_CONTAINS, 'value' => $text, 'ci' => $ci], $value) !== null,
+			'regex' => self::match(['op' => Ruleset::OP_REGEX, 'value' => $text, 'ci' => $ci], $value) !== null,
+			'numeric' => preg_match('~^[+-]?[0-9]+$~D', $value) === 1,
+			'not_numeric' => preg_match('~^[+-]?[0-9]+$~D', $value) !== 1,
+			'longer_than' => is_int($expected) && strlen($value) > $expected,
+			default => false,
+		};
+	}
+	
+	/** a value in a list, ASCII case folded or not */
+	protected static function among(
+		string $value,
+		array $list,
+		bool $ci,
+	): bool
+	{
+		foreach($list as $item)
+		{
+			if(is_string($item) && ($ci ? strcasecmp($item, $value) === 0 : $item === $value))
+			{
+				return true;
+			}
+		}
+		
+		return false;
 	}
 	
 	/**
