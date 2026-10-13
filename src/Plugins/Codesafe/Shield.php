@@ -26,7 +26,8 @@ use function max;
  *         - Security\Csrf
  *         - Codesafe\Shield   # after Csrf, before anything that acts on the request
  *
- * and switch it on per project under `codesafe.shield` (see the Service).
+ * It judges as soon as it is registered: `codesafe.shield` detect and enforce
+ * are on unless set to no (see the Service).
  * Inert on the CLI and whenever the Service says it is not enabled; fails
  * open on anything thrown — the shield may never be why a page does not
  * load.

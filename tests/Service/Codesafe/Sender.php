@@ -27,6 +27,7 @@ use function Ovos\container;
 
 use function apcu_delete;
 use function apcu_enabled;
+use function array_column;
 use function array_filter;
 use function array_key_exists;
 use function array_push;
@@ -85,8 +86,9 @@ class Sender extends Test
 	 * The hello (codesafe SENDER.md §7, docs/plans/project-features-live.md):
 	 * the switches this library has, in codesafe's words — security left out,
 	 * since the app calling reportRefusal() is its only opt-in — the Shield's
-	 * two only where the kernel runs, and nothing at all from a sender that is
-	 * off
+	 * two only where the kernel runs, both on and the inventory on unless set
+	 * to no (codesafe docs/plans/shield-auto-deploy.md D8, P0), and nothing at
+	 * all from a sender that is off
 	 */
 	public function helloPayloadNamesOnlyTheSwitchesThisLibraryHas(): bool
 	{
@@ -101,6 +103,12 @@ class Sender extends Test
 			'enabled' => true,
 			'shield' => ['detect' => true, 'enforce' => true, 'kill' => true],
 		]), 'php-library/dev');
+		$unset = CodesafeSender::helloPayload(new ArrayObject(['enabled' => true]), 'php-library/dev');
+		$declined = CodesafeSender::helloPayload(new ArrayObject([
+			'enabled' => true,
+			'inventory' => false,
+			'shield' => ['enforce' => false],
+		]), 'php-library/dev');
 		
 		return $on === [
 				'v' => 1,
@@ -110,6 +118,7 @@ class Sender extends Test
 					'not_found' => true,
 					'rollups' => false,
 					'files' => true,
+					'inventory' => true,
 					'shield_detect' => true,
 					'shield_enforce' => true,
 				],
@@ -118,6 +127,9 @@ class Sender extends Test
 			&& $killed['features']['shield_detect'] === false
 			&& $killed['features']['shield_enforce'] === false
 			&& $killed['features']['files'] === false
+			&& $unset['features']['shield_detect'] && $unset['features']['shield_enforce'] && $unset['features']['inventory']
+			&& $declined['features']['shield_detect'] && $declined['features']['shield_enforce'] === false
+			&& $declined['features']['inventory'] === false
 			&& CodesafeSender::helloPayload(new ArrayObject(['enabled' => false]), 'php-library/dev') === []
 			&& CodesafeSender::helloPayload(null, 'php-library/dev') === [];
 	}
@@ -188,6 +200,141 @@ class Sender extends Test
 			
 			return $afterFlips === [false, true, false]
 				&& $posted === [false, true, false, true];
+		}
+		finally
+		{
+			apcu_delete([$told, $lock]);
+		}
+	}
+	
+	/**
+	 * RULE: the inventory (codesafe API.V1.md "Inventory", platform composer)
+	 * is each installed package once, sorted, under its vendor/name with the
+	 * name's tail as slug — and leaves out what the site does not run or
+	 * codesafe would refuse: the app itself, a development-only requirement, a
+	 * name another package replaces or provides, a name outside codesafe's
+	 * pattern. A branch is sent versionless. Falsify: send `dev-main` as the
+	 * version — codesafe reads a branch as older than every release and the
+	 * package matches every advisory it ever had.
+	 */
+	public function inventoryIsTheInstalledPackagesOnceWithoutBranchesOrTheApp(): bool
+	{
+		$report = CodesafeSender::inventoryPayload([
+			[
+				'root' => ['name' => 'acme/shop'],
+				'versions' => [
+					'acme/shop' => ['pretty_version' => 'dev-main', 'dev_requirement' => false],
+					'symfony/cache' => ['pretty_version' => 'v6.4.9', 'dev_requirement' => false],
+					'psr/cache' => ['pretty_version' => '3.0.0', 'dev_requirement' => false],
+					'phpunit/phpunit' => ['pretty_version' => '11.0.0', 'dev_requirement' => true],
+					'psr/log-implementation' => ['dev_requirement' => false, 'provided' => ['3.0']],
+					'ovos/php-library' => ['pretty_version' => 'dev-release/8.5', 'dev_requirement' => false],
+					'acme/tool' => ['pretty_version' => '2.1.x-dev', 'dev_requirement' => false],
+					'acme/odd' => ['pretty_version' => '1.0.0+build.7', 'dev_requirement' => false],
+					'Acme/Upper' => ['pretty_version' => '1.0.0', 'dev_requirement' => false],
+				],
+			],
+			// a second vendor dir: its root left out too, a package already listed listed once
+			[
+				'root' => ['name' => 'acme/plugin'],
+				'versions' => [
+					'acme/plugin' => ['pretty_version' => '1.0.0', 'dev_requirement' => false],
+					'psr/cache' => ['pretty_version' => '1.0.1', 'dev_requirement' => false],
+					'guzzlehttp/guzzle' => ['pretty_version' => '7.9.2', 'dev_requirement' => false],
+				],
+			],
+		], '8.3.9');
+		$versions = array_column($report['items'], 'version', 'package');
+		
+		return $report['platform'] === 'composer' && $report['core'] === '' && $report['php'] === '8.3.9'
+			&& array_column($report['items'], 'package') === ['acme/odd', 'acme/tool', 'guzzlehttp/guzzle', 'ovos/php-library', 'psr/cache', 'symfony/cache']
+			&& array_column($report['items'], 'slug') === ['odd', 'tool', 'guzzle', 'php-library', 'cache', 'cache']
+			&& $versions === ['acme/odd' => '', 'acme/tool' => '', 'guzzlehttp/guzzle' => '7.9.2',
+				'ovos/php-library' => '', 'psr/cache' => '3.0.0', 'symfony/cache' => 'v6.4.9']
+			&& $report['items'][5] === ['type' => 'package', 'slug' => 'cache', 'package' => 'symfony/cache',
+				'version' => 'v6.4.9', 'name' => 'symfony/cache', 'active' => true]
+			&& CodesafeSender::inventoryPayload([], '8.3.9')['items'] === [];
+	}
+	
+	/**
+	 * RULE: the inventory is said when the installed list's stamp is not the
+	 * one last said — once for a list, again after a composer install — and
+	 * not at all with `inventory: no`; codesafe saying no (403: the project's
+	 * CVE switch off) stands like a said list, no answer is asked again only
+	 * after its back-off. Falsify: build and post the list on every request
+	 * — every page view of the app carries a POST.
+	 */
+	public function inventoryIsSaidOncePerInstalledListAndNotWhenSwitchedOff(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			throw new SkipException('APCu is not enabled on this CLI');
+		}
+		
+		$told = (new Prefixer())->prefix(CodesafeSender::INVENTORY_PREFIX . 'told');
+		$lock = (new Prefixer())->prefix(CodesafeSender::INVENTORY_PREFIX . 'lock');
+		apcu_delete([$told, $lock]);
+		
+		try
+		{
+			$posted = [];
+			$say = function(string $stamp, int $code = 202, bool $inventory = true) use (&$posted): void
+			{
+				$sender = new class(new ArrayObject([
+					'enabled' => true,
+					'url' => 'https://console.invalid',
+					'key' => 'test-key',
+					'inventory' => $inventory,
+				])) extends CodesafeSender
+				{
+					public string $stamp = '';
+					
+					public int $code = 202;
+					
+					public array $posted = [];
+					
+					public function sayInventory(): void
+					{
+						$this->maybeInventory();
+					}
+					
+					protected function installedStamp(): string
+					{
+						return $this->stamp;
+					}
+					
+					protected function installed(): array
+					{
+						return [['root' => ['name' => 'acme/shop'], 'versions' => [
+							'psr/log' => ['pretty_version' => $this->stamp, 'dev_requirement' => false],
+						]]];
+					}
+					
+					protected function post(
+						string $path,
+						string $json,
+					): int
+					{
+						$this->posted[] = $path . ' ' . json_decode($json, true)['items'][0]['version'];
+						
+						return $this->code;
+					}
+				};
+				$sender->stamp = $stamp;
+				$sender->code = $code;
+				$sender->sayInventory();
+				array_push($posted, ...$sender->posted);
+			};
+			
+			$say('1.0.0');
+			$say('1.0.0');
+			$say('1.1.0', 403);
+			$say('1.1.0');
+			$say('1.2.0', 0);
+			$say('1.2.0');
+			$say('1.3.0', 202, false);
+			
+			return $posted === ['/api/v1/ingest/inventory 1.0.0', '/api/v1/ingest/inventory 1.1.0', '/api/v1/ingest/inventory 1.2.0'];
 		}
 		finally
 		{

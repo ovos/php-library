@@ -62,10 +62,14 @@ if(class_exists(Kernel::class, false) === false)
  *
  *   codesafe:
  *     shield:
- *       detect: no    # pull the rules and OBSERVE every request: a match is reported, nothing is blocked
- *       enforce: no   # answer 403 to a request a PROVEN rule matches — inert without detect
+ *       detect: yes   # pull the rules and OBSERVE every request: a match is reported, nothing is blocked
+ *       enforce: yes  # answer 403 to a request a PROVEN rule matches — inert without detect
  *       kill: no      # off entirely, no network — the switch that needs no instance
  *       dir: ''       # where shield.json (the durable tier) lives; '' = the system temp dir
+ *
+ * detect and enforce are on unless set to no (codesafe docs/plans/shield-auto-deploy.md
+ * D8): a site is protected without anyone opting in, and codesafe — the
+ * project's Shield off, a rule switched off for it — is where it is stopped.
  *
  * Fails open on everything, like the kernel. A rule exists only while a
  * live CVE finding on this project justifies it, or a person wrote it with
@@ -122,14 +126,18 @@ class Shield
 		return $this->consent()->active();
 	}
 	
-	/** the three switches, read from the config on every call — never cached in the ruleset */
+	/**
+	 * The three switches, read from the config on every call — never cached in
+	 * the ruleset. detect and enforce default to on: absent is consent, an
+	 * explicit no (or anything but true) is not
+	 */
 	public function consent(): Consent
 	{
 		$shield = $this->shieldConfig();
 		
 		return new Consent(
-			($shield['detect'] ?? null) === true,
-			($shield['enforce'] ?? null) === true,
+			($shield['detect'] ?? true) === true,
+			($shield['enforce'] ?? true) === true,
 			($shield['kill'] ?? null) === true,
 		);
 	}
