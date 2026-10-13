@@ -22,6 +22,7 @@ use function in_array;
 use function ksort;
 use function str_contains;
 use function str_starts_with;
+use function str_repeat;
 use function sys_get_temp_dir;
 use function time;
 use function uniqid;
@@ -220,6 +221,40 @@ class Shield extends Test
 			&& $subject->hits($minute) === []
 			&& $subject->hits($minute + 1) === ['so:5' => 1]
 			&& $off->hits($minute) === [];
+	}
+	
+	/**
+	 * RULE: nudge() hands codesafe's version to the kernel, which forces the
+	 * next pull when it differs from the stored one (codesafe
+	 * docs/plans/shield-auto-deploy.md P7.d) — and does nothing while the
+	 * shield is off. Skipped without APCu (the forced flag lives there for
+	 * the pool). Falsify: nudge a switched-off shield — a site with detect: no
+	 * pulls on every answer.
+	 */
+	public function aNudgeForcesThePullOnlyWhileTheShieldIsOn(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			return true;
+		}
+		$one = str_repeat('a', 64);
+		$two = str_repeat('b', 64);
+		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => []];
+		$subject = $this->subject(['detect' => true], 'install-nudge-' . uniqid());
+		$store = $subject->kernel()->store();
+		$store->write(Ruleset::fromPayload($payload, time(), '', $one)->toRecord());
+		$off = new Subject($this->config(['detect' => false]), 'install-nudge-off-' . uniqid());
+		
+		try
+		{
+			return $subject->nudge($one) === false && $store->pullForced() === false
+				&& $subject->nudge($two) && $store->pullForced()
+				&& $off->nudge($two) === false;
+		}
+		finally
+		{
+			$store->forcePull(false);
+		}
 	}
 	
 	/**

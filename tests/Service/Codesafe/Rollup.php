@@ -7,10 +7,19 @@ use Ovos\ArrayObject;
 use Ovos\Controller;
 use Ovos\Request;
 use Ovos\Service\Codesafe\Rollup as CodesafeRollup;
+use APCUIterator;
 use Ovos\Test;
 
+use function apcu_delete;
+use function apcu_enabled;
+use function apcu_store;
 use function array_fill;
+use function function_exists;
+use function intdiv;
+use function preg_quote;
 use function str_repeat;
+use function time;
+use function uniqid;
 
 /**
  * Rollup — the pure half of the traffic-rollup accumulator: the opt-in
@@ -347,6 +356,62 @@ class Rollup extends Test
 			&& CodesafeRollup::isStream(['Content-Type: application/json']) === false
 			&& CodesafeRollup::isStream(['Link: </sse>; rel="text/event-stream"']) === false
 			&& CodesafeRollup::isStream([]) === false;
+	}
+	
+	/**
+	 * RULE: the body of a shipped fragment's 2xx answer goes to the
+	 * `answered` hook — the Sender hands the Shield's ruleset version in it
+	 * to the kernel (codesafe docs/plans/shield-auto-deploy.md P7.d); a
+	 * refused fragment hands nothing. Skipped without APCu. Falsify: drop
+	 * the answer as before — a quiet site hears an OFF only at its next
+	 * five-minute pull.
+	 */
+	public function aShippedFragmentsAnswerGoesToTheHook(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			return true;
+		}
+		$heard = [];
+		$ship = static function(?string $answer, string $install) use (&$heard): CodesafeRollup
+		{
+			$rollup = new class(new ArrayObject(['enabled' => true, 'url' => 'https://console.invalid', 'key' => 'k', 'rollups' => true]),
+				$install, null, static function(string $body) use (&$heard): void
+				{
+					$heard[] = $body;
+				}) extends CodesafeRollup
+			{
+				public ?string $answer = null;
+				
+				public function shipMinute(
+					int $minute,
+				): void
+				{
+					apcu_store($this->key(($minute - 1) . ':requests'), 3);
+					$this->flush($minute);
+				}
+				
+				protected function send(
+					array $payload,
+				): ?string
+				{
+					return $this->answer;
+				}
+			};
+			$rollup->answer = $answer;
+			$rollup->shipMinute(intdiv(time(), 60));
+			
+			return $rollup;
+		};
+		$answer = '{"success":true,"accepted":1,"shield":"' . str_repeat('a', 64) . '"}';
+		$heardOne = $ship($answer, 'install-heard-' . uniqid());
+		$refused = $ship(null, 'install-refused-' . uniqid());
+		foreach([$heardOne, $refused] as $rollup)
+		{
+			apcu_delete(new APCUIterator('~^' . preg_quote($rollup->getPrefix(), '~') . '~'));
+		}
+		
+		return $heard === [$answer];
 	}
 	
 	/**

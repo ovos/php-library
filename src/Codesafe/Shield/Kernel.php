@@ -61,6 +61,13 @@ declare(strict_types=1);
  * rules only to a kernel that does, so a kernel older than them never reads
  * a rate rule as a match rule.
  *
+ * Fast pickup: the door says the project's ruleset version (X-Shield-Version,
+ * one value whatever kinds a kernel reads) on every 200 and 304, and the
+ * kernel stores it beside the rules. codesafe's ingest answers carry the
+ * same version (`shield`); the host hands it to nudge(), which forces the
+ * next pull when it differs — a rule switched off in codesafe lands on the
+ * next tick after the site's next report, not at the interval.
+ *
  * PHP 8.3 floor (the WordPress plugin's, since 0.7.0 — MG 2026-09-23: 8.1 need
  * not be supported). codesafe's own suite tests this
  * file; consumers keep it byte-identical (sha1-compare after sync) and load
@@ -494,6 +501,7 @@ final class Ruleset
 		public readonly int $fetchedAt,
 		public readonly bool $usable,
 		public readonly string $project = '',
+		public readonly string $version = '',
 	)
 	{
 	}
@@ -503,12 +511,14 @@ final class Ruleset
 	 * every rule with an int id, a field and an op off the lists, a
 	 * non-empty value under VALUE_MAX, a mode — anything else is left out.
 	 * The digest is the door's (X-Shield-Sha256) or, absent, the sha256 of
-	 * the rules as received — the same bytes the door hashes
+	 * the rules as received — the same bytes the door hashes. The version is
+	 * the door's X-Shield-Version, '' when it said none
 	 */
 	public static function fromPayload(
 		array $payload,
 		int $fetchedAt,
 		string $digest = '',
+		string $version = '',
 	): self
 	{
 		$usable = ($payload['contract'] ?? null) === self::CONTRACT
@@ -530,7 +540,8 @@ final class Ruleset
 			$digest = hash('sha256', (string)json_encode(is_array($payload['rules'] ?? null) ? $payload['rules'] : [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 		}
 		
-		return new self($rules, $digest, $fetchedAt, $usable, is_string($payload['project'] ?? null) ? $payload['project'] : '');
+		return new self($rules, $digest, $fetchedAt, $usable, is_string($payload['project'] ?? null) ? $payload['project'] : '',
+			self::isVersion($version) ? $version : '');
 	}
 	
 	/** the stored record back into a ruleset; null when the record is not one */
@@ -549,6 +560,7 @@ final class Ruleset
 			$record['fetched_at'],
 			($record['usable'] ?? false) === true,
 			is_string($record['project'] ?? null) ? $record['project'] : '',
+			is_string($record['version'] ?? null) && self::isVersion($record['version']) ? $record['version'] : '',
 		);
 	}
 	
@@ -561,16 +573,28 @@ final class Ruleset
 			'project' => $this->project,
 			'fetched_at' => $this->fetchedAt,
 			'sha256' => $this->digest,
+			'version' => $this->version,
 			'usable' => $this->usable,
 			'rules' => $this->rules,
 		];
 	}
 	
+	/** renewed by a 304 — with the version it said, when it said one */
 	public function withFetchedAt(
 		int $fetchedAt,
+		string $version = '',
 	): self
 	{
-		return new self($this->rules, $this->digest, $fetchedAt, $this->usable, $this->project);
+		return new self($this->rules, $this->digest, $fetchedAt, $this->usable, $this->project,
+			self::isVersion($version) ? $version : $this->version);
+	}
+	
+	/** a version is the door's sha256, lowercase hex */
+	public static function isVersion(
+		string $version,
+	): bool
+	{
+		return preg_match('~^[0-9a-f]{64}$~', $version) === 1;
 	}
 	
 	/** past the ceiling: a codesafe instance gone silent lifts its shield */
@@ -906,6 +930,9 @@ final class Kernel
 	
 	public const KINDS = 'match,rate';
 	
+	/** the project's ruleset version, one value whatever kinds a kernel reads — what nudge() compares */
+	public const HEADER_VERSION = 'X-Shield-Version';
+	
 	public const PULL_OFF = 'off';
 	
 	public const PULL_SKIPPED = 'skipped';
@@ -1231,6 +1258,35 @@ final class Kernel
 	}
 	
 	/**
+	 * A codesafe answer said the project's ruleset version (the ingest
+	 * answers' `shield`): when the stored ruleset's version is known and
+	 * differs, the next pull is forced — no network here, the host's tick
+	 * pulls. Nothing stored, a version never said, or a malformed one compare
+	 * nothing. True when it forced
+	 */
+	public function nudge(
+		string $version,
+	): bool
+	{
+		try
+		{
+			$current = $this->ruleset();
+			if(Ruleset::isVersion($version) === false || $current === null
+				|| $current->version === '' || $current->version === $version)
+			{
+				return false;
+			}
+			$this->store->forcePull();
+			
+			return true;
+		}
+		catch(Throwable)
+		{
+			return false;
+		}
+	}
+	
+	/**
 	 * The conditional GET, on the host's tick: off under kill or without
 	 * detect (no network); skipped inside the interval unless forced;
 	 * locked when another request of the pool is pulling; fresh (200,
@@ -1294,7 +1350,7 @@ final class Kernel
 		$status = (int)($response['status'] ?? 0);
 		if($status === 304 && $current !== null)
 		{
-			$this->store->write($current->withFetchedAt($now)->toRecord());
+			$this->store->write($current->withFetchedAt($now, self::header($response, self::HEADER_VERSION))->toRecord());
 			$this->rulesetRead = false;
 			
 			return self::PULL_UNCHANGED;
@@ -1312,15 +1368,8 @@ final class Kernel
 			
 			return self::PULL_FAILED;
 		}
-		$digest = '';
-		foreach((array)($response['headers'] ?? []) as $name => $value)
-		{
-			if(strtolower((string)$name) === 'x-shield-sha256' && is_string($value))
-			{
-				$digest = trim($value);
-			}
-		}
-		$ruleset = Ruleset::fromPayload($payload, $now, $digest);
+		$ruleset = Ruleset::fromPayload($payload, $now, self::header($response, 'X-Shield-Sha256'),
+			self::header($response, self::HEADER_VERSION));
 		$this->store->write($ruleset->toRecord());
 		$this->rulesetRead = false;
 		if($ruleset->usable === false)
@@ -1331,6 +1380,23 @@ final class Kernel
 		}
 		
 		return self::PULL_FRESH;
+	}
+	
+	/** one header of the transport's answer, any case; '' when absent */
+	protected static function header(
+		array $response,
+		string $name,
+	): string
+	{
+		foreach((array)($response['headers'] ?? []) as $key => $value)
+		{
+			if(strtolower((string)$key) === strtolower($name) && is_string($value))
+			{
+				return trim($value);
+			}
+		}
+		
+		return '';
 	}
 	
 	/**
