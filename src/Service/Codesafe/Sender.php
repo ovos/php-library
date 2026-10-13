@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Service\Codesafe;
 
+use Composer\InstalledVersions;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
@@ -19,6 +20,7 @@ use Ovos\Service\Events;
 use Ovos\Service\Session;
 use Ovos\Service\Logger;
 use ErrorException;
+use ReflectionClass;
 use SplObjectStorage;
 use Throwable;
 use Traversable;
@@ -33,26 +35,32 @@ use function apcu_store;
 use function array_replace;
 use function array_slice;
 use function array_values;
+use function class_exists;
 use function count;
 use function curl_exec;
 use function curl_getinfo;
 use function curl_init;
 use function curl_setopt_array;
+use function dirname;
 use function explode;
 use function fclose;
 use function file_get_contents;
+use function filemtime;
+use function filesize;
 use function fopen;
 use function function_exists;
 use function http_response_code;
 use function in_array;
 use function intdiv;
 use function is_array;
+use function is_file;
 use function is_int;
 use function is_readable;
 use function is_scalar;
 use function is_string;
 use function iterator_to_array;
 use function json_encode;
+use function ksort;
 use function max;
 use function md5;
 use function mb_strlen;
@@ -61,6 +69,7 @@ use function min;
 use function preg_match;
 use function preg_split;
 use function rtrim;
+use function str_ends_with;
 use function str_replace;
 use function str_starts_with;
 use function stream_get_contents;
@@ -85,6 +94,9 @@ use const CURLOPT_TIMEOUT_MS;
 use const DIRECTORY_SEPARATOR;
 use const JSON_INVALID_UTF8_SUBSTITUTE;
 use const JSON_PARTIAL_OUTPUT_ON_ERROR;
+use const PHP_MAJOR_VERSION;
+use const PHP_MINOR_VERSION;
+use const PHP_RELEASE_VERSION;
 use const PREG_SPLIT_NO_EMPTY;
 
 /**
@@ -134,12 +146,18 @@ use const PREG_SPLIT_NO_EMPTY;
  *                                       # `php cli.php codesafe files` (ovos/php-module-system) or
  *                                       # $sender->reportUntracked() — CLI only, never a web request;
  *                                       # needs files_enabled on the project (403 says so).
- *     shield:                           # OPTIONAL: the Shield (Ovos\Service\Codesafe\Shield + the controller
- *       detect: no                      # plugin Ovos\Plugins\Codesafe\Shield in plugins.default.http). detect =
- *       enforce: no                     # pull this project's live rules from codesafe and OBSERVE every
+ *     inventory: yes                    # the installed composer packages (vendor/name + version, never a path)
+ *                                       # to /api/v1/ingest/inventory once a day and after every composer
+ *                                       # install — what codesafe matches against the CVE feeds. Needs url+key,
+ *                                       # APCu and cve_enabled on the project (403 says so: asked again a day later).
+ *     shield:                           # the Shield (Ovos\Service\Codesafe\Shield + the controller
+ *       detect: yes                     # plugin Ovos\Plugins\Codesafe\Shield in plugins.default.http). detect =
+ *       enforce: yes                    # pull this project's live rules from codesafe and OBSERVE every
  *       kill: no                        # request (report a match as shield_observe, block nothing); enforce =
  *       dir: ''                         # answer 403 to a request a PROVEN rule matches (inert without detect);
- *                                       # kill = off entirely, no network — the switch that needs no instance;
+ *                                       # kill = off entirely, no network — the switch that needs no instance.
+ *                                       # detect and enforce are ON unless set to no; without the plugin the
+ *                                       # pull runs and nothing is judged;
  *                                       # dir = where shield.json (the durable tier) lives, '' = the system temp
  *                                       # dir. Needs url+key; APCu is the fast tier, the file alone works without.
  *
@@ -241,6 +259,19 @@ class Sender extends Service
 	public const int HELLO_DAY = 86400;
 	
 	public const int HELLO_RETRY = 3600;
+	
+	/**
+	 * The inventory's key namespace, beneath the install's own: `told` holds
+	 * the installed list's stamp last said, `lock` the worker saying it now
+	 */
+	public const string INVENTORY_PREFIX = 'ovos:codesafe:inventory:';
+	
+	/** codesafe's InventoryPayload patterns: an item outside them would refuse the whole report */
+	public const string INVENTORY_PACKAGE = '~^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$~';
+	
+	public const string INVENTORY_SLUG = '~^[a-z0-9][a-z0-9._-]{0,99}$~';
+	
+	public const string INVENTORY_VERSION = '~^[0-9A-Za-z._-]{1,32}$~';
 	
 	/**
 	 * What codesafe's REPLAY needs to re-issue the request that failed
@@ -871,6 +902,20 @@ class Sender extends Service
 			if($this->app !== null && $this->app->isInterfaceCli() === false)
 			{
 				$this->maybeHello();
+			}
+		}
+		catch(Throwable)
+		{
+			// never break the host application
+		}
+		
+		// the inventory too: one stat and one apcu_fetch per request, the list
+		// built and posted once a day per pool and after every composer install
+		try
+		{
+			if($this->app !== null && $this->app->isInterfaceCli() === false)
+			{
+				$this->maybeInventory();
 			}
 		}
 		catch(Throwable)
@@ -1679,7 +1724,8 @@ class Sender extends Service
 	 * sends. Only the switches this library HAS — security events have none
 	 * (the app calling reportRefusal() is the opt-in), so `security` is left
 	 * out and codesafe judges it by what arrives. The Shield's two count only
-	 * where the kernel really runs: detect without kill, enforce on top of it.
+	 * where the kernel really runs: detect without kill, enforce on top of it —
+	 * both on unless set to no, like Shield::consent().
 	 *
 	 * @return array<string, mixed> the body; [] when the sender is off
 	 */
@@ -1695,7 +1741,7 @@ class Sender extends Service
 		
 		$shield = $config->shield;
 		$shield = $shield instanceof ArrayObject ? $shield->getArrayCopy() : (is_array($shield) ? $shield : []);
-		$detect = ($shield['detect'] ?? null) === true && ($shield['kill'] ?? null) !== true;
+		$detect = ($shield['detect'] ?? true) === true && ($shield['kill'] ?? null) !== true;
 		
 		return [
 			'v' => 1,
@@ -1706,8 +1752,9 @@ class Sender extends Service
 				'rollups' => $config->rollups === true,
 				// the working-copy pass runs from a cron line wherever its web dirs are set
 				'files' => ($config->files?->web ?? null) !== null,
+				'inventory' => $config->inventory !== false && class_exists(InstalledVersions::class),
 				'shield_detect' => $detect,
-				'shield_enforce' => $detect && ($shield['enforce'] ?? null) === true,
+				'shield_enforce' => $detect && ($shield['enforce'] ?? true) === true,
 			],
 		];
 	}
@@ -1756,6 +1803,131 @@ class Sender extends Service
 			default => self::HELLO_RETRY,
 		});
 		apcu_delete($lock);
+	}
+	
+	/**
+	 * Pure: the inventory report (codesafe API.V1.md "Inventory", platform
+	 * `composer`) from Composer's installed data — InstalledVersions::getAllRawData(),
+	 * one set per vendor dir. Each package once, sorted: `slug` its name's tail,
+	 * `package` the vendor/name codesafe's composer lane matches on. Left out:
+	 * the app itself, development-only requirements, names another package
+	 * replaces or provides (nothing installed), and any name outside codesafe's
+	 * patterns — one would refuse the whole report. A branch (dev-main,
+	 * 6.4.x-dev) or a version outside the pattern is sent empty: a version the
+	 * matcher cannot read matches nothing, a branch read as a version would
+	 * match every advisory.
+	 *
+	 * @param list<array{root?: array, versions?: array<string, array>}> $installed
+	 * @return array{platform: string, core: string, php: string, items: list<array<string, mixed>>}
+	 */
+	public static function inventoryPayload(
+		array $installed,
+		string $php,
+	): array
+	{
+		$items = [];
+		foreach($installed as $set)
+		{
+			$root = (string)($set['root']['name'] ?? '');
+			foreach($set['versions'] ?? [] as $package => $about)
+			{
+				if($package === $root || isset($items[$package])
+					|| ($about['dev_requirement'] ?? false) === true
+					|| isset($about['pretty_version']) === false
+					|| strlen($package) > 128 || preg_match(self::INVENTORY_PACKAGE, $package) !== 1)
+				{
+					continue;
+				}
+				
+				$slug = substr($package, (int)strpos($package, '/') + 1);
+				if(preg_match(self::INVENTORY_SLUG, $slug) !== 1)
+				{
+					continue;
+				}
+				
+				$version = (string)$about['pretty_version'];
+				$items[$package] = [
+					'type' => 'package',
+					'slug' => $slug,
+					'package' => $package,
+					'version' => str_starts_with($version, 'dev-') || str_ends_with($version, '-dev')
+						|| preg_match(self::INVENTORY_VERSION, $version) !== 1
+						? ''
+						: $version,
+					'name' => $package,
+					'active' => true,
+				];
+			}
+		}
+		ksort($items);
+		
+		return [
+			'platform' => 'composer',
+			'core' => '',
+			'php' => $php,
+			'items' => array_values($items),
+		];
+	}
+	
+	/**
+	 * Says the inventory when it is due: when the installed list's stamp is not
+	 * the one last said (a composer install rewrites installed.php) or the day
+	 * it stands for is over — the list is built only then, never per request.
+	 * One worker of the pool says it (the lock); codesafe saying no — the
+	 * project's CVE switch off (403), no endpoint (404), a refused report —
+	 * waits a day, no answer or a busy codesafe an hour. Needs APCu, the direct
+	 * transport and Composer 2's InstalledVersions; `inventory: no` silences it.
+	 */
+	protected function maybeInventory(): void
+	{
+		if($this->isEnabled() === false || $this->config->inventory === false
+			|| (string)$this->config->url === '' || (string)$this->config->key === ''
+			|| function_exists('apcu_enabled') === false || apcu_enabled() === false
+			|| class_exists(InstalledVersions::class) === false)
+		{
+			return;
+		}
+		
+		// the instance and key ride the stamp: a moved project hears the list at once
+		$stamp = md5($this->installedStamp() . '|' . $this->config->url . '|' . $this->config->key);
+		$prefixer = new Prefixer(self::cachePrefix($this->app ?? null));
+		$told = $prefixer->prefix(self::INVENTORY_PREFIX . 'told');
+		if(apcu_fetch($told) === $stamp)
+		{
+			return;
+		}
+		
+		$lock = $prefixer->prefix(self::INVENTORY_PREFIX . 'lock');
+		if(apcu_add($lock, 1, 60) === false)
+		{
+			return;
+		}
+		
+		$php = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '.' . PHP_RELEASE_VERSION;
+		$code = $this->post('/api/v1/ingest/inventory', (string)json_encode(self::inventoryPayload($this->installed(), $php)));
+		apcu_store($told, $stamp, $code === 0 || $code === 429 || $code >= 500
+			? self::HELLO_RETRY
+			: self::HELLO_DAY);
+		apcu_delete($lock);
+	}
+	
+	/** Composer's installed data, every vendor dir — the seam a test points at a fixture */
+	protected function installed(): array
+	{
+		return InstalledVersions::getAllRawData();
+	}
+	
+	/**
+	 * What changes when the list does: installed.php beside InstalledVersions,
+	 * rewritten by every composer install — one stat, not the list
+	 */
+	protected function installedStamp(): string
+	{
+		$file = dirname((string)(new ReflectionClass(InstalledVersions::class))->getFileName()) . '/installed.php';
+		
+		return is_file($file)
+			? filemtime($file) . ':' . filesize($file)
+			: '';
 	}
 	
 	/**

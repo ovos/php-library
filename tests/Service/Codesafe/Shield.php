@@ -136,10 +136,11 @@ class Shield extends Test
 	
 	/**
 	 * RULE: the shield runs only with the Sender's direct transport (console
-	 * enabled, url, key) AND `shield.detect` on AND `shield.kill` off; an
-	 * absent `shield` block is off, so an upgrade never starts pulling on
-	 * its own. Falsify: let detect default to on — every php-library app
-	 * with a console key starts calling the door the day the lib updates.
+	 * enabled, url, key) AND `shield.detect` not switched off AND
+	 * `shield.kill` off; an absent `shield` block is ON (codesafe
+	 * docs/plans/shield-auto-deploy.md D8: no site waits for someone to opt
+	 * in). Falsify: read detect as an opt-in again — every php-library app
+	 * stays unprotected until someone edits its environments.yml.
 	 */
 	public function theShieldNeedsTheTransportDetectAndNoKill(): bool
 	{
@@ -148,19 +149,21 @@ class Shield extends Test
 		return $enabled(['detect' => true])
 			&& $enabled(['detect' => true, 'enforce' => true])
 			&& $enabled(['detect' => false]) === false
-			&& $enabled([]) === false
+			&& $enabled([])
 			&& $enabled(['detect' => true, 'kill' => true]) === false
-			&& $enabled(['enforce' => true]) === false
+			&& $enabled(['enforce' => true])
+			&& $enabled(['detect' => false, 'enforce' => true]) === false
 			&& $enabled(['detect' => true], ['enabled' => false]) === false
 			&& $enabled(['detect' => true], ['url' => '']) === false
 			&& $enabled(['detect' => true], ['key' => '']) === false
-			&& (new Subject(new ArrayObject(['enabled' => true, 'url' => 'https://console.invalid', 'key' => 'k'])))->isEnabled() === false
+			&& (new Subject(new ArrayObject(['enabled' => true, 'url' => 'https://console.invalid', 'key' => 'k'])))->isEnabled()
 			&& (new Subject(null))->isEnabled() === false;
 	}
 	
 	/**
 	 * RULE: consent reads the three keys as booleans and nothing else (a
-	 * string "yes" is not consent); the APCu prefix sits beneath the
+	 * string "yes" is not consent), detect and enforce on when absent and
+	 * kill off; the APCu prefix sits beneath the
 	 * install's cache prefix like the rollups'; the durable file is named
 	 * by the install and the key, so two installs — or one install with two
 	 * keys — never share it, and `shield.dir` decides where it lives.
@@ -179,7 +182,7 @@ class Shield extends Test
 		
 		return $consent->detect && $consent->enforce && $consent->kill === false && $consent->active() && $consent->blocks()
 			&& $loose->detect === false && $loose->enforce === false
-			&& $none->detect === false && $none->enforce === false && $none->kill === false
+			&& $none->detect && $none->enforce && $none->kill === false
 			&& str_starts_with($a->keyPrefix(), 'install-a') && str_contains($a->keyPrefix(), Subject::PREFIX)
 			&& $a->keyPrefix() !== $b->keyPrefix()
 			&& $a->file() !== $b->file() && $a->file() !== $otherKey->file()
@@ -239,7 +242,7 @@ class Shield extends Test
 		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => $rules];
 		$enforcing = $this->subject(['detect' => true, 'enforce' => true]);
 		$enforcing->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord());
-		$observing = $this->subject(['detect' => true]);
+		$observing = $this->subject(['detect' => true, 'enforce' => false]);
 		$killed = $this->subject(['detect' => true, 'enforce' => true, 'kill' => true]);
 		
 		$bot = Facts::fromServer(['REQUEST_URI' => '/', 'HTTP_USER_AGENT' => 'python-requests/2.31', 'REMOTE_ADDR' => '203.0.113.9']);
