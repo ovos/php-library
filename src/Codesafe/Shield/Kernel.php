@@ -57,11 +57,11 @@ declare(strict_types=1);
  * first; a rate rule counts only a request no match rule decided. Counting
  * needs APCu (the file tier cannot count): without it rate rules are
  * skipped, and the limit is per POOL — one server's APCu, not the site's.
- * The pull names `X-Shield-Kinds: match,rate`, and the door serves rate
- * rules only to a kernel that does, so a kernel older than them never reads
- * a rate rule as a match rule.
+ * The pull names `X-Shield-Kinds: match,rate,threat,vpatch`, and the door
+ * serves each kind only to a kernel that names it, so a kernel older than
+ * rate rules never reads one as a match rule.
  *
- * Virtual patches (kind `vpatch`, docs/plans/shield-p2-conditions.md): an
+ * Virtual patches (kind `vpatch`): an
  * entry point, a parameter, a typed test and WHO — `{who, conditions:
  * [{target, decode, test, value, ci}]}`, every condition holding, over the
  * request as the platform parsed it (Facts' query, form, JSON, cookies,
@@ -561,6 +561,13 @@ final class Verdict
 	
 	/** a rate rule's verdict, observed or answered — `mode` in the report says which */
 	public const KIND_RATE = 'shield_rate';
+	
+	/**
+	 * A proven vpatch held as an observe because the host could not answer
+	 * its who or its nonce: a layer that judges before the host can (the
+	 * WordPress prepend) leaves such a request to the one that can
+	 */
+	public const REASON_UNANSWERED = 'unanswered';
 	
 	/**
 	 * @param ?array<string, mixed> $rule the rule that matched, as served
@@ -1344,7 +1351,7 @@ final class Kernel
 	/** what this kernel reads — the door serves rate rules only to a pull that names them */
 	public const HEADER_KINDS = 'X-Shield-Kinds';
 	
-	public const KINDS = 'match,rate,threat';
+	public const KINDS = 'match,rate,threat,vpatch';
 	
 	/** the project's ruleset version, one value whatever kinds a kernel reads — what nudge() compares */
 	public const HEADER_VERSION = 'X-Shield-Version';
@@ -1497,7 +1504,7 @@ final class Kernel
 					// what the host could not answer (who, a nonce) only observes — and a proven rule after it may still block
 					if($blocks && $hit['resolved'] === false)
 					{
-						$held ??= $verdict;
+						$held ??= new Verdict(Verdict::OBSERVE, $rule, $verdict->matched, Verdict::REASON_UNANSWERED);
 						
 						continue;
 					}

@@ -283,12 +283,17 @@ class Shield
 		?Application $app = null,
 	): Facts
 	{
+		// the parsed bags a virtual patch reads; no `can`: an app's roles are not the
+		// capabilities a vpatch names, so a signed-in request to a `lacks:` rule observes
 		return Facts::fromServer(
 			$_SERVER,
 			$_POST,
 			static fn(): string => (string)file_get_contents('php://input'),
 			self::isAuthed($app) === true,
 			user: self::identity($app),
+			get: $_GET,
+			cookies: $_COOKIE,
+			files: $_FILES,
 		);
 	}
 	
