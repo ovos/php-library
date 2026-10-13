@@ -61,6 +61,14 @@ declare(strict_types=1);
  * rules only to a kernel that does, so a kernel older than them never reads
  * a rate rule as a match rule.
  *
+ * Threat addresses (kind `threat`, served to a kernel that names it): a
+ * `threats` section beside the rules — `{mode, pass, addresses}`, the
+ * addresses codesafe saw send exploits. They are judged first: a request
+ * from one that is not signed in and not to a `pass` path (where a person
+ * behind the same NAT signs in) is blocked under enforce when the mode is
+ * proven, else observed — counted as hits of the reserved rule 0, never
+ * reported as an event, so a refusal never feeds the score that listed it.
+ *
  * Fast pickup: the door says the project's ruleset version (X-Shield-Version,
  * one value whatever kinds a kernel reads) on every 200 and 304, and the
  * kernel stores it beside the rules. codesafe's ingest answers carry the
@@ -91,6 +99,7 @@ use function apcu_inc;
 use function apcu_store;
 use function ceil;
 use function class_exists;
+use function count;
 use function crc32;
 use function curl_exec;
 use function curl_getinfo;
@@ -104,6 +113,7 @@ use function hash;
 use function http_get_last_response_headers;
 use function implode;
 use function in_array;
+use function inet_ntop;
 use function inet_pton;
 use function intdiv;
 use function is_array;
@@ -123,6 +133,7 @@ use function rename;
 use function rtrim;
 use function sprintf;
 use function str_contains;
+use function str_ends_with;
 use function str_starts_with;
 use function strcasecmp;
 use function stream_context_create;
@@ -479,6 +490,19 @@ final class Ruleset
 	
 	public const KINDS = [self::KIND_MATCH, self::KIND_RATE];
 	
+	/** the threat-address section's kind, named in X-Shield-Kinds — never a rule's */
+	public const KIND_THREAT = 'threat';
+	
+	/** the rule id a threat address's hits are counted under: a rule's id is never 0 */
+	public const THREAT_RULE = 0;
+	
+	/** at most this many addresses, this many pass paths of at most PASS_MAX bytes */
+	public const THREATS_MAX = 5000;
+	
+	public const PASSES_MAX = 20;
+	
+	public const PASS_MAX = 100;
+	
 	/** one address · one user (Facts::$user) · the route itself, whoever asks */
 	public const RATE_KEY_IP = 'ip';
 	
@@ -502,6 +526,7 @@ final class Ruleset
 		public readonly bool $usable,
 		public readonly string $project = '',
 		public readonly string $version = '',
+		public readonly ?array $threats = null,
 	)
 	{
 	}
@@ -512,7 +537,8 @@ final class Ruleset
 	 * non-empty value under VALUE_MAX, a mode — anything else is left out.
 	 * The digest is the door's (X-Shield-Sha256) or, absent, the sha256 of
 	 * the rules as received — the same bytes the door hashes. The version is
-	 * the door's X-Shield-Version, '' when it said none
+	 * the door's X-Shield-Version, '' when it said none. The threat section is
+	 * kept only whole — a mode, pass paths, addresses PHP can read (threats())
 	 */
 	public static function fromPayload(
 		array $payload,
@@ -537,11 +563,12 @@ final class Ruleset
 		}
 		if(preg_match('~^[0-9a-f]{64}$~', $digest) !== 1)
 		{
-			$digest = hash('sha256', (string)json_encode(is_array($payload['rules'] ?? null) ? $payload['rules'] : [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+			$digest = hash('sha256', (string)json_encode(is_array($payload['rules'] ?? null) ? $payload['rules'] : [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+				. (isset($payload['threats']) ? (string)json_encode($payload['threats'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : ''));
 		}
 		
 		return new self($rules, $digest, $fetchedAt, $usable, is_string($payload['project'] ?? null) ? $payload['project'] : '',
-			self::isVersion($version) ? $version : '');
+			self::isVersion($version) ? $version : '', $usable ? self::threats($payload['threats'] ?? null) : null);
 	}
 	
 	/** the stored record back into a ruleset; null when the record is not one */
@@ -561,7 +588,70 @@ final class Ruleset
 			($record['usable'] ?? false) === true,
 			is_string($record['project'] ?? null) ? $record['project'] : '',
 			is_string($record['version'] ?? null) && self::isVersion($record['version']) ? $record['version'] : '',
+			// stored as checked (a lookup map): read per request, never checked again
+			is_array($record['threats']['addresses'] ?? null) ? $record['threats'] : null,
 		);
+	}
+	
+	/**
+	 * The door's threat section, checked: a mode off the list, at most
+	 * PASSES_MAX pass paths (each `/…`, under PASS_MAX bytes), at most
+	 * THREATS_MAX addresses in their canonical form as a lookup map — an
+	 * address PHP cannot read is left out. Null when there is none
+	 *
+	 * @return ?array{mode: string, pass: list<string>, addresses: array<string, int>}
+	 */
+	public static function threats(
+		mixed $section,
+	): ?array
+	{
+		if(is_array($section) === false || in_array($section['mode'] ?? null, [self::MODE_OBSERVE, self::MODE_PROVEN], true) === false
+			|| is_array($section['addresses'] ?? null) === false)
+		{
+			return null;
+		}
+		$pass = [];
+		foreach(is_array($section['pass'] ?? null) ? $section['pass'] : [] as $path)
+		{
+			if(is_string($path) && str_starts_with($path, '/') && strlen($path) <= self::PASS_MAX && count($pass) < self::PASSES_MAX)
+			{
+				$pass[] = $path;
+			}
+		}
+		$addresses = [];
+		foreach($section['addresses'] as $address)
+		{
+			$canonical = is_string($address) ? self::canonical($address) : '';
+			if($canonical !== '')
+			{
+				$addresses[$canonical] = 1;
+			}
+			if(count($addresses) >= self::THREATS_MAX)
+			{
+				break;
+			}
+		}
+		
+		return ['mode' => $section['mode'], 'pass' => $pass, 'addresses' => $addresses];
+	}
+	
+	/**
+	 * An address in the one form every side compares: the `::ffff:` form
+	 * unwrapped to its v4 address, then inet_ntop(inet_pton()) — RFC 5952 for
+	 * v6, as the Node twin writes it; '' when it is none
+	 */
+	public static function canonical(
+		string $address,
+	): string
+	{
+		$address = trim($address);
+		if(preg_match('~^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$~i', $address, $mapped) === 1)
+		{
+			$address = $mapped[1];
+		}
+		$packed = @inet_pton($address);
+		
+		return $packed === false ? '' : (string)inet_ntop($packed);
 	}
 	
 	/** what the store keeps — JSON, never PHP */
@@ -574,6 +664,7 @@ final class Ruleset
 			'fetched_at' => $this->fetchedAt,
 			'sha256' => $this->digest,
 			'version' => $this->version,
+			'threats' => $this->threats,
 			'usable' => $this->usable,
 			'rules' => $this->rules,
 		];
@@ -586,7 +677,7 @@ final class Ruleset
 	): self
 	{
 		return new self($this->rules, $this->digest, $fetchedAt, $this->usable, $this->project,
-			self::isVersion($version) ? $version : $this->version);
+			self::isVersion($version) ? $version : $this->version, $this->threats);
 	}
 	
 	/** a version is the door's sha256, lowercase hex */
@@ -928,7 +1019,7 @@ final class Kernel
 	/** what this kernel reads — the door serves rate rules only to a pull that names them */
 	public const HEADER_KINDS = 'X-Shield-Kinds';
 	
-	public const KINDS = 'match,rate';
+	public const KINDS = 'match,rate,threat';
 	
 	/** the project's ruleset version, one value whatever kinds a kernel reads — what nudge() compares */
 	public const HEADER_VERSION = 'X-Shield-Version';
@@ -1049,6 +1140,13 @@ final class Kernel
 				
 				return Verdict::pass('ceiling');
 			}
+			$threat = $this->threatened($ruleset, $facts);
+			if($threat !== null)
+			{
+				$blocks = $threat['mode'] === Ruleset::MODE_PROVEN && $consent->blocks();
+				
+				return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $threat, $facts->ip);
+			}
 			$rates = [];
 			foreach($ruleset->rules as $rule)
 			{
@@ -1085,6 +1183,36 @@ final class Kernel
 			
 			return Verdict::pass('exception');
 		}
+	}
+	
+	/**
+	 * The threat section's word on this request: the pseudo-rule it is judged
+	 * by (id THREAT_RULE, the section's mode) when the address is listed, the
+	 * request is not signed in and its path ends in none of the pass paths;
+	 * null otherwise
+	 *
+	 * @return ?array{id: int, kind: string, mode: string}
+	 */
+	protected function threatened(
+		Ruleset $ruleset,
+		Facts $facts,
+	): ?array
+	{
+		$threats = $ruleset->threats;
+		if($threats === null || $facts->authed || isset($threats['addresses'][Ruleset::canonical($facts->ip)]) === false)
+		{
+			return null;
+		}
+		$path = $facts->path();
+		foreach((array)($threats['pass'] ?? []) as $pass)
+		{
+			if(str_ends_with($path, (string)$pass))
+			{
+				return null;
+			}
+		}
+		
+		return ['id' => Ruleset::THREAT_RULE, 'kind' => Ruleset::KIND_THREAT, 'mode' => (string)$threats['mode']];
 	}
 	
 	/** a rule's predicate over the request: the fragment, or null */
@@ -1161,7 +1289,10 @@ final class Kernel
 		Facts $facts,
 	): void
 	{
-		if($this->report === null || $verdict->isPass() || $verdict->rule === null)
+		// a threat address is counted, never reported: the event would feed the
+		// score that listed it, and the block would renew itself
+		if($this->report === null || $verdict->isPass() || $verdict->rule === null
+			|| ($verdict->rule['kind'] ?? '') === Ruleset::KIND_THREAT)
 		{
 			return;
 		}
