@@ -61,13 +61,13 @@ declare(strict_types=1);
  * serves each kind only to a kernel that names it, so a kernel older than
  * rate rules never reads one as a match rule.
  *
- * Virtual patches (kind `vpatch`): an
- * entry point, a parameter, a typed test and WHO — `{who, conditions:
- * [{target, decode, test, value, ci}]}`, every condition holding, over the
- * request as the platform parsed it (Facts' query, form, JSON, cookies,
- * headers, file names). `who` is anyone, anonymous or lacks:<capability>,
- * and a nonce test asks the platform: what the adapter cannot answer the
- * rule may only observe.
+ * Virtual patches (kind `vpatch`): an entry point, a parameter, a typed test
+ * and WHO — `{who, conditions: [{target, decode, test, value, ci}]}`, every
+ * condition holding, over the request as the platform parsed it (Facts'
+ * query, form, JSON, cookies, headers, file names). `who` is anyone,
+ * anonymous or lacks:<capability>, and a nonce test asks the platform: a
+ * proven vpatch whose who or nonce the adapter cannot answer is held with
+ * the reason `unanswered` (Verdict::REASON_UNANSWERED), never blocked.
  *
  * Threat addresses (kind `threat`, served to a kernel that names it): a
  * `threats` section beside the rules — `{mode, pass, addresses}`, the
@@ -84,9 +84,9 @@ declare(strict_types=1);
  * next pull when it differs — a rule switched off in codesafe lands on the
  * next tick after the site's next report, not at the interval.
  *
- * PHP 8.3 floor (the WordPress plugin's, since 0.7.0 — MG 2026-09-23: 8.1 need
- * not be supported). codesafe's own suite tests this
- * file; consumers keep it byte-identical (sha1-compare after sync) and load
+ * PHP 8.3 floor. codesafe's own suite tests this file (Tests\Shield\KernelSync
+ * holds the vendored copies to it); consumers keep it byte-identical
+ * (sha1-compare after sync) and load
  * it with require_once — like any PHP class file, a second include is a
  * fatal error (the classes bind at compile time, so no guard can help).
  *
@@ -341,6 +341,7 @@ final class Facts
 		{
 			$raw = $input();
 			
+			// past the cap, or nested deeper than 32 levels: no JSON at all
 			return is_string($raw) && strlen($raw) <= $cap ? json_decode($raw, true, 32) : null;
 		};
 	}
@@ -351,6 +352,8 @@ final class Facts
 	 * multipart's raw stream is gone by then; for JSON, XML and anything
 	 * else the raw input, capped at BODY_CAP, decoded once like the URI. Read
 	 * lazily: nothing is touched until a body rule asks
+	 *
+	 * @return ?Closure(): array{string, bool} the body and whether it was capped; null = no body to read
 	 */
 	public static function bodyReader(
 		string $contentType,
@@ -865,6 +868,7 @@ final class Ruleset
 		{
 			$address = $mapped[1];
 		}
+		// @: inet_pton() warns on anything that is not an address
 		$packed = @inet_pton($address);
 		
 		return $packed === false ? '' : (string)inet_ntop($packed);
@@ -1038,6 +1042,7 @@ final class Ruleset
 		{
 			return true;
 		}
+		// a target without ':' has no name (null)
 		[$prefix, $name] = explode(':', $target, 2) + [1 => null];
 		
 		return in_array($prefix, self::TARGET_PREFIXES, true) && is_string($name)
@@ -1064,7 +1069,7 @@ final class Ruleset
 }
 
 /**
- * Two tiers. Fast: APCu under a per-install prefix ('' = none). Durable:
+ * Two tiers. Fast: APCu under a per-install prefix ('' = no APCu tier). Durable:
  * a JSON file the pull writes with write-temp-and-rename into a writable,
  * non-web-served directory the adapter names ('' = none). A read that
  * misses APCu reads the file and re-primes APCu, so a cleared APCu costs
@@ -1142,10 +1147,12 @@ final class Store
 		$written = false;
 		if($this->file !== '')
 		{
+			// a temp file of its own: concurrent writers never share one, and rename() swaps the file whole
 			$temp = $this->file . '.' . uniqid('', true) . '.tmp';
 			try
 			{
 				$json = (string)json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+				// a short write (a full disk) never replaces the good file
 				if(file_put_contents($temp, $json, LOCK_EX) === strlen($json) && rename($temp, $this->file))
 				{
 					$written = true;
@@ -1165,10 +1172,12 @@ final class Store
 		}
 		if($this->apcu)
 		{
+			// apcu_store() first, so it runs even when the file took the record
 			$written = apcu_store($this->key('rules'), $record) || $written;
 		}
 		if($written)
 		{
+			// knowledge again: a pending forced pull is satisfied
 			$this->forcePull(false);
 		}
 		
@@ -1240,6 +1249,7 @@ final class Store
 			return;
 		}
 		$key = $this->key('hits:' . $minute . ':' . $ruleId . ':' . $outcome);
+		// no key yet: the minute's first hit creates it
 		if(apcu_inc($key, 1, $success, self::HITS_TTL) === false || $success === false)
 		{
 			apcu_add($key, 1, self::HITS_TTL);
@@ -1265,15 +1275,19 @@ final class Store
 			return null;
 		}
 		$bucket = intdiv($now, $window);
+		// the key as crc32, a short fixed-width name: two keys that collide share a count
 		$head = 'rate:' . $ruleId . ':' . crc32($key) . ':';
+		// a bucket outlives the next window, which reads it as the previous one
 		$ttl = 2 * $window + 1;
 		$name = $this->key($head . $bucket);
 		$current = apcu_inc($name, 1, $success, $ttl);
 		if($current === false || $success === false)
 		{
+			// the bucket's first request creates it; when another request just did, count on top
 			$current = apcu_add($name, 1, $ttl) ? 1 : (int)apcu_inc($name, 1, $success, $ttl);
 		}
 		$previous = apcu_fetch($this->key($head . ($bucket - 1)));
+		// the share of the previous bucket the sliding window still covers
 		$covered = 1 - ($now - $bucket * $window) / $window;
 		
 		return (float)$current + (is_int($previous) ? $previous * $covered : 0.0);
@@ -1285,6 +1299,7 @@ final class Store
 		int $ttl,
 	): bool
 	{
+		// at least 1: an APCu ttl of 0 never expires
 		return $this->apcu && apcu_add($this->key('once:' . $name), 1, max(1, $ttl));
 	}
 	
@@ -1307,6 +1322,7 @@ final class Store
 		foreach(new APCUIterator('~^' . preg_quote($head, '~') . '~') as $entry)
 		{
 			$key = (string)$entry['key'];
+			// the key's tail is `<rule id>:<outcome>`
 			[$ruleId, $outcome] = explode(':', substr($key, strlen($head)), 2) + [1 => ''];
 			$id = (int)$ruleId;
 			$hits[$id] ??= ['observe' => 0, 'block' => 0];
@@ -1458,6 +1474,7 @@ final class Kernel
 				return Verdict::pass('detect off');
 			}
 			$ruleset = $this->ruleset();
+			// no store: pass, and the next tick pulls regardless of the interval
 			if($ruleset === null)
 			{
 				$this->store->forcePull();
@@ -1468,12 +1485,14 @@ final class Kernel
 			{
 				return Verdict::pass('unknown contract');
 			}
+			// past the ceiling the rules lift until a pull renews them
 			if($ruleset->isStale($now ?? time(), $this->ceiling))
 			{
 				$this->store->forcePull();
 				
 				return Verdict::pass('ceiling');
 			}
+			// a listed address is judged before any rule
 			$threat = $this->threatened($ruleset, $facts);
 			if($threat !== null)
 			{
@@ -1482,9 +1501,11 @@ final class Kernel
 				return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $threat, $facts->ip);
 			}
 			$rates = [];
+			// a vpatch that would block but could not be answered: observed unless a later rule blocks
 			$held = null;
 			foreach($ruleset->rules as $rule)
 			{
+				// rate rules count only a request no match rule decided: judged after this loop
 				if(Ruleset::isRate($rule))
 				{
 					$rates[] = $rule;
@@ -1509,6 +1530,7 @@ final class Kernel
 						continue;
 					}
 					
+					// an observe after a held vpatch: the earlier, held verdict wins
 					return $verdict->isBlock() ? $verdict : ($held ?? $verdict);
 				}
 				$matched = $this->matched($rule, $facts);
@@ -1604,12 +1626,14 @@ final class Kernel
 			return null;
 		}
 		$rate = (array)$rule['rate'];
+		// the route key is one counter for every client
 		$key = match($rate['key'])
 		{
 			Ruleset::RATE_KEY_IP => $facts->ip,
 			Ruleset::RATE_KEY_USER => $facts->user,
 			default => '*',
 		};
+		// no address or no user to count by
 		if($key === '')
 		{
 			return null;
@@ -1665,6 +1689,7 @@ final class Kernel
 				
 				return;
 			}
+			// codesafe's Shield\Alarm reads the rule id off the message's `shield rule N ` start
 			($this->report)($verdict->kind(), sprintf('shield rule %d %s %s %s', (int)$rule['id'],
 				$verdict->isBlock() ? 'refused' : 'observed', $facts->method, substr($facts->path(), 0, 200)), [
 				'rule' => (int)$rule['id'],
@@ -1688,7 +1713,7 @@ final class Kernel
 	
 	/**
 	 * A rate verdict, ONCE per rule, key and window — the hits count every
-	 * request past the limit, the event says it started. Never "refused": the
+	 * request past the limit, the event says it started. Never "refused":
 	 * codesafe's alarm reads `shield rule N refused` as a match rule turning
 	 * people away, and a route ceiling doing its job is not that
 	 */
@@ -1746,6 +1771,7 @@ final class Kernel
 		}
 		catch(Throwable)
 		{
+			// a lost count never fails the request
 		}
 	}
 	
@@ -1830,10 +1856,11 @@ final class Kernel
 		int $now,
 	): string
 	{
-		// both names of the key header: X-Console-Key is what an instance from
-		// before the rename (2026-09-24) reads, X-Codesafe-Key every one since
+		// both names of the key header: an instance older than the rename to
+		// codesafe reads only X-Console-Key
 		$headers = ['X-Codesafe-Key: ' . $this->key, 'X-Console-Key: ' . $this->key, 'Accept: application/json',
 			self::HEADER_KINDS . ': ' . self::KINDS];
+		// the digest as the ETag: an unchanged ruleset answers 304
 		if($current !== null && $current->digest !== '')
 		{
 			$headers[] = 'If-None-Match: "' . $current->digest . '"';
@@ -1843,6 +1870,7 @@ final class Kernel
 		if($status === 304 && $current !== null)
 		{
 			$this->store->write($current->withFetchedAt($now, self::header($response, self::HEADER_VERSION))->toRecord());
+			// the next ruleset() call reads the new record
 			$this->rulesetRead = false;
 			
 			return self::PULL_UNCHANGED;
@@ -1862,6 +1890,7 @@ final class Kernel
 		}
 		$ruleset = Ruleset::fromPayload($payload, $now, self::header($response, 'X-Shield-Sha256'),
 			self::header($response, self::HEADER_VERSION));
+		// stored even when unusable, so an unknown contract is not fetched again on every tick
 		$this->store->write($ruleset->toRecord());
 		$this->rulesetRead = false;
 		if($ruleset->usable === false)
@@ -1913,10 +1942,12 @@ final class Kernel
 		if(str_starts_with($who, Ruleset::WHO_LACKS) && $facts->authed)
 		{
 			$can = $facts->can(substr($who, strlen(Ruleset::WHO_LACKS)));
+			// the user has the capability: the patch is not for them
 			if($can === true)
 			{
 				return null;
 			}
+			// null: the host cannot say, so the match stays unanswered
 			$resolved = $can === false;
 		}
 		$matched = '';
@@ -1929,6 +1960,7 @@ final class Kernel
 				return null;
 			}
 			$resolved = $resolved && $hit['resolved'];
+			// a method or path value only stands in when no parameter's value matched
 			if(in_array($condition['target'], Ruleset::TARGETS, true))
 			{
 				$framed = $framed === '' ? $hit['matched'] : $framed;
@@ -1963,6 +1995,7 @@ final class Kernel
 		}
 		if($test === 'nonce_invalid')
 		{
+			// no nonce sent is an invalid one
 			if($values === [])
 			{
 				return ['matched' => '', 'resolved' => true];
@@ -1971,10 +2004,12 @@ final class Kernel
 			foreach($values as $value)
 			{
 				$valid = $facts->nonceValid((string)$condition['value'], $value);
+				// one valid nonce and the condition fails
 				if($valid === true)
 				{
 					return null;
 				}
+				// null: the host cannot say
 				$resolved = $resolved && $valid === false;
 			}
 			
@@ -2011,6 +2046,7 @@ final class Kernel
 			return [$facts->path()];
 		}
 		[$prefix, $name] = explode(':', $target, 2) + [1 => ''];
+		// Facts::$headers is keyed by lowercase name
 		$header = strtolower($name);
 		
 		return match($prefix)
@@ -2192,6 +2228,7 @@ final class Kernel
 			}
 			else if($step === 'base64')
 			{
+				// strict: a character outside the alphabet fails the step
 				$bytes = base64_decode($value, true);
 				if($bytes === false)
 				{
@@ -2277,8 +2314,11 @@ final class Kernel
 			case Ruleset::OP_CIDR:
 				return self::inCidr($value, $subject) ? $subject : null;
 			case Ruleset::OP_REGEX:
+				// every `~` the value has not escaped itself (after an even run of
+				// backslashes) gets one, so it cannot close the delimiter
 				$pattern = '~' . (string)preg_replace('#(?<!\\\\)((?:\\\\\\\\)*)~#', '$1\\~', $value) . '~D' . ($ci ? 'i' : '');
 				
+				// @: a pattern PCRE refuses warns, returns false and matches nothing
 				return @preg_match($pattern, $subject, $m) === 1 ? (string)$m[0] : null;
 			default:
 				return null;
@@ -2295,21 +2335,25 @@ final class Kernel
 		$slash = strpos($cidr, '/');
 		$prefix = @inet_pton($slash === false ? $cidr : substr($cidr, 0, $slash));
 		$packed = @inet_pton(trim($address));
+		// different lengths: a v4 address never sits in a v6 prefix, nor the reverse
 		if($prefix === false || $packed === false || strlen($packed) !== strlen($prefix))
 		{
 			return false;
 		}
 		$max = strlen($prefix) * 8;
+		// a bare address compares every bit
 		$bits = $max;
 		if($slash !== false)
 		{
 			$given = substr($cidr, $slash + 1);
+			// a prefix length past 32 (v4) or 128 (v6) matches nothing
 			if(preg_match('~^\d{1,3}$~', $given) !== 1 || (int)$given > $max)
 			{
 				return false;
 			}
 			$bits = (int)$given;
 		}
+		// byte by byte under the mask; the last byte the prefix reaches is masked in part
 		for($i = 0, $n = strlen($packed); $i < $n && $bits > 0; $i++, $bits -= 8)
 		{
 			$mask = $bits >= 8 ? 0xFF : (0xFF << (8 - $bits)) & 0xFF;
@@ -2345,8 +2389,8 @@ final class Kernel
 					CURLOPT_NOSIGNAL => true,
 				]);
 				$raw = curl_exec($curl);
-				// no curl_close(): a no-op since PHP 8.0 and deprecated from 8.5, where
-				// a host that throws on deprecations turned every pull into status 0
+				// no curl_close(): a no-op since PHP 8.0 and deprecated from 8.5, so a
+				// host that throws on deprecations would turn every pull into status 0
 				$status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
 				if(is_string($raw) === false)
 				{
@@ -2359,6 +2403,7 @@ final class Kernel
 				'method' => 'GET',
 				'header' => implode("\r\n", $headers) . "\r\nUser-Agent: " . self::USER_AGENT,
 				'timeout' => $timeoutMs / 1000,
+				// a non-2xx answer (a 304 too) is still read, its status taken from the headers
 				'ignore_errors' => true,
 			]]);
 			$body = @file_get_contents($url, false, $context);
@@ -2415,6 +2460,7 @@ final class Kernel
 					$headers[strtolower(trim($name))] = trim($value);
 				}
 			}
+			// a 1xx block (100 Continue) is followed by the real one
 			if(preg_match('~^HTTP/\S+\s+1\d\d~', $statusLine) !== 1)
 			{
 				return ['headers' => $headers, 'body' => $raw];
@@ -2434,6 +2480,7 @@ final class Kernel
 			}
 			catch(Throwable)
 			{
+				// the host's log never fails the request
 			}
 		}
 	}
