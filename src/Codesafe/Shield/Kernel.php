@@ -1249,7 +1249,7 @@ final class Store
 			return;
 		}
 		$key = $this->key('hits:' . $minute . ':' . $ruleId . ':' . $outcome);
-		// no key yet: the minute's first hit creates it
+		// apcu_inc creates a missing key itself, so two first hits of a minute both count; the add is for an increment that failed
 		if(apcu_inc($key, 1, $success, self::HITS_TTL) === false || $success === false)
 		{
 			apcu_add($key, 1, self::HITS_TTL);
@@ -1283,7 +1283,7 @@ final class Store
 		$current = apcu_inc($name, 1, $success, $ttl);
 		if($current === false || $success === false)
 		{
-			// the bucket's first request creates it; when another request just did, count on top
+			// apcu_inc creates a missing bucket itself; an increment that failed gets one add, else one more increment
 			$current = apcu_add($name, 1, $ttl) ? 1 : (int)apcu_inc($name, 1, $success, $ttl);
 		}
 		$previous = apcu_fetch($this->key($head . ($bucket - 1)));
