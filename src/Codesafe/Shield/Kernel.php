@@ -25,7 +25,8 @@ declare(strict_types=1);
  * The kernel knows three things — Facts (what the adapter says about the
  * request; the kernel never reads a superglobal), Consent (three switches
  * read from the host's OWN config on every request: detect = observe,
- * enforce = block proven rules, kill = nothing and no network) and the Store
+ * enforce = block on the rules set to block, kill = nothing and no network)
+ * and the Store
  * (rules and counters, two tiers: APCu for speed, a JSON file for
  * durability — a cleared APCu re-primes from the file, a host without APCu
  * runs on the file alone). It does three things: pull() — a conditional GET
@@ -40,9 +41,12 @@ declare(strict_types=1);
  * the engine cannot run, a thrown anything — the request passes. A missing
  * store also forces the very next pull. A ruleset older than CEILING (24 h,
  * a codesafe instance gone silent) lifts by itself; a successful pull — 200 or 304 —
- * renews it. The verdict is `block` only when the rule is `proven` AND
+ * renews it. The verdict is `block` only when the rule is set to block AND
  * consent.enforce is on; an `observe` rule never blocks whatever the
- * switches say — the per-rule safety lives here.
+ * switches say — the per-rule safety lives here. A rule's blocking word is
+ * `block`, served to a kernel that names `mode-block` in X-Shield-Kinds;
+ * an older codesafe says `proven`, and this kernel reads both
+ * (Ruleset::blocks()).
  *
  * Rules are codesafe's one grammar for every runtime (dialect re2-2026,
  * contract 1): {field: uri|ua|ip|body, op: equals|prefix|contains|cidr|regex,
@@ -57,7 +61,7 @@ declare(strict_types=1);
  * first; a rate rule counts only a request no match rule decided. Counting
  * needs APCu (the file tier cannot count): without it rate rules are
  * skipped, and the limit is per POOL — one server's APCu, not the site's.
- * The pull names `X-Shield-Kinds: match,rate,threat,vpatch`, and the door
+ * The pull names `X-Shield-Kinds: match,rate,threat,vpatch,mode-block`, and the door
  * serves each kind only to a kernel that names it, so a kernel older than
  * rate rules never reads one as a match rule.
  *
@@ -66,15 +70,15 @@ declare(strict_types=1);
  * condition holding, over the request as the platform parsed it (Facts'
  * query, form, JSON, cookies, headers, file names). `who` is anyone,
  * anonymous or lacks:<capability>, and a nonce test asks the platform: a
- * proven vpatch whose who or nonce the adapter cannot answer is held with
+ * blocking vpatch whose who or nonce the adapter cannot answer is held with
  * the reason `unanswered` (Verdict::REASON_UNANSWERED), never blocked.
  *
  * Threat addresses (kind `threat`, served to a kernel that names it): a
  * `threats` section beside the rules — `{mode, pass, addresses}`, the
  * addresses codesafe saw send exploits. They are judged first: a request
  * from one that is not signed in and not to a `pass` path (where a person
- * behind the same NAT signs in) is blocked under enforce when the mode is
- * proven, else observed — counted as hits of the reserved rule 0, never
+ * behind the same NAT signs in) is blocked under enforce when the mode
+ * blocks, else observed — counted as hits of the reserved rule 0, never
  * reported as an event, so a refusal never feeds the score that listed it.
  *
  * Fast pickup: the door says the project's ruleset version (X-Shield-Version,
@@ -526,7 +530,7 @@ final class Facts
  * The three switches, read from the host's OWN config on every request and
  * never baked into the cached ruleset — unticking stops the next request,
  * not the next pull. detect = pull and observe; enforce = refuse on a
- * proven rule (inert without detect); kill = nothing, and no network
+ * rule set to block (inert without detect); kill = nothing, and no network
  */
 final class Consent
 {
@@ -566,7 +570,7 @@ final class Verdict
 	public const KIND_RATE = 'shield_rate';
 	
 	/**
-	 * A proven vpatch held as an observe because the host could not answer
+	 * A blocking vpatch held as an observe because the host could not answer
 	 * its who or its nonce: a layer that judges before the host can (the
 	 * WordPress prepend) leaves such a request to the one that can
 	 */
@@ -671,7 +675,14 @@ final class Ruleset
 	
 	public const MODE_OBSERVE = 'observe';
 	
+	/** the blocking mode, served to a kernel that names KIND_MODE_BLOCK */
+	public const MODE_BLOCK = 'block';
+	
+	/** the blocking mode as a codesafe before rule modes says it — read as MODE_BLOCK */
 	public const MODE_PROVEN = 'proven';
+	
+	/** named in X-Shield-Kinds: this kernel reads MODE_BLOCK — never a rule's kind */
+	public const KIND_MODE_BLOCK = 'mode-block';
 	
 	public const VALUE_MAX = 600;
 	
@@ -824,7 +835,7 @@ final class Ruleset
 		mixed $section,
 	): ?array
 	{
-		if(is_array($section) === false || in_array($section['mode'] ?? null, [self::MODE_OBSERVE, self::MODE_PROVEN], true) === false
+		if(is_array($section) === false || in_array($section['mode'] ?? null, [self::MODE_OBSERVE, self::MODE_BLOCK, self::MODE_PROVEN], true) === false
 			|| is_array($section['addresses'] ?? null) === false)
 		{
 			return null;
@@ -942,6 +953,18 @@ final class Ruleset
 	): bool
 	{
 		return ($rule['kind'] ?? self::KIND_MATCH) === self::KIND_VPATCH;
+	}
+	
+	/**
+	 * Whether a rule's (or the threat section's) mode blocks under enforce:
+	 * `block`, or `proven` from a codesafe before rule modes. Anything else —
+	 * observe, a word this kernel does not know — only observes
+	 */
+	public static function blocks(
+		mixed $mode,
+	): bool
+	{
+		return $mode === self::MODE_BLOCK || $mode === self::MODE_PROVEN;
 	}
 	
 	/** a vpatch: an int id, a mode, a `who` off the vocabulary, 1 to CONDITIONS_MAX conditions each well formed */
@@ -1364,10 +1387,13 @@ final class Kernel
 	
 	public const USER_AGENT = 'ovos-codesafe-shield/1';
 	
-	/** what this kernel reads — the door serves rate rules only to a pull that names them */
+	/**
+	 * what this kernel reads — the door serves rate rules only to a pull that
+	 * names them, and says a blocking rule `block` only to one naming `mode-block`
+	 */
 	public const HEADER_KINDS = 'X-Shield-Kinds';
 	
-	public const KINDS = 'match,rate,threat,vpatch';
+	public const KINDS = 'match,rate,threat,vpatch,mode-block';
 	
 	/** the project's ruleset version, one value whatever kinds a kernel reads — what nudge() compares */
 	public const HEADER_VERSION = 'X-Shield-Version';
@@ -1449,8 +1475,8 @@ final class Kernel
 	 * Over the cached ruleset. pass when consent says so, when there is no
 	 * store (and the next tick will pull), when the contract is unknown, when
 	 * the ruleset is past the ceiling; else the first MATCH or VPATCH rule
-	 * that matches — in the door's order, proven first — as block (proven AND
-	 * enforce, a vpatch's who and nonce answered) or observe; a vpatch that
+	 * that matches — in the door's order, blocking first — as block (set to
+	 * block AND enforce, a vpatch's who and nonce answered) or observe; a vpatch that
 	 * could not be answered observes unless a later rule blocks; else the
 	 * first RATE rule whose predicate matches and whose key
 	 * is over its limit, the same way. A rule the engine cannot run matches
@@ -1496,7 +1522,7 @@ final class Kernel
 			$threat = $this->threatened($ruleset, $facts);
 			if($threat !== null)
 			{
-				$blocks = $threat['mode'] === Ruleset::MODE_PROVEN && $consent->blocks();
+				$blocks = Ruleset::blocks($threat['mode']) && $consent->blocks();
 				
 				return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $threat, $facts->ip);
 			}
@@ -1519,10 +1545,10 @@ final class Kernel
 					{
 						continue;
 					}
-					$blocks = ($rule['mode'] ?? '') === Ruleset::MODE_PROVEN && $consent->blocks();
+					$blocks = Ruleset::blocks($rule['mode'] ?? '') && $consent->blocks();
 					$verdict = new Verdict($blocks && $hit['resolved'] ? Verdict::BLOCK : Verdict::OBSERVE, $rule,
 						substr($hit['matched'], 0, self::MATCHED_MAX));
-					// what the host could not answer (who, a nonce) only observes — and a proven rule after it may still block
+					// what the host could not answer (who, a nonce) only observes — and a blocking rule after it may still block
 					if($blocks && $hit['resolved'] === false)
 					{
 						$held ??= new Verdict(Verdict::OBSERVE, $rule, $verdict->matched, Verdict::REASON_UNANSWERED);
@@ -1538,7 +1564,7 @@ final class Kernel
 				{
 					continue;
 				}
-				$blocks = ($rule['mode'] ?? '') === Ruleset::MODE_PROVEN && $consent->blocks();
+				$blocks = Ruleset::blocks($rule['mode'] ?? '') && $consent->blocks();
 				$verdict = new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $rule, substr($matched, 0, self::MATCHED_MAX));
 				
 				return $verdict->isBlock() ? $verdict : ($held ?? $verdict);
@@ -1644,7 +1670,7 @@ final class Kernel
 		{
 			return null;
 		}
-		$blocks = ($rule['mode'] ?? '') === Ruleset::MODE_PROVEN && $consent->blocks();
+		$blocks = Ruleset::blocks($rule['mode'] ?? '') && $consent->blocks();
 		
 		return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $rule, substr($matched, 0, self::MATCHED_MAX),
 			'over limit', (int)ceil($count), $window - ($now % $window));
