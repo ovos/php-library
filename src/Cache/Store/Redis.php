@@ -647,7 +647,7 @@ class Redis extends TagIndex
 						break; // stop processing this tag if the result is invalid
 					}
 					
-					$count += (int)$result[0];
+					$count+= (int)$result[0];
 					$cursor = $result[1];
 				}
 				// continue as long as the cursor is not '0' (meaning there are more items to scan)

@@ -94,7 +94,7 @@ class RedisClusterVersioned extends RedisVersioned
 					$prefix,
 				);
 				
-				$count += (int)$result;
+				$count+= (int)$result;
 			}
 			
 			// rawCommand reports failures via the last error, not by throwing
