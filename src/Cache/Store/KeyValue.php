@@ -350,9 +350,11 @@ abstract class KeyValue
 	/**
 	 * What fetch() found: a value past its fresh time (written with a stale
 	 * time, see Stale) is a miss to the guard - the write that refreshes it
-	 * follows this read - so it is remembered with the epoch the item
-	 * carries ($epoch, or a Closure reading it when that costs a read of its
-	 * own); anything else is a hit
+	 * follows this read - and so is a value that did not decode (null: its
+	 * class gone in a deploy, a frame that does not decompress), recomputed
+	 * as any miss; either is remembered with the epoch the item carries
+	 * ($epoch, or a Closure reading it when that costs a read of its own);
+	 * anything else is a hit
 	 */
 	protected function found(
 		string $id,
@@ -360,7 +362,8 @@ abstract class KeyValue
 		mixed $epoch,
 	): mixed
 	{
-		if(($value instanceof Stale && $value->isFresh() === false)
+		if($value === null
+			|| ($value instanceof Stale && $value->isFresh() === false)
 			|| $this->refreshing)
 		{
 			$this->rememberMiss($id, $epoch instanceof Closure ? $epoch() : $epoch);

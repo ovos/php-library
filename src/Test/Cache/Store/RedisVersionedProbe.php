@@ -57,6 +57,9 @@ class RedisVersionedProbe extends RedisVersioned
 	/** run right before the lock with its look - a test lands a value meanwhile */
 	public ?Closure $beforeLock = null;
 	
+	/** run before each read of the rules stream - a test makes the read fail */
+	public ?Closure $beforeRuleFetch = null;
+	
 	/**
 	 * The function names each sendAll() sent in one round trip
 	 *
@@ -163,6 +166,10 @@ class RedisVersionedProbe extends RedisVersioned
 	): array
 	{
 		$this->fetchedFrom[] = $from;
+		if($this->beforeRuleFetch !== null)
+		{
+			($this->beforeRuleFetch)();
+		}
 		
 		return parent::fetchRuleEntries($from);
 	}
