@@ -14,6 +14,7 @@ use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
 use RedisException;
 use RedisClusterException;
+use Throwable;
 
 use function bin2hex;
 use function random_bytes;
@@ -472,11 +473,12 @@ class Redis extends MemoLock
 					[$lockValue, $channelName],
 			);
 		}
-		catch(RedisException|RedisClusterException $exception)
+		catch(Throwable $throwable)
 		{
 			// a release failure must not break a request whose write
-			// succeeded; the lock expires on its PX TTL anyway
-			$this->connection->log($exception);
+			// succeeded, whatever threw (a converted warning too); the lock
+			// expires on its PX TTL anyway
+			$this->connection->log($throwable);
 			
 			return false;
 		}
@@ -516,9 +518,11 @@ class Redis extends MemoLock
 				return null;
 			}
 		}
-		catch(RedisException|RedisClusterException $exception)
+		catch(Throwable $throwable)
 		{
-			$this->connection->log($exception);
+			// any failure to load leaves the release to releaseActiveLock(),
+			// never fails the caller's write
+			$this->connection->log($throwable);
 			
 			return null;
 		}
