@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Ovos\Test\Cache\Store;
 
+use Ovos\Cache\Compressor;
+use Ovos\Cache\Serializer;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
@@ -222,6 +224,42 @@ trait TraitInvalidationGuard
 		$writer->delete($key);
 		
 		return $written === false && $read === 'new';
+	}
+	
+	/**
+	 * RULE: a value that does not decode - its class gone in a deploy, a frame
+	 * that does not decompress - is a miss the guard remembers: a delete made
+	 * while it is recomputed refuses the write, the next reader misses
+	 */
+	public function aValueThatDoesNotDecodeIsAGuardedMiss(): bool
+	{
+		$writer = $this->guardStore();
+		
+		foreach([
+			Serializer::PREFIX_SERIALIZE . 'O:18:"NoSuchClassAnyMore":0:{}',
+			'gz' . Compressor::PREFIX_COMPRESS . 'garbage',
+		] as $index => $payload)
+		{
+			$key = $this->guardKey('undecodable-' . $index);
+			$writer->set($key, 'old', 60);
+			$writer->getClient()->hSet($writer->itemId($key), KeyValueRedis::KEY_DATA, $payload);
+			
+			$value = $this->guardStore()->get($key, function() use ($writer, $key): string
+			{
+				$writer->delete($key);
+				
+				return 'computed';
+			}, 60, queue: false);
+			$read = $this->guardStore()->get($key, queue: false);
+			$writer->delete($key);
+			
+			if($value !== 'computed' || $read !== null)
+			{
+				return false;
+			}
+		}
+		
+		return true;
 	}
 	
 	/**

@@ -4,7 +4,9 @@ declare(strict_types=1);
 namespace Tests\Cache\Store;
 
 use Ovos\ArrayObject;
+use Ovos\Cache\Compressor;
 use Ovos\Cache\MemoLock\Apcu as ApcuMemoLock;
+use Ovos\Cache\Serializer;
 use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\Apcu as Store;
@@ -20,6 +22,7 @@ use ReflectionMethod;
 use function Ovos\config;
 
 use function apcu_fetch;
+use function apcu_store;
 use function is_string;
 use function method_exists;
 
@@ -407,6 +410,43 @@ class Apcu extends Test
 		$writer->delete($key);
 		
 		return $written === false && $read === null;
+	}
+	
+	/**
+	 * RULE: a value that does not decode - its class gone in a deploy, a frame
+	 * that does not decompress - is a miss the guard remembers: a delete made
+	 * while it is recomputed refuses the write, the next reader misses
+	 */
+	public function aValueThatDoesNotDecodeIsAGuardedMiss(): bool
+	{
+		$writer = $this->newStore();
+		
+		foreach([
+			Serializer::PREFIX_SERIALIZE . 'O:18:"NoSuchClassAnyMore":0:{}',
+			'gz' . Compressor::PREFIX_COMPRESS . 'garbage',
+		] as $index => $payload)
+		{
+			$key = 'guard-undecodable-' . $index;
+			$writer->delete($key);
+			$writer->set($key, 'old', 60);
+			apcu_store($writer->itemId($key), $payload, 60);
+			
+			$value = $this->newStore()->get($key, function() use ($writer, $key): string
+			{
+				$writer->delete($key);
+				
+				return 'computed';
+			}, 60, queue: false);
+			$read = $this->newStore()->get($key, queue: false);
+			$writer->delete($key);
+			
+			if($value !== 'computed' || $read !== null)
+			{
+				return false;
+			}
+		}
+		
+		return true;
 	}
 	
 	/**

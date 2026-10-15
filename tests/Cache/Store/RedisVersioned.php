@@ -22,13 +22,16 @@ use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedis;
 use Ovos\Test\Exception\SkipException;
 use Override;
+use RedisException;
 use ReflectionMethod;
 
+use function array_column;
 use function array_keys;
 use function bin2hex;
 use function count;
 use function defined;
 use function end;
+use function in_array;
 use function is_subclass_of;
 use function method_exists;
 use function microtime;
@@ -578,6 +581,51 @@ class RedisVersioned extends Test
 		}
 		finally
 		{
+			$probe->delete($key);
+		}
+	}
+	
+	/**
+	 * A look made with the lock that the rules cannot judge - none held yet,
+	 * the stream read fails - is a miss, as fetch()'s read is: the lock stays
+	 * this process's, the value is computed under it and the lock goes with
+	 * the write, not at its TTL (the waiters would stall until then)
+	 */
+	public function aLookTheRulesCannotJudgeKeepsTheLock(): bool
+	{
+		$probe = $this->probe(['rules_shared_cache' => false]);
+		$key = 'p2_' . bin2hex(random_bytes(4));
+		$lockKey = $probe->getMemoLock()
+			->getPrefixer()
+			->prefix(MemoLock::TYPE_LOCK, $probe->prefix($key, $probe->getType()));
+		$failure = new RedisException('the rules stream cannot be read');
+		$thrown = 0;
+		// an item for the look to judge: its verdict needs the rules
+		$probe->beforeLock = function() use ($key): void
+		{
+			$this->store->set($key, 'landed');
+		};
+		$probe->beforeRuleFetch = function() use ($failure, &$thrown): void
+		{
+			if($thrown++ === 0)
+			{
+				throw $failure;
+			}
+		};
+		
+		try
+		{
+			$value = $probe->get($key, fn(): string => 'computed', 60, queueLockTtlMs: 30000);
+			
+			return $thrown > 0
+				&& $value === 'computed'
+				&& $probe->lookedWithLock === 1
+				&& in_array($failure, array_column($probe->logged, 0), true)
+				&& $probe->getClient()->exists($lockKey) === 0;
+		}
+		finally
+		{
+			$probe->getClient()->del($lockKey);
 			$probe->delete($key);
 		}
 	}

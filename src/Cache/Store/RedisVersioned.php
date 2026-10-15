@@ -501,14 +501,25 @@ class RedisVersioned extends Store
 				->set($lockKey, $lockValue, ['NX', 'PX' => $ttlMs])
 				->hMGet($id, $this->fetchedFields())
 				->exec();
-			$taken = ($replies[0] ?? false) === true;
+			if(($replies[0] ?? false) !== true)
+			{
+				return [false, null];
+			}
 			
-			return [
-				$taken,
-				$taken
-					? $this->fresh($this->judge($id, $replies[1] ?? false))
-					: null,
-			];
+			// the lock is taken: a look the rules cannot judge (none held, the
+			// stream unreadable - see getRules()) is a miss, as in fetch(), so
+			// MemoLock records the lock and it goes with the write; thrown, the
+			// lock stayed unrecorded until its TTL
+			try
+			{
+				return [true, $this->fresh($this->judge($id, $replies[1] ?? false))];
+			}
+			catch(RedisException|RedisClusterException $exception)
+			{
+				$this->log($exception);
+				
+				return [true, null];
+			}
 		};
 	}
 	
