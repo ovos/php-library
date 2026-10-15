@@ -206,6 +206,9 @@ final class Facts
 	
 	protected bool $jsonRead = false;
 	
+	/** the REST API's path prefix without slashes — WordPress's rest_get_url_prefix() */
+	public readonly string $restPrefix;
+	
 	/**
 	 * @param array<string, mixed> $query the query as the platform parsed it ($_GET)
 	 * @param array<string, mixed> $form the form fields as the platform parsed them ($_POST)
@@ -214,6 +217,7 @@ final class Facts
 	 * @param ?Closure(): mixed $jsonReader a JSON body, decoded
 	 * @param ?Closure(string): ?bool $can whether the signed-in user has a capability; null when the host cannot say
 	 * @param ?Closure(string, string): ?bool $nonce whether a nonce is valid for an action; null when the host cannot say
+	 * @param string $restPrefix the REST API's path prefix (restPrefixOf())
 	 */
 	public function __construct(
 		public readonly string $method,
@@ -231,8 +235,20 @@ final class Facts
 		protected ?Closure $jsonReader = null,
 		protected ?Closure $can = null,
 		protected ?Closure $nonce = null,
+		string $restPrefix = 'wp-json',
 	)
 	{
+		$this->restPrefix = self::restPrefixOf($restPrefix);
+	}
+	
+	/** a REST prefix without its slashes; none is WordPress's default, wp-json */
+	public static function restPrefixOf(
+		string $prefix,
+	): string
+	{
+		$prefix = trim($prefix, '/');
+		
+		return $prefix === '' ? 'wp-json' : $prefix;
 	}
 	
 	/**
@@ -245,6 +261,7 @@ final class Facts
 	 * @param array<string, mixed> $files the uploads ($_FILES) — their names, never their bytes
 	 * @param ?callable(string): ?bool $can whether the signed-in user has a capability (a vpatch's `lacks:`)
 	 * @param ?callable(string, string): ?bool $nonce whether a nonce is valid for an action (a vpatch's nonce test)
+	 * @param string $restPrefix the REST API's path prefix — WordPress's rest_get_url_prefix(), wp-json elsewhere
 	 */
 	public static function fromServer(
 		array $server,
@@ -258,6 +275,7 @@ final class Facts
 		array $files = [],
 		?callable $can = null,
 		?callable $nonce = null,
+		string $restPrefix = 'wp-json',
 	): self
 	{
 		$uri = is_string($server['REQUEST_URI'] ?? null) ? $server['REQUEST_URI'] : '/';
@@ -284,6 +302,7 @@ final class Facts
 			self::jsonReader($contentType, $input),
 			$can === null ? null : Closure::fromCallable($can),
 			$nonce === null ? null : Closure::fromCallable($nonce),
+			$restPrefix,
 		);
 	}
 	
@@ -694,8 +713,8 @@ final class Ruleset
 	
 	public const KINDS = [self::KIND_MATCH, self::KIND_RATE, self::KIND_VPATCH];
 	
-	/** a vpatch's targets without a name, and the prefixes that take one (`query:file`) */
-	public const TARGETS = ['method', 'path'];
+	/** a vpatch's targets without a name — `rest` is the REST route in either spelling — and the prefixes that take one (`query:file`) */
+	public const TARGETS = ['method', 'path', 'rest'];
 	
 	/** `request:` is $_REQUEST's reading: the query's values and the body's */
 	public const TARGET_PREFIXES = ['query', 'body', 'request', 'json', 'cookie', 'header', 'file', 'query-keys', 'body-keys'];
@@ -713,6 +732,16 @@ final class Ruleset
 	public const CONDITIONS_MAX = 6;
 	
 	public const LIST_MAX = 50;
+	
+	/** the decode steps one condition chains at most */
+	public const DECODE_STEPS_MAX = 2;
+	
+	/** an entry `{"any": [...]}` holds when one of its GROUP_MIN to GROUP_MAX plain conditions does; it counts as one */
+	public const GROUP_ANY = 'any';
+	
+	public const GROUP_MIN = 2;
+	
+	public const GROUP_MAX = 4;
 	
 	public const WHO_ANYONE = 'anyone';
 	
@@ -967,7 +996,7 @@ final class Ruleset
 		return $mode === self::MODE_BLOCK || $mode === self::MODE_PROVEN;
 	}
 	
-	/** a vpatch: an int id, a mode, a `who` off the vocabulary, 1 to CONDITIONS_MAX conditions each well formed */
+	/** a vpatch: an int id, a mode, a `who` off the vocabulary, 1 to CONDITIONS_MAX entries each well formed */
 	public static function vpatchWellFormed(
 		array $rule,
 	): bool
@@ -982,13 +1011,42 @@ final class Ruleset
 		}
 		foreach($conditions as $condition)
 		{
-			if(self::conditionWellFormed($condition) === false)
+			if(self::entryWellFormed($condition) === false)
 			{
 				return false;
 			}
 		}
 		
 		return true;
+	}
+	
+	/** a vpatch's entry: a plain condition, or a group of GROUP_MIN to GROUP_MAX plain conditions under `any` and nothing else */
+	public static function entryWellFormed(
+		mixed $entry,
+	): bool
+	{
+		if(is_array($entry) && array_key_exists(self::GROUP_ANY, $entry))
+		{
+			$members = $entry[self::GROUP_ANY];
+			if(count($entry) !== 1 || is_array($members) === false || array_is_list($members) === false
+				|| count($members) < self::GROUP_MIN || count($members) > self::GROUP_MAX)
+			{
+				return false;
+			}
+			foreach($members as $member)
+			{
+				// no group in a group; a nonce test answers absent as invalid, never as one branch of several
+				if(is_array($member) === false || array_key_exists(self::GROUP_ANY, $member)
+					|| ($member['test'] ?? null) === 'nonce_invalid' || self::conditionWellFormed($member) === false)
+				{
+					return false;
+				}
+			}
+			
+			return true;
+		}
+		
+		return self::conditionWellFormed($entry);
 	}
 	
 	public static function whoWellFormed(
@@ -1011,7 +1069,7 @@ final class Ruleset
 			return false;
 		}
 		$decode = $condition['decode'] ?? [];
-		if(is_array($decode) === false || array_is_list($decode) === false || count($decode) > count(self::DECODES))
+		if(is_array($decode) === false || array_is_list($decode) === false || count($decode) > self::DECODE_STEPS_MAX)
 		{
 			return false;
 		}
@@ -1052,7 +1110,7 @@ final class Ruleset
 		return is_string($value) && trim($value) !== '' && strlen($value) <= self::VALUE_MAX;
 	}
 	
-	/** `method`, `path`, or a prefix and a name (`query:file`); the keys targets may name the top level ('') */
+	/** `method`, `path`, `rest`, or a prefix and a name (`query:file`); the keys targets may name the top level ('') */
 	public static function targetWellFormed(
 		mixed $target,
 	): bool
@@ -1978,16 +2036,16 @@ final class Kernel
 		}
 		$matched = '';
 		$framed = '';
-		foreach((array)($rule['conditions'] ?? []) as $condition)
+		foreach((array)($rule['conditions'] ?? []) as $entry)
 		{
-			$hit = self::condition($condition, $facts);
+			$hit = self::held((array)$entry, $facts);
 			if($hit === null)
 			{
 				return null;
 			}
 			$resolved = $resolved && $hit['resolved'];
-			// a method or path value only stands in when no parameter's value matched
-			if(in_array($condition['target'], Ruleset::TARGETS, true))
+			// a method, path or route value only stands in when no parameter's value matched
+			if($hit['frame'])
 			{
 				$framed = $framed === '' ? $hit['matched'] : $framed;
 			}
@@ -1998,6 +2056,33 @@ final class Kernel
 		}
 		
 		return ['matched' => $matched !== '' ? $matched : $framed, 'resolved' => $resolved];
+	}
+	
+	/**
+	 * One entry: a plain condition, or a group — its first member that
+	 * holds; no member waits on the host, a nonce test never being in one —
+	 * with `frame` saying whether the holding target is a frame target
+	 *
+	 * @return ?array{matched: string, resolved: bool, frame: bool}
+	 */
+	public static function held(
+		array $entry,
+		Facts $facts,
+	): ?array
+	{
+		$members = isset($entry[Ruleset::GROUP_ANY]) ? (array)$entry[Ruleset::GROUP_ANY] : [$entry];
+		foreach($members as $member)
+		{
+			$hit = self::condition((array)$member, $facts);
+			if($hit !== null)
+			{
+				$hit['frame'] = in_array((string)($member['target'] ?? ''), Ruleset::TARGETS, true);
+				
+				return $hit;
+			}
+		}
+		
+		return null;
 	}
 	
 	/**
@@ -2043,10 +2128,12 @@ final class Kernel
 		}
 		foreach($values as $value)
 		{
-			$decoded = self::decoded($value, (array)($condition['decode'] ?? []));
-			if($decoded !== null && self::passes($test, $decoded, $condition))
+			foreach(self::decoded($value, (array)($condition['decode'] ?? [])) as $decoded)
 			{
-				return ['matched' => $decoded, 'resolved' => true];
+				if(self::passes($test, $decoded, $condition))
+				{
+					return ['matched' => $decoded, 'resolved' => true];
+				}
 			}
 		}
 		
@@ -2071,6 +2158,10 @@ final class Kernel
 		{
 			return [$facts->path()];
 		}
+		if($target === 'rest')
+		{
+			return self::routes($facts);
+		}
 		[$prefix, $name] = explode(':', $target, 2) + [1 => ''];
 		// Facts::$headers is keyed by lowercase name
 		$header = strtolower($name);
@@ -2088,6 +2179,75 @@ final class Kernel
 			'body-keys' => self::keys($facts->form, $name),
 			default => [],
 		};
+	}
+	
+	/**
+	 * The REST routes a request addresses, as WordPress finds them: the
+	 * path's spelling decoded once and, when that differs, twice (WordPress
+	 * matches a percent-encoded prefix on the decoded path and decodes the
+	 * capture again), then `rest_route` from the query and the body
+	 *
+	 * @return list<string>
+	 */
+	public static function routes(
+		Facts $facts,
+	): array
+	{
+		$routes = [];
+		$path = $facts->path();
+		foreach([$path, rawurldecode($path)] as $spelling)
+		{
+			$route = self::routeIn($spelling, $facts->restPrefix);
+			if($route !== null && in_array($route, $routes, true) === false)
+			{
+				$routes[] = $route;
+			}
+		}
+		foreach([...self::pick($facts->query, 'rest_route'), ...self::pick($facts->form, 'rest_route')] as $value)
+		{
+			// WordPress's empty(): '' and '0' address no route
+			if($value !== '' && $value !== '0')
+			{
+				$routes[] = self::untrailed($value);
+			}
+		}
+		
+		return $routes;
+	}
+	
+	/**
+	 * The route after the first `/<prefix>` followed by a slash or the end,
+	 * as WordPress's rewrite reads it, with case; null for none
+	 */
+	public static function routeIn(
+		string $path,
+		string $prefix,
+	): ?string
+	{
+		$needle = '/' . $prefix;
+		$at = strpos($path, $needle);
+		while($at !== false)
+		{
+			$rest = substr($path, $at + strlen($needle));
+			// `/wp-jsonx` is not the prefix: look further
+			if($rest === '' || $rest[0] === '/')
+			{
+				return self::untrailed($rest);
+			}
+			$at = strpos($path, $needle, $at + 1);
+		}
+		
+		return null;
+	}
+	
+	/** a route as WordPress's untrailingslashit() leaves it; none is the index route */
+	public static function untrailed(
+		string $route,
+	): string
+	{
+		$route = rtrim($route, '/\\');
+		
+		return $route === '' ? '/' : $route;
 	}
 	
 	/**
@@ -2240,31 +2400,57 @@ final class Kernel
 		};
 	}
 	
-	/** a value through the decode steps; null when a step cannot read it (base64 that is not) */
+	/**
+	 * A value through the decode steps: every value the last step yields —
+	 * url and base64 yield one or none
+	 *
+	 * @return list<string>
+	 */
 	public static function decoded(
 		string $value,
 		array $steps,
-	): ?string
+	): array
 	{
+		$values = [$value];
 		foreach($steps as $step)
 		{
-			if($step === 'url')
+			$next = [];
+			foreach($values as $one)
 			{
-				$value = rawurldecode($value);
-			}
-			else if($step === 'base64')
-			{
-				// strict: a character outside the alphabet fails the step
-				$bytes = base64_decode($value, true);
-				if($bytes === false)
+				foreach(self::step((string)$step, $one) as $out)
 				{
-					return null;
+					$next[] = $out;
 				}
-				$value = $bytes;
 			}
+			$values = $next;
 		}
 		
-		return $value;
+		return $values;
+	}
+	
+	/**
+	 * One decode step over one value: none when the step cannot read it
+	 *
+	 * @return list<string>
+	 */
+	protected static function step(
+		string $step,
+		string $value,
+	): array
+	{
+		if($step === 'url')
+		{
+			return [rawurldecode($value)];
+		}
+		if($step === 'base64')
+		{
+			// strict: a character outside the alphabet fails the step
+			$bytes = base64_decode($value, true);
+			
+			return $bytes === false ? [] : [$bytes];
+		}
+		
+		return [];
 	}
 	
 	/** one value under one test — the literal ops fold ASCII, as a match rule's do */
