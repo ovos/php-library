@@ -21,8 +21,18 @@ use function array_key_first;
 use function array_map;
 use function array_unique;
 use function bin2hex;
+use function chdir;
+use function file_put_contents;
+use function getcwd;
+use function is_file;
+use function mkdir;
 use function preg_quote;
 use function random_bytes;
+use function rmdir;
+use function sys_get_temp_dir;
+use function unlink;
+
+use const DIRECTORY_SEPARATOR;
 
 /**
  * Functions
@@ -209,6 +219,46 @@ class Functions extends Test
 		{
 			$store->getClient()->del($key);
 			$store->getClient()->function('delete', $first->functionsPrefix('cache'));
+		}
+	}
+	
+	/**
+	 * RULE: a bare library name is this class's own library wherever the
+	 * process stands, and a path is the caller's - the working directory is
+	 * never probed (outside open_basedir, as in a shutdown callback, it warns)
+	 */
+	public function aBareLibraryNameNeverResolvesAgainstTheWorkingDirectory(): bool
+	{
+		$functions = new class([], $this->getStore(Store::class)->getConnection()) extends Subject
+		{
+			public function path(
+				string $libraryFile,
+			): string
+			{
+				return $this->libraryPath($libraryFile);
+			}
+		};
+		$own = $functions->path('Cache.lua');
+		// a file of the same name where the process stands
+		$directory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'tests_' . bin2hex(random_bytes(4));
+		$decoy = $directory . DIRECTORY_SEPARATOR . 'Cache.lua';
+		$cwd = getcwd();
+		mkdir($directory);
+		file_put_contents($decoy, '-- decoy');
+		
+		try
+		{
+			chdir($directory);
+			
+			return $functions->path('Cache.lua') === $own
+				&& is_file($own)
+				&& $functions->path(__FILE__) === __FILE__;
+		}
+		finally
+		{
+			chdir($cwd);
+			unlink($decoy);
+			rmdir($directory);
 		}
 	}
 	
