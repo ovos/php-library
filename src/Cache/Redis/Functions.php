@@ -13,6 +13,7 @@ use function apcu_enabled;
 use function apcu_fetch;
 use function apcu_store;
 use function array_slice;
+use function basename;
 use function ceil;
 use function count;
 use function file_get_contents;
@@ -20,7 +21,6 @@ use function filemtime;
 use function function_exists;
 use function hash;
 use function is_array;
-use function is_file;
 use function is_int;
 use function str_contains;
 use function str_replace;
@@ -375,13 +375,15 @@ class Functions
 	
 	/**
 	 * The library file's path - a bare name is one of this class's own
-	 * libraries (Functions/*.lua)
+	 * libraries (Functions/*.lua), anything with a directory is the caller's
 	 */
 	protected function libraryPath(
 		string $libraryFile,
 	): string
 	{
-		return is_file($libraryFile) === false
+		// decided by the spelling: a file probe resolves a bare name against
+		// the working directory, which open_basedir refuses in a shutdown callback
+		return basename($libraryFile) === $libraryFile
 			? __DIR__ . DIRECTORY_SEPARATOR . 'Functions' . DIRECTORY_SEPARATOR . $libraryFile
 			: $libraryFile;
 	}
