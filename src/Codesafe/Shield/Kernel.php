@@ -73,6 +73,11 @@ declare(strict_types=1);
  * anonymous or lacks:<capability>, and a nonce test asks the platform: a
  * blocking vpatch whose who or nonce the adapter cannot answer is held with
  * the reason `unanswered` (Verdict::REASON_UNANSWERED), never blocked.
+ * Every vpatch a request reaches is counted per minute beside the hits,
+ * whether or not it decided the verdict: `entry` (its selecting entries
+ * held, Ruleset::selects()), `match` (it held, who included) and `authed`
+ * (a match by a caller signed in or one the host cannot tell) — the
+ * evidence codesafe reads an observing rule by.
  *
  * Threat addresses (kind `threat`, served to a kernel that names it): a
  * `threats` section beside the rules — `{mode, pass, addresses}`, the
@@ -235,6 +240,9 @@ final class Facts
 	
 	/** @var array<string, ?string> the uploads read, by temp path */
 	protected array $fileContents = [];
+	
+	/** @var array<string, ?bool> the host's answers, by question: a rule judged twice asks once */
+	protected array $answers = [];
 	
 	/** the REST API's path prefix without slashes — WordPress's rest_get_url_prefix() */
 	public readonly string $restPrefix;
@@ -644,16 +652,30 @@ final class Facts
 		string $capability,
 	): ?bool
 	{
-		try
+		return $this->answer('can:' . $capability, $this->can, $capability);
+	}
+	
+	/** a host's answer, asked once per request and question: only a boolean is one, a throw none */
+	protected function answer(
+		string $question,
+		?Closure $host,
+		string ...$arguments,
+	): ?bool
+	{
+		if(array_key_exists($question, $this->answers) === false)
 		{
-			$answer = $this->can === null ? null : ($this->can)($capability);
-		}
-		catch(Throwable)
-		{
-			return null;
+			try
+			{
+				$answer = $host === null ? null : $host(...$arguments);
+			}
+			catch(Throwable)
+			{
+				$answer = null;
+			}
+			$this->answers[$question] = is_bool($answer) ? $answer : null;
 		}
 		
-		return is_bool($answer) ? $answer : null;
+		return $this->answers[$question];
 	}
 	
 	/**
@@ -691,16 +713,7 @@ final class Facts
 		string $value,
 	): ?bool
 	{
-		try
-		{
-			$answer = $this->kses === null ? null : ($this->kses)($value);
-		}
-		catch(Throwable)
-		{
-			return null;
-		}
-		
-		return is_bool($answer) ? $answer : null;
+		return $this->answer('kses:' . $value, $this->kses, $value);
 	}
 	
 	/** whether a nonce is valid for an action; null when the host cannot say */
@@ -709,16 +722,8 @@ final class Facts
 		string $value,
 	): ?bool
 	{
-		try
-		{
-			$answer = $this->nonce === null ? null : ($this->nonce)($action, $value);
-		}
-		catch(Throwable)
-		{
-			return null;
-		}
-		
-		return is_bool($answer) ? $answer : null;
+		// the action's length keeps `a` + `b:c` apart from `a:b` + `c`
+		return $this->answer('nonce:' . strlen($action) . ':' . $action . ':' . $value, $this->nonce, $action, $value);
 	}
 	
 	/** the path alone — what a report line names; the query may carry what the body may not */
@@ -936,6 +941,9 @@ final class Ruleset
 	
 	/** the tests the host answers: unanswered they only observe, and never sit in a group, where one branch would answer for the others */
 	public const HOST_TESTS = ['nonce_invalid', 'unsafe_html'];
+	
+	/** the tests a condition names the handler a request reaches with, not what an exploit carries (selects()) */
+	public const ENTRY_TESTS = ['equals', 'in', 'prefix', 'suffix'];
 	
 	/** the integer the number tests compare against at most, either way — fifteen digits, which every runtime holds exactly */
 	public const NUMBER_MAX = 999999999999999;
@@ -1193,6 +1201,35 @@ final class Ruleset
 	): bool
 	{
 		return ($rule['kind'] ?? self::KIND_MATCH) === self::KIND_VPATCH;
+	}
+	
+	/**
+	 * Whether a vpatch entry selects the handler a request reaches — its
+	 * entry point: a route, or an ENTRY_TESTS test on a value as sent (no
+	 * decode steps) of any target but an upload's contents; a group when
+	 * every member does. A negation, a payload test, a nonce or exists says
+	 * what the exploit carries
+	 */
+	public static function selects(
+		array $entry,
+	): bool
+	{
+		if(isset($entry[self::GROUP_ANY]))
+		{
+			foreach((array)$entry[self::GROUP_ANY] as $member)
+			{
+				if(self::selects((array)$member) === false)
+				{
+					return false;
+				}
+			}
+			
+			return true;
+		}
+		$target = (string)($entry['target'] ?? '');
+		
+		return $target === 'rest' || (in_array($entry['test'] ?? null, self::ENTRY_TESTS, true) && ($entry['decode'] ?? []) === []
+			&& str_starts_with($target, 'file-content:') === false);
 	}
 	
 	/**
@@ -1612,9 +1649,10 @@ final class Store
 	
 	/**
 	 * A minute's counters, taken (fetched and deleted) for the fragment that
-	 * ships them: [rule id => ['observe' => n, 'block' => n]]
+	 * ships them: [rule id => [outcome => n]], the verdicts (observe, block)
+	 * and a vpatch's evidence (entry, match, authed — Kernel::tallied())
 	 *
-	 * @return array<int, array{observe: int, block: int}>
+	 * @return array<int, array{observe: int, block: int, entry: int, match: int, authed: int}>
 	 */
 	public function takeHits(
 		int $minute,
@@ -1632,7 +1670,7 @@ final class Store
 			// the key's tail is `<rule id>:<outcome>`
 			[$ruleId, $outcome] = explode(':', substr($key, strlen($head)), 2) + [1 => ''];
 			$id = (int)$ruleId;
-			$hits[$id] ??= ['observe' => 0, 'block' => 0];
+			$hits[$id] ??= ['observe' => 0, 'block' => 0, 'entry' => 0, 'match' => 0, 'authed' => 0];
 			if(isset($hits[$id][$outcome]))
 			{
 				$hits[$id][$outcome] += (int)$entry['value'];
@@ -1997,8 +2035,94 @@ final class Kernel
 			$this->count($verdict, $now);
 			$this->report($verdict, $facts);
 		}
+		$this->tally($facts, $consent, $now);
 		
 		return $verdict;
+	}
+	
+	/**
+	 * The evidence counters of every vpatch the request reached (tallied()),
+	 * under the rules judge() reads by; nothing without a store that counts.
+	 * Never fails the request
+	 */
+	public function tally(
+		Facts $facts,
+		Consent $consent,
+		?int $now = null,
+	): void
+	{
+		try
+		{
+			$now ??= time();
+			$ruleset = $consent->kill || $consent->detect === false || $this->store->hasApcu() === false ? null : $this->ruleset();
+			if($ruleset === null || $ruleset->usable === false || $ruleset->isStale($now, $this->ceiling))
+			{
+				return;
+			}
+			foreach(self::tallied($ruleset->rules, $facts) as $id => $counts)
+			{
+				foreach($counts as $outcome => $counted)
+				{
+					if($counted)
+					{
+						$this->store->hit(intdiv($now, 60), $id, $outcome);
+					}
+				}
+			}
+		}
+		catch(Throwable)
+		{
+			// a lost count never fails the request
+		}
+	}
+	
+	/**
+	 * What a request did to each vpatch, whether or not it decided the
+	 * verdict: rule id => entry (every selecting entry held, Ruleset::selects();
+	 * never for a rule with none), match (the rule held, who included,
+	 * answered or not) and authed (a match by a caller signed in or one the
+	 * host cannot tell, who may be) — for the rules it reached or matched. A
+	 * batch counts once with its sub-requests
+	 *
+	 * @return array<int, array{entry: bool, match: bool, authed: bool}>
+	 */
+	public static function tallied(
+		array $rules,
+		Facts $facts,
+	): array
+	{
+		$tally = [];
+		$requests = [$facts, ...self::batched($facts)];
+		foreach($rules as $rule)
+		{
+			if(Ruleset::isVpatch($rule) === false)
+			{
+				continue;
+			}
+			$selecting = array_filter((array)($rule['conditions'] ?? []), static fn(mixed $entry): bool => Ruleset::selects((array)$entry));
+			$entry = false;
+			$matched = null;
+			foreach($requests as $request)
+			{
+				// the entry point first: a request that misses it cannot match
+				foreach($selecting as $condition)
+				{
+					if(self::held((array)$condition, $request) === null)
+					{
+						continue 2;
+					}
+				}
+				$entry = $entry || $selecting !== [];
+				$matched ??= self::patched($rule, $request) === null ? null : $request;
+			}
+			if($entry || $matched !== null)
+			{
+				$tally[(int)$rule['id']] = ['entry' => $entry, 'match' => $matched !== null,
+					'authed' => $matched !== null && ($matched->authed || $matched->callerKnown === false)];
+			}
+		}
+		
+		return $tally;
 	}
 	
 	/** the match through the adapter's sender as a security event; never throws */

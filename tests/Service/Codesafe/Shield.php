@@ -194,8 +194,9 @@ class Shield extends Test
 	
 	/**
 	 * RULE: hits() hands the Rollup's hook the kernel store's counters of one
-	 * minute as `so:<id>` / `sb:<id>` fields — taken once, zero outcomes left
-	 * out — and nothing while the shield is not enabled. Skipped without APCu
+	 * minute as `so:<id>` / `sb:<id>` fields, a vpatch's evidence as `se:` /
+	 * `sm:` / `sa:` — taken once, zero outcomes left out — and nothing while
+	 * the shield is not enabled. Skipped without APCu
 	 * (the counters live there alone). Falsify: read without taking — every
 	 * minute's fragment re-ships the same hits and the overview doubles.
 	 */
@@ -212,12 +213,15 @@ class Shield extends Test
 		$store->hit($minute, 5, 'observe');
 		$store->hit($minute, 5, 'block');
 		$store->hit($minute, 6, 'observe');
+		$store->hit($minute, 6, 'entry');
+		$store->hit($minute, 6, 'match');
+		$store->hit($minute, 6, 'authed');
 		$store->hit($minute + 1, 5, 'observe');
 		$taken = $subject->hits($minute);
 		ksort($taken);
 		$off = new Subject($this->config(['detect' => false]), 'install-hits-off');
 		
-		return $taken === ['sb:5' => 1, 'so:5' => 2, 'so:6' => 1]
+		return $taken === ['sa:6' => 1, 'sb:5' => 1, 'se:6' => 1, 'sm:6' => 1, 'so:5' => 2, 'so:6' => 1]
 			&& $subject->hits($minute) === []
 			&& $subject->hits($minute + 1) === ['so:5' => 1]
 			&& $off->hits($minute) === [];
