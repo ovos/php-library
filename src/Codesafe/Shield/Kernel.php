@@ -77,7 +77,10 @@ declare(strict_types=1);
  * whether or not it decided the verdict: `entry` (its selecting entries
  * held, Ruleset::selects()), `match` (it held, who included) and `authed`
  * (a match by a caller signed in or one the host cannot tell) — the
- * evidence codesafe reads an observing rule by.
+ * evidence codesafe reads an observing rule by. Every request the counting
+ * ran on is also an `entry` of rule 0 (HEARTBEAT): against the site's
+ * request count it tells codesafe this site counts, so a vpatch's zero is
+ * a zero and not a site that cannot say.
  *
  * Threat addresses (kind `threat`, served to a kernel that names it): a
  * `threats` section beside the rules — `{mode, pass, addresses}`, the
@@ -1786,6 +1789,9 @@ final class Kernel
 	
 	/** the batch's sub-requests judged at most — the body's own size bounds them first */
 	public const BATCH_MAX = 1000;
+
+	/** the rule the counting's heartbeat is an `entry` of, once per request it ran on: rule 0, the threat addresses', whose evidence nothing else counts */
+	public const HEARTBEAT = Ruleset::THREAT_RULE;
 	
 	/** WordPress's shortcode_parse_atts() pattern (get_shortcode_atts_regex()), as it is */
 	public const SHORTCODE_ATTRIBUTES = '/([\w-]+)\s*=\s*"([^"]*)"(?:\s|$)|([\w-]+)\s*=\s*\'([^\']*)\'(?:\s|$)|([\w-]+)\s*=\s*([^\s\'"]+)(?:\s|$)|"([^"]*)"(?:\s|$)|\'([^\']*)\'(?:\s|$)|(\S+)(?:\s|$)/';
@@ -2132,6 +2138,8 @@ final class Kernel
 			{
 				return;
 			}
+			// the counting ran on this request: what codesafe weighs a vpatch's zero against
+			$this->store->hit(intdiv($now, 60), self::HEARTBEAT, 'entry');
 			foreach(self::tallied($ruleset->rules, $facts) as $id => $counts)
 			{
 				foreach($counts as $outcome => $counted)
