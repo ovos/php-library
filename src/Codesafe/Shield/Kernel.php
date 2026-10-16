@@ -57,7 +57,8 @@ declare(strict_types=1);
  * 403. A rate rule (`kind: rate`, `rate: {key: ip|user|route, limit,
  * window}`) is the same predicate plus a counter — over `limit` requests per
  * `window` seconds for one address, one user or the route itself, it
- * observes or answers 429 with Retry-After. The match rules are judged
+ * observes or answers 429 with Retry-After; an IPv6 address counts as its
+ * /64, as in the Node twin (Kernel::rateAddress()). The match rules are judged
  * first; a rate rule counts only a request no match rule decided. Counting
  * needs APCu (the file tier cannot count): without it rate rules are
  * skipped, and the limit is per POOL — one server's APCu, not the site's.
@@ -71,8 +72,10 @@ declare(strict_types=1);
  * query, form, JSON, cookies, headers, file names, and an upload's head and
  * tail when a condition names its contents). `who` is anyone,
  * anonymous or lacks:<capability>, and a nonce test asks the platform: a
- * blocking vpatch whose who or nonce the adapter cannot answer is held with
- * the reason `unanswered` (Verdict::REASON_UNANSWERED), never blocked.
+ * blocking vpatch whose who or nonce the adapter cannot answer, or that
+ * reads what the kernel could not (an upload, a JSON body past
+ * Facts::JSON_CAP, a batch not read in full), is held with the reason `unanswered`
+ * (Verdict::REASON_UNANSWERED), never blocked.
  * Every vpatch a request reaches is counted per minute beside the hits,
  * whether or not it decided the verdict: `entry` (its selecting entries
  * held, Ruleset::selects()), `match` (it held, who included) and `authed`
@@ -110,6 +113,7 @@ namespace Ovos\Codesafe\Shield;
 
 use APCUIterator;
 use Closure;
+use LengthException;
 use Throwable;
 
 use function abs;
@@ -223,7 +227,7 @@ final class Facts
 	/** a body rule cannot see past this, and the report says so */
 	public const BODY_CAP = 65536;
 	
-	/** a JSON body past this decodes to nothing — padding past BODY_CAP must not hide a json: target */
+	/** a JSON body past this is not decoded, and its json: conditions hold unanswered (jsonUnread()): padding never hides one */
 	public const JSON_CAP = 1048576;
 	
 	/**
@@ -248,11 +252,16 @@ final class Facts
 	
 	protected bool $jsonRead = false;
 	
+	protected bool $jsonUnread = false;
+	
 	/** @var array<string, ?string> the uploads read, by temp path */
 	protected array $fileContents = [];
 	
 	/** @var array<string, ?bool> the host's answers, by question: a rule judged twice asks once */
 	protected array $answers = [];
+	
+	/** the batch request a sub-request came in, whose superglobals its handler reads too (subRequest()) */
+	protected ?Facts $outer = null;
 	
 	/** the REST API's path prefix without slashes — WordPress's rest_get_url_prefix() */
 	public readonly string $restPrefix;
@@ -262,7 +271,7 @@ final class Facts
 	 * @param array<string, mixed> $form the form fields as the platform parsed them ($_POST)
 	 * @param array<string, string> $headers lowercase names
 	 * @param array<string, mixed> $files field => the uploaded file's name (or names)
-	 * @param ?Closure(): mixed $jsonReader a JSON body, decoded
+	 * @param ?Closure(): mixed $jsonReader a JSON body, decoded; it throws a LengthException for a body too large to read
 	 * @param ?Closure(string): ?bool $can whether the signed-in user has a capability; null when the host cannot say
 	 * @param ?Closure(string, string): ?bool $nonce whether a nonce is valid for an action; null when the host cannot say
 	 * @param string $restPrefix the REST API's path prefix (restPrefixOf())
@@ -303,7 +312,10 @@ final class Facts
 	 * A WordPress batch's sub-request as its route's handler sees it: its
 	 * method, its path under this site's REST prefix with its query, its body
 	 * as the form and the JSON, its headers — and this request's caller, whom
-	 * WordPress runs every sub-request as
+	 * WordPress runs every sub-request as. Its handler also reads the
+	 * superglobals, which stay this request's: its cookies, uploads, query,
+	 * form and headers count beside the sub-request's own (Kernel::values()),
+	 * and its host is this request's
 	 *
 	 * @param array<string, mixed> $headers
 	 */
@@ -322,14 +334,29 @@ final class Facts
 			$names[strtolower((string)$name)] = is_array($value) ? (string)(array_values($value)[0] ?? '') : (is_scalar($value) ? (string)$value : '');
 		}
 		
-		return new self(strtoupper($method), self::decodeOnce('/' . $this->restPrefix . $path), $this->ua, $this->ip, $this->authed, null, $this->user, $query,
+		$sub = new self(strtoupper($method), self::decodeOnce('/' . $this->restPrefix . $path), $this->ua, $this->ip, $this->authed, null, $this->user, $query,
 			is_array($body) ? $body : [], [], $names, [], static fn(): mixed => $body, $this->can, $this->nonce, $this->restPrefix, $this->callerKnown,
 			$this->kses);
+		$sub->outer = $this;
+		
+		return $sub;
+	}
+	
+	/** the batch request this sub-request came in; null for a request of its own */
+	public function outer(): ?Facts
+	{
+		return $this->outer;
 	}
 	
 	/** the host the request named (its Host header) as authorityHost() reads one: '' when it named none */
 	public function host(): string
 	{
+		// a sub-request runs on the site its batch reached
+		if($this->outer !== null)
+		{
+			return $this->outer->host();
+		}
+		
 		return self::hostOf((string)($this->headers['host'] ?? ''));
 	}
 	
@@ -518,15 +545,14 @@ final class Facts
 		return $bytes === false ? null : $bytes;
 	}
 	
-	/** a JSON body, decoded — read only when a json: target asks */
+	/** a JSON body, decoded — read only when a json: target asks; past the cap it throws, and json() says the body went unread */
 	public static function jsonReader(
 		string $contentType,
 		?callable $input,
 		int $cap = self::JSON_CAP,
 	): ?Closure
 	{
-		$type = strtolower(trim(explode(';', $contentType, 2)[0]));
-		if($input === null || ($type !== 'application/json' && str_ends_with($type, '+json') === false))
+		if($input === null || self::jsonType($contentType) === false)
 		{
 			return null;
 		}
@@ -534,10 +560,41 @@ final class Facts
 		return static function() use ($input, $cap): mixed
 		{
 			$raw = $input();
+			// the app may still decode what the kernel will not: unread, never "no JSON"
+			if(is_string($raw) && strlen($raw) > $cap)
+			{
+				throw new LengthException('a JSON body past the cap');
+			}
 			
-			// past the cap, or nested deeper than JSON_DEPTH allows: no JSON at all
-			return is_string($raw) && strlen($raw) <= $cap ? json_decode($raw, true, Facts::JSON_DEPTH) : null;
+			// nested deeper than JSON_DEPTH allows: no JSON at all
+			return is_string($raw) ? json_decode($raw, true, Facts::JSON_DEPTH) : null;
 		};
+	}
+	
+	/** whether a body of this content type is JSON to a rule: `application/json`, a `+json` type, or one WordPress reads as JSON */
+	public static function jsonType(
+		string $contentType,
+	): bool
+	{
+		$type = strtolower(trim(explode(';', $contentType, 2)[0]));
+		
+		return $type === 'application/json' || str_ends_with($type, '+json') || self::wordpressJson($contentType);
+	}
+	
+	/**
+	 * Whether WordPress reads a body of this content type as JSON:
+	 * WP_REST_Request::get_content_type()'s value — cut at a `;` past the
+	 * first byte, lower case, holding a `/`, trimmed — through
+	 * wp_is_json_media_type()'s pattern
+	 */
+	public static function wordpressJson(
+		string $contentType,
+	): bool
+	{
+		// WordPress tests strpos() for truth: a `;` as the first byte cuts nothing
+		$value = strtolower(strpos($contentType, ';') ? explode(';', $contentType, 2)[0] : $contentType);
+		
+		return str_contains($value, '/') && preg_match('/(^|\s|,)application\/([\w!#\$&-\^\.\+]+\+)?json(\+oembed)?($|\s|;|,)/i', trim($value)) === 1;
 	}
 	
 	/**
@@ -638,7 +695,7 @@ final class Facts
 		return $this->bodyCapped;
 	}
 	
-	/** a JSON body, decoded; null when there is none */
+	/** a JSON body, decoded; null when there is none, or none the kernel read (jsonUnread()) */
 	public function json(): mixed
 	{
 		if($this->jsonRead === false)
@@ -648,6 +705,10 @@ final class Facts
 			{
 				$this->json = $this->jsonReader === null ? null : ($this->jsonReader)();
 			}
+			catch(LengthException)
+			{
+				$this->jsonUnread = true;
+			}
 			catch(Throwable)
 			{
 				$this->json = null;
@@ -655,6 +716,14 @@ final class Facts
 		}
 		
 		return $this->json;
+	}
+	
+	/** whether the body is JSON too large to read (Facts::JSON_CAP): what its json: conditions ask is not known */
+	public function jsonUnread(): bool
+	{
+		$this->json();
+		
+		return $this->jsonUnread;
 	}
 	
 	/** whether the signed-in user has a capability; null when the host cannot say */
@@ -690,7 +759,9 @@ final class Facts
 	
 	/**
 	 * An upload's contents as a rule reads them, its head and tail
-	 * (FILE_HEAD, FILE_TAIL), read once; null when the host cannot read it
+	 * (FILE_HEAD, FILE_TAIL), read once; null when the host cannot read it.
+	 * A payload padded into the middle of a larger upload is never read, so a
+	 * file-content condition passes it
 	 */
 	public function fileContent(
 		string $path,
@@ -1787,7 +1858,7 @@ final class Kernel
 	/** WordPress's batch route: each request it lists reaches its own route's handler */
 	public const BATCH_ROUTE = '/batch/v1';
 	
-	/** the batch's sub-requests judged at most — the body's own size bounds them first */
+	/** the batch's sub-requests judged at most — WordPress takes 25 unless a site raises it; past this the batch holds unanswered */
 	public const BATCH_MAX = 1000;
 
 	/** the rule the counting's heartbeat is an `entry` of, once per request it ran on: rule 0, the threat addresses', whose evidence nothing else counts */
@@ -1804,6 +1875,28 @@ final class Kernel
 	
 	/** the schemes whose slashes a browser reads loosely and whose authority names a host (`offsite`) */
 	public const SPECIAL_SCHEMES = ['http', 'https', 'ftp', 'ws', 'wss'];
+	
+	/** the bytes JavaScript's trim() takes off a byte string, as the Node twin reads an address: never `\0`, which PHP's trim() takes */
+	protected const TRIM_BYTES = " \t\n\x0B\f\r\xA0";
+	
+	/** an IPv4 part as Node's net.isIPv4() reads one: 0 to 255, no leading zero */
+	protected const IPV4_PART = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])';
+	
+	protected const IPV4 = '(?:' . self::IPV4_PART . '\.){3}' . self::IPV4_PART;
+	
+	protected const IPV6_PART = '(?:[0-9a-fA-F]{1,4})';
+	
+	/** Node's net.isIPv6() pattern, ported so that no platform's inet_pton() decides: eight parts, `::`, a v4 tail, a zone id */
+	protected const IPV6 = '~^(?:'
+		. '(?:' . self::IPV6_PART . ':){7}(?:' . self::IPV6_PART . '|:)|'
+		. '(?:' . self::IPV6_PART . ':){6}(?:' . self::IPV4 . '|:' . self::IPV6_PART . '|:)|'
+		. '(?:' . self::IPV6_PART . ':){5}(?::' . self::IPV4 . '|(?::' . self::IPV6_PART . '){1,2}|:)|'
+		. '(?:' . self::IPV6_PART . ':){4}(?:(?::' . self::IPV6_PART . '){0,1}:' . self::IPV4 . '|(?::' . self::IPV6_PART . '){1,3}|:)|'
+		. '(?:' . self::IPV6_PART . ':){3}(?:(?::' . self::IPV6_PART . '){0,2}:' . self::IPV4 . '|(?::' . self::IPV6_PART . '){1,4}|:)|'
+		. '(?:' . self::IPV6_PART . ':){2}(?:(?::' . self::IPV6_PART . '){0,3}:' . self::IPV4 . '|(?::' . self::IPV6_PART . '){1,5}|:)|'
+		. '(?:' . self::IPV6_PART . ':){1}(?:(?::' . self::IPV6_PART . '){0,4}:' . self::IPV4 . '|(?::' . self::IPV6_PART . '){1,6}|:)|'
+		. '(?::(?:(?::' . self::IPV6_PART . '){0,5}:' . self::IPV4 . '|(?::' . self::IPV6_PART . '){1,7}|:))'
+		. ')(?:%[0-9a-zA-Z.:\-]+)?$~D';
 	
 	/** the project's ruleset version, one value whatever kinds a kernel reads — what nudge() compares */
 	public const HEADER_VERSION = 'X-Shield-Version';
@@ -1944,6 +2037,7 @@ final class Kernel
 			}
 			$rates = [];
 			$subs = self::batched($facts);
+			$unreadBatch = self::batchUnread($facts);
 			foreach($ruleset->rules as $rule)
 			{
 				// rate rules count only a request no match rule decided: judged after this loop
@@ -1964,6 +2058,11 @@ final class Kernel
 						{
 							$hit = $subHit;
 						}
+					}
+					// a batch the kernel could not read may have reached it: held, never blocked, never passed in silence
+					if($hit === null && $unreadBatch && self::batchReaches($rule, $facts))
+					{
+						$hit = ['matched' => '', 'resolved' => false];
 					}
 					if($hit === null)
 					{
@@ -2077,13 +2176,7 @@ final class Kernel
 			return null;
 		}
 		$rate = (array)$rule['rate'];
-		// the route key is one counter for every client
-		$key = match($rate['key'])
-		{
-			Ruleset::RATE_KEY_IP => $facts->ip,
-			Ruleset::RATE_KEY_USER => $facts->user,
-			default => '*',
-		};
+		$key = self::rateKey($rule, $facts);
 		// no address or no user to count by
 		if($key === '')
 		{
@@ -2099,6 +2192,60 @@ final class Kernel
 		
 		return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $rule, substr($matched, 0, self::MATCHED_MAX),
 			'over limit', (int)ceil($count), $window - ($now % $window));
+	}
+	
+	/** the counter a request falls under; `route` is one counter for every request the rule matches, '' none */
+	protected static function rateKey(
+		array $rule,
+		Facts $facts,
+	): string
+	{
+		return match(((array)$rule['rate'])['key'])
+		{
+			Ruleset::RATE_KEY_IP => self::rateAddress($facts->ip),
+			Ruleset::RATE_KEY_USER => $facts->user,
+			default => '*',
+		};
+	}
+	
+	/**
+	 * The address an ip-keyed rate rule counts, byte for byte the Node twin's
+	 * (Facts.address(), then Kernel.rateAddress()): a v4 address as it is, a
+	 * v6 one as its /64 — the block one subscriber is handed, where every one
+	 * of 2^64 addresses is free to use, so counting them one by one counts
+	 * nothing; '' for what is no address, so the rule skips the request
+	 */
+	public static function rateAddress(
+		string $ip,
+	): string
+	{
+		$ip = trim($ip, self::TRIM_BYTES);
+		// the dual-stack `::ffff:` form is its v4 address
+		if(preg_match('~^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$~iD', $ip, $mapped) === 1)
+		{
+			$ip = $mapped[1];
+		}
+		if(preg_match('~^' . self::IPV4 . '$~D', $ip) === 1)
+		{
+			return $ip;
+		}
+		if(preg_match(self::IPV6, $ip) !== 1)
+		{
+			return '';
+		}
+		// a zone id is kept whole, as Node keeps it; @: inet_pton() warns on anything it cannot read
+		$packed = str_contains($ip, '%') ? false : @inet_pton($ip);
+		if($packed === false || strlen($packed) !== 16)
+		{
+			return $ip;
+		}
+		$words = [];
+		for($at = 0; $at < 8; $at+= 2)
+		{
+			$words[] = sprintf('%x', ord($packed[$at]) << 8 | ord($packed[$at + 1]));
+		}
+		
+		return implode(':', $words) . '::/64';
 	}
 	
 	/** judge, count, report — the adapter turns block into its own 403, or a rate block into its 429 */
@@ -2163,7 +2310,8 @@ final class Kernel
 	 * never for a rule with none), match (the rule held, who included,
 	 * answered or not) and authed (a match by a caller signed in or one the
 	 * host cannot tell, who may be) — for the rules it reached or matched. A
-	 * batch counts once with its sub-requests
+	 * batch counts once with its sub-requests; one the kernel could not read
+	 * matches what it may have reached (batchReaches()), never as an entry
 	 *
 	 * @return array<int, array{entry: bool, match: bool, authed: bool}>
 	 */
@@ -2174,6 +2322,7 @@ final class Kernel
 	{
 		$tally = [];
 		$requests = [$facts, ...self::batched($facts)];
+		$unreadBatch = self::batchUnread($facts);
 		foreach($rules as $rule)
 		{
 			if(Ruleset::isVpatch($rule) === false)
@@ -2195,6 +2344,11 @@ final class Kernel
 				}
 				$entry = $entry || $selecting !== [];
 				$matched ??= self::patched($rule, $request) === null ? null : $request;
+			}
+			// held as judge() holds it: whose request it is says whether it was signed in
+			if($matched === null && $unreadBatch && self::batchReaches($rule, $facts))
+			{
+				$matched = $facts;
 			}
 			if($entry || $matched !== null)
 			{
@@ -2264,12 +2418,7 @@ final class Kernel
 		$rule = (array)$verdict->rule;
 		$rate = (array)$rule['rate'];
 		$window = (int)$rate['window'];
-		$key = match($rate['key'])
-		{
-			Ruleset::RATE_KEY_IP => $facts->ip,
-			Ruleset::RATE_KEY_USER => $facts->user,
-			default => '*',
-		};
+		$key = self::rateKey($rule, $facts);
 		// claimed until the window ends: the next window's first request past the limit reports again
 		if($this->store->once('rate:' . (int)$rule['id'] . ':' . crc32($key), max(1, $verdict->retryAfter)) === false)
 		{
@@ -2531,9 +2680,11 @@ final class Kernel
 	}
 	
 	/**
-	 * One entry: a plain condition, or a group — its first member that
-	 * holds; no member waits on the host, a nonce test never being in one —
-	 * with `frame` saying whether the holding target is a frame target
+	 * One entry: a plain condition, or a group — its first member that holds
+	 * answered, else its first that holds unanswered (a body or a decode step
+	 * the kernel could not read; no member waits on the host, a nonce test
+	 * never being in one) — with `frame` saying whether the holding target is
+	 * a frame target
 	 *
 	 * @return ?array{matched: string, resolved: bool, frame: bool}
 	 */
@@ -2543,18 +2694,23 @@ final class Kernel
 	): ?array
 	{
 		$members = isset($entry[Ruleset::GROUP_ANY]) ? (array)$entry[Ruleset::GROUP_ANY] : [$entry];
+		$pending = null;
 		foreach($members as $member)
 		{
 			$hit = self::condition((array)$member, $facts);
 			if($hit !== null)
 			{
 				$hit['frame'] = in_array((string)($member['target'] ?? ''), Ruleset::TARGETS, true);
-				
-				return $hit;
+				// an unread branch never answers for one that holds answered
+				if($hit['resolved'])
+				{
+					return $hit;
+				}
+				$pending ??= $hit;
 			}
 		}
 		
-		return null;
+		return $pending;
 	}
 	
 	/**
@@ -2562,7 +2718,9 @@ final class Kernel
 	 * null when none passes. Any value of a target with several (an array, a
 	 * wildcard, the keys) is enough; an absent one never holds — but a nonce
 	 * that is not there is an invalid one, and a present one needs the host,
-	 * and an upload the host cannot read holds unanswered where no value passes
+	 * and an upload the host cannot read holds unanswered where no value
+	 * passes; a JSON body the kernel did not read holds every json: condition
+	 * unanswered
 	 *
 	 * @return ?array{matched: string, resolved: bool}
 	 */
@@ -2572,6 +2730,11 @@ final class Kernel
 	): ?array
 	{
 		$target = (string)$condition['target'];
+		// before exists and nonce_invalid: an unread body is neither absent nor missing its nonce
+		if(str_starts_with($target, 'json:') && $facts->jsonUnread())
+		{
+			return ['matched' => '', 'resolved' => false];
+		}
 		[$values, $unread] = str_starts_with($target, 'file-content:')
 			? self::contents($facts, substr($target, strlen('file-content:'))) : [self::values($target, $facts), false];
 		$test = (string)$condition['test'];
@@ -2655,7 +2818,10 @@ final class Kernel
 	}
 	
 	/**
-	 * A target's values over the request
+	 * A target's values over the request; over a batch's sub-request its
+	 * own, then its batch's: the handler reads the superglobals too, which
+	 * stay the batch's — never the batch's JSON, which is the batch itself,
+	 * and an upload's bytes contents() reads both of
 	 *
 	 * @return list<string>
 	 */
@@ -2680,7 +2846,7 @@ final class Kernel
 		// Facts::$headers is keyed by lowercase name
 		$header = strtolower($name);
 		
-		return match($prefix)
+		$values = match($prefix)
 		{
 			'query' => self::pick($facts->query, $name),
 			'request' => [...self::pick($facts->query, $name), ...self::pick($facts->form, $name)],
@@ -2694,12 +2860,20 @@ final class Kernel
 			'body-keys' => self::keys($facts->form, $name),
 			default => [],
 		};
+		$outer = $facts->outer();
+		if($outer === null || in_array($prefix, ['json', 'file-content'], true))
+		{
+			return $values;
+		}
+		
+		return [...$values, ...self::values($target, $outer)];
 	}
 	
 	/**
 	 * An upload field's contents (Facts::fileContent()) and whether the host
 	 * could not read one; a failed upload, with no temp path, never reached
-	 * the app and is not there
+	 * the app and is not there. A batch's sub-request has none of its own:
+	 * its handler reads its batch's, through the batch's own reads
 	 *
 	 * @return array{list<string>, bool}
 	 */
@@ -2723,8 +2897,15 @@ final class Kernel
 				$contents[] = $content;
 			}
 		}
+		$outer = $facts->outer();
+		if($outer === null)
+		{
+			return [$contents, $unread];
+		}
+		// read once per request, however many sub-requests reach the rule
+		[$outers, $outerUnread] = self::contents($outer, $name);
 		
-		return [$contents, $unread];
+		return [[...$contents, ...$outers], $unread || $outerUnread];
 	}
 	
 	/**
@@ -2775,9 +2956,9 @@ final class Kernel
 	
 	/**
 	 * The sub-requests of a WordPress batch — a request to `/batch/v1` whose
-	 * JSON body lists `requests` — each as its route's handler sees it
-	 * (Facts::subRequest: POST when it names no method); none for any other
-	 * request
+	 * `requests` list them (batchList()) — each as its route's handler sees
+	 * it (Facts::subRequest: POST when it names no method); none for any
+	 * other request, and none past BATCH_MAX (batchUnread())
 	 *
 	 * @return list<Facts>
 	 */
@@ -2785,18 +2966,14 @@ final class Kernel
 		Facts $facts,
 	): array
 	{
-		// the route first: the body is read only for a batch
-		if(array_filter(self::routes($facts), static fn(string $route): bool => strcasecmp($route, self::BATCH_ROUTE) === 0) === [])
-		{
-			return [];
-		}
-		$json = $facts->json();
-		if(is_array($json) === false || is_array($json['requests'] ?? null) === false)
+		$list = self::batchList($facts);
+		// a list WordPress's own validation refuses runs nothing
+		if(is_array($list) === false)
 		{
 			return [];
 		}
 		$subs = [];
-		foreach(array_slice(array_values($json['requests']), 0, self::BATCH_MAX) as $request)
+		foreach(array_slice(array_values($list), 0, self::BATCH_MAX) as $request)
 		{
 			if(is_array($request) && is_string($request['path'] ?? null))
 			{
@@ -2806,6 +2983,115 @@ final class Kernel
 		}
 		
 		return $subs;
+	}
+	
+	/** whether a request addresses WordPress's batch route */
+	public static function isBatch(
+		Facts $facts,
+	): bool
+	{
+		return array_filter(self::routes($facts), static fn(string $route): bool => strcasecmp($route, self::BATCH_ROUTE) === 0) !== [];
+	}
+	
+	/**
+	 * A batch's `requests` where WordPress's WP_REST_Request::get_param()
+	 * finds them: the JSON body when WordPress reads it as JSON, then the
+	 * form, then the query — the first that sets it (isset(): null is not
+	 * set), taken whatever it holds, as WordPress takes it. Null off the
+	 * batch route, when none sets it, and when the JSON body that comes
+	 * first went unread (batchUnread())
+	 */
+	protected static function batchList(
+		Facts $facts,
+	): mixed
+	{
+		// the route first: the body is read only for a batch
+		if(self::isBatch($facts) === false)
+		{
+			return null;
+		}
+		$sources = [];
+		if(self::jsonFirst($facts))
+		{
+			if($facts->jsonUnread())
+			{
+				return null;
+			}
+			$sources[] = $facts->json();
+		}
+		foreach([...$sources, $facts->form, $facts->query] as $source)
+		{
+			if(is_array($source) && isset($source['requests']))
+			{
+				return $source['requests'];
+			}
+		}
+		
+		return null;
+	}
+	
+	/**
+	 * Whether WordPress reads a batch's JSON body before its form: when its
+	 * content type is one WordPress reads as JSON (Facts::wordpressJson()),
+	 * else whenever the adapter named no content type and handed a JSON body
+	 */
+	protected static function jsonFirst(
+		Facts $facts,
+	): bool
+	{
+		$type = $facts->headers['content-type'] ?? null;
+		
+		return is_string($type) === false || Facts::wordpressJson($type);
+	}
+	
+	/**
+	 * Whether a request is a batch whose sub-requests the kernel did not
+	 * read in full: the JSON body that comes first past JSON_CAP
+	 * (Facts::jsonUnread()), or a list past BATCH_MAX
+	 */
+	public static function batchUnread(
+		Facts $facts,
+	): bool
+	{
+		// the route first: the body is read only for a batch
+		if(self::isBatch($facts) === false)
+		{
+			return false;
+		}
+		if(self::jsonFirst($facts) && $facts->jsonUnread())
+		{
+			return true;
+		}
+		$list = self::batchList($facts);
+		
+		return is_array($list) && count($list) > self::BATCH_MAX;
+	}
+	
+	/**
+	 * Whether a batch the kernel could not read may have reached a vpatch: a
+	 * sub-request runs a REST route's handler, which a vpatch names with a
+	 * `rest` condition (in a group too), and runs it as this request's
+	 * caller, so `who` must take this caller in. Nothing else rules a vpatch
+	 * out: the handler reads this request's cookies and uploads, and the
+	 * sub-request's method, path, query, body and headers are the sender's
+	 */
+	public static function batchReaches(
+		array $rule,
+		Facts $facts,
+	): bool
+	{
+		$routed = false;
+		foreach((array)($rule['conditions'] ?? []) as $entry)
+		{
+			$entry = (array)$entry;
+			foreach(isset($entry[Ruleset::GROUP_ANY]) ? (array)$entry[Ruleset::GROUP_ANY] : [$entry] as $member)
+			{
+				$routed = $routed || (((array)$member)['target'] ?? '') === 'rest';
+			}
+		}
+		
+		// who alone, as patched() judges it for this caller
+		return $routed && self::patched(['who' => $rule['who'] ?? '', 'conditions' => []], $facts) !== null;
 	}
 	
 	/**
