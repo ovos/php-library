@@ -103,6 +103,7 @@ use APCUIterator;
 use Closure;
 use Throwable;
 
+use function abs;
 use function apcu_add;
 use function apcu_delete;
 use function apcu_enabled;
@@ -117,6 +118,7 @@ use function array_slice;
 use function array_values;
 use function base64_decode;
 use function ceil;
+use function chr;
 use function class_exists;
 use function count;
 use function crc32;
@@ -129,6 +131,7 @@ use function file_get_contents;
 use function file_put_contents;
 use function function_exists;
 use function hash;
+use function hexdec;
 use function http_get_last_response_headers;
 use function implode;
 use function in_array;
@@ -151,6 +154,7 @@ use function preg_match;
 use function preg_match_all;
 use function preg_quote;
 use function preg_replace;
+use function preg_replace_callback;
 use function preg_split;
 use function rawurldecode;
 use function rename;
@@ -158,6 +162,7 @@ use function rtrim;
 use function sprintf;
 use function str_contains;
 use function str_ends_with;
+use function str_ireplace;
 use function str_replace;
 use function str_starts_with;
 use function strcasecmp;
@@ -165,6 +170,7 @@ use function stream_context_create;
 use function stripos;
 use function strlen;
 use function strncasecmp;
+use function strpbrk;
 use function strpos;
 use function strrpos;
 use function strtolower;
@@ -226,6 +232,8 @@ final class Facts
 	 * @param string $restPrefix the REST API's path prefix (restPrefixOf())
 	 * @param bool $callerKnown whether the host could tell who the caller is: false leaves `authed` a guess,
 	 *     and what depends on it — a vpatch's anonymous or lacks:, a threat address — only observes
+	 * @param ?Closure(string): ?bool $kses whether the host's HTML filter would change a value (WordPress:
+	 *     wp_kses_post()); null when the host cannot say
 	 */
 	public function __construct(
 		public readonly string $method,
@@ -245,6 +253,7 @@ final class Facts
 		protected ?Closure $nonce = null,
 		string $restPrefix = 'wp-json',
 		public readonly bool $callerKnown = true,
+		protected ?Closure $kses = null,
 	)
 	{
 		$this->restPrefix = self::restPrefixOf($restPrefix);
@@ -274,7 +283,8 @@ final class Facts
 		}
 		
 		return new self(strtoupper($method), self::decodeOnce('/' . $this->restPrefix . $path), $this->ua, $this->ip, $this->authed, null, $this->user, $query,
-			is_array($body) ? $body : [], [], $names, [], static fn(): mixed => $body, $this->can, $this->nonce, $this->restPrefix, $this->callerKnown);
+			is_array($body) ? $body : [], [], $names, [], static fn(): mixed => $body, $this->can, $this->nonce, $this->restPrefix, $this->callerKnown,
+			$this->kses);
 	}
 	
 	/** the host the request named (its Host header) as authorityHost() reads one: '' when it named none */
@@ -315,6 +325,7 @@ final class Facts
 	 * @param ?callable(string, string): ?bool $nonce whether a nonce is valid for an action (a vpatch's nonce test)
 	 * @param string $restPrefix the REST API's path prefix — WordPress's rest_get_url_prefix(), wp-json elsewhere
 	 * @param bool $callerKnown whether the host could tell who the caller is (Facts::$callerKnown)
+	 * @param ?callable(string): ?bool $kses whether the host's HTML filter would change a value (a vpatch's unsafe_html)
 	 */
 	public static function fromServer(
 		array $server,
@@ -330,6 +341,7 @@ final class Facts
 		?callable $nonce = null,
 		string $restPrefix = 'wp-json',
 		bool $callerKnown = true,
+		?callable $kses = null,
 	): self
 	{
 		$uri = is_string($server['REQUEST_URI'] ?? null) ? $server['REQUEST_URI'] : '/';
@@ -358,6 +370,7 @@ final class Facts
 			$nonce === null ? null : Closure::fromCallable($nonce),
 			$restPrefix,
 			$callerKnown,
+			$kses === null ? null : Closure::fromCallable($kses),
 		);
 	}
 	
@@ -549,6 +562,23 @@ final class Facts
 		try
 		{
 			$answer = $this->can === null ? null : ($this->can)($capability);
+		}
+		catch(Throwable)
+		{
+			return null;
+		}
+		
+		return is_bool($answer) ? $answer : null;
+	}
+	
+	/** whether the host's HTML filter would change a value; null when the host cannot say */
+	public function htmlUnsafe(
+		string $value,
+	): ?bool
+	{
+		try
+		{
+			$answer = $this->kses === null ? null : ($this->kses)($value);
 		}
 		catch(Throwable)
 		{
@@ -777,12 +807,19 @@ final class Ruleset
 	public const DECODES = ['url', 'base64'];
 	
 	public const TESTS = ['equals', 'in', 'not_in', 'prefix', 'suffix', 'contains', 'regex', 'not_prefix', 'not_suffix', 'not_contains',
-		'not_regex', 'numeric', 'not_numeric', 'exists', 'longer_than', 'offsite', 'nonce_invalid'];
+		'not_regex', 'numeric', 'not_numeric', 'exists', 'longer_than', 'greater_than', 'less_than', 'offsite', 'has_quote', 'has_markup',
+		'unsafe_html', 'nonce_invalid'];
 	
 	/** the tests whose value is a list, and those that take none */
 	public const LIST_TESTS = ['in', 'not_in'];
 	
-	public const BARE_TESTS = ['numeric', 'not_numeric', 'exists', 'offsite'];
+	public const BARE_TESTS = ['numeric', 'not_numeric', 'exists', 'offsite', 'has_quote', 'has_markup', 'unsafe_html'];
+	
+	/** the tests the host answers: unanswered they only observe, and never sit in a group, where one branch would answer for the others */
+	public const HOST_TESTS = ['nonce_invalid', 'unsafe_html'];
+	
+	/** the integer the number tests compare against at most, either way — fifteen digits, which every runtime holds exactly */
+	public const NUMBER_MAX = 999999999999999;
 	
 	public const CONDITIONS_MAX = 6;
 	
@@ -1090,9 +1127,9 @@ final class Ruleset
 			}
 			foreach($members as $member)
 			{
-				// no group in a group; a nonce test answers absent as invalid, never as one branch of several
+				// no group in a group, no test the host answers: one unanswered branch would answer for the others
 				if(is_array($member) === false || array_key_exists(self::GROUP_ANY, $member)
-					|| ($member['test'] ?? null) === 'nonce_invalid' || self::conditionWellFormed($member) === false)
+					|| in_array($member['test'] ?? null, self::HOST_TESTS, true) || self::conditionWellFormed($member) === false)
 				{
 					return false;
 				}
@@ -1160,6 +1197,10 @@ final class Ruleset
 		if($test === 'longer_than')
 		{
 			return is_int($value) && $value >= 0 && $value <= Facts::BODY_CAP;
+		}
+		if($test === 'greater_than' || $test === 'less_than')
+		{
+			return is_int($value) && abs($value) <= self::NUMBER_MAX;
 		}
 		
 		return is_string($value) && trim($value) !== '' && strlen($value) <= self::VALUE_MAX;
@@ -2210,6 +2251,25 @@ final class Kernel
 			
 			return ['matched' => $values[0], 'resolved' => $resolved];
 		}
+		if($test === 'unsafe_html')
+		{
+			// the first value the filter changes; a value it cannot judge keeps the match unanswered
+			$pending = null;
+			foreach($values as $value)
+			{
+				foreach(self::decoded($value, (array)($condition['decode'] ?? [])) as $decoded)
+				{
+					$unsafe = $facts->htmlUnsafe($decoded);
+					if($unsafe === true)
+					{
+						return ['matched' => $decoded, 'resolved' => true];
+					}
+					$pending ??= $unsafe === null ? $decoded : null;
+				}
+			}
+			
+			return $pending === null ? null : ['matched' => $pending, 'resolved' => false];
+		}
 		foreach($values as $value)
 		{
 			foreach(self::decoded($value, (array)($condition['decode'] ?? [])) as $decoded)
@@ -2613,10 +2673,66 @@ final class Kernel
 			'numeric' => preg_match('~^[+-]?[0-9]+$~D', $value) === 1,
 			'not_numeric' => preg_match('~^[+-]?[0-9]+$~D', $value) !== 1,
 			'longer_than' => is_int($expected) && strlen($value) > $expected,
+			'greater_than' => is_int($expected) && ($number = self::integer($value)) !== null && $number > $expected,
+			'less_than' => is_int($expected) && ($number = self::integer($value)) !== null && $number < $expected,
+			'has_quote' => strpbrk($value, "'\"`") !== false,
+			'has_markup' => self::markup($value),
 			// the value as given, or once percent-decoded, as an app that decodes it again would follow it
 			'offsite' => self::offsite($value, $host) || self::offsite(rawurldecode($value), $host),
 			default => false,
 		};
+	}
+	
+	/** a value written as an integer of at most fifteen digits, signed or not, leading zeros allowed; null for anything else */
+	protected static function integer(
+		string $value,
+	): ?int
+	{
+		return preg_match('~^[+-]?0*[0-9]{1,15}$~D', $value) === 1 ? (int)$value : null;
+	}
+	
+	/**
+	 * Whether a value carries markup, as written or with its character
+	 * references decoded (numeric ones to ASCII, the named ones markup is
+	 * written with): a tag opener, an on…= handler after a space, a quote or
+	 * a slash, or a javascript:, vbscript: or data: scheme at the start or
+	 * after a quote, `=` or `(` once control characters and spaces are
+	 * squeezed out, as a browser reads a URL
+	 */
+	public static function markup(
+		string $value,
+	): bool
+	{
+		foreach([$value, self::referencesDecoded($value)] as $text)
+		{
+			if(preg_match('~<[a-zA-Z!/?]~', $text) === 1 || preg_match('~[\x09-\x0d\x20"\'`/]on[a-zA-Z]+[\x09-\x0d\x20]*=~i', $text) === 1)
+			{
+				return true;
+			}
+			$squeezed = (string)preg_replace('~[\x00-\x20]+~', '', $text);
+			if(preg_match('~(?:^|["\'`=(])(?:javascript|vbscript|data):~i', $squeezed) === 1)
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	/** a value with its numeric character references to ASCII decoded, and the named ones markup is written with */
+	protected static function referencesDecoded(
+		string $value,
+	): string
+	{
+		$value = (string)preg_replace_callback('~&#(?:[xX]0*([0-9a-fA-F]{1,6})|0*([0-9]{1,7}));?~', static function(array $reference): string
+		{
+			$code = ($reference[1] ?? '') !== '' ? (int)hexdec($reference[1]) : (int)$reference[2];
+			
+			return $code < 128 ? chr($code) : $reference[0];
+		}, $value);
+		
+		return str_ireplace(['&lt;', '&gt;', '&quot;', '&apos;', '&colon;', '&lpar;', '&rpar;', '&tab;', '&newline;', '&amp;'],
+			['<', '>', '"', "'", ':', '(', ')', "\t", "\n", '&'], $value);
 	}
 	
 	/** a value ending in a text, ASCII case folded or not */
