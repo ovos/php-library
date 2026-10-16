@@ -109,9 +109,12 @@ use function apcu_enabled;
 use function apcu_fetch;
 use function apcu_inc;
 use function apcu_store;
+use function array_filter;
 use function array_is_list;
 use function array_key_exists;
 use function array_keys;
+use function array_slice;
+use function array_values;
 use function base64_decode;
 use function ceil;
 use function class_exists;
@@ -218,6 +221,8 @@ final class Facts
 	 * @param ?Closure(string): ?bool $can whether the signed-in user has a capability; null when the host cannot say
 	 * @param ?Closure(string, string): ?bool $nonce whether a nonce is valid for an action; null when the host cannot say
 	 * @param string $restPrefix the REST API's path prefix (restPrefixOf())
+	 * @param bool $callerKnown whether the host could tell who the caller is: false leaves `authed` a guess,
+	 *     and what depends on it — a vpatch's anonymous or lacks:, a threat address — only observes
 	 */
 	public function __construct(
 		public readonly string $method,
@@ -236,9 +241,37 @@ final class Facts
 		protected ?Closure $can = null,
 		protected ?Closure $nonce = null,
 		string $restPrefix = 'wp-json',
+		public readonly bool $callerKnown = true,
 	)
 	{
 		$this->restPrefix = self::restPrefixOf($restPrefix);
+	}
+	
+	/**
+	 * A WordPress batch's sub-request as its route's handler sees it: its
+	 * method, its path under this site's REST prefix with its query, its body
+	 * as the form and the JSON, its headers — and this request's caller, whom
+	 * WordPress runs every sub-request as
+	 *
+	 * @param array<string, mixed> $headers
+	 */
+	public function subRequest(
+		string $method,
+		string $path,
+		mixed $body,
+		array $headers,
+	): self
+	{
+		parse_str(explode('?', $path, 2)[1] ?? '', $query);
+		$names = [];
+		foreach($headers as $name => $value)
+		{
+			// WordPress keeps a header's values as a list: the first is the one read
+			$names[strtolower((string)$name)] = is_array($value) ? (string)(array_values($value)[0] ?? '') : (is_scalar($value) ? (string)$value : '');
+		}
+		
+		return new self(strtoupper($method), self::decodeOnce('/' . $this->restPrefix . $path), $this->ua, $this->ip, $this->authed, null, $this->user, $query,
+			is_array($body) ? $body : [], [], $names, [], static fn(): mixed => $body, $this->can, $this->nonce, $this->restPrefix, $this->callerKnown);
 	}
 	
 	/** a REST prefix without its slashes; none is WordPress's default, wp-json */
@@ -262,6 +295,7 @@ final class Facts
 	 * @param ?callable(string): ?bool $can whether the signed-in user has a capability (a vpatch's `lacks:`)
 	 * @param ?callable(string, string): ?bool $nonce whether a nonce is valid for an action (a vpatch's nonce test)
 	 * @param string $restPrefix the REST API's path prefix — WordPress's rest_get_url_prefix(), wp-json elsewhere
+	 * @param bool $callerKnown whether the host could tell who the caller is (Facts::$callerKnown)
 	 */
 	public static function fromServer(
 		array $server,
@@ -276,6 +310,7 @@ final class Facts
 		?callable $can = null,
 		?callable $nonce = null,
 		string $restPrefix = 'wp-json',
+		bool $callerKnown = true,
 	): self
 	{
 		$uri = is_string($server['REQUEST_URI'] ?? null) ? $server['REQUEST_URI'] : '/';
@@ -303,6 +338,7 @@ final class Facts
 			$can === null ? null : Closure::fromCallable($can),
 			$nonce === null ? null : Closure::fromCallable($nonce),
 			$restPrefix,
+			$callerKnown,
 		);
 	}
 	
@@ -1453,6 +1489,12 @@ final class Kernel
 	
 	public const KINDS = 'match,rate,threat,vpatch,mode-block';
 	
+	/** WordPress's batch route: each request it lists reaches its own route's handler */
+	public const BATCH_ROUTE = '/batch/v1';
+	
+	/** the batch's sub-requests judged at most — the body's own size bounds them first */
+	public const BATCH_MAX = 1000;
+	
 	/** the project's ruleset version, one value whatever kinds a kernel reads — what nudge() compares */
 	public const HEADER_VERSION = 'X-Shield-Version';
 	
@@ -1576,17 +1618,22 @@ final class Kernel
 				
 				return Verdict::pass('ceiling');
 			}
+			// a vpatch that would block but could not be answered: observed unless a later rule blocks
+			$held = null;
 			// a listed address is judged before any rule
 			$threat = $this->threatened($ruleset, $facts);
 			if($threat !== null)
 			{
 				$blocks = Ruleset::blocks($threat['mode']) && $consent->blocks();
-				
-				return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $threat, $facts->ip);
+				if($facts->callerKnown || $blocks === false)
+				{
+					return new Verdict($blocks ? Verdict::BLOCK : Verdict::OBSERVE, $threat, $facts->ip);
+				}
+				// a caller the host cannot tell may be signed in: held, and a rule after it may still block
+				$held = new Verdict(Verdict::OBSERVE, $threat, $facts->ip, Verdict::REASON_UNANSWERED);
 			}
 			$rates = [];
-			// a vpatch that would block but could not be answered: observed unless a later rule blocks
-			$held = null;
+			$subs = self::batched($facts);
 			foreach($ruleset->rules as $rule)
 			{
 				// rate rules count only a request no match rule decided: judged after this loop
@@ -1599,6 +1646,15 @@ final class Kernel
 				if(Ruleset::isVpatch($rule))
 				{
 					$hit = self::patched($rule, $facts);
+					foreach($subs as $sub)
+					{
+						// a batch's sub-request reaches its route's handler as a request of its own; an answered hit wins
+						$subHit = $hit !== null && $hit['resolved'] ? null : self::patched($rule, $sub);
+						if($subHit !== null && ($hit === null || $subHit['resolved']))
+						{
+							$hit = $subHit;
+						}
+					}
 					if($hit === null)
 					{
 						continue;
@@ -1665,7 +1721,8 @@ final class Kernel
 	): ?array
 	{
 		$threats = $ruleset->threats;
-		if($threats === null || $facts->authed || isset($threats['addresses'][Ruleset::canonical($facts->ip)]) === false)
+		// a caller the host cannot tell is not known to be signed in
+		if($threats === null || ($facts->authed && $facts->callerKnown) || isset($threats['addresses'][Ruleset::canonical($facts->ip)]) === false)
 		{
 			return null;
 		}
@@ -2019,11 +2076,16 @@ final class Kernel
 	{
 		$resolved = true;
 		$who = (string)($rule['who'] ?? '');
-		if($who === Ruleset::WHO_ANONYMOUS && $facts->authed)
+		if($facts->callerKnown === false)
+		{
+			// whom the patch is for waits on the host: the match holds unanswered
+			$resolved = $who === Ruleset::WHO_ANYONE;
+		}
+		else if($who === Ruleset::WHO_ANONYMOUS && $facts->authed)
 		{
 			return null;
 		}
-		if(str_starts_with($who, Ruleset::WHO_LACKS) && $facts->authed)
+		else if(str_starts_with($who, Ruleset::WHO_LACKS) && $facts->authed)
 		{
 			$can = $facts->can(substr($who, strlen(Ruleset::WHO_LACKS)));
 			// the user has the capability: the patch is not for them
@@ -2207,10 +2269,11 @@ final class Kernel
 		}
 		foreach([...self::pick($facts->query, 'rest_route'), ...self::pick($facts->form, 'rest_route')] as $value)
 		{
-			// WordPress's empty(): '' and '0' address no route
+			// WordPress's empty(): '' and '0' address no route, and an untrailed '0' is the index
 			if($value !== '' && $value !== '0')
 			{
-				$routes[] = self::untrailed($value);
+				$route = self::untrailed($value);
+				$routes[] = $route === '0' ? '/' : $route;
 			}
 		}
 		foreach($routes as $route)
@@ -2224,6 +2287,37 @@ final class Kernel
 		}
 		
 		return $routes;
+	}
+	
+	/**
+	 * The sub-requests of a WordPress batch — a request to `/batch/v1` whose
+	 * JSON body lists `requests` — each as its route's handler sees it
+	 * (Facts::subRequest: POST when it names no method); none for any other
+	 * request
+	 *
+	 * @return list<Facts>
+	 */
+	public static function batched(
+		Facts $facts,
+	): array
+	{
+		$json = $facts->json();
+		if(is_array($json) === false || is_array($json['requests'] ?? null) === false
+			|| array_filter(self::routes($facts), static fn(string $route): bool => strcasecmp($route, self::BATCH_ROUTE) === 0) === [])
+		{
+			return [];
+		}
+		$subs = [];
+		foreach(array_slice(array_values($json['requests']), 0, self::BATCH_MAX) as $request)
+		{
+			if(is_array($request) && is_string($request['path'] ?? null))
+			{
+				$subs[] = $facts->subRequest(is_string($request['method'] ?? null) ? $request['method'] : 'POST', $request['path'], $request['body'] ?? null,
+					is_array($request['headers'] ?? null) ? $request['headers'] : []);
+			}
+		}
+		
+		return $subs;
 	}
 	
 	/**
