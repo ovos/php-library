@@ -179,12 +179,14 @@ use function str_starts_with;
 use function strcasecmp;
 use function stream_context_create;
 use function stream_get_contents;
+use function stripcslashes;
 use function stripos;
 use function strlen;
 use function strncasecmp;
 use function strpbrk;
 use function strpos;
 use function strrpos;
+use function strspn;
 use function strtolower;
 use function strtoupper;
 use function substr;
@@ -205,6 +207,7 @@ use const CURLOPT_USERAGENT;
 use const JSON_UNESCAPED_SLASHES;
 use const JSON_UNESCAPED_UNICODE;
 use const LOCK_EX;
+use const PREG_SET_ORDER;
 
 /**
  * What the adapter tells the kernel about the request. The kernel never
@@ -934,6 +937,15 @@ final class Ruleset
 	/** the values a condition's decode steps yield that are read at most: past them the condition holds unanswered */
 	public const DECODED_MAX = 256;
 	
+	/** the shortcodes or blocks one decode step reads in a value at most: past them the value is not read in full and the condition holds unanswered */
+	public const OCCURRENCES_MAX = 256;
+	
+	/** a shortcode tag as add_shortcode() takes one, in printable ASCII: never `<>&/[]=` or a space */
+	public const SHORTCODE_TAG = '~^[^<>&/\[\]\x00-\x20=\x7f-\xff]{1,100}$~D';
+	
+	/** a block's `namespace/name` as WordPress's block parser reads one */
+	public const BLOCK_NAME = '~^[a-z][a-z0-9_-]*/[a-z][a-z0-9_-]*$~D';
+	
 	public const TESTS = ['equals', 'in', 'not_in', 'prefix', 'suffix', 'contains', 'regex', 'not_prefix', 'not_suffix', 'not_contains',
 		'not_regex', 'numeric', 'not_numeric', 'exists', 'longer_than', 'greater_than', 'less_than', 'offsite', 'has_quote', 'has_markup',
 		'unsafe_html', 'nonce_invalid'];
@@ -1374,7 +1386,55 @@ final class Ruleset
 	): bool
 	{
 		return in_array($step, self::DECODES, true)
-			|| (is_string($step) && str_starts_with($step, 'json:') && $step !== 'json:' && self::targetWellFormed($step));
+			|| (is_string($step) && str_starts_with($step, 'json:') && $step !== 'json:' && self::targetWellFormed($step))
+			|| self::shortcodeStep($step) !== null || self::blockStep($step) !== null;
+	}
+	
+	/**
+	 * `shortcode:<tag>.<attribute>` as [tag, attribute]: split at the last
+	 * `.`, as an attribute name holds none; the attribute lower-cased as
+	 * WordPress lower-cases names — a name, a position (`0`, `1`, …) or `*`
+	 * for every one. Null when the step is not one
+	 *
+	 * @return ?array{string, string}
+	 */
+	public static function shortcodeStep(
+		mixed $step,
+	): ?array
+	{
+		if(is_string($step) === false || str_starts_with($step, 'shortcode:') === false || strlen($step) > 200)
+		{
+			return null;
+		}
+		$rest = substr($step, strlen('shortcode:'));
+		$at = strrpos($rest, '.');
+		if($at === false)
+		{
+			return null;
+		}
+		$tag = substr($rest, 0, $at);
+		$attribute = strtolower(substr($rest, $at + 1));
+		
+		return preg_match(self::SHORTCODE_TAG, $tag) === 1 && preg_match('~^(?:[a-z0-9_-]{1,100}|\*)$~D', $attribute) === 1 ? [$tag, $attribute] : null;
+	}
+	
+	/**
+	 * `block:<namespace/name>.<dot.path>` as [name, path], the path as the
+	 * json: target walks one. Null when the step is not one
+	 *
+	 * @return ?array{string, string}
+	 */
+	public static function blockStep(
+		mixed $step,
+	): ?array
+	{
+		if(is_string($step) === false || str_starts_with($step, 'block:') === false || strlen($step) > 200)
+		{
+			return null;
+		}
+		[$name, $path] = explode('.', substr($step, strlen('block:')), 2) + [1 => ''];
+		
+		return preg_match(self::BLOCK_NAME, $name) === 1 && $path !== '' ? [$name, $path] : null;
 	}
 	
 	/** `method`, `path`, `rest`, or a prefix and a name (`query:file`); the keys targets may name the top level ('') */
@@ -1726,6 +1786,15 @@ final class Kernel
 	
 	/** the batch's sub-requests judged at most — the body's own size bounds them first */
 	public const BATCH_MAX = 1000;
+	
+	/** WordPress's shortcode_parse_atts() pattern (get_shortcode_atts_regex()), as it is */
+	public const SHORTCODE_ATTRIBUTES = '/([\w-]+)\s*=\s*"([^"]*)"(?:\s|$)|([\w-]+)\s*=\s*\'([^\']*)\'(?:\s|$)|([\w-]+)\s*=\s*([^\s\'"]+)(?:\s|$)|"([^"]*)"(?:\s|$)|\'([^\']*)\'(?:\s|$)|(\S+)(?:\s|$)/';
+	
+	/** the bytes PCRE's `\w` and a hyphen are: what may not follow a shortcode's tag */
+	public const WORD_BYTES = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-';
+	
+	/** the bytes PCRE's `\s` is */
+	public const SPACE_BYTES = " \t\n\x0B\f\r";
 	
 	/** the schemes whose slashes a browser reads loosely and whose authority names a host (`offsite`) */
 	public const SPECIAL_SCHEMES = ['http', 'https', 'ftp', 'ws', 'wss'];
@@ -2534,7 +2603,10 @@ final class Kernel
 			$pending = null;
 			foreach($values as $value)
 			{
-				foreach(self::decoded($value, (array)($condition['decode'] ?? [])) as $decoded)
+				[$decodedValues, $cut] = self::decoded($value, (array)($condition['decode'] ?? []));
+				// what a decode step left unread may hold
+				$unread = $unread || $cut;
+				foreach($decodedValues as $decoded)
 				{
 					if($capped && ++$read > Ruleset::DECODED_MAX)
 					{
@@ -2554,7 +2626,10 @@ final class Kernel
 		}
 		foreach($values as $value)
 		{
-			foreach(self::decoded($value, (array)($condition['decode'] ?? [])) as $decoded)
+			[$decodedValues, $cut] = self::decoded($value, (array)($condition['decode'] ?? []));
+			// what a decode step left unread may hold
+			$unread = $unread || $cut;
+			foreach($decodedValues as $decoded)
 			{
 				if($capped && ++$read > Ruleset::DECODED_MAX)
 				{
@@ -2911,10 +2986,12 @@ final class Kernel
 	}
 	
 	/**
-	 * A value through the decode steps: every value the last step yields —
-	 * url and base64 yield one or none
+	 * A value through the decode steps: every value the last step yields,
+	 * and whether a step read only part of what it was given. url and
+	 * base64 yield one or none; a step's values past DECODED_MAX are not
+	 * carried on — one past it is, so the condition still sees there were more
 	 *
-	 * @return list<string>
+	 * @return array{list<string>, bool}
 	 */
 	public static function decoded(
 		string $value,
@@ -2922,26 +2999,36 @@ final class Kernel
 	): array
 	{
 		$values = [$value];
+		$cut = false;
 		foreach($steps as $step)
 		{
 			$next = [];
 			foreach($values as $one)
 			{
-				foreach(self::step((string)$step, $one) as $out)
+				[$out, $short] = self::step((string)$step, $one);
+				$cut = $cut || $short;
+				foreach($out as $decoded)
 				{
-					$next[] = $out;
+					$next[] = $decoded;
 				}
+			}
+			if(count($next) > Ruleset::DECODED_MAX + 1)
+			{
+				$next = array_slice($next, 0, Ruleset::DECODED_MAX + 1);
+				$cut = true;
 			}
 			$values = $next;
 		}
 		
-		return $values;
+		return [$values, $cut];
 	}
 	
 	/**
-	 * One decode step over one value: none when the step cannot read it
+	 * One decode step over one value: the values it yields — none when it
+	 * cannot read the value — and whether it read only part of it (shortcodes
+	 * and blocks past OCCURRENCES_MAX or JSON_CAP)
 	 *
-	 * @return list<string>
+	 * @return array{list<string>, bool}
 	 */
 	protected static function step(
 		string $step,
@@ -2950,14 +3037,14 @@ final class Kernel
 	{
 		if($step === 'url')
 		{
-			return [rawurldecode($value)];
+			return [[rawurldecode($value)], false];
 		}
 		if($step === 'base64')
 		{
 			// strict: a character outside the alphabet fails the step
 			$bytes = base64_decode($value, true);
 			
-			return $bytes === false ? [] : [$bytes];
+			return [$bytes === false ? [] : [$bytes], false];
 		}
 		if($step === 'json' || str_starts_with($step, 'json:'))
 		{
@@ -2965,20 +3052,346 @@ final class Kernel
 			$json = json_decode($value, true, Facts::JSON_DEPTH);
 			if(is_array($json) === false)
 			{
-				return [];
+				return [[], false];
 			}
 			$values = [];
 			if($step === 'json')
 			{
 				self::leaves($json, $values);
 				
-				return $values;
+				return [$values, false];
 			}
 			
-			return self::pickJson($json, substr($step, strlen('json:')));
+			return [self::pickJson($json, substr($step, strlen('json:'))), false];
+		}
+		$shortcode = Ruleset::shortcodeStep($step);
+		if($shortcode !== null)
+		{
+			[$found, $cut] = self::shortcodes($value, $shortcode[0]);
+			$values = [];
+			foreach($found as $attributes)
+			{
+				foreach($attributes as $name => $one)
+				{
+					// a positional attribute's name is its place
+					if($shortcode[1] === '*' || (string)$name === $shortcode[1])
+					{
+						$values[] = $one;
+					}
+				}
+			}
+			
+			return [$values, $cut];
+		}
+		$block = Ruleset::blockStep($step);
+		if($block !== null)
+		{
+			[$found, $cut] = self::blocks($value, $block[0]);
+			$values = [];
+			foreach($found as $attributes)
+			{
+				foreach(self::pickJson($attributes, $block[1]) as $one)
+				{
+					$values[] = $one;
+				}
+			}
+			
+			return [$values, $cut];
 		}
 		
-		return [];
+		return [[], false];
+	}
+	
+	/**
+	 * Every `[<tag>` in a value with its attributes as WordPress reads them
+	 * (shortcodeAttributes()): an occurrence not followed by a word character
+	 * or a hyphen, its attribute text up to the first `]` less a
+	 * self-closing `/` — get_shortcode_regex()'s third group — read in
+	 * do_shortcode()'s view of the value (shortcodeView()) and, where it holds
+	 * markup, in the value as written too: a shortcode inside an element's
+	 * attribute runs there. Every occurrence, an escaped `[[tag]]` too: a
+	 * nested do_shortcode() sees only its content and may run one the whole
+	 * value shows escaped. An attribute text that spans a tag WordPress
+	 * rewrites first is not read in full; so is the rest past OCCURRENCES_MAX
+	 * occurrences or JSON_CAP bytes of attribute text — the second value says so
+	 *
+	 * @return array{list<array<int|string, string>>, bool}
+	 */
+	public static function shortcodes(
+		string $value,
+		string $tag,
+	): array
+	{
+		$found = [];
+		$cut = false;
+		$budget = Facts::JSON_CAP;
+		$open = '[' . $tag;
+		[$shown, $rewritten] = self::shortcodeView($value);
+		foreach(str_contains($value, '<') ? [[$shown, $rewritten], [$value, []]] : [[$shown, $rewritten]] as [$view, $spans])
+		{
+			$length = strlen($view);
+			for($at = strpos($view, $open); $at !== false; $at = strpos($view, $open, $at + 1))
+			{
+				$after = $at + strlen($open);
+				// `[tagx` and `[tag-x` are other tags
+				if($after < $length && strspn($view, self::WORD_BYTES, $after, 1) === 1)
+				{
+					continue;
+				}
+				$close = strpos($view, ']', $after);
+				// no `]` after this one: none after a later one either
+				if($close === false)
+				{
+					break;
+				}
+				$budget -= $close - $after;
+				if(count($found) === Ruleset::OCCURRENCES_MAX || $budget < 0)
+				{
+					return [$found, true];
+				}
+				foreach($spans as [$from, $to])
+				{
+					// a tag WordPress rewrites before it reads this text: what it reads there is not known
+					$cut = $cut || ($from < $close && $to > $after);
+				}
+				$end = $close > $after && $view[$close - 1] === '/' ? $close - 1 : $close;
+				$found[] = self::shortcodeAttributes(substr($view, $after, $end - $after));
+			}
+		}
+		
+		return [$found, $cut];
+	}
+	
+	/**
+	 * A value as WordPress's do_shortcode() matches shortcodes in it, after
+	 * do_shortcodes_in_html_tags(): `&#91;` and `&#93;` written `&#091;` and
+	 * `&#093;`, and the brackets inside every HTML element escaped — an
+	 * element as wp_html_split() cuts one: a comment to its `-->`, a CDATA
+	 * section to its `]]>`, anything else to its `>`, each to the end when
+	 * unclosed. So a shortcode's attribute text runs on past a `]` inside an
+	 * element, as WordPress reads it. With the view, the spans of the tags
+	 * WordPress rewrites before it reads it — a tag holding both brackets,
+	 * whose attributes' shortcodes run first and are filtered through kses —
+	 * as [start, end) offsets in the view
+	 *
+	 * @return array{string, list<array{int, int}>}
+	 */
+	public static function shortcodeView(
+		string $value,
+	): array
+	{
+		$value = strtr($value, ['&#91;' => '&#091;', '&#93;' => '&#093;']);
+		$view = '';
+		$rewritten = [];
+		$at = 0;
+		for($open = strpos($value, '<'); $open !== false; $open = strpos($value, '<', $at))
+		{
+			$escaped = substr($value, $open + 1, 3) === '!--' || substr($value, $open + 1, 8) === '![CDATA[';
+			$close = match(true)
+			{
+				substr($value, $open + 1, 3) === '!--' => self::through($value, '-->', $open + 2),
+				substr($value, $open + 1, 8) === '![CDATA[' => self::through($value, ']]>', $open + 9),
+				default => self::through($value, '>', $open + 1),
+			};
+			$element = substr($value, $open, $close - $open);
+			$view .= substr($value, $at, $open - $at);
+			$start = strlen($view);
+			$view .= strtr($element, ['[' => '&#91;', ']' => '&#93;']);
+			if($escaped === false && str_contains($element, '[') && str_contains($element, ']'))
+			{
+				$rewritten[] = [$start, strlen($view)];
+			}
+			$at = $close;
+			if($at >= strlen($value))
+			{
+				break;
+			}
+		}
+		
+		return [$view . substr($value, $at), $rewritten];
+	}
+	
+	/** the offset just past the first `$end` at or after `$from`, or the value's end */
+	protected static function through(
+		string $value,
+		string $end,
+		int $from,
+	): int
+	{
+		$at = $from <= strlen($value) ? strpos($value, $end, $from) : false;
+		
+		return $at === false ? strlen($value) : $at + strlen($end);
+	}
+	
+	/**
+	 * A shortcode's attribute text as WordPress's shortcode_parse_atts()
+	 * reads it, its own steps in its order: no-break and zero-width spaces
+	 * as one space (not UTF-8: no attributes), its pattern's six forms, names
+	 * lower-cased with a later one winning and a name empty() drops dropped,
+	 * a positional value appended, stripcslashes() on every value, and a
+	 * value with an unclosed element blanked
+	 *
+	 * @return array<int|string, string>
+	 */
+	public static function shortcodeAttributes(
+		string $text,
+	): array
+	{
+		$atts = [];
+		$text = preg_replace('/[\x{00a0}\x{200b}]+/u', ' ', $text);
+		if(is_string($text) === false || preg_match_all(self::SHORTCODE_ATTRIBUTES, $text, $matches, PREG_SET_ORDER) < 1)
+		{
+			return $atts;
+		}
+		foreach($matches as $m)
+		{
+			if(empty($m[1]) === false)
+			{
+				$atts[strtolower($m[1])] = stripcslashes($m[2]);
+			}
+			else if(empty($m[3]) === false)
+			{
+				$atts[strtolower($m[3])] = stripcslashes($m[4]);
+			}
+			else if(empty($m[5]) === false)
+			{
+				$atts[strtolower($m[5])] = stripcslashes($m[6]);
+			}
+			else if(isset($m[7]) && strlen($m[7]) > 0)
+			{
+				$atts[] = stripcslashes($m[7]);
+			}
+			else if(isset($m[8]) && strlen($m[8]) > 0)
+			{
+				$atts[] = stripcslashes($m[8]);
+			}
+			else if(isset($m[9]))
+			{
+				$atts[] = stripcslashes($m[9]);
+			}
+		}
+		foreach($atts as $name => $one)
+		{
+			// a `<` no `>` closes after it
+			if(str_contains($one, '<') && preg_match('/^[^<]*+(?:<[^>]*+>[^<]*+)*+$/', $one) !== 1)
+			{
+				$atts[$name] = '';
+			}
+		}
+		
+		return $atts;
+	}
+	
+	/**
+	 * The attributes of every `<!-- wp:<namespace/name> … -->` opener or void
+	 * block in a value, as WordPress's block parser reads a comment: each
+	 * `<!--` on its own (a superset of the tokens WordPress reads one after
+	 * another), a bare `wp:x` being `core/x`, the attributes `{` up to the
+	 * first `}` that whitespace, an optional `/` and `-->` follow, decoded
+	 * as json_decode() does; invalid JSON is none. At most OCCURRENCES_MAX
+	 * of them and JSON_CAP bytes of attributes; past either the rest is not
+	 * read, and the second value says so
+	 *
+	 * @return array{list<array>, bool}
+	 */
+	public static function blocks(
+		string $value,
+		string $name,
+	): array
+	{
+		$found = [];
+		$budget = Facts::JSON_CAP;
+		$count = 0;
+		$length = strlen($value);
+		// the closing braces, found once: a brace that whitespace, an optional `/` and `-->` follow
+		$braces = [];
+		for($at = strpos($value, '}'); $at !== false; $at = strpos($value, '}', $at + 1))
+		{
+			$space = strspn($value, self::SPACE_BYTES, $at + 1);
+			$after = $at + 1 + $space;
+			if($space > 0 && substr($value, ($value[$after] ?? '') === '/' ? $after + 1 : $after, 3) === '-->')
+			{
+				$braces[] = $at;
+			}
+		}
+		$brace = 0;
+		for($at = strpos($value, '<!--'); $at !== false; $at = strpos($value, '<!--', $at + 1))
+		{
+			$i = $at + 4;
+			$space = strspn($value, self::SPACE_BYTES, $i);
+			// a closer (`<!-- /wp:`) carries no attributes
+			if($space === 0 || substr($value, $i + $space, 3) !== 'wp:')
+			{
+				continue;
+			}
+			$i += $space + 3;
+			$word = self::blockWord($value, $i);
+			$read = 'core/' . substr($value, $i, $word);
+			$i += $word;
+			if($word > 0 && $i < $length && $value[$i] === '/')
+			{
+				$second = self::blockWord($value, $i + 1);
+				$read = substr($value, $i - $word, $word) . '/' . substr($value, $i + 1, $second);
+				$i += 1 + $second;
+				$word = $second;
+			}
+			$space = strspn($value, self::SPACE_BYTES, $i);
+			if($word === 0 || $space === 0 || $read !== $name)
+			{
+				continue;
+			}
+			$i += $space;
+			$attrs = null;
+			if($i < $length && $value[$i] === '{')
+			{
+				while($brace < count($braces) && $braces[$brace] <= $i)
+				{
+					$brace++;
+				}
+				// no closing brace: not a block comment
+				if($brace === count($braces))
+				{
+					continue;
+				}
+				$attrs = substr($value, $i, $braces[$brace] - $i + 1);
+				$i = $braces[$brace] + 1;
+				$i += strspn($value, self::SPACE_BYTES, $i);
+			}
+			if($i < $length && $value[$i] === '/')
+			{
+				$i++;
+			}
+			if(substr($value, $i, 3) !== '-->')
+			{
+				continue;
+			}
+			$budget -= strlen((string)$attrs);
+			if(++$count > Ruleset::OCCURRENCES_MAX || $budget < 0)
+			{
+				return [$found, true];
+			}
+			$json = $attrs === null ? [] : json_decode($attrs, true, Facts::JSON_DEPTH);
+			if(is_array($json))
+			{
+				$found[] = $json;
+			}
+		}
+		
+		return [$found, false];
+	}
+	
+	/** the length of a block name's part at an offset — `[a-z][a-z0-9_-]*` — 0 for none */
+	protected static function blockWord(
+		string $value,
+		int $at,
+	): int
+	{
+		if($at >= strlen($value) || strspn($value, 'abcdefghijklmnopqrstuvwxyz', $at, 1) === 0)
+		{
+			return 0;
+		}
+		
+		return 1 + strspn($value, 'abcdefghijklmnopqrstuvwxyz0123456789_-', $at + 1);
 	}
 	
 	/** one value under one test — the literal ops fold ASCII, as a match rule's do */
