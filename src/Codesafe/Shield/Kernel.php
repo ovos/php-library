@@ -68,7 +68,8 @@ declare(strict_types=1);
  * Virtual patches (kind `vpatch`): an entry point, a parameter, a typed test
  * and WHO — `{who, conditions: [{target, decode, test, value, ci}]}`, every
  * condition holding, over the request as the platform parsed it (Facts'
- * query, form, JSON, cookies, headers, file names). `who` is anyone,
+ * query, form, JSON, cookies, headers, file names, and an upload's head and
+ * tail when a condition names its contents). `who` is anyone,
  * anonymous or lacks:<capability>, and a nonce test asks the platform: a
  * blocking vpatch whose who or nonce the adapter cannot answer is held with
  * the reason `unanswered` (Verdict::REASON_UNANSWERED), never blocked.
@@ -127,8 +128,11 @@ use function curl_getinfo;
 use function curl_init;
 use function curl_setopt_array;
 use function explode;
+use function fclose;
 use function file_get_contents;
 use function file_put_contents;
+use function fopen;
+use function fstat;
 use function function_exists;
 use function hash;
 use function hexdec;
@@ -142,8 +146,10 @@ use function is_array;
 use function is_bool;
 use function is_file;
 use function is_int;
+use function is_readable;
 use function is_scalar;
 use function is_string;
+use function is_uploaded_file;
 use function json_decode;
 use function json_encode;
 use function ltrim;
@@ -167,6 +173,7 @@ use function str_replace;
 use function str_starts_with;
 use function strcasecmp;
 use function stream_context_create;
+use function stream_get_contents;
 use function stripos;
 use function strlen;
 use function strncasecmp;
@@ -211,6 +218,11 @@ final class Facts
 	/** how deep JSON may nest, as json_decode() counts it: 32 holds containers 31 deep */
 	public const JSON_DEPTH = 32;
 	
+	/** an upload is read as its first FILE_HEAD bytes and its last FILE_TAIL, one value: a payload hides at either end */
+	public const FILE_HEAD = 65536;
+	
+	public const FILE_TAIL = 4096;
+	
 	protected ?string $body = null;
 	
 	protected bool $bodyRead = false;
@@ -220,6 +232,9 @@ final class Facts
 	protected mixed $json = null;
 	
 	protected bool $jsonRead = false;
+	
+	/** @var array<string, ?string> the uploads read, by temp path */
+	protected array $fileContents = [];
 	
 	/** the REST API's path prefix without slashes — WordPress's rest_get_url_prefix() */
 	public readonly string $restPrefix;
@@ -237,6 +252,8 @@ final class Facts
 	 *     and what depends on it — a vpatch's anonymous or lacks:, a threat address — only observes
 	 * @param ?Closure(string): ?bool $kses whether the host's HTML filter would change a value (WordPress:
 	 *     wp_kses_post()); null when the host cannot say
+	 * @param array<string, mixed> $uploads field => the upload's temp path (or paths), nested as $files nests the names
+	 * @param ?Closure(string): ?string $fileReader an upload's bytes by its temp path; null when the host cannot read it
 	 */
 	public function __construct(
 		public readonly string $method,
@@ -257,6 +274,8 @@ final class Facts
 		string $restPrefix = 'wp-json',
 		public readonly bool $callerKnown = true,
 		protected ?Closure $kses = null,
+		public readonly array $uploads = [],
+		protected ?Closure $fileReader = null,
 	)
 	{
 		$this->restPrefix = self::restPrefixOf($restPrefix);
@@ -323,12 +342,13 @@ final class Facts
 	 * @param string $user who a `user`-keyed rate rule counts: the signed-in identity, or the name a login POST tries ('' = none, the rule is skipped)
 	 * @param ?array<string, mixed> $get the parsed query ($_GET); null = the raw URI's query through parse_str
 	 * @param array<string, mixed> $cookies the parsed cookies ($_COOKIE)
-	 * @param array<string, mixed> $files the uploads ($_FILES) — their names, never their bytes
+	 * @param array<string, mixed> $files the uploads ($_FILES): their names, and their temp files for a file-content condition
 	 * @param ?callable(string): ?bool $can whether the signed-in user has a capability (a vpatch's `lacks:`)
 	 * @param ?callable(string, string): ?bool $nonce whether a nonce is valid for an action (a vpatch's nonce test)
 	 * @param string $restPrefix the REST API's path prefix — WordPress's rest_get_url_prefix(), wp-json elsewhere
 	 * @param bool $callerKnown whether the host could tell who the caller is (Facts::$callerKnown)
 	 * @param ?callable(string): ?bool $kses whether the host's HTML filter would change a value (a vpatch's unsafe_html)
+	 * @param ?callable(string): ?string $fileReader an upload's bytes by its temp path; null reads PHP's own (uploadReader())
 	 */
 	public static function fromServer(
 		array $server,
@@ -345,6 +365,7 @@ final class Facts
 		string $restPrefix = 'wp-json',
 		bool $callerKnown = true,
 		?callable $kses = null,
+		?callable $fileReader = null,
 	): self
 	{
 		$uri = is_string($server['REQUEST_URI'] ?? null) ? $server['REQUEST_URI'] : '/';
@@ -374,6 +395,8 @@ final class Facts
 			$restPrefix,
 			$callerKnown,
 			$kses === null ? null : Closure::fromCallable($kses),
+			self::uploadPaths($files),
+			$fileReader === null ? self::uploadReader() : Closure::fromCallable($fileReader),
 		);
 	}
 	
@@ -416,6 +439,65 @@ final class Facts
 		}
 		
 		return $names;
+	}
+	
+	/** $_FILES as temp paths: field => tmp_name, a multiple upload's as a list — nested as fileNames() nests the names */
+	public static function uploadPaths(
+		array $files,
+	): array
+	{
+		$paths = [];
+		foreach($files as $field => $file)
+		{
+			if(is_array($file) && isset($file['tmp_name']))
+			{
+				$paths[(string)$field] = $file['tmp_name'];
+			}
+		}
+		
+		return $paths;
+	}
+	
+	/** PHP's own temp files, read by headAndTail(): a path PHP did not write for this request's upload is never opened */
+	public static function uploadReader(): Closure
+	{
+		return static fn(string $path): ?string => is_uploaded_file($path) ? self::headAndTail($path) : null;
+	}
+	
+	/** a file's first $head bytes and its last $tail as one value, the whole file when it is no longer; null when it cannot be read */
+	public static function headAndTail(
+		string $path,
+		int $head = self::FILE_HEAD,
+		int $tail = self::FILE_TAIL,
+	): ?string
+	{
+		$handle = is_file($path) && is_readable($path) ? fopen($path, 'rb') : false;
+		if($handle === false)
+		{
+			return null;
+		}
+		try
+		{
+			$stat = fstat($handle);
+			$size = $stat === false ? 0 : $stat['size'];
+			if($size <= $head + $tail)
+			{
+				$bytes = stream_get_contents($handle);
+			}
+			else
+			{
+				// the middle is never read: a large upload costs what a small one does
+				$start = stream_get_contents($handle, $head);
+				$end = stream_get_contents($handle, $tail, $size - $tail);
+				$bytes = $start === false || $end === false ? false : $start . $end;
+			}
+		}
+		finally
+		{
+			fclose($handle);
+		}
+		
+		return $bytes === false ? null : $bytes;
 	}
 	
 	/** a JSON body, decoded — read only when a json: target asks */
@@ -572,6 +654,36 @@ final class Facts
 		}
 		
 		return is_bool($answer) ? $answer : null;
+	}
+	
+	/**
+	 * An upload's contents as a rule reads them, its head and tail
+	 * (FILE_HEAD, FILE_TAIL), read once; null when the host cannot read it
+	 */
+	public function fileContent(
+		string $path,
+	): ?string
+	{
+		if(array_key_exists($path, $this->fileContents) === false)
+		{
+			try
+			{
+				$bytes = $this->fileReader === null ? null : ($this->fileReader)($path);
+			}
+			catch(Throwable)
+			{
+				$bytes = null;
+			}
+			$bytes = is_string($bytes) ? $bytes : null;
+			// a host's reader may hand the whole file: a rule reads its head and tail all the same
+			if($bytes !== null && strlen($bytes) > self::FILE_HEAD + self::FILE_TAIL)
+			{
+				$bytes = substr($bytes, 0, self::FILE_HEAD) . substr($bytes, -self::FILE_TAIL);
+			}
+			$this->fileContents[$path] = $bytes;
+		}
+		
+		return $this->fileContents[$path];
 	}
 	
 	/** whether the host's HTML filter would change a value; null when the host cannot say */
@@ -804,8 +916,8 @@ final class Ruleset
 	/** a vpatch's targets without a name — `rest` is the REST route in either spelling — and the prefixes that take one (`query:file`) */
 	public const TARGETS = ['method', 'path', 'rest'];
 	
-	/** `request:` is $_REQUEST's reading: the query's values and the body's */
-	public const TARGET_PREFIXES = ['query', 'body', 'request', 'json', 'cookie', 'header', 'file', 'query-keys', 'body-keys'];
+	/** `request:` is $_REQUEST's reading: the query's values and the body's; `file:` an upload's name, `file-content:` its bytes */
+	public const TARGET_PREFIXES = ['query', 'body', 'request', 'json', 'cookie', 'header', 'file', 'file-content', 'query-keys', 'body-keys'];
 	
 	/** the decode steps; `json:<dot.path>` is json walked to a path, as the json: target walks a body */
 	public const DECODES = ['url', 'base64', 'json'];
@@ -1134,9 +1246,11 @@ final class Ruleset
 			}
 			foreach($members as $member)
 			{
-				// no group in a group, no test the host answers: one unanswered branch would answer for the others
+				// no group in a group, nothing the host answers or reads: one unanswered branch would answer for the others
 				if(is_array($member) === false || array_key_exists(self::GROUP_ANY, $member)
-					|| in_array($member['test'] ?? null, self::HOST_TESTS, true) || self::conditionWellFormed($member) === false)
+					|| in_array($member['test'] ?? null, self::HOST_TESTS, true)
+					|| (is_string($member['target'] ?? null) && str_starts_with($member['target'], 'file-content:'))
+					|| self::conditionWellFormed($member) === false)
 				{
 					return false;
 				}
@@ -2177,7 +2291,11 @@ final class Kernel
 		}
 		$matched = '';
 		$framed = '';
-		foreach((array)($rule['conditions'] ?? []) as $entry)
+		$entries = (array)($rule['conditions'] ?? []);
+		// an upload's contents are read last, once every cheaper condition held
+		$entries = [...array_filter($entries, static fn(mixed $entry): bool => self::readsUpload($entry) === false),
+			...array_filter($entries, static fn(mixed $entry): bool => self::readsUpload($entry))];
+		foreach($entries as $entry)
 		{
 			$hit = self::held((array)$entry, $facts);
 			if($hit === null)
@@ -2197,6 +2315,14 @@ final class Kernel
 		}
 		
 		return ['matched' => $matched !== '' ? $matched : $framed, 'resolved' => $resolved];
+	}
+	
+	/** whether an entry reads an upload's contents — a plain condition: a group never holds one (Ruleset::entryWellFormed) */
+	protected static function readsUpload(
+		mixed $entry,
+	): bool
+	{
+		return str_starts_with((string)(((array)$entry)['target'] ?? ''), 'file-content:');
 	}
 	
 	/**
@@ -2230,7 +2356,8 @@ final class Kernel
 	 * One condition: the value that passed it and whether it was answered, or
 	 * null when none passes. Any value of a target with several (an array, a
 	 * wildcard, the keys) is enough; an absent one never holds — but a nonce
-	 * that is not there is an invalid one, and a present one needs the host
+	 * that is not there is an invalid one, and a present one needs the host,
+	 * and an upload the host cannot read holds unanswered where no value passes
 	 *
 	 * @return ?array{matched: string, resolved: bool}
 	 */
@@ -2239,11 +2366,14 @@ final class Kernel
 		Facts $facts,
 	): ?array
 	{
-		$values = self::values((string)$condition['target'], $facts);
+		$target = (string)$condition['target'];
+		[$values, $unread] = str_starts_with($target, 'file-content:')
+			? self::contents($facts, substr($target, strlen('file-content:'))) : [self::values($target, $facts), false];
 		$test = (string)$condition['test'];
 		if($test === 'exists')
 		{
-			return $values === [] ? null : ['matched' => $values[0], 'resolved' => true];
+			// an upload that could not be read is there all the same
+			return $values === [] && $unread === false ? null : ['matched' => $values[0] ?? '', 'resolved' => true];
 		}
 		if($test === 'nonce_invalid')
 		{
@@ -2291,7 +2421,8 @@ final class Kernel
 				}
 			}
 			
-			return $pending === null ? null : ['matched' => $pending, 'resolved' => false];
+			// an upload the host could not read is a value the filter could not judge
+			return $pending === null && $unread === false ? null : ['matched' => $pending ?? '', 'resolved' => false];
 		}
 		foreach($values as $value)
 		{
@@ -2308,7 +2439,8 @@ final class Kernel
 			}
 		}
 		
-		return null;
+		// an upload the host could not read may hold what no value read did
+		return $unread ? ['matched' => '', 'resolved' => false] : null;
 	}
 	
 	/**
@@ -2346,10 +2478,42 @@ final class Kernel
 			'cookie' => self::pick($facts->cookies, $name),
 			'header' => isset($facts->headers[$header]) ? [(string)$facts->headers[$header]] : [],
 			'file' => self::pick($facts->files, $name),
+			'file-content' => self::contents($facts, $name)[0],
 			'query-keys' => self::keys($facts->query, $name),
 			'body-keys' => self::keys($facts->form, $name),
 			default => [],
 		};
+	}
+	
+	/**
+	 * An upload field's contents (Facts::fileContent()) and whether the host
+	 * could not read one; a failed upload, with no temp path, never reached
+	 * the app and is not there
+	 *
+	 * @return array{list<string>, bool}
+	 */
+	public static function contents(
+		Facts $facts,
+		string $name,
+	): array
+	{
+		$contents = [];
+		$unread = false;
+		foreach(self::pick($facts->uploads, $name) as $path)
+		{
+			if($path === '')
+			{
+				continue;
+			}
+			$content = $facts->fileContent($path);
+			$unread = $unread || $content === null;
+			if($content !== null)
+			{
+				$contents[] = $content;
+			}
+		}
+		
+		return [$contents, $unread];
 	}
 	
 	/**
