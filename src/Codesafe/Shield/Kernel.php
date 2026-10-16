@@ -220,8 +220,12 @@ final class Facts
 	/** a JSON body past this decodes to nothing — padding past BODY_CAP must not hide a json: target */
 	public const JSON_CAP = 1048576;
 	
-	/** how deep JSON may nest, as json_decode() counts it: 32 holds containers 31 deep */
-	public const JSON_DEPTH = 32;
+	/**
+	 * how deep JSON may nest, as json_decode() counts it (512 holds containers
+	 * 511 deep): its own default, so a document an app decodes is never one a
+	 * rule cannot read
+	 */
+	public const JSON_DEPTH = 512;
 	
 	/** an upload is read as its first FILE_HEAD bytes and its last FILE_TAIL, one value: a payload hides at either end */
 	public const FILE_HEAD = 65536;
