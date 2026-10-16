@@ -2301,9 +2301,13 @@ final class Kernel
 		Facts $facts,
 	): array
 	{
+		// the route first: the body is read only for a batch
+		if(array_filter(self::routes($facts), static fn(string $route): bool => strcasecmp($route, self::BATCH_ROUTE) === 0) === [])
+		{
+			return [];
+		}
 		$json = $facts->json();
-		if(is_array($json) === false || is_array($json['requests'] ?? null) === false
-			|| array_filter(self::routes($facts), static fn(string $route): bool => strcasecmp($route, self::BATCH_ROUTE) === 0) === [])
+		if(is_array($json) === false || is_array($json['requests'] ?? null) === false)
 		{
 			return [];
 		}
