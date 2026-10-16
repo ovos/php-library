@@ -143,6 +143,7 @@ use function is_scalar;
 use function is_string;
 use function json_decode;
 use function json_encode;
+use function ltrim;
 use function max;
 use function ord;
 use function parse_str;
@@ -150,6 +151,7 @@ use function preg_match;
 use function preg_match_all;
 use function preg_quote;
 use function preg_replace;
+use function preg_split;
 use function rawurldecode;
 use function rename;
 use function rtrim;
@@ -164,6 +166,7 @@ use function stripos;
 use function strlen;
 use function strncasecmp;
 use function strpos;
+use function strrpos;
 use function strtolower;
 use function strtoupper;
 use function substr;
@@ -272,6 +275,22 @@ final class Facts
 		
 		return new self(strtoupper($method), self::decodeOnce('/' . $this->restPrefix . $path), $this->ua, $this->ip, $this->authed, null, $this->user, $query,
 			is_array($body) ? $body : [], [], $names, [], static fn(): mixed => $body, $this->can, $this->nonce, $this->restPrefix, $this->callerKnown);
+	}
+	
+	/** the host the request named (its Host header) as authorityHost() reads one: '' when it named none */
+	public function host(): string
+	{
+		return self::hostOf((string)($this->headers['host'] ?? ''));
+	}
+	
+	/** a host and port as a host: the port gone (an IPv6 address keeps its brackets), lower case, no trailing dot */
+	public static function hostOf(
+		string $hostPort,
+	): string
+	{
+		$host = (string)preg_replace('~:[0-9]*$~D', '', trim($hostPort));
+		
+		return rtrim(strtolower($host), '.');
 	}
 	
 	/** a REST prefix without its slashes; none is WordPress's default, wp-json */
@@ -757,13 +776,13 @@ final class Ruleset
 	
 	public const DECODES = ['url', 'base64'];
 	
-	public const TESTS = ['equals', 'in', 'not_in', 'prefix', 'suffix', 'contains', 'regex', 'numeric', 'not_numeric', 'exists',
-		'longer_than', 'nonce_invalid'];
+	public const TESTS = ['equals', 'in', 'not_in', 'prefix', 'suffix', 'contains', 'regex', 'not_prefix', 'not_suffix', 'not_contains',
+		'not_regex', 'numeric', 'not_numeric', 'exists', 'longer_than', 'offsite', 'nonce_invalid'];
 	
 	/** the tests whose value is a list, and those that take none */
 	public const LIST_TESTS = ['in', 'not_in'];
 	
-	public const BARE_TESTS = ['numeric', 'not_numeric', 'exists'];
+	public const BARE_TESTS = ['numeric', 'not_numeric', 'exists', 'offsite'];
 	
 	public const CONDITIONS_MAX = 6;
 	
@@ -1495,6 +1514,9 @@ final class Kernel
 	/** the batch's sub-requests judged at most — the body's own size bounds them first */
 	public const BATCH_MAX = 1000;
 	
+	/** the schemes whose slashes a browser reads loosely and whose authority names a host (`offsite`) */
+	public const SPECIAL_SCHEMES = ['http', 'https', 'ftp', 'ws', 'wss'];
+	
 	/** the project's ruleset version, one value whatever kinds a kernel reads — what nudge() compares */
 	public const HEADER_VERSION = 'X-Shield-Version';
 	
@@ -2192,7 +2214,7 @@ final class Kernel
 		{
 			foreach(self::decoded($value, (array)($condition['decode'] ?? [])) as $decoded)
 			{
-				if(self::passes($test, $decoded, $condition))
+				if(self::passes($test, $decoded, $condition, $facts->host()))
 				{
 					return ['matched' => $decoded, 'resolved' => true];
 				}
@@ -2567,6 +2589,7 @@ final class Kernel
 		string $test,
 		string $value,
 		array $condition,
+		string $host = '',
 	): bool
 	{
 		$ci = ($condition['ci'] ?? true) === true;
@@ -2579,15 +2602,111 @@ final class Kernel
 			'in' => self::among($value, (array)$expected, $ci),
 			'not_in' => self::among($value, (array)$expected, $ci) === false,
 			'prefix' => self::match(['op' => Ruleset::OP_PREFIX, 'value' => $text, 'ci' => $ci], $value) !== null,
-			'suffix' => strlen($value) >= strlen($text)
-				&& ($ci ? strcasecmp(substr($value, strlen($value) - strlen($text)), $text) === 0 : str_ends_with($value, $text)),
+			'suffix' => self::endsWith($value, $text, $ci),
 			'contains' => self::match(['op' => Ruleset::OP_CONTAINS, 'value' => $text, 'ci' => $ci], $value) !== null,
 			'regex' => self::match(['op' => Ruleset::OP_REGEX, 'value' => $text, 'ci' => $ci], $value) !== null,
+			'not_prefix' => self::match(['op' => Ruleset::OP_PREFIX, 'value' => $text, 'ci' => $ci], $value) === null,
+			'not_suffix' => self::endsWith($value, $text, $ci) === false,
+			'not_contains' => self::match(['op' => Ruleset::OP_CONTAINS, 'value' => $text, 'ci' => $ci], $value) === null,
+			// only a pattern that ran and did not match: one the engine refuses holds on nothing
+			'not_regex' => self::regexes($text, $value, $ci) === false,
 			'numeric' => preg_match('~^[+-]?[0-9]+$~D', $value) === 1,
 			'not_numeric' => preg_match('~^[+-]?[0-9]+$~D', $value) !== 1,
 			'longer_than' => is_int($expected) && strlen($value) > $expected,
+			// the value as given, or once percent-decoded, as an app that decodes it again would follow it
+			'offsite' => self::offsite($value, $host) || self::offsite(rawurldecode($value), $host),
 			default => false,
 		};
+	}
+	
+	/** a value ending in a text, ASCII case folded or not */
+	protected static function endsWith(
+		string $value,
+		string $text,
+		bool $ci,
+	): bool
+	{
+		return strlen($value) >= strlen($text)
+			&& ($ci ? strcasecmp(substr($value, strlen($value) - strlen($text)), $text) === 0 : str_ends_with($value, $text));
+	}
+	
+	/**
+	 * A rule's regex as PCRE runs it: `~…~D[i]`, never `u`; every `~` the
+	 * value has not escaped itself (after an even run of backslashes) gets
+	 * one, so it cannot close the delimiter
+	 */
+	protected static function regexPattern(
+		string $value,
+		bool $ci,
+	): string
+	{
+		return '~' . (string)preg_replace('#(?<!\\\\)((?:\\\\\\\\)*)~#', '$1\\~', $value) . '~D' . ($ci ? 'i' : '');
+	}
+	
+	/** whether a regex matches, as match() runs it: null when the engine refuses the pattern */
+	protected static function regexes(
+		string $pattern,
+		string $subject,
+		bool $ci,
+	): ?bool
+	{
+		// @: a pattern PCRE refuses warns and returns false
+		$found = @preg_match(self::regexPattern($pattern, $ci), $subject);
+		
+		return $found === false ? null : $found === 1;
+	}
+	
+	/**
+	 * Whether a URL takes a browser to another host than $host, read as a
+	 * browser reads it: every tab and newline dropped, control characters
+	 * and spaces at either end too; two slashes or backslashes in any mix
+	 * open an authority, so does a special scheme (http, https, ftp, ws, wss)
+	 * with or without its slashes; any other scheme (javascript:, data:)
+	 * leaves the site too. A relative path stays; an unknown $host makes
+	 * every authority another host's
+	 */
+	public static function offsite(
+		string $url,
+		string $host,
+	): bool
+	{
+		$url = trim(str_replace(["\t", "\n", "\r"], '', $url), "\x00..\x20");
+		if(preg_match('~^([a-zA-Z][a-zA-Z0-9+.\-]*):(.*)$~sD', $url, $scheme) === 1)
+		{
+			if(in_array(strtolower($scheme[1]), self::SPECIAL_SCHEMES, true) === false)
+			{
+				return true;
+			}
+			
+			return self::otherHost(self::authorityHost(ltrim($scheme[2], '/\\')), $host);
+		}
+		if(preg_match('~^[/\\\\]{2}~', $url) === 1)
+		{
+			return self::otherHost(self::authorityHost(ltrim($url, '/\\')), $host);
+		}
+		
+		return false;
+	}
+	
+	/** the host an authority names: up to its path, query or fragment, after any user part, without its port, lower case, no trailing dot */
+	protected static function authorityHost(
+		string $authority,
+	): string
+	{
+		$authority = (string)(preg_split('~[/\\\\?#]~', $authority, 2)[0] ?? '');
+		$at = strrpos($authority, '@');
+		$hostPort = $at === false ? $authority : substr($authority, $at + 1);
+		
+		return Facts::hostOf($hostPort);
+	}
+	
+	/** whether an authority's host is not the request's: an empty one counts as another, and so does every one when the request named none */
+	protected static function otherHost(
+		string $found,
+		string $host,
+	): bool
+	{
+		return $found === '' || $found !== $host;
 	}
 	
 	/** a value in a list, ASCII case folded or not */
@@ -2635,9 +2754,7 @@ final class Kernel
 			case Ruleset::OP_CIDR:
 				return self::inCidr($value, $subject) ? $subject : null;
 			case Ruleset::OP_REGEX:
-				// every `~` the value has not escaped itself (after an even run of
-				// backslashes) gets one, so it cannot close the delimiter
-				$pattern = '~' . (string)preg_replace('#(?<!\\\\)((?:\\\\\\\\)*)~#', '$1\\~', $value) . '~D' . ($ci ? 'i' : '');
+				$pattern = self::regexPattern($value, $ci);
 				
 				// @: a pattern PCRE refuses warns, returns false and matches nothing
 				return @preg_match($pattern, $subject, $m) === 1 ? (string)$m[0] : null;
