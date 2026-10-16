@@ -208,6 +208,9 @@ final class Facts
 	/** a JSON body past this decodes to nothing — padding past BODY_CAP must not hide a json: target */
 	public const JSON_CAP = 1048576;
 	
+	/** how deep JSON may nest, as json_decode() counts it: 32 holds containers 31 deep */
+	public const JSON_DEPTH = 32;
+	
 	protected ?string $body = null;
 	
 	protected bool $bodyRead = false;
@@ -432,8 +435,8 @@ final class Facts
 		{
 			$raw = $input();
 			
-			// past the cap, or nested deeper than 32 levels: no JSON at all
-			return is_string($raw) && strlen($raw) <= $cap ? json_decode($raw, true, 32) : null;
+			// past the cap, or nested deeper than JSON_DEPTH allows: no JSON at all
+			return is_string($raw) && strlen($raw) <= $cap ? json_decode($raw, true, Facts::JSON_DEPTH) : null;
 		};
 	}
 	
@@ -804,7 +807,11 @@ final class Ruleset
 	/** `request:` is $_REQUEST's reading: the query's values and the body's */
 	public const TARGET_PREFIXES = ['query', 'body', 'request', 'json', 'cookie', 'header', 'file', 'query-keys', 'body-keys'];
 	
-	public const DECODES = ['url', 'base64'];
+	/** the decode steps; `json:<dot.path>` is json walked to a path, as the json: target walks a body */
+	public const DECODES = ['url', 'base64', 'json'];
+	
+	/** the values a condition's decode steps yield that are read at most: past them the condition holds unanswered */
+	public const DECODED_MAX = 256;
 	
 	public const TESTS = ['equals', 'in', 'not_in', 'prefix', 'suffix', 'contains', 'regex', 'not_prefix', 'not_suffix', 'not_contains',
 		'not_regex', 'numeric', 'not_numeric', 'exists', 'longer_than', 'greater_than', 'less_than', 'offsite', 'has_quote', 'has_markup',
@@ -1167,7 +1174,7 @@ final class Ruleset
 		}
 		foreach($decode as $step)
 		{
-			if(in_array($step, self::DECODES, true) === false)
+			if(self::decodeWellFormed($step) === false)
 			{
 				return false;
 			}
@@ -1204,6 +1211,15 @@ final class Ruleset
 		}
 		
 		return is_string($value) && trim($value) !== '' && strlen($value) <= self::VALUE_MAX;
+	}
+	
+	/** a decode step: one of DECODES, or `json:` and a path the json: target would take */
+	public static function decodeWellFormed(
+		mixed $step,
+	): bool
+	{
+		return in_array($step, self::DECODES, true)
+			|| (is_string($step) && str_starts_with($step, 'json:') && $step !== 'json:' && self::targetWellFormed($step));
 	}
 	
 	/** `method`, `path`, `rest`, or a prefix and a name (`query:file`); the keys targets may name the top level ('') */
@@ -2251,6 +2267,9 @@ final class Kernel
 			
 			return ['matched' => $values[0], 'resolved' => $resolved];
 		}
+		// past DECODED_MAX values the decode steps yield, the rest is not read: the condition holds unanswered
+		$capped = (array)($condition['decode'] ?? []) !== [];
+		$read = 0;
 		if($test === 'unsafe_html')
 		{
 			// the first value the filter changes; a value it cannot judge keeps the match unanswered
@@ -2259,6 +2278,10 @@ final class Kernel
 			{
 				foreach(self::decoded($value, (array)($condition['decode'] ?? [])) as $decoded)
 				{
+					if($capped && ++$read > Ruleset::DECODED_MAX)
+					{
+						return ['matched' => $values[0], 'resolved' => false];
+					}
 					$unsafe = $facts->htmlUnsafe($decoded);
 					if($unsafe === true)
 					{
@@ -2274,6 +2297,10 @@ final class Kernel
 		{
 			foreach(self::decoded($value, (array)($condition['decode'] ?? [])) as $decoded)
 			{
+				if($capped && ++$read > Ruleset::DECODED_MAX)
+				{
+					return ['matched' => $values[0], 'resolved' => false];
+				}
 				if(self::passes($test, $decoded, $condition, $facts->host()))
 				{
 					return ['matched' => $decoded, 'resolved' => true];
@@ -2639,6 +2666,24 @@ final class Kernel
 			$bytes = base64_decode($value, true);
 			
 			return $bytes === false ? [] : [$bytes];
+		}
+		if($step === 'json' || str_starts_with($step, 'json:'))
+		{
+			// an object or an array read as the json: target reads a body: a scalar or invalid JSON yields nothing
+			$json = json_decode($value, true, Facts::JSON_DEPTH);
+			if(is_array($json) === false)
+			{
+				return [];
+			}
+			$values = [];
+			if($step === 'json')
+			{
+				self::leaves($json, $values);
+				
+				return $values;
+			}
+			
+			return self::pickJson($json, substr($step, strlen('json:')));
 		}
 		
 		return [];
