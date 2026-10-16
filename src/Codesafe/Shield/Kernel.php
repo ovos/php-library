@@ -2185,7 +2185,9 @@ final class Kernel
 	 * The REST routes a request addresses, as WordPress finds them: the
 	 * path's spelling decoded once and, when that differs, twice (WordPress
 	 * matches a percent-encoded prefix on the decoded path and decodes the
-	 * capture again), then `rest_route` from the query and the body
+	 * capture again), then `rest_route` from the query and the body; each
+	 * ending in one newline also without it, since WordPress matches a route
+	 * as `@^route$@i`, whose `$` ends before a final newline
 	 *
 	 * @return list<string>
 	 */
@@ -2209,6 +2211,15 @@ final class Kernel
 			if($value !== '' && $value !== '0')
 			{
 				$routes[] = self::untrailed($value);
+			}
+		}
+		foreach($routes as $route)
+		{
+			// not untrailed again: WordPress untrails before the newline, never after
+			$bare = str_ends_with($route, "\n") ? substr($route, 0, -1) : null;
+			if($bare !== null && in_array($bare, $routes, true) === false)
+			{
+				$routes[] = $bare;
 			}
 		}
 		
