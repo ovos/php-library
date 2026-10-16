@@ -88,6 +88,9 @@ class Shield
 	/** the most a pull reads: the door caps a payload at 25 rules of 600 bytes — a megabyte is a wrong door */
 	public const int RESPONSE_LIMIT = 1_048_576;
 	
+	/** the rollup field prefix of each outcome the kernel store counts: the verdicts, then a vpatch's evidence (Kernel::tallied()) */
+	public const array HIT_FIELDS = ['so:' => 'observe', 'sb:' => 'block', 'se:' => 'entry', 'sm:' => 'match', 'sa:' => 'authed'];
+	
 	protected ?Kernel $kernel = null;
 	
 	protected ?Closure $http;
@@ -312,8 +315,10 @@ class Shield
 	
 	/**
 	 * The rules' hits of one minute as rollup fields — `so:<id>` observed,
-	 * `sb:<id>` blocked — taken from the kernel store (APCu; once), for the
-	 * Rollup's flush hook. Nothing while the shield is not enabled
+	 * `sb:<id>` blocked, and a vpatch's evidence: `se:<id>` reached,
+	 * `sm:<id>` matched, `sa:<id>` matched signed in — taken from the kernel
+	 * store (APCu; once), for the Rollup's flush hook. Nothing while the
+	 * shield is not enabled
 	 *
 	 * @return array<string, int>
 	 */
@@ -328,13 +333,12 @@ class Shield
 		$fields = [];
 		foreach($this->kernel()->store()->takeHits($minute) as $id => $counts)
 		{
-			if(($counts['observe'] ?? 0) > 0)
+			foreach(self::HIT_FIELDS as $prefix => $outcome)
 			{
-				$fields['so:' . $id] = (int)$counts['observe'];
-			}
-			if(($counts['block'] ?? 0) > 0)
-			{
-				$fields['sb:' . $id] = (int)$counts['block'];
+				if(($counts[$outcome] ?? 0) > 0)
+				{
+					$fields[$prefix . $id] = $counts[$outcome];
+				}
 			}
 		}
 		

@@ -40,16 +40,18 @@ class Rollup extends Test
 {
 	/**
 	 * RULE: the Shield's hits ride the fragment — the flush hook's `so:<id>` /
-	 * `sb:<id>` fields join the minute's counters (a throwing hook adds
-	 * nothing) and assemble() maps them into the shield_observe /
-	 * shield_block sections, absent when no rule fired. Falsify: assemble the
+	 * `sb:<id>` fields and a vpatch's evidence `se:` / `sm:` / `sa:` join the
+	 * minute's counters (a throwing hook adds nothing) and assemble() maps
+	 * them into the shield_observe / shield_block / shield_entry /
+	 * shield_match / shield_authed sections, absent when no rule fired.
+	 * Falsify: assemble the
 	 * two prefixes as routes — `r:so:203` ships and the console refuses the
 	 * whole fragment as a route key outside the vocabulary.
 	 */
 	public function theShieldHitsRideTheFragment(): bool
 	{
 		$fields = CodesafeRollup::withExtra(['requests' => 3, 's:200' => 3],
-			static fn(int $minute): array => ['so:203' => 4, 'sb:203' => 1, 'so:7' => 0, 'minute' => $minute],
+			static fn(int $minute): array => ['so:203' => 4, 'sb:203' => 1, 'so:7' => 0, 'se:203' => 9, 'sm:203' => 5, 'sa:203' => 2, 'minute' => $minute],
 			29833333);
 		$payload = CodesafeRollup::assemble(29833333, $fields);
 		$plain = CodesafeRollup::assemble(29833333, ['requests' => 3]);
@@ -58,10 +60,11 @@ class Rollup extends Test
 			throw new \RuntimeException('no apcu');
 		}, 29833333);
 		
-		return $fields === ['requests' => 3, 's:200' => 3, 'so:203' => 4, 'sb:203' => 1, 'minute' => 29833333]
+		return $fields === ['requests' => 3, 's:200' => 3, 'so:203' => 4, 'sb:203' => 1, 'se:203' => 9, 'sm:203' => 5, 'sa:203' => 2, 'minute' => 29833333]
 			&& $payload['shield_observe'] === ['203' => 4] && $payload['shield_block'] === ['203' => 1]
+			&& $payload['shield_entry'] === ['203' => 9] && $payload['shield_match'] === ['203' => 5] && $payload['shield_authed'] === ['203' => 2]
 			&& $payload['requests'] === 3 && $payload['routes'] === []
-			&& isset($plain['shield_observe']) === false && isset($plain['shield_block']) === false
+			&& isset($plain['shield_observe']) === false && isset($plain['shield_block']) === false && isset($plain['shield_entry']) === false
 			&& $broken === ['requests' => 3]
 			&& CodesafeRollup::withExtra(['requests' => 1], null, 1) === ['requests' => 1];
 	}

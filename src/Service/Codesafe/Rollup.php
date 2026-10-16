@@ -188,8 +188,9 @@ class Rollup
 	/**
 	 * The Shield's per-minute hook (docs: ovos/codesafe wave8-shield-build.md,
 	 * S1 part d): fn(int $minute): array<string, int> — `so:<rule>` / `sb:<rule>`
-	 * fields the flush merges into the minute's counters before the fragment
-	 * is assembled. Null = none; the Sender passes the Shield adapter's
+	 * fields, and a vpatch's evidence `se:` / `sm:` / `sa:`, the flush merges
+	 * into the minute's counters before the fragment is assembled. Null =
+	 * none; the Sender passes the Shield adapter's
 	 */
 	protected ?Closure $extra;
 	
@@ -588,8 +589,8 @@ class Rollup
 				$payload['authed'][substr($field, 2)] = $count;
 			}
 			// the Shield's per-rule hits (the kernel store's counters, merged in
-			// by the flush hook): two optional sections codesafe folds beside
-			// the request counters — absent when no rule fired
+			// by the flush hook): optional sections codesafe folds beside the
+			// request counters — absent when no rule fired
 			elseif(substr($field, 0, 3) === 'so:')
 			{
 				$payload['shield_observe'][substr($field, 3)] = $count;
@@ -597,6 +598,19 @@ class Rollup
 			elseif(substr($field, 0, 3) === 'sb:')
 			{
 				$payload['shield_block'][substr($field, 3)] = $count;
+			}
+			// a vpatch's evidence: the requests that reached its entry point, its matches, those by a caller who may be signed in
+			elseif(substr($field, 0, 3) === 'se:')
+			{
+				$payload['shield_entry'][substr($field, 3)] = $count;
+			}
+			elseif(substr($field, 0, 3) === 'sm:')
+			{
+				$payload['shield_match'][substr($field, 3)] = $count;
+			}
+			elseif(substr($field, 0, 3) === 'sa:')
+			{
+				$payload['shield_authed'][substr($field, 3)] = $count;
 			}
 		}
 		
