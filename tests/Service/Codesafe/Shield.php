@@ -6,6 +6,7 @@ namespace Tests\Service\Codesafe;
 use Ovos\ArrayObject;
 use Ovos\Codesafe\Shield\Facts;
 use Ovos\Codesafe\Shield\Kernel;
+use Ovos\Codesafe\Shield\Platform;
 use Ovos\Codesafe\Shield\Ruleset;
 use Ovos\Codesafe\Shield\Verdict;
 use Ovos\Plugins\Codesafe\Shield as Plugin;
@@ -13,6 +14,7 @@ use Ovos\Service\Codesafe\Shield as Subject;
 use Ovos\Test;
 use Ovos\Test\Internal;
 
+use function array_map;
 use function class_exists;
 use function apcu_enabled;
 use function count;
@@ -309,6 +311,73 @@ class Shield extends Test
 			&& $response->getHttpCode() === 403
 			&& ($response->getHeaders()[Plugin::HEADER_RULE]['value'] ?? null) === '2'
 			&& Subject::isAuthed(null) === null;
+	}
+	
+	/**
+	 * RULE: the adapter runs the kernel's core alone unless
+	 * `codesafe.shield.platforms` names a module: with none the kernel and
+	 * the request's Facts carry no module, the pull names `core`, and a
+	 * vpatch on WordPress's REST route is left out at the pull and never
+	 * judged; with `wordpress` (a list or a comma list, any case; a word
+	 * without a module ignored, each module once) both carry WordPress's
+	 * module, the pull names `core,wordpress`, and the request to the route
+	 * is refused. Falsify: load the module whatever the config says — every
+	 * application reads `/wp-json/…` as WordPress's REST route.
+	 */
+	public function theCoreRunsAloneUnlessTheConfigNamesAModule(): bool
+	{
+		$vpatch = ['id' => 9, 'kind' => 'vpatch', 'origin' => 'manual', 'finding' => '', 'cve' => '', 'mode' => Ruleset::MODE_PROVEN,
+			'expires_at' => null, 'who' => 'anyone', 'conditions' => [['target' => 'rest', 'test' => 'equals', 'value' => '/fx/v1/items']]];
+		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => [$vpatch]];
+		$sent = [];
+		$transport = static function(string $url, array $headers) use (&$sent): array
+		{
+			$sent = [...$sent, ...$headers];
+			
+			return ['status' => 0, 'headers' => [], 'body' => ''];
+		};
+		$core = new Subject($this->config(['detect' => true, 'enforce' => true]), 'install-core-' . uniqid(), $transport);
+		$wordpress = new Subject($this->config(['detect' => true, 'enforce' => true, 'platforms' => new ArrayObject(['WordPress', 'drupal', 'WORDPRESS'])]),
+			'install-wordpress-' . uniqid(), $transport);
+		$listed = new Subject($this->config(['platforms' => ' wordpress ,typo3']), 'install-listed-' . uniqid());
+		$verdicts = [];
+		$pulls = [];
+		foreach([$core, $wordpress] as $subject)
+		{
+			$this->paths[] = $subject->file();
+			// fetched past the interval, so the pull goes out and names the platforms; it fails, and the rules stay
+			$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time() - Kernel::INTERVAL - 1, platforms: $subject->platforms())->toRecord());
+			$pulls[] = $subject->pull();
+			$verdicts[] = $this->judgedAt('/wp-json/fx/v1/items', $subject);
+		}
+		$names = static fn(array $platforms): array => array_map(static fn(Platform $platform): string => $platform->name(), $platforms);
+		
+		return $core->platforms() === [] && $core->kernel()->platforms() === []
+			&& $names($wordpress->platforms()) === ['wordpress'] && $wordpress->kernel()->platforms() === $wordpress->platforms()
+			&& $names($listed->platforms()) === ['wordpress']
+			&& $pulls === [Kernel::PULL_FAILED, Kernel::PULL_FAILED] && in_array('X-Shield-Platforms: core', $sent, true) && in_array('X-Shield-Platforms: core,wordpress', $sent, true)
+			&& $verdicts[0]->isPass() && $verdicts[1]->isBlock() && ($verdicts[1]->rule['id'] ?? null) === 9;
+	}
+	
+	/** a GET to the path as the adapter's own facts() reads it off the superglobals, judged; the superglobals put back after */
+	protected function judgedAt(
+		string $uri,
+		Subject $subject,
+	): Verdict
+	{
+		$saved = [$_SERVER, $_GET, $_POST];
+		$_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => $uri, 'HTTP_USER_AGENT' => 'Mozilla/5.0', 'REMOTE_ADDR' => '203.0.113.9'] + $_SERVER;
+		$_GET = [];
+		$_POST = [];
+		
+		try
+		{
+			return $subject->judge($subject->facts());
+		}
+		finally
+		{
+			[$_SERVER, $_GET, $_POST] = $saved;
+		}
 	}
 	
 	/**

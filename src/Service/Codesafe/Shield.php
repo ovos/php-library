@@ -10,12 +10,15 @@ use Ovos\Cache\Prefixer;
 use Ovos\Codesafe\Shield\Consent;
 use Ovos\Codesafe\Shield\Facts;
 use Ovos\Codesafe\Shield\Kernel;
+use Ovos\Codesafe\Shield\Platform;
 use Ovos\Codesafe\Shield\Store;
 use Ovos\Codesafe\Shield\Verdict;
+use Ovos\Codesafe\Shield\Wordpress;
 use Ovos\Service\Auth;
 use Ovos\Stream\Request;
 use Throwable;
 
+use function array_values;
 use function class_exists;
 use function explode;
 use function file_get_contents;
@@ -36,7 +39,8 @@ use function trim;
 
 // the kernel is one vendored multi-class file (ovos/codesafe client-php/Shield.php,
 // byte-identical here); a plain class binds at compile time, so the guard has
-// to sit at the require, never inside the file
+// to sit at the require, never inside the file. A platform module is required
+// after it, and only when the config names it (platforms())
 if(class_exists(Kernel::class, false) === false)
 {
 	require_once __DIR__ . '/../../Codesafe/Shield/Kernel.php';
@@ -66,10 +70,18 @@ if(class_exists(Kernel::class, false) === false)
  *       enforce: yes  # answer 403 to a request a PROVEN rule matches — inert without detect
  *       kill: no      # off entirely, no network — the switch that needs no instance
  *       dir: ''       # where shield.json (the durable tier) lives; '' = the system temp dir
+ *       platforms: [] # the kernel's platform modules (MODULES), e.g. [wordpress]; none = the core alone
  *
  * detect and enforce are on unless set to no (codesafe docs/plans/shield-auto-deploy.md
  * D8): a site is protected without anyone opting in, and codesafe — the
  * project's Shield off, a rule switched off for it — is where it is stopped.
+ *
+ * The kernel runs its platform-neutral core alone unless `platforms` names a
+ * module: an application is no WordPress, and a rule in WordPress's words (a
+ * REST route under /wp-json, a shortcode or block attribute) is left out at
+ * the pull and never read. A host in front of WordPress names `wordpress`;
+ * the kernel and the request's Facts are then given its module, and the pull
+ * says so in X-Shield-Platforms, which codesafe serves by.
  *
  * Fails open on everything, like the kernel. A rule exists only while a
  * live CVE finding on this project justifies it, or a person wrote it with
@@ -91,7 +103,17 @@ class Shield
 	/** the rollup field prefix of each outcome the kernel store counts: the verdicts, then a vpatch's evidence (Kernel::tallied()) */
 	public const array HIT_FIELDS = ['so:' => 'observe', 'sb:' => 'block', 'se:' => 'entry', 'sm:' => 'match', 'sa:' => 'authed'];
 	
+	/**
+	 * The platform modules `codesafe.shield.platforms` may name, by the word
+	 * X-Shield-Platforms names each by, with the vendored file beside
+	 * Kernel.php that declares it
+	 */
+	public const array MODULES = ['wordpress' => [Wordpress::class, 'Wordpress.php']];
+	
 	protected ?Kernel $kernel = null;
+	
+	/** @var ?list<Platform> the modules the config names, built once */
+	protected ?array $platforms = null;
 	
 	protected ?Closure $http;
 	
@@ -198,7 +220,47 @@ class Shield
 			new Store($this->file(), $this->keyPrefix()),
 			$this->http ?? $this->transport(...),
 			$this->report,
+			platforms: $this->platforms(),
 		);
+	}
+	
+	/**
+	 * The platform modules `codesafe.shield.platforms` names — a list or a
+	 * comma list, any case; a word MODULES does not know is ignored — each
+	 * required after the kernel the first time: none unless named, so an
+	 * application runs the core alone
+	 *
+	 * @return list<Platform>
+	 */
+	public function platforms(): array
+	{
+		if($this->platforms !== null)
+		{
+			return $this->platforms;
+		}
+		$named = $this->shieldConfig()['platforms'] ?? [];
+		if($named instanceof ArrayObject)
+		{
+			$named = $named->getArrayCopy();
+		}
+		$words = is_string($named) ? explode(',', $named) : (is_array($named) ? $named : []);
+		$platforms = [];
+		foreach($words as $word)
+		{
+			$module = is_string($word) ? (self::MODULES[strtolower(trim($word))] ?? null) : null;
+			if($module === null || isset($platforms[$module[0]]))
+			{
+				continue;
+			}
+			// by path behind its guard, as the kernel: autoloaded before Kernel.php, its interface would not be found
+			if(class_exists($module[0], false) === false)
+			{
+				require_once __DIR__ . '/../../Codesafe/Shield/' . $module[1];
+			}
+			$platforms[$module[0]] = new $module[0];
+		}
+		
+		return $this->platforms = array_values($platforms);
 	}
 	
 	/**
@@ -287,7 +349,8 @@ class Shield
 	): Facts
 	{
 		// the parsed bags a virtual patch reads; no `can`: an app's roles are not the
-		// capabilities a vpatch names, so a signed-in request to a `lacks:` rule observes
+		// capabilities a vpatch names, so a signed-in request to a `lacks:` rule observes.
+		// Read with the kernel's modules, in whose words its rules were kept
 		return Facts::fromServer(
 			$_SERVER,
 			$_POST,
@@ -297,6 +360,7 @@ class Shield
 			get: $_GET,
 			cookies: $_COOKIE,
 			files: $_FILES,
+			platforms: $this->platforms(),
 		);
 	}
 	
