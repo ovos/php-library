@@ -71,6 +71,7 @@ if(class_exists(Kernel::class, false) === false)
  *       kill: no      # off entirely, no network — the switch that needs no instance
  *       dir: ''       # where shield.json (the durable tier) lives; '' = the system temp dir
  *       platforms: [] # the kernel's platform modules (MODULES), e.g. [wordpress]; none = the core alone
+ *       rest_prefix: '' # WordPress's REST prefix (rest_get_url_prefix()) for its module; '' = wp-json
  *
  * detect and enforce are on unless set to no (codesafe docs/plans/shield-auto-deploy.md
  * D8): a site is protected without anyone opting in, and codesafe — the
@@ -81,7 +82,9 @@ if(class_exists(Kernel::class, false) === false)
  * REST route under /wp-json, a shortcode or block attribute) is left out at
  * the pull and never read. A host in front of WordPress names `wordpress`;
  * the kernel and the request's Facts are then given its module, and the pull
- * says so in X-Shield-Platforms, which codesafe serves by.
+ * says so in X-Shield-Platforms, which codesafe serves by. In front of a
+ * WordPress whose REST prefix is not wp-json, `rest_prefix` names it: the
+ * module reads a `rest` route under that prefix alone.
  *
  * Fails open on everything, like the kernel. A rule exists only while a
  * live CVE finding on this project justifies it, or a person wrote it with
@@ -361,7 +364,36 @@ class Shield
 			cookies: $_COOKIE,
 			files: $_FILES,
 			platforms: $this->platforms(),
+			options: $this->options(),
 		);
+	}
+	
+	/**
+	 * What the kernel's modules read of the host, by each module's own key:
+	 * WordPress's REST prefix from `codesafe.shield.rest_prefix`. None when it
+	 * is unset or WordPress's module is not named, and the module reads wp-json
+	 *
+	 * @return array<string, string>
+	 */
+	public function options(): array
+	{
+		$prefix = $this->shieldConfig()['rest_prefix'] ?? '';
+		// without its slashes, as WordPress's plugin hands it over
+		$prefix = is_string($prefix) ? trim(trim($prefix), '/') : '';
+		if($prefix === '')
+		{
+			return [];
+		}
+		foreach($this->platforms() as $platform)
+		{
+			// the module's own constant only once it is loaded: unnamed, nothing required it
+			if($platform instanceof Wordpress)
+			{
+				return [Wordpress::OPTION_REST_PREFIX => $prefix];
+			}
+		}
+		
+		return [];
 	}
 	
 	/** judge, count, report — `pass` with the word `off` when the shield is not enabled */
