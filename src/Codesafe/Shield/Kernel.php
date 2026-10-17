@@ -102,8 +102,10 @@ declare(strict_types=1);
  * which the adapter loads after this file and hands the kernel and Facts.
  * A kernel drops a rule naming a module's words it was not given at the
  * pull, as it drops a kind it does not know, and Facts read none of them:
- * nothing is guessed. The pull names the modules in X-Shield-Platforms,
- * `core` always first.
+ * nothing is guessed. It reads every request with at least the modules it
+ * pulled for, whatever its Facts name, and logs an entry of `platforms` that
+ * is no module. The pull names the modules in X-Shield-Platforms, `core`
+ * always first.
  *
  * Fast pickup: the door says the project's ruleset version (X-Shield-Version,
  * one value whatever kinds a kernel reads) on every 200 and 304, and the
@@ -161,6 +163,7 @@ use function file_put_contents;
 use function fopen;
 use function fstat;
 use function function_exists;
+use function get_debug_type;
 use function hash;
 use function hexdec;
 use function http_get_last_response_headers;
@@ -343,6 +346,9 @@ final class Facts
 	/** the request a sub-request came in, whose superglobals its handler reads too (derived()) */
 	protected ?Facts $outer = null;
 	
+	/** @var ?Closure(list<Platform>): ?Closure fromServer()'s JSON reader for a list of modules: a copy read with others builds its own (withPlatforms()) */
+	protected ?Closure $jsonFor = null;
+	
 	/** @var list<Platform> the platform modules the request is read with */
 	public readonly array $platforms;
 	
@@ -417,6 +423,43 @@ final class Facts
 		return $sub;
 	}
 	
+	/**
+	 * This request read with other platform modules — a kernel's, when the
+	 * adapter handed Facts fewer (Kernel::judge(), tally()). Every read goes
+	 * through this request, so its body, uploads and the host's answers are
+	 * read once whichever asks, and what a report says of the body holds for
+	 * both. A JSON body is read anew only by fromServer()'s reader, which then
+	 * takes the modules' JSON types too; a reader the adapter built stays its own
+	 *
+	 * @param list<Platform> $platforms
+	 */
+	public function withPlatforms(
+		array $platforms,
+	): self
+	{
+		$copy = new self($this->method, $this->uri, $this->ua, $this->ip, $this->authed, fn(): array => [$this->body(), $this->bodyWasCapped()], $this->user,
+			$this->query, $this->form, $this->cookies, $this->headers, $this->files, $this->jsonFor === null ? $this->jsonThrough(...) : ($this->jsonFor)($platforms),
+			fn(string $capability): ?bool => $this->can($capability), fn(string $action, string $value): ?bool => $this->nonceValid($action, $value),
+			$this->callerKnown, fn(string $value): ?bool => $this->htmlUnsafe($value), $this->uploads, fn(string $path): ?string => $this->fileContent($path),
+			$platforms, $this->options);
+		$copy->outer = $this->outer;
+		$copy->jsonFor = $this->jsonFor;
+		
+		return $copy;
+	}
+	
+	/** this request's JSON body as a copy's reader hands it over (withPlatforms()): past the cap it is unread there too */
+	protected function jsonThrough(): mixed
+	{
+		$json = $this->json();
+		if($this->jsonUnread())
+		{
+			throw new LengthException('a JSON body past the cap');
+		}
+		
+		return $json;
+	}
+	
 	/** the request this sub-request came in; null for a request of its own */
 	public function outer(): ?Facts
 	{
@@ -488,7 +531,7 @@ final class Facts
 		}
 		$contentType = is_string($server['CONTENT_TYPE'] ?? null) ? $server['CONTENT_TYPE'] : '';
 		
-		return new self(
+		$facts = new self(
 			is_string($server['REQUEST_METHOD'] ?? null) ? $server['REQUEST_METHOD'] : 'GET',
 			self::decodeOnce($uri),
 			is_string($server['HTTP_USER_AGENT'] ?? null) ? $server['HTTP_USER_AGENT'] : '',
@@ -511,6 +554,9 @@ final class Facts
 			$platforms,
 			$options,
 		);
+		$facts->jsonFor = static fn(array $platforms): ?Closure => self::jsonReader($contentType, $input, platforms: $platforms);
+		
+		return $facts;
 	}
 	
 	/** the request headers by lowercase name, off the server's HTTP_* keys */
@@ -2035,13 +2081,17 @@ final class Kernel
 	
 	protected bool $rulesetRead = false;
 	
+	/** whether the host's log was told of a request read with more modules than its Facts named (readable()): once per kernel */
+	protected bool $misread = false;
+	
 	/**
 	 * @param string $url codesafe instance base URL
 	 * @param string $key the project api_key
 	 * @param ?callable(string $url, array<string> $headers, int $timeoutMs): array{status: int, headers: array<string, string>, body: string} $http the transport; null = curl or streams
 	 * @param ?callable(string $kind, string $message, array<string, mixed> $extra): mixed $report the host's sender
 	 * @param ?callable(string $line): mixed $log the host's log
-	 * @param list<Platform> $platforms the platform modules loaded: the rules in their words are kept at the pull; anything else is ignored
+	 * @param list<Platform> $platforms the platform modules loaded: the rules in their words are kept at the pull; anything else is
+	 *     ignored, and the host's log names it
 	 */
 	public function __construct(
 		protected string $url,
@@ -2060,6 +2110,14 @@ final class Kernel
 		$this->http = $http === null ? null : Closure::fromCallable($http);
 		$this->report = $report === null ? null : Closure::fromCallable($report);
 		$this->log = $log === null ? null : Closure::fromCallable($log);
+		foreach($platforms as $platform)
+		{
+			// a module named but not given (its word, say): its rules would be left out at the pull, and nothing else would tell
+			if($platform instanceof Platform === false)
+			{
+				$this->log('platforms: ' . (is_string($platform) ? '"' . substr($platform, 0, 64) . '"' : get_debug_type($platform)) . ' is no platform module, ignored');
+			}
+		}
 		$this->platforms = array_values(array_filter($platforms, static fn(mixed $platform): bool => $platform instanceof Platform));
 	}
 	
@@ -2077,6 +2135,34 @@ final class Kernel
 	public function platforms(): array
 	{
 		return $this->platforms;
+	}
+	
+	/**
+	 * The request as this kernel reads it: never with fewer platform modules
+	 * than it pulled for. Facts an adapter built without some of the
+	 * kernel's — none given, or a module's word where the module was meant —
+	 * are read with them too, else a rule kept for a module reads as
+	 * unreadable and passes the request unreported; the host's log says so
+	 * once per kernel
+	 */
+	protected function readable(
+		Facts $facts,
+	): Facts
+	{
+		$given = array_map(static fn(Platform $platform): string => $platform->name(), $facts->platforms);
+		$missing = array_values(array_filter($this->platforms, static fn(Platform $platform): bool => in_array($platform->name(), $given, true) === false));
+		if($missing === [])
+		{
+			return $facts;
+		}
+		if($this->misread === false)
+		{
+			$this->misread = true;
+			$this->log('a request came without the platform modules ' . implode(',', array_map(static fn(Platform $platform): string => $platform->name(), $missing))
+				. ', read with the kernel\'s: hand Facts Kernel::platforms()');
+		}
+		
+		return $facts->withPlatforms([...$facts->platforms, ...$missing]);
 	}
 	
 	/** the cached ruleset, read once per request; null = no store (ignorance) */
@@ -2145,6 +2231,7 @@ final class Kernel
 				
 				return Verdict::pass('ceiling');
 			}
+			$facts = $this->readable($facts);
 			// a vpatch that would block but could not be answered: observed unless a later rule blocks
 			$held = null;
 			// a listed address is judged before any rule
@@ -2410,7 +2497,7 @@ final class Kernel
 			}
 			// the counting ran on this request: what codesafe weighs a vpatch's zero against
 			$this->store->hit(intdiv($now, 60), self::HEARTBEAT, 'entry');
-			foreach(self::tallied($ruleset->rules, $facts) as $id => $counts)
+			foreach(self::tallied($ruleset->rules, $this->readable($facts)) as $id => $counts)
 			{
 				foreach($counts as $outcome => $counted)
 				{
