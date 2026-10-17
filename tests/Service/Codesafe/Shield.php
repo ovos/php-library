@@ -9,6 +9,7 @@ use Ovos\Codesafe\Shield\Kernel;
 use Ovos\Codesafe\Shield\Platform;
 use Ovos\Codesafe\Shield\Ruleset;
 use Ovos\Codesafe\Shield\Verdict;
+use Ovos\Codesafe\Shield\Wordpress;
 use Ovos\Plugins\Codesafe\Shield as Plugin;
 use Ovos\Service\Codesafe\Shield as Subject;
 use Ovos\Test;
@@ -357,6 +358,35 @@ class Shield extends Test
 			&& $names($listed->platforms()) === ['wordpress']
 			&& $pulls === [Kernel::PULL_FAILED, Kernel::PULL_FAILED] && in_array('X-Shield-Platforms: core', $sent, true) && in_array('X-Shield-Platforms: core,wordpress', $sent, true)
 			&& $verdicts[0]->isPass() && $verdicts[1]->isBlock() && ($verdicts[1]->rule['id'] ?? null) === 9;
+	}
+	
+	/**
+	 * RULE: in front of a WordPress whose REST prefix is not wp-json,
+	 * `codesafe.shield.rest_prefix` names it and the request's Facts hand it
+	 * to WordPress's module: a `rest` rule matches its route under that
+	 * prefix and not under /wp-json; unset, the module reads wp-json; the
+	 * core alone is handed no option. Falsify: build facts() without the
+	 * option — the rule is kept and never matches the site's REST API.
+	 */
+	public function aRestRuleMatchesUnderTheConfiguredRestPrefix(): bool
+	{
+		$vpatch = ['id' => 9, 'kind' => 'vpatch', 'origin' => 'manual', 'finding' => '', 'cve' => '', 'mode' => Ruleset::MODE_PROVEN,
+			'expires_at' => null, 'who' => 'anyone', 'conditions' => [['target' => 'rest', 'test' => 'equals', 'value' => '/fx/v1/items']]];
+		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => [$vpatch]];
+		$moved = $this->subject(['detect' => true, 'enforce' => true, 'platforms' => 'wordpress', 'rest_prefix' => ' /custom-prefix/ '], 'install-moved-' . uniqid());
+		$default = $this->subject(['detect' => true, 'enforce' => true, 'platforms' => 'wordpress'], 'install-default-' . uniqid());
+		$core = $this->subject(['detect' => true, 'enforce' => true, 'rest_prefix' => 'custom-prefix'], 'install-core-' . uniqid());
+		$verdicts = [];
+		foreach([$moved, $default] as $subject)
+		{
+			$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time(), platforms: $subject->platforms())->toRecord());
+			$verdicts[] = $this->judgedAt('/custom-prefix/fx/v1/items', $subject);
+			$verdicts[] = $this->judgedAt('/wp-json/fx/v1/items', $subject);
+		}
+		
+		return $verdicts[0]->isBlock() && ($verdicts[0]->rule['id'] ?? null) === 9 && $verdicts[1]->isPass()
+			&& $verdicts[2]->isPass() && $verdicts[3]->isBlock() && ($verdicts[3]->rule['id'] ?? null) === 9
+			&& $moved->options() === [Wordpress::OPTION_REST_PREFIX => 'custom-prefix'] && $default->options() === [] && $core->options() === [];
 	}
 	
 	/** a GET to the path as the adapter's own facts() reads it off the superglobals, judged; the superglobals put back after */
