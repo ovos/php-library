@@ -428,8 +428,9 @@ final class Facts
 	 * adapter handed Facts fewer (Kernel::judge(), tally()). Every read goes
 	 * through this request, so its body, uploads and the host's answers are
 	 * read once whichever asks, and what a report says of the body holds for
-	 * both. A JSON body is read anew only by fromServer()'s reader, which then
-	 * takes the modules' JSON types too; a reader the adapter built stays its own
+	 * both. A JSON body is decoded anew only by fromServer()'s reader, off the
+	 * input's one read, and then takes the modules' JSON types too; a reader
+	 * the adapter built stays its own
 	 *
 	 * @param list<Platform> $platforms
 	 */
@@ -491,7 +492,7 @@ final class Facts
 	/**
 	 * @param array<string, mixed> $server the request's server parameters ($_SERVER or a PSR-7 equivalent)
 	 * @param array<string, mixed> $post the parsed form fields ($_POST) — files never
-	 * @param ?callable(): string $input the raw body reader (fn() => file_get_contents('php://input'))
+	 * @param ?callable(): string $input the raw body reader (fn() => file_get_contents('php://input')), called once at most
 	 * @param string $user who a `user`-keyed rate rule counts: the signed-in identity, or the name a login POST tries ('' = none, the rule is skipped)
 	 * @param ?array<string, mixed> $get the parsed query ($_GET); null = the raw URI's query through parse_str
 	 * @param array<string, mixed> $cookies the parsed cookies ($_COOKIE)
@@ -530,6 +531,8 @@ final class Facts
 			parse_str(explode('?', $uri, 2)[1] ?? '', $get);
 		}
 		$contentType = is_string($server['CONTENT_TYPE'] ?? null) ? $server['CONTENT_TYPE'] : '';
+		// the body's reader, the JSON readers and every copy's share one read: an input that cannot be rewound hands a second read nothing
+		$input = $input === null ? null : self::readOnce($input);
 		
 		$facts = new self(
 			is_string($server['REQUEST_METHOD'] ?? null) ? $server['REQUEST_METHOD'] : 'GET',
@@ -557,6 +560,50 @@ final class Facts
 		$facts->jsonFor = static fn(array $platforms): ?Closure => self::jsonReader($contentType, $input, platforms: $platforms);
 		
 		return $facts;
+	}
+	
+	/**
+	 * The raw input read once, whichever reader asks: what it returned, or
+	 * what it threw, is every later read's answer. Of a body past both caps
+	 * only the part a reader looks at is kept: it still reads as capped, and
+	 * as JSON too large to decode
+	 */
+	protected static function readOnce(
+		callable $input,
+	): Closure
+	{
+		$read = false;
+		$raw = null;
+		$failure = null;
+		// a byte past the larger cap: every reader still sees the body run past its own
+		$keep = max(self::BODY_CAP, self::JSON_CAP) + 1;
+		
+		return static function() use ($input, $keep, &$read, &$raw, &$failure): mixed
+		{
+			if($read === false)
+			{
+				$read = true;
+				try
+				{
+					$raw = $input();
+					// held while the request is read: the rest of a large body would cost its size for nothing
+					if(is_string($raw) && strlen($raw) > $keep)
+					{
+						$raw = substr($raw, 0, $keep);
+					}
+				}
+				catch(Throwable $thrown)
+				{
+					$failure = $thrown;
+				}
+			}
+			if($failure !== null)
+			{
+				throw $failure;
+			}
+			
+			return $raw;
+		};
 	}
 	
 	/** the request headers by lowercase name, off the server's HTTP_* keys */
@@ -1234,6 +1281,7 @@ final class Ruleset
 		$usable = ($payload['contract'] ?? null) === self::CONTRACT
 			&& ($payload['dialect'] ?? null) === self::DIALECT
 			&& is_array($payload['rules'] ?? null);
+		// the store keeps only these: fromRecord() checks nothing, and a malformed rate rule would throw in judge() on every request (the Node twin checks on read)
 		$rules = [];
 		if($usable)
 		{
