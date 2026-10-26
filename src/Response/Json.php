@@ -48,6 +48,10 @@ class Json extends Response
 		
 		$this->setHeader('Content-Type',
 			'application/json; charset=utf-8');
+		// an API answer is a signed-in user's data: neither the browser's disk
+		// cache nor a shared cache in front may keep it. A controller whose
+		// answer may be cached sets its own Cache-Control, which replaces this
+		$this->setHeader('Cache-Control', 'no-store');
 	}
 	
 	/**

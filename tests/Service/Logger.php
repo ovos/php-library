@@ -6,6 +6,7 @@ namespace Tests\Service;
 use Ovos\Service\Logger as Subject;
 use Ovos\Test;
 
+use function array_fill_keys;
 use function str_contains;
 
 /**
@@ -39,6 +40,43 @@ class Logger extends Test
 		}
 		
 		return true;
+	}
+	
+	/**
+	 * The credentials beside password and token are dropped too, as
+	 * codesafe's own scrubber drops them: a passphrase, a credential, the keys
+	 * that name what they unlock, a second factor's one-time and backup codes
+	 * (the Two-Factor plugin's `authcode`), a CSRF value, a session id, a bare
+	 * `auth` — and the names that only contain the letters stay. Prevents: a
+	 * WordPress login's backup code or a license key travelling to codesafe.
+	 */
+	public function redactsTheOtherCredentialNames(): bool
+	{
+		$secrets = ['passphrase', 'private_key', 'credentials', 'license_key', 'encryption_key', 'signing_key', 'consumer_key', '_csrf', 'xsrf',
+			'mfa_code', 'otp_code', 'totp', '2fa', 'backup_code', 'authcode', 'auth', 'x-auth', 'session_id', 'PHPSESSID'];
+		$words = ['otpaper', 'credit', 'licensee', 'encryption', 'backup', 'author', 'e02fa5'];
+		$out = (new Subject)->remove(array_fill_keys([...$secrets, ...$words], 'v'));
+		
+		foreach($secrets as $name)
+		{
+			if($out[$name] !== '[redacted]')
+			{
+				return false;
+			}
+		}
+		foreach($words as $name)
+		{
+			if($out[$name] !== 'v')
+			{
+				return false;
+			}
+		}
+		
+		// a build hash carries `2fa` among hex digits: a stack line keeps its line and column
+		$frame = 'at render (https://shop.test/js/app.e02fa5.js:2:5390)';
+		
+		return str_contains((new Subject)->removeText('mfa_code=123456&note=x'), '123456') === false
+			&& (new Subject)->removeText($frame) === $frame;
 	}
 	
 	/**

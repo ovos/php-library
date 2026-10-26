@@ -67,4 +67,21 @@ class Json extends Test
 		
 		return $response->hasErrors() === true;
 	}
+	
+	/**
+	 * RULE: a JSON answer goes out with Cache-Control: no-store unless its
+	 * controller sets a Cache-Control of its own, which replaces it.
+	 * Falsify: drop the header from the constructor — the answer then carries
+	 * only mod_expires' max-age=0, which lets the browser's disk cache and a
+	 * shared cache in front keep a signed-in user's API answers.
+	 */
+	public function aJsonAnswerIsNeverStoredUnlessItsControllerSaysSo(): bool
+	{
+		$default = new JsonResponse;
+		$own = (new JsonResponse)
+			->setHeader('Cache-Control', 'private, max-age=60');
+		
+		return ($default->getHeaders()['Cache-Control']['value'] ?? null) === 'no-store'
+			&& $own->getHeaders()['Cache-Control']['value'] === 'private, max-age=60';
+	}
 }

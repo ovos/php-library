@@ -23,8 +23,6 @@ use RuntimeException;
 use Throwable;
 use WeakReference;
 
-use function Ovos\container;
-
 use function apcu_delete;
 use function apcu_enabled;
 use function array_column;
@@ -33,11 +31,12 @@ use function array_key_exists;
 use function array_push;
 use function count;
 use function function_exists;
-use function json_decode;
-use function json_encode;
 use function gc_collect_cycles;
 use function in_array;
+use function json_decode;
+use function json_encode;
 use function mb_strlen;
+use function Ovos\container;
 use function str_contains;
 use function str_repeat;
 use function str_starts_with;
@@ -505,6 +504,24 @@ class Sender extends Test
 	}
 	
 	/**
+	 * The Shield's matched fragment is the request's own text: by text it
+	 * loses a password a pattern matched around and keeps the rest; the key
+	 * walk alone sees only the key `matched`. Falsify: scrub the extra bag by
+	 * key alone — `pwd=hunter2` travels to codesafe.
+	 */
+	public function aShieldFragmentLosesItsSecretsByText(): bool
+	{
+		$sender = $this->makeBatchSender();
+		$sender->reportRefusal('shield_observe', 'shield rule 4 observed POST /login',
+			['rule' => 4, 'matched' => 'log=admin&pwd=hunter2&rememberme=forever']);
+		$extra = $sender->batch()[0]['context']['extra'] ?? [];
+		
+		return str_contains((string)($extra['matched'] ?? 'hunter2'), 'hunter2') === false
+			&& str_contains((string)($extra['matched'] ?? ''), 'rememberme=forever')
+			&& ($extra['rule'] ?? null) === 4;
+	}
+	
+	/**
 	 * The application's word that one matters (codesafe
 	 * docs/plans/sender-security-priority.md): a priority it names travels,
 	 * clamped to 0-7 — the console keeps it when it is more severe than the
@@ -550,6 +567,36 @@ class Sender extends Test
 		return $unknownIsSilent
 			&& $cappedIsSilent
 			&& $disabled->queueCount() === 0;
+	}
+	
+	/**
+	 * RULE: the Shield's reports (shield_observe, shield_block, shield_rate)
+	 * count against a budget of their own: a flood the Shield sees leaves the
+	 * app's own security events reported, the app's cap leaves the Shield's
+	 * alone, and the two counters never share a key. Falsify: count the
+	 * Shield's kinds against allowSecurity() — an attacker tripping an
+	 * observing rule silences the site's auth_failure and csrf_reject.
+	 */
+	public function theShieldsReportsHaveABudgetOfTheirOwn(): bool
+	{
+		$appCapped = $this->makeSender();
+		$appCapped->securityAllowed = false;
+		$appCapped->reportRefusal('shield_block', 'shield rule 7 refused GET /x');
+		$shieldStillReports = $appCapped->queueCount() === 1;
+		$appCapped->reportRefusal('auth_failure', 'over the app cap');
+		
+		$shieldCapped = $this->makeSender();
+		$shieldCapped->shieldAllowed = false;
+		$shieldCapped->reportRefusal('shield_observe', 'over the Shield cap');
+		$shieldCapped->reportRefusal('csrf_reject', 'the app still reports');
+		$minute = 29248320;
+		
+		return $shieldStillReports && $appCapped->queueCount() === 1
+			&& $shieldCapped->queueCount() === 1
+			&& CodesafeSender::securityKey('shop', $minute, true)
+				=== 'shop:' . CodesafeSender::SECURITY_PREFIX . 'shield:' . $minute
+			&& CodesafeSender::securityKey('shop', $minute, true)
+				!== CodesafeSender::securityKey('shop', $minute);
 	}
 	
 	/**
@@ -995,9 +1042,17 @@ class Sender extends Test
 			 */
 			public bool $securityAllowed = true;
 			
+			/** the Shield's own cap, scripted the same way */
+			public bool $shieldAllowed = true;
+			
 			protected function allowSecurity(): bool
 			{
 				return $this->securityAllowed;
+			}
+			
+			protected function allowShield(): bool
+			{
+				return $this->shieldAllowed;
 			}
 			
 			public function queueCount(): int

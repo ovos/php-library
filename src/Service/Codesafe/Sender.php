@@ -245,6 +245,15 @@ class Sender extends Service
 	public const int SECURITY_MAX_PER_MINUTE = 60;
 	
 	/**
+	 * The Shield's own cap beside it, on a counter of its own: its reports
+	 * (shield_observe, shield_block, shield_rate) follow what an attacker
+	 * sends, and a flood of them must not spend the allowance the app's own
+	 * auth_failure and csrf_reject events need — the Node sender keeps the
+	 * two apart the same way (maxShieldPerMinute)
+	 */
+	public const int SHIELD_MAX_PER_MINUTE = 60;
+	
+	/**
 	 * The security limiter's key namespace, beneath the install's own
 	 */
 	public const string SECURITY_PREFIX = 'ovos:codesafe:security:';
@@ -567,7 +576,7 @@ class Sender extends Service
 	{
 		if($this->isEnabled() === false
 			|| in_array($kind, self::SECURITY_KINDS, true) === false
-			|| $this->allowSecurity() === false)
+			|| (str_starts_with($kind, 'shield_') ? $this->allowShield() : $this->allowSecurity()) === false)
 		{
 			return $this;
 		}
@@ -664,17 +673,33 @@ class Sender extends Service
 	 */
 	protected function allowSecurity(): bool
 	{
+		return self::withinBudget(self::securityKey(self::cachePrefix($this->app), intdiv(time(), 60)), self::SECURITY_MAX_PER_MINUTE);
+	}
+	
+	/**
+	 * The Shield's reports' cap (SHIELD_MAX_PER_MINUTE), on a minute counter
+	 * apart from allowSecurity()'s, on the same terms
+	 */
+	protected function allowShield(): bool
+	{
+		return self::withinBudget(self::securityKey(self::cachePrefix($this->app), intdiv(time(), 60), true), self::SHIELD_MAX_PER_MINUTE);
+	}
+	
+	/** one more on an APCu minute counter (created with a TTL), and whether it is still within $max; true without APCu */
+	protected static function withinBudget(
+		string $key,
+		int $max,
+	): bool
+	{
 		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
 		{
 			return true;
 		}
 		
 		$ok = false;
-		$count = apcu_inc(
-			self::securityKey(self::cachePrefix($this->app), intdiv(time(), 60)),
-			1, $ok, 120);
+		$count = apcu_inc($key, 1, $ok, 120);
 		
-		return $count === false || $count <= self::SECURITY_MAX_PER_MINUTE;
+		return $count === false || $count <= $max;
 	}
 	
 	/**
@@ -686,10 +711,12 @@ class Sender extends Service
 	public static function securityKey(
 		?string $prefix,
 		int $minute,
+		bool $shield = false,
 	): string
 	{
+		// the Shield's counter beside the app's, under the same namespace
 		return (new Prefixer($prefix !== '' ? $prefix : null))
-			->prefix(self::SECURITY_PREFIX . $minute);
+			->prefix(self::SECURITY_PREFIX . ($shield ? 'shield:' : '') . $minute);
 	}
 	
 	/**
@@ -1047,10 +1074,17 @@ class Sender extends Service
 			// per-event context overrides win over the auto-built base;
 			// extras are scrubbed like request variables (secrets dropped,
 			// identities kept for codesafe's vault) — the WP sender and the
-			// JS clients do the same
+			// JS clients do the same. The Shield's matched fragment is the
+			// request's own text, so it gets the text pass as well: a pattern
+			// that matched a form carries the pairs around the match
+			$extra = $logger->remove($payload['extra']);
+			if(is_string($extra['matched'] ?? null))
+			{
+				$extra['matched'] = $logger->removeText($extra['matched']);
+			}
 			$payload['context'] = array_replace($context['context'],
 					$payload['context'] ?? [])
-				+ ['extra' => $logger->remove($payload['extra'])];
+				+ ['extra' => $extra];
 			unset($payload['extra']);
 			
 			if($release !== '')
