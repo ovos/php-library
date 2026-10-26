@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Tests\Service\Codesafe;
 
 use Ovos\ArrayObject;
+use Ovos\Client;
 use Ovos\Codesafe\Shield\Facts;
 use Ovos\Codesafe\Shield\Kernel;
 use Ovos\Codesafe\Shield\Platform;
@@ -15,17 +16,17 @@ use Ovos\Service\Codesafe\Shield as Subject;
 use Ovos\Test;
 use Ovos\Test\Internal;
 
+use function apcu_enabled;
 use function array_map;
 use function class_exists;
-use function apcu_enabled;
 use function count;
 use function function_exists;
-use function is_file;
 use function in_array;
+use function is_file;
 use function ksort;
 use function str_contains;
-use function str_starts_with;
 use function str_repeat;
+use function str_starts_with;
 use function sys_get_temp_dir;
 use function time;
 use function uniqid;
@@ -387,6 +388,39 @@ class Shield extends Test
 		return $verdicts[0]->isBlock() && ($verdicts[0]->rule['id'] ?? null) === 9 && $verdicts[1]->isPass()
 			&& $verdicts[2]->isPass() && $verdicts[3]->isBlock() && ($verdicts[3]->rule['id'] ?? null) === 9
 			&& $moved->options() === [Wordpress::OPTION_REST_PREFIX => 'custom-prefix'] && $default->options() === [] && $core->options() === [];
+	}
+	
+	/**
+	 * RULE: the kernel judges the address Ovos\Client::getIp() names — the
+	 * visitor behind a configured proxy, read right to left — and never a
+	 * forwarded header a peer that is no proxy wrote. Falsify: hand the
+	 * kernel REMOTE_ADDR — behind a load balancer every ip rule and every
+	 * threat address meets the balancer, and an ip-keyed rate rule counts
+	 * the whole site as one visitor.
+	 */
+	public function theKernelJudgesTheAddressTheTrustedProxiesName(): bool
+	{
+		$subject = $this->subject(['detect' => true, 'enforce' => true], 'install-proxy-' . uniqid());
+		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p',
+			'rules' => [$this->rule(4, 'ip', 'equals', '198.51.100.7', Ruleset::MODE_PROVEN)]];
+		$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord());
+		$saved = $_SERVER;
+		try
+		{
+			Client::setTrustedProxies(['10.0.0.0/8']);
+			$_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_FOR' => '198.51.100.7'] + $saved;
+			$behind = $subject->judge($subject->facts());
+			Client::setTrustedProxies(['10.0.0.0/8']);
+			$_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'REMOTE_ADDR' => '203.0.113.9', 'HTTP_X_FORWARDED_FOR' => '198.51.100.7'] + $saved;
+			$spoofed = $subject->judge($subject->facts());
+		}
+		finally
+		{
+			$_SERVER = $saved;
+			Client::reset();
+		}
+		
+		return $behind->isBlock() && ($behind->rule['id'] ?? null) === 4 && $spoofed->isPass();
 	}
 	
 	/** a GET to the path as the adapter's own facts() reads it off the superglobals, judged; the superglobals put back after */

@@ -125,6 +125,20 @@ class Logger extends Service implements Writer
 		// ordinary field name contains `signature`. It was already exact in
 		// the query list, which missed webhook_signature and x_signature.
 		'~signature~i',
+		// the credentials beside password and token, as codesafe's own
+		// scrubber has them: a credential, the keys that name what they
+		// unlock, a second factor's backup and auth codes, a CSRF value, a
+		// session id — safe unanchored, no ordinary field name contains them
+		'~credential~i',
+		'~(private|access|consumer|licen[cs]e|encryption|signing)[_-]?key~i',
+		'~backup[_-]?codes?~i',
+		'~auth[_-]?code~i',
+		'~csrf|xsrf~i',
+		'~sess(ion)?[_-]?id~i',
+		// a one-time code and a bare `auth` only as a word of the name:
+		// otpaper and author stay readable
+		'~(?<![a-z0-9])(otp|totp|mfa|2fa)([_-]?codes?)?(?![a-z0-9])~i',
+		'~(?<![a-z])auth(?![a-z])~i',
 	];
 	
 	/**

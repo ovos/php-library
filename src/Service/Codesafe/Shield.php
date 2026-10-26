@@ -7,6 +7,7 @@ use Closure;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
+use Ovos\Client;
 use Ovos\Codesafe\Shield\Consent;
 use Ovos\Codesafe\Shield\Facts;
 use Ovos\Codesafe\Shield\Kernel;
@@ -359,6 +360,10 @@ class Shield
 			$_POST,
 			static fn(): string => (string)file_get_contents('php://input'),
 			self::isAuthed($app) === true,
+			// the visitor's address as the app reads it: behind a configured
+			// proxy the forwarded chain walked right to left, never a header a
+			// peer that is no proxy wrote
+			ip: Client::getIp(),
 			user: self::identity($app),
 			get: $_GET,
 			cookies: $_COOKIE,

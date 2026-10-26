@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Service;
 
 use Ovos\ArrayObject;
+use Ovos\Client;
 use Ovos\Container\Inject;
 use Ovos\Exception;
 use Ovos\Service;
@@ -103,7 +104,11 @@ class Cookies extends Service
 		$options['path'] = SYSTEM_PATH;
 		$options['domain'] = $this->app->getDomain(); // if we pass null here, then the domain will be set to the current domain
 		$options['samesite'] = $this->cookiesConfig->samesite;
-		$options['secure'] = $this->request->isSecure();
+		// an https instance is https for the browser even where the request
+		// reaching PHP is not (TLS ends at a proxy that sends no
+		// X-Forwarded-Proto): its cookies are Secure either way
+		$options['secure'] = $this->request->isSecure()
+			|| $this->config->getPath(['system', 'protocol']) === Client::PROTOCOL_HTTPS;
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
 		// SameSite=None works only with Secure
 		if($options['secure'] === false
