@@ -144,9 +144,9 @@ use const PREG_SPLIT_NO_EMPTY;
  *       web: [public]                   # the web-reachable directories, relative to the working copy
  *                                       # root ('.' = the root itself is the docroot). An untracked or
  *                                       # modified PHP file there is URGENT, elsewhere HIGH. Run from a cron line —
- *                                       # `php cli.php codesafe files` (ovos/php-module-system) or
+ *                                       # `php cli.php codesafe integrity` (ovos/php-module-system) or
  *                                       # $sender->reportUntracked() — CLI only, never a web request;
- *                                       # needs files_enabled on the project (403 says so).
+ *                                       # needs integrity_enabled on the project (403 says so).
  *     inventory: yes                    # the installed composer packages (vendor/name + version, never a path)
  *                                       # to /api/v1/ingest/inventory once a day and after every composer
  *                                       # install — what codesafe matches against the CVE feeds. Needs url+key,
@@ -1676,7 +1676,7 @@ class Sender extends Service
 	 * and reads the tree). Synchronous and best-effort like the announce:
 	 * false when the sender is off, when this is not a CLI run, when nothing
 	 * can be known (no .git/.svn, proc_open closed, a non-zero exit — never a
-	 * guess) or when codesafe refuses (403 = files_enabled is off for the
+	 * guess) or when codesafe refuses (403 = integrity_enabled is off for the
 	 * project). An EMPTY answer is still posted: that is how a finding the
 	 * codesafe holds goes GONE.
 	 *
