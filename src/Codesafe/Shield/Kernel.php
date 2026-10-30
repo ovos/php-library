@@ -82,7 +82,9 @@ declare(strict_types=1);
  * and WHO — `{who, conditions: [{target, decode, test, value, ci}]}`, every
  * condition holding, over the request as the platform parsed it (Facts'
  * query, form, JSON, cookies, headers, file names, and an upload's head and
- * tail when a condition names its contents). `who` is anyone,
+ * tail when a condition names its contents; a form PHP left out of $_POST
+ * on PUT, PATCH or DELETE the kernel parses as WordPress's REST server
+ * does, Facts::formReader()). `who` is anyone,
  * anonymous or lacks:<capability>, and a nonce test asks the platform: a
  * blocking vpatch whose who or nonce the adapter cannot answer, or that
  * reads what the kernel could not (an upload; a JSON body past
@@ -164,6 +166,7 @@ use function array_is_list;
 use function array_key_exists;
 use function array_keys;
 use function array_map;
+use function array_merge;
 use function array_pop;
 use function array_slice;
 use function array_unique;
@@ -338,6 +341,14 @@ interface Platform
 	public function jsonType(
 		string $contentType,
 	): bool;
+	
+	/**
+	 * The method its app runs the request as, where that differs from the
+	 * one sent (WordPress's REST method override); null = the one sent
+	 */
+	public function appMethod(
+		Facts $facts,
+	): ?string;
 }
 
 /**
@@ -365,6 +376,14 @@ final class Facts
 	 */
 	public const JSON_DEPTH = 512;
 	
+	/**
+	 * a form body the kernel parses itself (formReader(): PUT, PATCH, DELETE)
+	 * is parsed up to this and cut at the last whole pair; the app parses it
+	 * whole, so what lies past holds as a JSON body past JSON_CAP does
+	 * (formUnread(), Kernel::condition())
+	 */
+	public const FORM_CAP = 1048576;
+	
 	/** an upload is read as its first FILE_HEAD bytes and its last FILE_TAIL, one value: a payload hides at either end */
 	public const FILE_HEAD = 65536;
 	
@@ -381,6 +400,12 @@ final class Facts
 	protected bool $jsonRead = false;
 	
 	protected bool $jsonUnread = false;
+	
+	/** @var ?array<string, mixed> the form the kernel parsed itself (form()), once a rule asked */
+	protected ?array $formParsed = null;
+	
+	/** whether the form the kernel parsed itself ran past FORM_CAP: what lies past is unread */
+	protected bool $formCut = false;
 	
 	/** @var array<string, ?string> the uploads read, by temp path */
 	protected array $fileContents = [];
@@ -401,10 +426,13 @@ final class Facts
 	 * the decoded values a request's conditions test at most, every condition
 	 * of every rule together, judge and tally alike (Kernel::condition()): a
 	 * literal test costs about a microsecond per value whatever its bytes, so
-	 * the budget bounds a request at about 70 ms whatever the rule count;
-	 * past it a decode-bearing condition is cut (Kernel::patched())
+	 * the budget bounds a request at under 200 ms whatever the rule count
+	 * (half of it measured at 50 ms for `contains`, 68 ms a regex, 88 ms
+	 * `has_markup`), and a 30000-leaf page-builder save passes four blocking
+	 * decode-bearing vpatches at one handler; past it a decode-bearing
+	 * condition is cut (Kernel::patched())
 	 */
-	public const DECODED_BUDGET = 65536;
+	public const DECODED_BUDGET = 131072;
 	
 	/** what a value the host's filter judges (unsafe_html) costs the budget: wp_kses_post() takes 2 to 33 µs where a literal test takes one */
 	public const HOST_TEST_WEIGHT = 32;
@@ -420,7 +448,7 @@ final class Facts
 	
 	/**
 	 * @param array<string, mixed> $query the query as the platform parsed it ($_GET)
-	 * @param array<string, mixed> $form the form fields as the platform parsed them ($_POST)
+	 * @param array<string, mixed> $form the form fields as the platform parsed them ($_POST); form() is what a rule reads
 	 * @param array<string, string> $headers lowercase names
 	 * @param array<string, mixed> $files field => the uploaded file's name (or names)
 	 * @param ?Closure(): mixed $jsonReader a JSON body, decoded; it throws a LengthException for a body too large to read
@@ -436,6 +464,8 @@ final class Facts
 	 * @param array<string, scalar> $options what a platform module reads of the host, by the module's own key (WordPress's REST prefix)
 	 * @param ?array<string, mixed> $request the host's request bag ($_REQUEST), whose values a request: target reads beside the
 	 *     query's and the form's; null where the host has none
+	 * @param ?Closure(): array{array<string, mixed>, bool} $formReader the form a rule reads where the platform parsed none
+	 *     (formReader()), and whether it ran past FORM_CAP; null = $form is the form
 	 */
 	public function __construct(
 		public readonly string $method,
@@ -460,6 +490,7 @@ final class Facts
 		array $platforms = [],
 		public readonly array $options = [],
 		public readonly ?array $request = null,
+		protected ?Closure $formReader = null,
 	)
 	{
 		$this->platforms = array_values(array_filter($platforms, static fn(mixed $platform): bool => $platform instanceof Platform));
@@ -502,7 +533,8 @@ final class Facts
 	 * both. A JSON body is decoded anew only by fromServer()'s reader, off the
 	 * input's one read, and then takes the modules' JSON types too; a reader
 	 * the adapter built stays its own. One copy per module set: judge() and
-	 * tally() read the same one, so what the first read the second has
+	 * tally() read the same one, so what the first read the second has; a
+	 * form the kernel parses itself is parsed once, through this request
 	 *
 	 * @param list<Platform> $platforms
 	 */
@@ -518,7 +550,7 @@ final class Facts
 				$this->query, $this->form, $this->cookies, $this->headers, $this->files, $this->jsonFor === null ? $this->jsonThrough(...) : ($this->jsonFor)($platforms),
 				fn(string $capability): ?bool => $this->can($capability), fn(string $action, string $value): ?bool => $this->nonceValid($action, $value),
 				$this->callerKnown, fn(string $value): ?bool => $this->htmlUnsafe($value), $this->uploads, fn(string $path): ?string => $this->fileContent($path),
-				$platforms, $this->options, $this->request);
+				$platforms, $this->options, $this->request, $this->formReader === null ? null : fn(): array => [$this->form(), $this->formUnread()]);
 			$copy->outer = $this->outer;
 			$copy->jsonFor = $this->jsonFor;
 			$copy->root = $this->root ?? $this;
@@ -648,6 +680,7 @@ final class Facts
 	): self
 	{
 		$uri = is_string($server['REQUEST_URI'] ?? null) ? $server['REQUEST_URI'] : '/';
+		$method = is_string($server['REQUEST_METHOD'] ?? null) ? $server['REQUEST_METHOD'] : 'GET';
 		if($get === null)
 		{
 			// the RAW query, as PHP would have parsed it — the URI is decoded once below
@@ -656,9 +689,11 @@ final class Facts
 		$contentType = is_string($server['CONTENT_TYPE'] ?? null) ? $server['CONTENT_TYPE'] : '';
 		// the body's reader, the JSON readers and every copy's share one read: an input that cannot be rewound hands a second read nothing
 		$input = $input === null ? null : self::readOnce($input);
+		// a form PHP left out of $_POST (PUT, PATCH, DELETE) is the kernel's to parse, as the app parses it, once a rule asks
+		$formReader = self::formReader($contentType, $post, $input);
 		
 		$facts = new self(
-			is_string($server['REQUEST_METHOD'] ?? null) ? $server['REQUEST_METHOD'] : 'GET',
+			$method,
 			self::decodeOnce($uri),
 			is_string($server['HTTP_USER_AGENT'] ?? null) ? $server['HTTP_USER_AGENT'] : '',
 			$ip ?? (is_string($server['REMOTE_ADDR'] ?? null) ? $server['REMOTE_ADDR'] : ''),
@@ -680,6 +715,7 @@ final class Facts
 			$platforms,
 			$options,
 			$request,
+			$formReader,
 		);
 		$facts->jsonFor = static fn(array $platforms): ?Closure => self::jsonReader($contentType, $input, platforms: $platforms);
 		
@@ -699,8 +735,8 @@ final class Facts
 		$read = false;
 		$raw = null;
 		$failure = null;
-		// a byte past the larger cap: every reader still sees the body run past its own
-		$keep = max(self::BODY_CAP, self::JSON_CAP) + 1;
+		// a byte past the largest cap: every reader still sees the body run past its own
+		$keep = max(self::BODY_CAP, self::JSON_CAP, self::FORM_CAP) + 1;
 		
 		return static function() use ($input, $keep, &$read, &$raw, &$failure): mixed
 		{
@@ -890,11 +926,75 @@ final class Facts
 	}
 	
 	/**
+	 * The form a rule reads where PHP parsed none: PHP fills $_POST on POST
+	 * alone, and WordPress's REST server parses the raw input itself on PUT,
+	 * PATCH and DELETE (WP_REST_Request::parse_body_params()) when the
+	 * Content-Type is application/x-www-form-urlencoded or names no type at
+	 * all — none, or one without a slash — never multipart or any other
+	 * type, and never a GET's body. The same here, with parse_str: the body
+	 * up to $cap, cut at the last whole pair so no value is read in part, the
+	 * host's fields over the parsed ones as WordPress merges them. The type
+	 * is decided here, the method by form() — the one the app runs the
+	 * request as (appMethod()), known once the modules read it — and the
+	 * parse runs there, lazily: nothing until a rule asks
+	 *
+	 * @return ?Closure(): array{array<string, mixed>, bool} the form and whether the body ran past the cap; null = no form body to parse
+	 */
+	public static function formReader(
+		string $contentType,
+		array $post,
+		?callable $input,
+		int $cap = self::FORM_CAP,
+	): ?Closure
+	{
+		$type = strtolower(trim(explode(';', $contentType, 2)[0]));
+		if($input === null || ($type !== 'application/x-www-form-urlencoded' && str_contains($type, '/')))
+		{
+			return null;
+		}
+		
+		return static function() use ($post, $input, $cap): array
+		{
+			$raw = $input();
+			$raw = is_string($raw) ? $raw : '';
+			$cut = strlen($raw) > $cap;
+			if($cut)
+			{
+				// the pair the cap falls in goes whole: a value read in part would answer for one never sent
+				$raw = substr($raw, 0, (int)strrpos(substr($raw, 0, $cap), '&'));
+			}
+			// past max_input_vars PHP keeps the first pairs and warns, for WordPress's parse_str as for this one: the same fields, the warning spared
+			@parse_str($raw, $fields);
+			
+			return [array_merge($fields, $post), $cut];
+		};
+	}
+	
+	/** whether a form body on this method is the kernel's to parse (formReader()): PUT, PATCH and DELETE, where PHP fills no $_POST and WordPress parses the input itself */
+	public static function formMethod(
+		string $method,
+	): bool
+	{
+		return in_array(strtoupper($method), ['PUT', 'PATCH', 'DELETE'], true);
+	}
+	
+	/** whether a body of this content type is a form to a rule: its fields flattened, never the raw bytes */
+	public static function formType(
+		string $contentType,
+	): bool
+	{
+		$type = strtolower(trim(explode(';', $contentType, 2)[0]));
+		
+		return $type === 'application/x-www-form-urlencoded' || $type === 'multipart/form-data';
+	}
+	
+	/**
 	 * What the body IS to a rule: for a form (urlencoded, multipart) the
 	 * parsed fields flattened to `name=value` lines — PHP has parsed them and
-	 * multipart's raw stream is gone by then; for JSON, XML and anything
-	 * else the raw input, capped at BODY_CAP, decoded once like the URI. Read
-	 * lazily: nothing is touched until a body rule asks
+	 * multipart's raw stream is gone by then; a form the kernel parses itself
+	 * body() flattens off form() instead; for JSON, XML and anything else the
+	 * raw input, capped at BODY_CAP, decoded once like the URI. Read lazily:
+	 * nothing is touched until a body rule asks
 	 *
 	 * @return ?Closure(): array{string, bool} the body and whether it was capped; null = no body to read
 	 */
@@ -905,8 +1005,7 @@ final class Facts
 		int $cap = self::BODY_CAP,
 	): ?Closure
 	{
-		$type = strtolower(trim(explode(';', $contentType, 2)[0]));
-		if($type === 'application/x-www-form-urlencoded' || $type === 'multipart/form-data')
+		if(self::formType($contentType))
 		{
 			return static fn(): array => [self::flatten($post), false];
 		}
@@ -962,16 +1061,21 @@ final class Facts
 		if($this->bodyRead === false)
 		{
 			$this->bodyRead = true;
-			if($this->bodyReader !== null)
+			try
 			{
-				try
+				// a form the kernel may parse itself is the body too, flattened off the one parse, cut where that was
+				if($this->formReader !== null && self::formType((string)($this->headers['content-type'] ?? '')))
+				{
+					[$this->body, $this->bodyCapped] = [self::flatten($this->form()), $this->formUnread()];
+				}
+				elseif($this->bodyReader !== null)
 				{
 					[$this->body, $this->bodyCapped] = ($this->bodyReader)();
 				}
-				catch(Throwable)
-				{
-					$this->body = null;
-				}
+			}
+			catch(Throwable)
+			{
+				$this->body = null;
 			}
 		}
 		
@@ -986,6 +1090,66 @@ final class Facts
 	public function bodyWasCapped(): bool
 	{
 		return $this->bodyCapped;
+	}
+	
+	/**
+	 * The method the app runs the request as: the one sent ($method) unless
+	 * a platform module names another (Platform::appMethod() — WordPress's
+	 * REST override), upper-cased; what the `method` target reads and a form
+	 * body is parsed for (form()). Asked once per request; a copy read with
+	 * other modules asks its own
+	 */
+	public function appMethod(): string
+	{
+		return $this->kept('appMethod', function(): string
+		{
+			foreach($this->platforms as $platform)
+			{
+				$named = $platform->appMethod($this);
+				if(is_string($named) && $named !== '')
+				{
+					return strtoupper($named);
+				}
+			}
+			
+			return strtoupper($this->method);
+		});
+	}
+	
+	/**
+	 * The form a rule reads: the host's parsed fields ($form), or where the
+	 * host parsed none the body the kernel parses itself (formReader()) for
+	 * the method the app runs the request as (formMethod()), once when first
+	 * asked
+	 */
+	public function form(): array
+	{
+		if($this->formReader === null || self::formMethod($this->appMethod()) === false)
+		{
+			return $this->form;
+		}
+		if($this->formParsed === null)
+		{
+			try
+			{
+				[$this->formParsed, $this->formCut] = ($this->formReader)();
+			}
+			catch(Throwable)
+			{
+				// an input that cannot be read leaves the host's fields
+				$this->formParsed = $this->form;
+			}
+		}
+		
+		return $this->formParsed;
+	}
+	
+	/** whether the form the kernel parsed itself ran past FORM_CAP: what its body: conditions ask of the rest is not known */
+	public function formUnread(): bool
+	{
+		$this->form();
+		
+		return $this->formCut;
 	}
 	
 	/** a JSON body, decoded; null when there is none, or none the kernel read (jsonUnread()) */
@@ -1398,7 +1562,7 @@ final class Ruleset
 	/**
 	 * the values one condition's decode steps yield that are built at most;
 	 * the request's budget for every condition together is Facts::DECODED_BUDGET,
-	 * the same count: a literal test costs about a microsecond per value
+	 * twice this: a literal test costs about a microsecond per value
 	 * whatever its bytes, a host's filter 2 to 33 µs, so the counts bound the
 	 * CPU, and the largest page-builder save yields a fraction of them; past
 	 * them the condition holds as a JSON body past Facts::JSON_CAP does
@@ -4438,9 +4602,10 @@ final class Kernel
 		Facts $facts,
 	): bool
 	{
-		if($facts->form !== [])
+		$form = $facts->form();
+		if($form !== [])
 		{
-			return self::holdsSecret($facts->form) === false;
+			return self::holdsSecret($form) === false;
 		}
 		$json = $facts->json();
 		
@@ -4640,8 +4805,9 @@ final class Kernel
 	 * test — or null when it does not hold. A request that is not signed in
 	 * lacks every capability; a signed-in one asks Facts::can(). A condition
 	 * over what the kernel did not read whole — a JSON body past
-	 * Facts::JSON_CAP, a decode step's values past Ruleset::DECODED_MAX or a
-	 * module's own bound — is answered as holding once an entry that held
+	 * Facts::JSON_CAP, a form it parsed itself past Facts::FORM_CAP, a decode
+	 * step's values past Ruleset::DECODED_MAX or a module's own bound — is
+	 * answered as holding once an entry that held
 	 * answered pins the handler (pins()): the app reads it whole, and padding
 	 * must not turn a block into an observe; `unread` says the answer rests
 	 * on that. A rule's answer is kept for the request: tally() reads what
@@ -4813,9 +4979,10 @@ final class Kernel
 	 * that is not there is an invalid one, and a present one needs the host,
 	 * and an upload the host cannot read holds unanswered where no value
 	 * passes; what the kernel did not read whole — a JSON body past the cap,
-	 * a decode step's values past DECODED_MAX or a module's own bound — holds
-	 * the condition unanswered where no value read passes and says so
-	 * (`unread`), for patched() to answer
+	 * a form it parsed itself past Facts::FORM_CAP, a decode step's values
+	 * past DECODED_MAX or a module's own bound — holds the condition
+	 * unanswered where no value read passes and says so (`unread`), for
+	 * patched() to answer
 	 *
 	 * @return ?array{matched: string, resolved: bool, unread?: true}
 	 */
@@ -4830,6 +4997,11 @@ final class Kernel
 		{
 			return ['matched' => '', 'resolved' => false, 'unread' => true];
 		}
+		// what the kernel did not read — the decode steps' values past the request's budget (Facts::DECODED_BUDGET) or a step's own
+		// bound, a form's pairs past Facts::FORM_CAP — may hold what no value read did: the condition holds unanswered and says so,
+		// for patched() to answer on a pinned handler
+		$cut = ['matched' => '', 'resolved' => false, 'unread' => true];
+		$formCut = self::readsForm($target) && $facts->formUnread();
 		// unreadable: an upload the host could not read — the host's failure, never a cap
 		[$values, $unreadable] = str_starts_with($target, 'file-content:')
 			? self::contents($facts, substr($target, strlen('file-content:'))) : [self::values($target, $facts), false];
@@ -4837,14 +5009,14 @@ final class Kernel
 		if($test === 'exists')
 		{
 			// an upload that could not be read is there all the same
-			return $values === [] && $unreadable === false ? null : ['matched' => $values[0] ?? '', 'resolved' => true];
+			return $values === [] && $unreadable === false ? ($formCut ? $cut : null) : ['matched' => $values[0] ?? '', 'resolved' => true];
 		}
 		if($test === 'nonce_invalid')
 		{
-			// no nonce sent is an invalid one
+			// no nonce sent is an invalid one, unless the form it would be in was cut
 			if($values === [])
 			{
-				return ['matched' => '', 'resolved' => true];
+				return $formCut ? $cut : ['matched' => '', 'resolved' => true];
 			}
 			$resolved = true;
 			foreach($values as $value)
@@ -4861,9 +5033,6 @@ final class Kernel
 			
 			return ['matched' => $values[0], 'resolved' => $resolved];
 		}
-		// what the decode steps yield past the request's budget (Facts::DECODED_BUDGET), or past a step's own bound, is not read:
-		// the condition holds unanswered and says so, for patched() to answer on a pinned handler
-		$cut = ['matched' => '', 'resolved' => false, 'unread' => true];
 		$steps = (array)($condition['decode'] ?? []);
 		$short = false;
 		if($test === 'unsafe_html')
@@ -4896,7 +5065,7 @@ final class Kernel
 			}
 			
 			// an upload the host could not read is a value the filter could not judge
-			return $pending === null && $unreadable === false ? null : ['matched' => $pending ?? '', 'resolved' => false];
+			return $pending === null && $unreadable === false ? ($formCut ? $cut : null) : ['matched' => $pending ?? '', 'resolved' => false];
 		}
 		foreach($values as $value)
 		{
@@ -4921,7 +5090,15 @@ final class Kernel
 		}
 		
 		// an upload the host could not read may hold what no value read did
-		return $unreadable ? ['matched' => '', 'resolved' => false] : null;
+		return $unreadable ? ['matched' => '', 'resolved' => false] : ($formCut ? $cut : null);
+	}
+	
+	/** whether a target reads the form: `body:`, `body-keys:`, and `request:`, which reads it beside the query */
+	protected static function readsForm(
+		string $target,
+	): bool
+	{
+		return str_starts_with($target, 'body:') || str_starts_with($target, 'body-keys:') || str_starts_with($target, 'request:');
 	}
 	
 	/**
@@ -4940,7 +5117,8 @@ final class Kernel
 	{
 		if($target === 'method')
 		{
-			return [strtoupper($facts->method)];
+			// the method the app runs the request as: WordPress's REST override, where a module reads one
+			return [$facts->appMethod()];
 		}
 		if($target === 'path')
 		{
@@ -4960,14 +5138,14 @@ final class Kernel
 		{
 			'query' => self::pick($facts->query, $name),
 			'request' => self::requested($facts, $name),
-			'body' => self::pick($facts->form, $name),
+			'body' => self::pick($facts->form(), $name),
 			'json' => self::pickJson($facts->json(), $name),
 			'cookie' => self::pick($facts->cookies, $name),
 			'header' => isset($facts->headers[$header]) ? [(string)$facts->headers[$header]] : [],
 			'file' => self::pick($facts->files, $name),
 			'file-content' => self::contents($facts, $name)[0],
 			'query-keys' => self::keys($facts->query, $name),
-			'body-keys' => self::keys($facts->form, $name),
+			'body-keys' => self::keys($facts->form(), $name),
 			default => [],
 		};
 		$outer = $facts->outer();
@@ -4994,7 +5172,7 @@ final class Kernel
 		string $name,
 	): array
 	{
-		$sent = [...self::pick($facts->query, $name), ...self::pick($facts->form, $name)];
+		$sent = [...self::pick($facts->query, $name), ...self::pick($facts->form(), $name)];
 		if($facts->request === null)
 		{
 			return $sent;
@@ -5210,7 +5388,9 @@ final class Kernel
 	/**
 	 * decoded() once per request for a value and its steps, whichever rule
 	 * reads them — a batch's thousand sub-requests carrying one value decode
-	 * it once — built no further than the budget left
+	 * it once — built no further than the budget left, and no more of it
+	 * handed over than the condition may test: the one value built past the
+	 * limit is the sign of the cut, never a value read
 	 *
 	 * @return array{list<string>, bool}
 	 */
@@ -5223,7 +5403,13 @@ final class Kernel
 		$names = implode(',', array_map(static fn(Platform $platform): string => $platform->name(), $facts->platforms));
 		$key = 'decoded:' . hash('xxh3', $names . "\0" . implode("\0", $steps) . "\0" . $value);
 		
-		return $facts->keptShared($key, static fn(): array => self::decoded($value, $steps, $facts->platforms, min(Ruleset::DECODED_MAX, $facts->remaining())));
+		return $facts->keptShared($key, static function() use ($value, $steps, $facts): array
+		{
+			$limit = min(Ruleset::DECODED_MAX, $facts->remaining());
+			[$values, $cut] = self::decoded($value, $steps, $facts->platforms, $limit);
+			
+			return [array_slice($values, 0, $limit), $cut];
+		});
 	}
 	
 	/**
