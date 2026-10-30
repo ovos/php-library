@@ -32,7 +32,11 @@ declare(strict_types=1);
  * and the Store
  * (rules and counters, two tiers: APCu for speed, a JSON file for
  * durability — a cleared APCu re-primes from the file, a host without APCu
- * runs on the file alone). It does three things: pull() — a conditional GET
+ * runs on the file alone; the record is sealed under a key derived from the
+ * project key (Kernel::sealKey()), so what another writer of the file or
+ * the pool puts there is no record, and a layer that holds the seal key
+ * alone reads the store without the key that opens the door). It
+ * does three things: pull() — a conditional GET
  * of the project's live rules under the store's lock, on the host's tick,
  * every INTERVAL seconds, a 304 costs nothing, a failure leaves the cache
  * alone; judge() — pure over the cached ruleset, returns pass | observe |
@@ -40,9 +44,12 @@ declare(strict_types=1);
  * adapter supplied (the host's sender) as a `shield_observe` /
  * `shield_block` security event, `matched` capped at 200 bytes.
  *
- * Fails open on everything: a missing store, an unknown contract, a rule
- * the engine cannot run, a thrown anything — the request passes. A missing
- * store also forces the very next pull. A ruleset older than CEILING (24 h,
+ * Fails open on everything: a missing store, a stored record not sealed
+ * under the seal key or pulled by another kernel (read as a missing store;
+ * the next pull puts a sealed unusable record in its place until the door
+ * answers), an unknown contract, a rule the engine cannot run, a thrown
+ * anything — the request passes. A
+ * missing store also forces the very next pull. A ruleset older than CEILING (24 h,
  * a codesafe instance gone silent) lifts by itself; a successful pull — 200 or 304 —
  * renews it. The verdict is `block` only when the rule is set to block AND
  * consent.enforce is on; an `observe` rule never blocks whatever the
@@ -78,13 +85,19 @@ declare(strict_types=1);
  * tail when a condition names its contents). `who` is anyone,
  * anonymous or lacks:<capability>, and a nonce test asks the platform: a
  * blocking vpatch whose who or nonce the adapter cannot answer, or that
- * reads what the kernel could not (an upload, a WordPress batch not read
- * in full, a JSON body past Facts::JSON_CAP on a handler none of its other
- * entries pins), is held with the reason `unanswered`
- * (Verdict::REASON_UNANSWERED), never blocked. A JSON body past the cap on
- * the handler its other entries pin is taken to carry what its json:
- * conditions look for: the app decodes it whole, and an honest client sends
- * no such body to a patched handler.
+ * reads what the kernel could not (an upload; a JSON body past
+ * Facts::JSON_CAP or a decode step's values past Facts::DECODED_BUDGET on a
+ * handler none of its other entries pins; a WordPress batch whose body it
+ * could not read), is held with the reason `unanswered`
+ * (Verdict::REASON_UNANSWERED), never blocked. On the handler its other
+ * entries pin, what the kernel did not read whole is taken to carry what the
+ * condition looks for, and the verdict says `unread` (Verdict::REASON_UNREAD):
+ * the app reads it whole, padding must never turn a block into an observe,
+ * and an honest heavy save refused there is reported as not read, never as
+ * an exploit. A WordPress batch of more requests than the kernel reads
+ * (Wordpress::BATCH_MAX) is taken to reach the REST handler a vpatch's `rest`
+ * entry names, for the caller `who` names: WordPress refuses a batch past
+ * its own count regardless.
  * Every vpatch a request reaches is counted per minute beside the hits,
  * whether or not it decided the verdict: `entry` (its selecting entries
  * held, Ruleset::selects()), `match` (it held, who included) and `authed`
@@ -176,6 +189,8 @@ use function function_exists;
 use function fwrite;
 use function get_debug_type;
 use function hash;
+use function hash_equals;
+use function hash_hmac;
 use function hexdec;
 use function http_get_last_response_headers;
 use function implode;
@@ -196,6 +211,7 @@ use function json_decode;
 use function json_encode;
 use function ltrim;
 use function max;
+use function min;
 use function ord;
 use function parse_str;
 use function preg_match;
@@ -208,6 +224,7 @@ use function random_bytes;
 use function rawurldecode;
 use function rename;
 use function rtrim;
+use function sort;
 use function sprintf;
 use function str_contains;
 use function str_ends_with;
@@ -244,6 +261,7 @@ use const CURLOPT_USERAGENT;
 use const FILTER_VALIDATE_IP;
 use const JSON_UNESCAPED_SLASHES;
 use const JSON_UNESCAPED_UNICODE;
+use const PHP_INT_MAX;
 
 /**
  * A platform's kernel module: the vocabulary only its app gives a request a
@@ -304,6 +322,15 @@ interface Platform
 	/** whether requests inside this one that could not be read (subRequests()) may have reached a vpatch */
 	public function reaches(
 		array $rule,
+		Facts $facts,
+	): bool;
+	
+	/**
+	 * whether the requests inside this one run past the count the kernel reads,
+	 * which the platform itself refuses to run: a vpatch they may reach fails
+	 * closed, where a body the kernel could not read only holds unanswered
+	 */
+	public function overflows(
 		Facts $facts,
 	): bool;
 	
@@ -369,6 +396,27 @@ final class Facts
 	
 	/** @var list<Platform> the platform modules the request is read with */
 	public readonly array $platforms;
+	
+	/**
+	 * the decoded values a request's conditions test at most, every condition
+	 * of every rule together, judge and tally alike (Kernel::condition()): a
+	 * literal test costs about a microsecond per value whatever its bytes, so
+	 * the budget bounds a request at about 70 ms whatever the rule count;
+	 * past it a decode-bearing condition is cut (Kernel::patched())
+	 */
+	public const DECODED_BUDGET = 65536;
+	
+	/** what a value the host's filter judges (unsafe_html) costs the budget: wp_kses_post() takes 2 to 33 µs where a literal test takes one */
+	public const HOST_TEST_WEIGHT = 32;
+	
+	/** the budget spent so far (spend()); a sub-request's and a copy's is its request's */
+	protected int $spent = 0;
+	
+	/** @var array<string, mixed> what was computed once for this request (kept()): what judge() read, tally() reads again for free */
+	protected array $kept = [];
+	
+	/** the request whose budget and decoded values this one shares — the batch a sub-request came in, the request a copy was made of; null for a request of its own */
+	protected ?Facts $root = null;
 	
 	/**
 	 * @param array<string, mixed> $query the query as the platform parsed it ($_GET)
@@ -440,6 +488,8 @@ final class Facts
 		$sub = new self($method, $uri, $this->ua, $this->ip, $this->authed, null, $this->user, $query, $form, [], $headers, [], static fn(): mixed => $json,
 			$this->can, $this->nonce, $this->callerKnown, $this->kses, platforms: $this->platforms, options: $this->options);
 		$sub->outer = $this;
+		// a batch's thousand sub-requests spend their request's one budget
+		$sub->root = $this->root ?? $this;
 		
 		return $sub;
 	}
@@ -451,7 +501,8 @@ final class Facts
 	 * read once whichever asks, and what a report says of the body holds for
 	 * both. A JSON body is decoded anew only by fromServer()'s reader, off the
 	 * input's one read, and then takes the modules' JSON types too; a reader
-	 * the adapter built stays its own
+	 * the adapter built stays its own. One copy per module set: judge() and
+	 * tally() read the same one, so what the first read the second has
 	 *
 	 * @param list<Platform> $platforms
 	 */
@@ -459,15 +510,64 @@ final class Facts
 		array $platforms,
 	): self
 	{
-		$copy = new self($this->method, $this->uri, $this->ua, $this->ip, $this->authed, fn(): array => [$this->body(), $this->bodyWasCapped()], $this->user,
-			$this->query, $this->form, $this->cookies, $this->headers, $this->files, $this->jsonFor === null ? $this->jsonThrough(...) : ($this->jsonFor)($platforms),
-			fn(string $capability): ?bool => $this->can($capability), fn(string $action, string $value): ?bool => $this->nonceValid($action, $value),
-			$this->callerKnown, fn(string $value): ?bool => $this->htmlUnsafe($value), $this->uploads, fn(string $path): ?string => $this->fileContent($path),
-			$platforms, $this->options, $this->request);
-		$copy->outer = $this->outer;
-		$copy->jsonFor = $this->jsonFor;
+		$names = implode(',', array_map(static fn(mixed $platform): string => $platform instanceof Platform ? $platform->name() : '', $platforms));
 		
-		return $copy;
+		return $this->kept('with:' . $names, function() use ($platforms): self
+		{
+			$copy = new self($this->method, $this->uri, $this->ua, $this->ip, $this->authed, fn(): array => [$this->body(), $this->bodyWasCapped()], $this->user,
+				$this->query, $this->form, $this->cookies, $this->headers, $this->files, $this->jsonFor === null ? $this->jsonThrough(...) : ($this->jsonFor)($platforms),
+				fn(string $capability): ?bool => $this->can($capability), fn(string $action, string $value): ?bool => $this->nonceValid($action, $value),
+				$this->callerKnown, fn(string $value): ?bool => $this->htmlUnsafe($value), $this->uploads, fn(string $path): ?string => $this->fileContent($path),
+				$platforms, $this->options, $this->request);
+			$copy->outer = $this->outer;
+			$copy->jsonFor = $this->jsonFor;
+			$copy->root = $this->root ?? $this;
+			
+			return $copy;
+		});
+	}
+	
+	/**
+	 * Whether the request's budget still covers a test of this cost, which is
+	 * spent: false past DECODED_BUDGET, where the rest goes unread
+	 */
+	public function spend(
+		int $cost = 1,
+	): bool
+	{
+		$root = $this->root ?? $this;
+		$root->spent+= $cost;
+		
+		return $root->spent <= self::DECODED_BUDGET;
+	}
+	
+	/** the budget left: what a decode step need still build */
+	public function remaining(): int
+	{
+		return max(0, self::DECODED_BUDGET - ($this->root ?? $this)->spent);
+	}
+	
+	/** what was computed once for this request under a key: what judge() read, tally() reads again for free */
+	public function kept(
+		string $key,
+		Closure $compute,
+	): mixed
+	{
+		if(array_key_exists($key, $this->kept) === false)
+		{
+			$this->kept[$key] = $compute();
+		}
+		
+		return $this->kept[$key];
+	}
+	
+	/** the same, shared with the request this one derives from (its batch, the request it copies): a value decoded once whichever reads it */
+	public function keptShared(
+		string $key,
+		Closure $compute,
+	): mixed
+	{
+		return ($this->root ?? $this)->kept($key, $compute);
 	}
 	
 	/** this request's JSON body as a copy's reader hands it over (withPlatforms()): past the cap it is unread there too */
@@ -1160,6 +1260,15 @@ final class Verdict
 	public const REASON_UNANSWERED = 'unanswered';
 	
 	/**
+	 * A verdict decided on what the kernel did not read whole — a JSON body
+	 * past Facts::JSON_CAP, a decode step's values past Facts::DECODED_BUDGET,
+	 * a batch past the count it reads — on the handler the rule pins: a padded
+	 * exploit, or an honest heavy save at a patched handler, which codesafe
+	 * must not read as an exploit (the report says so)
+	 */
+	public const REASON_UNREAD = 'unread';
+	
+	/**
 	 * @param ?array<string, mixed> $rule the rule that matched, as served
 	 * @param string $matched the fragment that matched, capped by the kernel
 	 * @param int $count a rate rule's count in its window (the sliding estimate, rounded up)
@@ -1286,8 +1395,16 @@ final class Ruleset
 	/** the decode steps; `json:<dot.path>` is json walked to a path, as the json: target walks a body; a platform module decodes its own (Platform::decodes()) */
 	public const DECODES = ['url', 'base64', 'json'];
 	
-	/** the values a condition's decode steps yield that are read at most: past them the condition holds unanswered */
-	public const DECODED_MAX = 256;
+	/**
+	 * the values one condition's decode steps yield that are built at most;
+	 * the request's budget for every condition together is Facts::DECODED_BUDGET,
+	 * the same count: a literal test costs about a microsecond per value
+	 * whatever its bytes, a host's filter 2 to 33 µs, so the counts bound the
+	 * CPU, and the largest page-builder save yields a fraction of them; past
+	 * them the condition holds as a JSON body past Facts::JSON_CAP does
+	 * (Kernel::patched())
+	 */
+	public const DECODED_MAX = 65536;
 	
 	public const TESTS = ['equals', 'in', 'not_in', 'prefix', 'suffix', 'contains', 'regex', 'not_prefix', 'not_suffix', 'not_contains',
 		'not_regex', 'numeric', 'not_numeric', 'exists', 'longer_than', 'greater_than', 'less_than', 'offsite', 'has_quote', 'has_markup',
@@ -1377,6 +1494,8 @@ final class Ruleset
 	
 	/**
 	 * @param list<array<string, mixed>> $rules
+	 * @param list<string> $platforms the names of the platform modules the ruleset was pulled with: sealed into the record, and a
+	 *   kernel reads back only a record pulled with its own (fromRecord())
 	 */
 	public function __construct(
 		public readonly array $rules,
@@ -1386,8 +1505,31 @@ final class Ruleset
 		public readonly string $project = '',
 		public readonly string $version = '',
 		public readonly ?array $threats = null,
+		public readonly array $platforms = [],
 	)
 	{
+	}
+	
+	/**
+	 * What takes a refused record's place in the store (Kernel::pull()):
+	 * unusable, without a digest, fetched now — so the interval and the lock
+	 * apply until the door answers, and every request passes with
+	 * `refused store` (isRefused())
+	 *
+	 * @param list<string> $platforms
+	 */
+	public static function refused(
+		int $now,
+		array $platforms,
+	): self
+	{
+		return new self([], '', $now, false, '', '', null, $platforms);
+	}
+	
+	/** the stand-in for a refused record: the one unusable ruleset without a digest, so no 304 is asked for it or renews it */
+	public function isRefused(): bool
+	{
+		return $this->usable === false && $this->digest === '';
 	}
 	
 	/**
@@ -1413,7 +1555,7 @@ final class Ruleset
 		$usable = ($payload['contract'] ?? null) === self::CONTRACT
 			&& ($payload['dialect'] ?? null) === self::DIALECT
 			&& is_array($payload['rules'] ?? null);
-		// the store keeps only these: fromRecord() checks nothing, and a malformed rate rule would throw in judge() on every request (the Node twin checks on read)
+		// the store keeps only these: fromRecord() checks the seal, not the rules, and a malformed rate rule would throw in judge() on every request (the Node twin checks on read)
 		$rules = [];
 		if($usable)
 		{
@@ -1443,15 +1585,45 @@ final class Ruleset
 		}
 		
 		return new self($rules, $digest, $fetchedAt, $usable, is_string($payload['project'] ?? null) ? $payload['project'] : '',
-			self::isVersion($version) ? $version : '', $usable ? self::threats($payload['threats'] ?? null) : null);
+			self::isVersion($version) ? $version : '', $usable ? self::threats($payload['threats'] ?? null) : null,
+			// an entry that is no module names nothing, as it keeps no rule (targetOf())
+			array_values(array_map(static fn(Platform $platform): string => $platform->name(),
+				array_filter($platforms, static fn(mixed $platform): bool => $platform instanceof Platform))));
 	}
 	
-	/** the stored record back into a ruleset; null when the record is not one */
+	/**
+	 * The stored record back into a ruleset; null when the record is not
+	 * one, is not sealed under this key (seal()) — planted by another
+	 * writer of the store, changed after the write, an earlier kernel's —
+	 * or was pulled by another kernel: of another contract or dialect, or
+	 * with other platform modules than $platforms names, whose rules this
+	 * kernel would have kept differently. Null also for an empty key: a
+	 * kernel without one reads no store. Read as no store, so the request
+	 * passes and the next pull asks for the whole ruleset, never with the
+	 * record's digest
+	 *
+	 * @param list<string> $platforms the names of the kernel's platform modules
+	 */
 	public static function fromRecord(
 		mixed $record,
+		string $key,
+		array $platforms = [],
 	): ?self
 	{
-		if(is_array($record) === false || is_array($record['rules'] ?? null) === false || is_int($record['fetched_at'] ?? null) === false)
+		if($key === '' || is_array($record) === false || is_array($record['rules'] ?? null) === false || is_int($record['fetched_at'] ?? null) === false
+			|| is_string($record['seal'] ?? null) === false || hash_equals(self::seal($record, $key), $record['seal']) === false)
+		{
+			return null;
+		}
+		// the writing kernel's own contract, dialect and modules, so a record it derived under other rules never comes back as this kernel's
+		$pulledWith = $record['platforms'] ?? null;
+		if(($record['contract'] ?? null) !== self::CONTRACT || ($record['dialect'] ?? null) !== self::DIALECT || is_array($pulledWith) === false)
+		{
+			return null;
+		}
+		sort($pulledWith);
+		sort($platforms);
+		if(array_values($pulledWith) !== array_values($platforms))
 		{
 			return null;
 		}
@@ -1459,12 +1631,14 @@ final class Ruleset
 		return new self(
 			$record['rules'],
 			is_string($record['sha256'] ?? null) ? $record['sha256'] : '',
-			$record['fetched_at'],
+			// a fetched_at ahead of the clock (the clock ran ahead at the write) reads as now: the pull would skip the record for as long as it lies ahead, and the ceiling would never lift it
+			min($record['fetched_at'], time()),
 			($record['usable'] ?? false) === true,
 			is_string($record['project'] ?? null) ? $record['project'] : '',
 			is_string($record['version'] ?? null) && self::isVersion($record['version']) ? $record['version'] : '',
 			// stored as checked (a lookup map): read per request, never checked again
 			is_array($record['threats']['addresses'] ?? null) ? $record['threats'] : null,
+			$record['platforms'],
 		);
 	}
 	
@@ -1530,20 +1704,45 @@ final class Ruleset
 		return $packed === false ? '' : (string)inet_ntop($packed);
 	}
 	
-	/** what the store keeps — JSON, never PHP */
-	public function toRecord(): array
+	/** what the store keeps — JSON, never PHP — sealed under the project key (seal()) */
+	public function toRecord(
+		string $key,
+	): array
 	{
-		return [
+		$record = [
 			'contract' => self::CONTRACT,
 			'dialect' => self::DIALECT,
 			'project' => $this->project,
 			'fetched_at' => $this->fetchedAt,
 			'sha256' => $this->digest,
 			'version' => $this->version,
+			'platforms' => $this->platforms,
 			'threats' => $this->threats,
 			'usable' => $this->usable,
 			'rules' => $this->rules,
 		];
+		$record['seal'] = self::seal($record, $key);
+		
+		return $record;
+	}
+	
+	/**
+	 * A record's seal: an HMAC-SHA256 under the project key over every other
+	 * field as the store's JSON. The store — a file, an APCu pool — can be
+	 * written by more than this kernel, and the key is the one secret such
+	 * a writer lacks: only a record a holder of the key wrote, and nobody
+	 * changed since, is read back (fromRecord()). The bytes are this
+	 * kernel's own encoding, so the check is exact wherever the record was
+	 * kept
+	 */
+	public static function seal(
+		array $record,
+		string $key,
+	): string
+	{
+		unset($record['seal']);
+		
+		return hash_hmac('sha256', (string)json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $key);
 	}
 	
 	/** renewed by a 304 — with the version it said, when it said one */
@@ -1553,7 +1752,7 @@ final class Ruleset
 	): self
 	{
 		return new self($this->rules, $this->digest, $fetchedAt, $this->usable, $this->project,
-			self::isVersion($version) ? $version : $this->version, $this->threats);
+			self::isVersion($version) ? $version : $this->version, $this->threats, $this->platforms);
 	}
 	
 	/** a version is the door's sha256, lowercase hex */
@@ -3060,7 +3259,7 @@ final class Store
 		return $this->apcu;
 	}
 	
-	/** the record, from APCu, else from the file (re-priming APCu); null = no store */
+	/** the record as stored, from APCu, else from the file (re-priming APCu); null = no store. Ruleset::fromRecord() holds it to its seal */
 	public function read(): ?array
 	{
 		if($this->apcu)
@@ -3068,7 +3267,7 @@ final class Store
 			$hit = apcu_fetch($this->key('rules'));
 			if(is_array($hit))
 			{
-				return self::clamped($hit);
+				return $hit;
 			}
 		}
 		// a link planted at the path is no store: the next pull writes a real one
@@ -3088,28 +3287,9 @@ final class Store
 		{
 			return null;
 		}
-		$record = self::clamped($record);
 		if($this->apcu)
 		{
 			apcu_store($this->key('rules'), $record);
-		}
-		
-		return $record;
-	}
-	
-	/**
-	 * A record whose fetched_at lies in the future (a clock that ran ahead, a
-	 * file written by hand) as fetched now: the pull would skip it for as
-	 * long as it lies ahead, and the ceiling would never lift it
-	 */
-	protected static function clamped(
-		array $record,
-	): array
-	{
-		$now = time();
-		if(is_int($record['fetched_at'] ?? null) && $record['fetched_at'] > $now)
-		{
-			$record['fetched_at'] = $now;
 		}
 		
 		return $record;
@@ -3440,6 +3620,9 @@ final class Kernel
 	/** whether the host's log was told of a request read with more modules than its Facts named (readable()): once per kernel */
 	protected bool $misread = false;
 	
+	/** the key the stored record is sealed under (Ruleset::seal()): given, or derived from the API key (sealKey()) */
+	protected string $sealKey;
+	
 	/**
 	 * @param string $url codesafe instance base URL
 	 * @param string $key the project api_key
@@ -3448,6 +3631,9 @@ final class Kernel
 	 * @param ?callable(string $line): mixed $log the host's log
 	 * @param list<Platform> $platforms the platform modules loaded: the rules in their words are kept at the pull; anything else is
 	 *     ignored, and the host's log names it
+	 * @param ?string $sealKey the key the stored record is sealed under, for a layer that holds it without the API key (the
+	 *     plugin's prepend, from its consent file); null derives it from the API key (sealKey()), which gives '' for none —
+	 *     and a kernel with '' reads no store
 	 */
 	public function __construct(
 		protected string $url,
@@ -3460,8 +3646,10 @@ final class Kernel
 		protected int $ceiling = self::CEILING,
 		protected int $timeoutMs = self::TIMEOUT_MS,
 		protected array $platforms = [],
+		?string $sealKey = null,
 	)
 	{
+		$this->sealKey = $sealKey ?? self::sealKey($key);
 		$this->url = rtrim($url, '/');
 		$this->http = $http === null ? null : Closure::fromCallable($http);
 		$this->report = $report === null ? null : Closure::fromCallable($report);
@@ -3491,6 +3679,25 @@ final class Kernel
 	public function platforms(): array
 	{
 		return $this->platforms;
+	}
+	
+	/**
+	 * The seal key of an API key: an HMAC under the key over a fixed word,
+	 * so a layer that holds it alone (the plugin's prepend, from its
+	 * consent file) reads and verifies the store without the key that
+	 * opens the door; '' for no key, which seals nothing a kernel reads
+	 */
+	public static function sealKey(
+		string $apiKey,
+	): string
+	{
+		return $apiKey === '' ? '' : hash_hmac('sha256', 'codesafe-shield-seal', $apiKey);
+	}
+	
+	/** @return list<string> the names of the platform modules this kernel pulls with, in their order */
+	protected function platformNames(): array
+	{
+		return array_values(array_map(static fn(Platform $platform): string => $platform->name(), $this->platforms));
 	}
 	
 	/**
@@ -3529,7 +3736,7 @@ final class Kernel
 			$this->rulesetRead = true;
 			try
 			{
-				$this->ruleset = Ruleset::fromRecord($this->store->read());
+				$this->ruleset = Ruleset::fromRecord($this->store->read(), $this->sealKey, $this->platformNames());
 			}
 			catch(Throwable)
 			{
@@ -3583,7 +3790,7 @@ final class Kernel
 			}
 			if($ruleset->usable === false)
 			{
-				return Verdict::pass('unknown contract');
+				return Verdict::pass($ruleset->isRefused() ? 'refused store' : 'unknown contract');
 			}
 			// past the ceiling the rules lift until a pull renews them
 			if($ruleset->isStale($now ?? time(), $this->ceiling))
@@ -3640,18 +3847,23 @@ final class Kernel
 							$hit = $subHit;
 						}
 					}
-					// sub-requests the kernel could not read may have reached it: held, never blocked, never passed in silence
+					// sub-requests the kernel could not read may have reached the handler the rule names (Platform::reaches()): past the
+					// count the platform itself refuses (overflows()) the rule fails closed for this caller, the padded exploit refused
+					// and not only logged; a body the kernel could not read holds unanswered
 					if($hit === null && self::reaches($rule, $facts, $unread))
 					{
-						$hit = ['matched' => '', 'resolved' => false];
+						$overflow = self::overflows($facts, $unread);
+						$who = $overflow ? self::patched(['who' => $rule['who'] ?? '', 'conditions' => []], $facts) : null;
+						$hit = ['matched' => '', 'resolved' => $who !== null && $who['resolved'], 'unread' => $overflow];
 					}
 					if($hit === null)
 					{
 						continue;
 					}
 					$blocks = Ruleset::blocks($rule['mode'] ?? '') && $consent->blocks();
+					// decided on what was not read whole: the verdict says so, and the report after it
 					$verdict = new Verdict($blocks && $hit['resolved'] ? Verdict::BLOCK : Verdict::OBSERVE, $rule,
-						substr($hit['matched'], 0, self::MATCHED_MAX));
+						substr($hit['matched'], 0, self::MATCHED_MAX), ($hit['unread'] ?? false) ? Verdict::REASON_UNREAD : '');
 					// what the host could not answer (who, a nonce) only observes — and a blocking rule after it may still block
 					if($blocks && $hit['resolved'] === false)
 					{
@@ -3961,19 +4173,46 @@ final class Kernel
 		Facts $facts,
 	): array
 	{
-		$subs = [];
-		$unread = [];
-		foreach($facts->platforms as $platform)
+		// read once per request: judge() and tally() share the sub-requests, and so what each of them read
+		return $facts->kept('subs', static function() use ($facts): array
 		{
-			[$found, $cut] = $platform->subRequests($facts);
-			$subs = [...$subs, ...$found];
-			if($cut)
+			$subs = [];
+			$unread = [];
+			foreach($facts->platforms as $platform)
 			{
-				$unread[] = $platform;
+				[$found, $cut] = $platform->subRequests($facts);
+				$subs = [...$subs, ...$found];
+				if($cut)
+				{
+					$unread[] = $platform;
+				}
+			}
+			
+			return [$subs, $unread];
+		});
+	}
+	
+	/**
+	 * Whether the sub-requests a module could not read run past the count the
+	 * module's platform itself refuses (Platform::overflows()), so a vpatch
+	 * they may reach fails closed
+	 *
+	 * @param list<Platform> $unread
+	 */
+	public static function overflows(
+		Facts $facts,
+		array $unread,
+	): bool
+	{
+		foreach($unread as $platform)
+		{
+			if($platform->overflows($facts))
+			{
+				return true;
 			}
 		}
 		
-		return [$subs, $unread];
+		return false;
 	}
 	
 	/**
@@ -4021,6 +4260,9 @@ final class Kernel
 				
 				return;
 			}
+			// a verdict on what was not read whole says so — `reason`, the tag codesafe's grid filters by — and names no match: the
+			// value that pinned the handler is no payload, and an honest heavy save refused there must not read as an exploit
+			$unread = $verdict->reason === Verdict::REASON_UNREAD;
 			// codesafe's Shield\Alarm reads the rule id off the message's `shield rule N ` start
 			($this->report)($verdict->kind(), sprintf('shield rule %d %s %s %s', (int)$rule['id'],
 				$verdict->isBlock() ? 'refused' : 'observed', $facts->method, substr($facts->path(), 0, 200)), [
@@ -4032,10 +4274,11 @@ final class Kernel
 				'field' => Ruleset::isVpatch($rule) ? Ruleset::KIND_VPATCH : (string)$rule['field'],
 				'op' => Ruleset::isVpatch($rule) ? 'conditions' : (string)$rule['op'],
 				'mode' => (string)$rule['mode'],
-				'matched' => self::shown($rule, $verdict->matched, $facts),
+				'matched' => $unread ? '' : self::shown($rule, $verdict->matched, $facts),
+				'reason' => $verdict->reason,
 				'authed' => $facts->authed,
 				'body_capped' => $facts->bodyWasCapped(),
-			] + (Ruleset::isVpatch($rule) ? ['who' => (string)($rule['who'] ?? '')] : []));
+			] + ($unread ? ['tags' => [Verdict::REASON_UNREAD]] : []) + (Ruleset::isVpatch($rule) ? ['who' => (string)($rule['who'] ?? '')] : []));
 		}
 		catch(Throwable $e)
 		{
@@ -4274,8 +4517,20 @@ final class Kernel
 		$now ??= time();
 		try
 		{
-			$current = Ruleset::fromRecord($this->store->read());
-			if($force === false && $current !== null && $this->store->pullForced() === false && $current->fetchedAt + $this->interval > $now)
+			$record = $this->store->read();
+			$current = Ruleset::fromRecord($record, $this->sealKey, $this->platformNames());
+			// a record that is not this kernel's: the door is asked for the whole ruleset now (no If-None-Match), and a sealed
+			// unusable record fetched now takes its place, so while the door is down the interval and the lock apply as to any
+			// record — one request and one log line per interval, not per tick
+			$refused = $current === null && is_array($record);
+			if($refused)
+			{
+				$this->log('stored ruleset refused (seal, contract or modules not this kernel\'s): pulling whole');
+				$current = Ruleset::refused($now, $this->platformNames());
+				$this->store->write($current->toRecord($this->sealKey));
+				$this->rulesetRead = false;
+			}
+			if($force === false && $refused === false && $current !== null && $this->store->pullForced() === false && $current->fetchedAt + $this->interval > $now)
 			{
 				return self::PULL_SKIPPED;
 			}
@@ -4317,9 +4572,11 @@ final class Kernel
 		}
 		$response = ($this->http ?? Closure::fromCallable([$this, 'transport']))($this->url . self::DOOR, $headers, $this->timeoutMs);
 		$status = (int)($response['status'] ?? 0);
-		if($status === 304 && $current !== null)
+		// never the stand-in for a refused record: no If-None-Match went out for it, so a 304 is no answer to this pull
+		if($status === 304 && $current !== null && $current->isRefused() === false)
 		{
-			$this->store->write($current->withFetchedAt($now, self::header($response, self::HEADER_VERSION))->toRecord());
+			// only a record that read back sealed is renewed, and it is sealed again
+			$this->store->write($current->withFetchedAt($now, self::header($response, self::HEADER_VERSION))->toRecord($this->sealKey));
 			// the next ruleset() call reads the new record
 			$this->rulesetRead = false;
 			
@@ -4348,7 +4605,7 @@ final class Kernel
 		$ruleset = Ruleset::fromPayload($payload, $now, self::header($response, 'X-Shield-Sha256'),
 			self::header($response, self::HEADER_VERSION), $this->platforms);
 		// stored even when unusable, so an unknown contract is not fetched again on every tick
-		$this->store->write($ruleset->toRecord());
+		$this->store->write($ruleset->toRecord($this->sealKey));
 		$this->rulesetRead = false;
 		if($ruleset->usable === false)
 		{
@@ -4381,14 +4638,39 @@ final class Kernel
 	 * A vpatch over the request: the value that passed (a parameter's, else
 	 * the frame's) and whether all of it was answered — `who` and any nonce
 	 * test — or null when it does not hold. A request that is not signed in
-	 * lacks every capability; a signed-in one asks Facts::can(). A json:
-	 * condition over a body past Facts::JSON_CAP is answered as holding once
-	 * an entry that held answered pins the handler (pins()): the app decodes
-	 * the body whole, and padding must not turn a block into an observe
+	 * lacks every capability; a signed-in one asks Facts::can(). A condition
+	 * over what the kernel did not read whole — a JSON body past
+	 * Facts::JSON_CAP, a decode step's values past Ruleset::DECODED_MAX or a
+	 * module's own bound — is answered as holding once an entry that held
+	 * answered pins the handler (pins()): the app reads it whole, and padding
+	 * must not turn a block into an observe; `unread` says the answer rests
+	 * on that. A rule's answer is kept for the request: tally() reads what
+	 * judge() read
 	 *
-	 * @return ?array{matched: string, resolved: bool}
+	 * @return ?array{matched: string, resolved: bool, unread: bool}
 	 */
 	public static function patched(
+		array $rule,
+		Facts $facts,
+	): ?array
+	{
+		$id = $rule['id'] ?? null;
+		if(is_int($id) === false)
+		{
+			return self::patchedNow($rule, $facts);
+		}
+		// by id and by what the rule reads: a rule served again with other conditions is another rule
+		$key = 'patched:' . $id . ':' . hash('xxh3', (string)json_encode([$rule['who'] ?? '', $rule['conditions'] ?? []]));
+		
+		return $facts->kept($key, static fn(): ?array => self::patchedNow($rule, $facts));
+	}
+	
+	/**
+	 * patched(), computed
+	 *
+	 * @return ?array{matched: string, resolved: bool, unread: bool}
+	 */
+	protected static function patchedNow(
 		array $rule,
 		Facts $facts,
 	): ?array
@@ -4417,7 +4699,7 @@ final class Kernel
 		}
 		$matched = '';
 		$framed = '';
-		// whether an entry the kernel read pins the handler, and whether a JSON body it did not read waits on that
+		// whether an entry the kernel read pins the handler, and whether a condition it could not read whole waits on that
 		$pinned = false;
 		$unread = false;
 		$entries = (array)($rule['conditions'] ?? []);
@@ -4451,7 +4733,7 @@ final class Kernel
 			}
 		}
 		
-		return ['matched' => $matched !== '' ? $matched : $framed, 'resolved' => $resolved && ($unread === false || $pinned)];
+		return ['matched' => $matched !== '' ? $matched : $framed, 'resolved' => $resolved && ($unread === false || $pinned), 'unread' => $unread];
 	}
 	
 	/**
@@ -4530,8 +4812,10 @@ final class Kernel
 	 * wildcard, the keys) is enough; an absent one never holds — but a nonce
 	 * that is not there is an invalid one, and a present one needs the host,
 	 * and an upload the host cannot read holds unanswered where no value
-	 * passes; a JSON body the kernel did not read holds every json: condition
-	 * unanswered and says so (`unread`), for patched() to answer
+	 * passes; what the kernel did not read whole — a JSON body past the cap,
+	 * a decode step's values past DECODED_MAX or a module's own bound — holds
+	 * the condition unanswered where no value read passes and says so
+	 * (`unread`), for patched() to answer
 	 *
 	 * @return ?array{matched: string, resolved: bool, unread?: true}
 	 */
@@ -4546,13 +4830,14 @@ final class Kernel
 		{
 			return ['matched' => '', 'resolved' => false, 'unread' => true];
 		}
-		[$values, $unread] = str_starts_with($target, 'file-content:')
+		// unreadable: an upload the host could not read — the host's failure, never a cap
+		[$values, $unreadable] = str_starts_with($target, 'file-content:')
 			? self::contents($facts, substr($target, strlen('file-content:'))) : [self::values($target, $facts), false];
 		$test = (string)$condition['test'];
 		if($test === 'exists')
 		{
 			// an upload that could not be read is there all the same
-			return $values === [] && $unread === false ? null : ['matched' => $values[0] ?? '', 'resolved' => true];
+			return $values === [] && $unreadable === false ? null : ['matched' => $values[0] ?? '', 'resolved' => true];
 		}
 		if($test === 'nonce_invalid')
 		{
@@ -4576,23 +4861,25 @@ final class Kernel
 			
 			return ['matched' => $values[0], 'resolved' => $resolved];
 		}
-		// past DECODED_MAX values the decode steps yield, the rest is not read: the condition holds unanswered
-		$capped = (array)($condition['decode'] ?? []) !== [];
-		$read = 0;
+		// what the decode steps yield past the request's budget (Facts::DECODED_BUDGET), or past a step's own bound, is not read:
+		// the condition holds unanswered and says so, for patched() to answer on a pinned handler
+		$cut = ['matched' => '', 'resolved' => false, 'unread' => true];
+		$steps = (array)($condition['decode'] ?? []);
+		$short = false;
 		if($test === 'unsafe_html')
 		{
 			// the first value the filter changes; a value it cannot judge keeps the match unanswered
 			$pending = null;
 			foreach($values as $value)
 			{
-				[$decodedValues, $cut] = self::decoded($value, (array)($condition['decode'] ?? []), $facts->platforms);
-				// what a decode step left unread may hold
-				$unread = $unread || $cut;
+				[$decodedValues, $partly] = $steps === [] ? [[$value], false] : self::decodedOnce($value, $steps, $facts);
+				$short = $short || $partly;
 				foreach($decodedValues as $decoded)
 				{
-					if($capped && ++$read > Ruleset::DECODED_MAX)
+					// the host's filter costs the budget its weight
+					if($steps !== [] && $facts->spend(Facts::HOST_TEST_WEIGHT) === false)
 					{
-						return ['matched' => $values[0], 'resolved' => false];
+						return $cut;
 					}
 					$unsafe = $facts->htmlUnsafe($decoded);
 					if($unsafe === true)
@@ -4602,20 +4889,24 @@ final class Kernel
 					$pending ??= $unsafe === null ? $decoded : null;
 				}
 			}
+			// what a step left unread may hold
+			if($short)
+			{
+				return $cut;
+			}
 			
 			// an upload the host could not read is a value the filter could not judge
-			return $pending === null && $unread === false ? null : ['matched' => $pending ?? '', 'resolved' => false];
+			return $pending === null && $unreadable === false ? null : ['matched' => $pending ?? '', 'resolved' => false];
 		}
 		foreach($values as $value)
 		{
-			[$decodedValues, $cut] = self::decoded($value, (array)($condition['decode'] ?? []), $facts->platforms);
-			// what a decode step left unread may hold
-			$unread = $unread || $cut;
+			[$decodedValues, $partly] = $steps === [] ? [[$value], false] : self::decodedOnce($value, $steps, $facts);
+			$short = $short || $partly;
 			foreach($decodedValues as $decoded)
 			{
-				if($capped && ++$read > Ruleset::DECODED_MAX)
+				if($steps !== [] && $facts->spend() === false)
 				{
-					return ['matched' => $values[0], 'resolved' => false];
+					return $cut;
 				}
 				if(self::passes($test, $decoded, $condition, $facts->host()))
 				{
@@ -4623,9 +4914,14 @@ final class Kernel
 				}
 			}
 		}
+		// what a step left unread may hold
+		if($short)
+		{
+			return $cut;
+		}
 		
 		// an upload the host could not read may hold what no value read did
-		return $unread ? ['matched' => '', 'resolved' => false] : null;
+		return $unreadable ? ['matched' => '', 'resolved' => false] : null;
 	}
 	
 	/**
@@ -4793,13 +5089,15 @@ final class Kernel
 	}
 	
 	/**
-	 * A JSON body's values at a dot path, `*` for any key or element
+	 * A JSON body's values at a dot path, `*` for any key or element; at most
+	 * $limit of them
 	 *
 	 * @return list<string>
 	 */
 	public static function pickJson(
 		mixed $json,
 		string $path,
+		int $limit = PHP_INT_MAX,
 	): array
 	{
 		if(is_array($json) === false || $path === '')
@@ -4809,7 +5107,11 @@ final class Kernel
 		$values = [];
 		foreach(self::walk([$json], explode('.', $path)) as $node)
 		{
-			self::leaves($node, $values);
+			self::leaves($node, $values, $limit);
+			if(count($values) >= $limit)
+			{
+				break;
+			}
 		}
 		
 		return $values;
@@ -4872,17 +5174,26 @@ final class Kernel
 		return $nodes;
 	}
 	
-	/** every scalar under a node, as the string a test reads */
+	/** every scalar under a node, as the string a test reads, until $values holds $limit of them: the rest is never built */
 	protected static function leaves(
 		mixed $node,
 		array &$values,
+		int $limit = PHP_INT_MAX,
 	): void
 	{
+		if(count($values) >= $limit)
+		{
+			return;
+		}
 		if(is_array($node))
 		{
 			foreach($node as $child)
 			{
-				self::leaves($child, $values);
+				self::leaves($child, $values, $limit);
+				if(count($values) >= $limit)
+				{
+					return;
+				}
 			}
 			
 			return;
@@ -4897,10 +5208,29 @@ final class Kernel
 	}
 	
 	/**
+	 * decoded() once per request for a value and its steps, whichever rule
+	 * reads them — a batch's thousand sub-requests carrying one value decode
+	 * it once — built no further than the budget left
+	 *
+	 * @return array{list<string>, bool}
+	 */
+	protected static function decodedOnce(
+		string $value,
+		array $steps,
+		Facts $facts,
+	): array
+	{
+		$names = implode(',', array_map(static fn(Platform $platform): string => $platform->name(), $facts->platforms));
+		$key = 'decoded:' . hash('xxh3', $names . "\0" . implode("\0", $steps) . "\0" . $value);
+		
+		return $facts->keptShared($key, static fn(): array => self::decoded($value, $steps, $facts->platforms, min(Ruleset::DECODED_MAX, $facts->remaining())));
+	}
+	
+	/**
 	 * A value through the decode steps: every value the last step yields,
 	 * and whether a step read only part of what it was given. url and
-	 * base64 yield one or none; a step's values past DECODED_MAX are not
-	 * carried on — one past it is, so the condition still sees there were more
+	 * base64 yield one or none; a step's values past $limit are not built
+	 * — one past it is, so the condition still sees there were more
 	 *
 	 * @param list<Platform> $platforms the modules whose steps are read
 	 * @return array{list<string>, bool}
@@ -4909,6 +5239,7 @@ final class Kernel
 		string $value,
 		array $steps,
 		array $platforms = [],
+		int $limit = Ruleset::DECODED_MAX,
 	): array
 	{
 		$values = [$value];
@@ -4921,17 +5252,20 @@ final class Kernel
 			$next = [];
 			foreach($values as $one)
 			{
-				[$out, $short] = self::step($step, $one, $platform);
-				$cut = $cut || $short;
-				foreach($out as $decoded)
+				$room = $limit + 1 - count($next);
+				[$out, $short] = self::step($step, $one, $platform, $room);
+				$cut = $cut || $short || count($out) > $room;
+				foreach(array_slice($out, 0, $room) as $decoded)
 				{
 					$next[] = $decoded;
 				}
-			}
-			if(count($next) > Ruleset::DECODED_MAX + 1)
-			{
-				$next = array_slice($next, 0, Ruleset::DECODED_MAX + 1);
-				$cut = true;
+				// the one past the limit is built, nothing beyond it
+				if(count($next) > $limit)
+				{
+					$cut = true;
+					
+					break;
+				}
 			}
 			$values = $next;
 		}
@@ -4941,9 +5275,10 @@ final class Kernel
 	
 	/**
 	 * One decode step over one value: the values it yields — none when it
-	 * cannot read the value — and whether it read only part of it (a
-	 * module's step past its own bounds). A step none of the core's is the
-	 * module's that decodes it; one no module given reads yields nothing
+	 * cannot read the value, at most $room of a JSON document's — and whether
+	 * it read only part of it (a module's step past its own bounds, a json
+	 * step over a value past Facts::JSON_CAP). A step none of the core's is
+	 * the module's that decodes it; one no module given reads yields nothing
 	 *
 	 * @return array{list<string>, bool}
 	 */
@@ -4951,6 +5286,7 @@ final class Kernel
 		string $step,
 		string $value,
 		?Platform $platform = null,
+		int $room = PHP_INT_MAX,
 	): array
 	{
 		if($step === 'url')
@@ -4966,6 +5302,11 @@ final class Kernel
 		}
 		if($step === 'json' || str_starts_with($step, 'json:'))
 		{
+			// not decoded past the cap, as a JSON body is not: a megabyte costs the request its decoding, not a 9 MB value
+			if(strlen($value) > Facts::JSON_CAP)
+			{
+				return [[], true];
+			}
 			// an object or an array read as the json: target reads a body: a scalar or invalid JSON yields nothing
 			$json = json_decode($value, true, Facts::JSON_DEPTH);
 			if(is_array($json) === false)
@@ -4975,12 +5316,12 @@ final class Kernel
 			$values = [];
 			if($step === 'json')
 			{
-				self::leaves($json, $values);
+				self::leaves($json, $values, $room);
 				
 				return [$values, false];
 			}
 			
-			return [self::pickJson($json, substr($step, strlen('json:'))), false];
+			return [self::pickJson($json, substr($step, strlen('json:')), $room), false];
 		}
 		
 		return $platform === null ? [[], false] : $platform->decode($step, $value);
