@@ -208,6 +208,26 @@ final class Wordpress implements Platform
 		return self::jsonMediaType($contentType);
 	}
 	
+	/**
+	 * The method WordPress runs a REST request as
+	 * (WP_REST_Server::serve_request()): $_GET['_method'], else the
+	 * X-HTTP-Method-Override header, upper-cased by set_method(). Null off a
+	 * REST route (routes()), for a batch's sub-request — serve_batch_request_v1()
+	 * takes the method the item names — and where neither is sent
+	 */
+	public function appMethod(
+		Facts $facts,
+	): ?string
+	{
+		if($facts->outer() !== null || self::routes($facts) === [])
+		{
+			return null;
+		}
+		$override = $facts->query['_method'] ?? ($facts->headers['x-http-method-override'] ?? null);
+		
+		return is_string($override) && $override !== '' ? strtoupper($override) : null;
+	}
+	
 	/** a REST prefix without its slashes; none is WordPress's default, wp-json */
 	public static function restPrefixOf(
 		string $prefix,
@@ -297,13 +317,19 @@ final class Wordpress implements Platform
 				$routes[] = $route;
 			}
 		}
-		foreach([...Kernel::pick($facts->query, 'rest_route'), ...Kernel::pick($facts->form, 'rest_route')] as $value)
+		// rest_route is a query var WP::parse_request() reads, from $_POST then $_GET, and parse_request() runs through the front
+		// controller alone (frontController()); PHP fills $_POST on POST alone, and a batch's sub-request has no query vars of its own
+		$bags = $facts->outer() === null && self::frontController($facts) ? (strtoupper($facts->method) === 'POST' ? [$facts->query, $facts->form] : [$facts->query]) : [];
+		foreach($bags as $bag)
 		{
-			// WordPress's empty(): '' and '0' address no route, and an untrailed '0' is the index
-			if($value !== '' && $value !== '0')
+			foreach(Kernel::pick($bag, 'rest_route') as $value)
 			{
-				$route = self::untrailed($value);
-				$routes[] = $route === '0' ? '/' : $route;
+				// WordPress's empty(): '' and '0' address no route, and an untrailed '0' is the index
+				if($value !== '' && $value !== '0')
+				{
+					$route = self::untrailed($value);
+					$routes[] = $route === '0' ? '/' : $route;
+				}
 			}
 		}
 		foreach($routes as $route)
@@ -350,12 +376,28 @@ final class Wordpress implements Platform
 		return $subs;
 	}
 	
-	/** whether a request addresses WordPress's batch route */
+	/**
+	 * Whether a path reaches WordPress's front controller — index.php by
+	 * name, or a pretty path a rewrite hands it — the one place wp() runs
+	 * WP::parse_request() (wp-blog-header.php): wp-admin's scripts,
+	 * wp-login.php, xmlrpc.php and a plugin's own file never do, so
+	 * rest_route and the REST method override mean nothing there
+	 */
+	public static function frontController(
+		Facts $facts,
+	): bool
+	{
+		$script = $facts->scriptPath();
+		
+		return preg_match('~\.php$~i', $script) !== 1 || preg_match('~(^|/)index\.php$~i', $script) === 1;
+	}
+	
+	/** whether a request addresses WordPress's batch route as the method it runs (appMethod()): the route answers POST alone */
 	public static function isBatch(
 		Facts $facts,
 	): bool
 	{
-		return array_filter(self::routes($facts), static fn(string $route): bool => strcasecmp($route, self::BATCH_ROUTE) === 0) !== [];
+		return $facts->appMethod() === 'POST' && array_filter(self::routes($facts), static fn(string $route): bool => strcasecmp($route, self::BATCH_ROUTE) === 0) !== [];
 	}
 	
 	/**
@@ -384,6 +426,7 @@ final class Wordpress implements Platform
 			}
 			$sources[] = $facts->json();
 		}
+		// the form as PHP parsed it: the batch route takes POST alone, so no body the kernel parses itself reaches it
 		foreach([...$sources, $facts->form, $facts->query] as $source)
 		{
 			if(is_array($source) && isset($source['requests']))
