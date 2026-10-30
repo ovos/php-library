@@ -250,7 +250,7 @@ class Shield extends Test
 		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => []];
 		$subject = $this->subject(['detect' => true], 'install-nudge-' . uniqid());
 		$store = $subject->kernel()->store();
-		$store->write(Ruleset::fromPayload($payload, time(), '', $one)->toRecord());
+		$store->write(Ruleset::fromPayload($payload, time(), '', $one)->toRecord(Kernel::sealKey('test-key')));
 		$off = new Subject($this->config(['detect' => false]), 'install-nudge-off-' . uniqid());
 		
 		try
@@ -284,7 +284,7 @@ class Shield extends Test
 		];
 		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => $rules];
 		$enforcing = $this->subject(['detect' => true, 'enforce' => true]);
-		$enforcing->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord());
+		$enforcing->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord(Kernel::sealKey('test-key')));
 		$observing = $this->subject(['detect' => true, 'enforce' => false]);
 		$killed = $this->subject(['detect' => true, 'enforce' => true, 'kill' => true]);
 		
@@ -348,7 +348,7 @@ class Shield extends Test
 		{
 			$this->paths[] = $subject->file();
 			// fetched past the interval, so the pull goes out and names the platforms; it fails, and the rules stay
-			$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time() - Kernel::INTERVAL - 1, platforms: $subject->platforms())->toRecord());
+			$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time() - Kernel::INTERVAL - 1, platforms: $subject->platforms())->toRecord(Kernel::sealKey('test-key')));
 			$pulls[] = $subject->pull();
 			$verdicts[] = $this->judgedAt('/wp-json/fx/v1/items', $subject);
 		}
@@ -380,7 +380,7 @@ class Shield extends Test
 		$verdicts = [];
 		foreach([$moved, $default] as $subject)
 		{
-			$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time(), platforms: $subject->platforms())->toRecord());
+			$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time(), platforms: $subject->platforms())->toRecord(Kernel::sealKey('test-key')));
 			$verdicts[] = $this->judgedAt('/custom-prefix/fx/v1/items', $subject);
 			$verdicts[] = $this->judgedAt('/wp-json/fx/v1/items', $subject);
 		}
@@ -403,7 +403,7 @@ class Shield extends Test
 		$subject = $this->subject(['detect' => true, 'enforce' => true], 'install-proxy-' . uniqid());
 		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p',
 			'rules' => [$this->rule(4, 'ip', 'equals', '198.51.100.7', Ruleset::MODE_PROVEN)]];
-		$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord());
+		$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord(Kernel::sealKey('test-key')));
 		$saved = $_SERVER;
 		try
 		{
@@ -463,7 +463,7 @@ class Shield extends Test
 		$rate = ['kind' => 'rate', 'rate' => ['key' => 'ip', 'limit' => 1, 'window' => 60]] + $this->rule(7, 'uri', 'prefix', '/search', Ruleset::MODE_PROVEN);
 		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => [$rate]];
 		$enforcing = $this->subject(['detect' => true, 'enforce' => true], 'install-rate-' . uniqid());
-		$enforcing->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord());
+		$enforcing->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord(Kernel::sealKey('test-key')));
 		$search = Facts::fromServer(['REQUEST_URI' => '/search?q=x', 'HTTP_USER_AGENT' => 'Mozilla/5.0', 'REMOTE_ADDR' => '203.0.113.9']);
 		
 		$first = $enforcing->judge($search);

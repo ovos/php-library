@@ -76,11 +76,23 @@ final class Wordpress implements Platform
 	/** WordPress's batch route: each request it lists reaches its own route's handler */
 	public const BATCH_ROUTE = '/batch/v1';
 	
-	/** the batch's sub-requests judged at most — WordPress takes 25 unless a site raises it; past this the batch holds unanswered */
+	/**
+	 * the batch's sub-requests judged at most — WordPress refuses a batch of
+	 * more requests than rest_get_max_batch_size, 25 unless a site raises it,
+	 * so one past this runs nothing honest, and a vpatch its unread requests
+	 * may reach fails closed (overflows()). The count is WordPress's limit,
+	 * not the bytes: a batch within it whose body runs past JSON_CAP holds
+	 * unanswered, since an editor saving 25 large posts sends one
+	 */
 	public const BATCH_MAX = 1000;
 	
-	/** the shortcodes or blocks one decode step reads in a value at most: past them the value is not read in full and the condition holds unanswered */
-	public const OCCURRENCES_MAX = 256;
+	/**
+	 * the shortcodes or blocks one decode step reads in a value at most: no
+	 * post carries that many of one tag, and the read costs under 60 ms
+	 * there; past them the value is not read in full and the condition holds
+	 * as one past Ruleset::DECODED_MAX does (Kernel::patched())
+	 */
+	public const OCCURRENCES_MAX = 16384;
 	
 	/** a shortcode tag as add_shortcode() takes one, in printable ASCII: never `<>&/[]=` or a space */
 	public const SHORTCODE_TAG = '~^[^<>&/\[\]\x00-\x20=\x7f-\xff]{1,100}$~D';
@@ -179,6 +191,14 @@ final class Wordpress implements Platform
 	): bool
 	{
 		return self::batchReaches($rule, $facts);
+	}
+	
+	/** whether the batch lists more requests than the kernel reads (batchOverflows()): WordPress refuses one past its own count, so nothing honest fails closed */
+	public function overflows(
+		Facts $facts,
+	): bool
+	{
+		return self::batchOverflows($facts);
 	}
 	
 	public function jsonType(
@@ -392,7 +412,7 @@ final class Wordpress implements Platform
 	/**
 	 * Whether a request is a batch whose sub-requests the kernel did not
 	 * read in full: the JSON body that comes first past JSON_CAP
-	 * (Facts::jsonUnread()), or a list past BATCH_MAX
+	 * (Facts::jsonUnread()), or a list past BATCH_MAX (batchOverflows())
 	 */
 	public static function batchUnread(
 		Facts $facts,
@@ -403,11 +423,21 @@ final class Wordpress implements Platform
 		{
 			return false;
 		}
-		if(self::jsonFirst($facts) && $facts->jsonUnread())
-		{
-			return true;
-		}
-		$list = self::batchList($facts);
+		
+		return (self::jsonFirst($facts) && $facts->jsonUnread()) || self::batchOverflows($facts);
+	}
+	
+	/**
+	 * Whether a batch lists more requests than BATCH_MAX, which WordPress
+	 * itself refuses to run: a vpatch the unread ones may reach fails closed
+	 * at no honest cost, where a body past JSON_CAP, whose count WordPress
+	 * would accept, only holds unanswered
+	 */
+	public static function batchOverflows(
+		Facts $facts,
+	): bool
+	{
+		$list = self::isBatch($facts) ? self::batchList($facts) : null;
 		
 		return is_array($list) && count($list) > self::BATCH_MAX;
 	}
