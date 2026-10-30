@@ -14,6 +14,7 @@ use function apcu_delete;
 use function apcu_enabled;
 use function apcu_store;
 use function array_fill;
+use function count;
 use function function_exists;
 use function intdiv;
 use function preg_quote;
@@ -415,6 +416,63 @@ class Rollup extends Test
 		}
 		
 		return $heard === [$answer];
+	}
+	
+	/**
+	 * RULE: a seq that starts over takes a new instance. Under apc.ttl APCu
+	 * may drop the seq counter, which is only ever incremented, while the
+	 * instance, read on every flush, survives: the old instance with a seq
+	 * from 1 again repeats pairs the console has seen, and a console that
+	 * dedups on (instance, seq) drops each fragment as a retry. Skipped
+	 * without APCu. Falsify: take the instance before the seq — the third
+	 * fragment ships the first one's instance with seq 1 again.
+	 */
+	public function aSeqThatStartsOverTakesANewInstance(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			return true;
+		}
+		$rollup = new class(new ArrayObject(['enabled' => true, 'url' => 'https://console.invalid', 'key' => 'k', 'rollups' => true]),
+			'install-seq-' . uniqid()) extends CodesafeRollup
+		{
+			/** @var list<array{string, int}> */
+			public array $sent = [];
+			
+			public function shipMinute(
+				int $minute,
+			): void
+			{
+				apcu_store($this->key(($minute - 1) . ':requests'), 3);
+				$this->flush($minute);
+			}
+			
+			/** what an idle eviction does: the seq counter gone, the instance kept */
+			public function dropSeq(): void
+			{
+				apcu_delete($this->key(self::SEQ_KEY));
+			}
+			
+			protected function send(
+				array $payload,
+			): ?string
+			{
+				$this->sent[] = [$payload['instance'], $payload['seq']];
+				
+				return null;
+			}
+		};
+		$minute = intdiv(time(), 60);
+		$rollup->shipMinute($minute);
+		$rollup->shipMinute($minute + 1);
+		$rollup->dropSeq();
+		$rollup->shipMinute($minute + 2);
+		apcu_delete(new APCUIterator('~^' . preg_quote($rollup->getPrefix(), '~') . '~'));
+		[$first, $second, $restarted] = $rollup->sent + [null, null, null];
+		
+		return count($rollup->sent) === 3
+			&& $first[1] === 1 && $second === [$first[0], 2]
+			&& $restarted[1] === 1 && $restarted[0] !== $first[0];
 	}
 	
 	/**
