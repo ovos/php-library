@@ -6,15 +6,7 @@ namespace Ovos\Form\Element;
 use Ovos\Form\Element;
 use Ovos\Form\Validator;
 
-/**
- * An element whose value is a list — the class spelling of
- * Element::asCollection(), for setElement(). See asCollection() for the
- * contract: a scalar where an array belongs is a single field error (the
- * Validator\Collection gate), and null passes ("no restriction" is a
- * value for several lists).
- *
- * @author Marcin Gil <mg@ovos.at>
- */
+/** Collection element. */
 class Collection extends Element
 {
 	public const string ERROR_TYPE = Validator\Collection::ERROR_COLLECTION;
@@ -23,6 +15,11 @@ class Collection extends Element
 		?string $typeMessage = null,
 	)
 	{
-		$this->asCollection($typeMessage);
+		$validator = new Validator\Collection;
+		if($typeMessage !== null)
+		{
+			$validator->withMessage($typeMessage);
+		}
+		$this->addInputValidator($validator);
 	}
 }

@@ -11,16 +11,7 @@ use function is_numeric;
 use function sprintf;
 
 /**
- * Range — a number between bounds, either of which may be left open.
- *
- * An UNSET value passes, like every other validator here: "must be filled in"
- * is NotEmpty's job, and an optional field with a range is an ordinary thing
- * to want. Unset means null or '' specifically, NOT empty() — 0 and '0' are
- * empty() and are exactly the values a `min: 1` exists to reject.
- *
- * A value that is not a number at all fails: declaring a range says the field
- * IS a number, and silently passing "abc" would leave the caller casting it
- * to 0 afterwards.
+ * Checks numeric bounds. Null and '' are allowed when nullable is true.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -43,15 +34,7 @@ class Range extends Validator
 		self::ERROR_TOO_LARGE => '"%s" must be %s or less.',
 	];
 	
-	/**
-	 * @param bool $nullable whether an unset value (null or '') passes. True
-	 *                       is the HTML-form meaning — optional field,
-	 *                       requiredness is NotEmpty's job. A JSON caller can
-	 *                       send an EXPLICIT null, and a field whose column
-	 *                       cannot hold one needs nullable: false, or the null
-	 *                       sails past the range straight into a database
-	 *                       error.
-	 */
+	/** $nullable permits an unset value (null or an empty string). */
 	public function __construct(
 		protected int|float|null $min = null,
 		protected int|float|null $max = null,

@@ -12,10 +12,21 @@ use Ovos\Form\Filter;
  */
 class Integer extends Filter
 {
+	public function __construct(
+		protected bool $nullable = false,
+	)
+	{
+	}
+	
 	public function filter(
 		mixed $value,
-	): int
+	): ?int
 	{
+		if($this->nullable && ($value === null || $value === ''))
+		{
+			return null;
+		}
+		
 		return (int)$value;
 	}
 }

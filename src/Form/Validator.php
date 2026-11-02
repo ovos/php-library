@@ -91,12 +91,7 @@ abstract class Validator
 		return $this->messages[$errorCode];
 	}
 	
-	/**
-	 * One text for EVERY error code this validator can raise — for the
-	 * common case where the caller has one message and does not care which
-	 * rule tripped ("must be between 1 and 1440 minutes" reads the same
-	 * whether the value was too small, too large or not a number at all).
-	 */
+	/** Sets the same message for every error code. */
 	public function withMessage(
 		string $message,
 	): static

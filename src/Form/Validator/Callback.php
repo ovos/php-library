@@ -18,11 +18,7 @@ class Callback extends Validator
 	// Errors
 	public const string ERROR_CALLBACK = 'callback';
 	
-	/**
-	 * Overwrite with setMessage() for a task-specific text; without this
-	 * default a failing callback used to FATAL on sprintf(null) instead of
-	 * producing a form error
-	 */
+	/** @var string[] */
 	protected array $messages = [
 		self::ERROR_CALLBACK => '"%s" is not valid.',
 	];
@@ -46,11 +42,7 @@ class Callback extends Validator
 		Closure $callback,
 	): static
 	{
-		// the rebinding is what lets a closure call $this->setMessage(...) for
-		// a dynamic error text — but a STATIC closure cannot be rebound, and
-		// `static fn` is the ordinary way to write a callback that needs no
-		// $this. Binding unconditionally turned that idiom into a warning
-		// today and an error in PHP 9.
+		// Non-static callbacks can access the validator through $this.
 		$this->callback = (new ReflectionFunction($callback))->isStatic()
 			? $callback
 			: $callback->bindTo($this, $this);

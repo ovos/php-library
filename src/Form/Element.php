@@ -6,14 +6,8 @@ namespace Ovos\Form;
 use Ovos\Exception;
 use Ovos\Form;
 
-use function array_filter;
 use function count;
-use function implode;
-use function in_array;
 use function is_array;
-use function sprintf;
-use function strtolower;
-use function trim;
 
 /**
  * Element
@@ -28,53 +22,33 @@ class Element
 	
 	protected null|string|bool|int|float|array $value = null;
 	
+	protected bool $valueProcessed = false;
+	
 	protected ?string $label = null;
 	
 	/**
-	 * @var Validator[]
+	 * @var array<array{validator: Validator, breakOnFailure: bool}>
 	 */
 	protected array $validators = [];
 	
 	/**
-	 * @var Filter[]
+	 * @var array<array{filter: Filter, each: bool}>
 	 */
 	protected array $filters = [];
 	
 	/**
-	 * Whole-value transform-or-reject steps — see addNormalizer()
-	 *
-	 * @var Normalizer[]
+	 * Validators applied to raw input, before filters.
+	 * @var array<array{validator: Validator, breakOnFailure: bool}>
 	 */
-	protected array $normalizers = [];
+	protected array $inputValidators = [];
 	
-	/**
-	 * The message of the normalizer that rejected the current value;
-	 * null while the value passes
-	 */
-	protected ?string $normalizerError = null;
+	protected bool $inputValid = true;
 	
-	/**
-	 * Post-validation transforms — see addCast()
-	 *
-	 * @var callable[]
-	 */
+	/** @var Error[] */
+	protected array $inputErrors = [];
+	
+	/** @var array<callable|Filter> */
 	protected array $casts = [];
-	
-	/**
-	 * The type gate — see asText()/asNumber()/asCollection(). A VALIDATOR
-	 * (Validator\Text|Number|Collection) that judges the RAW value before
-	 * filters, normalizers and validators run: a value of the wrong shape is
-	 * the field's single error, and the message lives on the validator,
-	 * overwritable exactly like every other rule's.
-	 */
-	protected ?Validator\Gate $gate = null;
-	
-	/**
-	 * asInteger()'s whole-number check — kept apart from the validators so it
-	 * runs AFTER them: a Range on the field answers 0.5 with its bounds, the
-	 * more useful message, and the step error comes only when the bounds hold
-	 */
-	protected ?Validator\WholeNumber $whole = null;
 	
 	/**
 	 * @var Error[]
@@ -153,69 +127,21 @@ class Element
 		bool $default = false,
 	): null|string|bool|int|float|array
 	{
-		$value = $this->form
-			->getRawValue($this->id);
+		$value = $this->getForm()->getRawValue($this->id);
 		
-		// return the default value, if no other value is present
-		// do not filter it, we assume it's in filtered state
-		if($value === null
-			&& $default === true)
+		// Defaults are already prepared for display.
+		if($value === null && $default)
 		{
-			return $this->form
-				->getDefaultValue($this->id);
+			return $this->getForm()->getDefaultValue($this->id);
 		}
 		
-		// if a default value was not requested, process our value & cache it for future calls
-		// some filters also process null values (for example, casting to int)
-		if($this->value === null)
+		if($this->valueProcessed === false)
 		{
-			// a value the gate refuses has no usable value: filters and
-			// normalizers are written assuming the gate protected them, so
-			// running them on a hostile shape warns or worse — the field
-			// error is isValid()'s business, and every read answers null
-			if($this->gate !== null
-				&& $this->gate->conforms($value) === false)
-			{
-				return null;
-			}
-			
-			if(is_array($value))
-			{
-				foreach($value as &$item)
-				{
-					$item = $this->filterValue($item);
-				}
-				unset($item);
-			}
-			else
-			{
-				$value = $this->filterValue($value);
-			}
-			
-			// normalizers run AFTER the filters and always on the value as a
-			// WHOLE — filters apply per item of an array value (the HTML
-			// multi-input contract), which is exactly what a whole-array
-			// normalizer cannot live with
-			$this->normalizerError = null;
-			foreach($this->normalizers as $normalizer)
-			{
-				$value = $normalizer->normalize($value);
-				
-				if($value === null)
-				{
-					$this->normalizerError = sprintf(
-						(string)$normalizer->getMessage(Normalizer::ERROR_NORMALIZER),
-						$this->getName(),
-					);
-					
-					break;
-				}
-			}
-			
-			$this->value = $value;
+			[$this->inputValid, $this->inputErrors] = $this->validateValue($value, $this->inputValidators);
+			$this->value = $this->inputValid ? $this->filterValue($value) : null;
+			$this->valueProcessed = true;
 		}
 		
-		// return cached value
 		return $this->value;
 	}
 	
@@ -234,7 +160,9 @@ class Element
 	public function reset(): static
 	{
 		$this->value = null;
-		$this->normalizerError = null;
+		$this->valueProcessed = false;
+		$this->inputValid = true;
+		$this->inputErrors = [];
 		
 		return $this;
 	}
@@ -267,72 +195,40 @@ class Element
 		mixed $value,
 	): mixed
 	{
-		foreach($this->filters as $filter)
+		foreach($this->filters as ['filter' => $filter, 'each' => $each])
 		{
-			$value = $filter->filter($value);
+			if($each && is_array($value))
+			{
+				foreach($value as &$item)
+				{
+					$item = $filter->filter($item);
+				}
+				unset($item);
+			}
+			else
+			{
+				$value = $filter->filter($value);
+			}
 		}
 		
 		return $value;
 	}
 	
+	/** Set $each to false to filter an array as a whole. */
 	public function addFilter(
 		Filter $filter,
+		bool $each = true,
 	): static
 	{
-		$this->filters[] = $filter;
+		$this->filters[] = ['filter' => $filter, 'each' => $each];
+		$this->reset();
 		
 		return $this;
 	}
 	
-	/**
-	 * A whole-value transform-or-reject step, for input a filter cannot
-	 * express: it runs AFTER the filters, always on the value as a whole
-	 * (filters apply per item of an array value — the HTML multi-input
-	 * contract), its return becomes the element's value, and returning NULL
-	 * rejects the value — isValid() then reports the message and skips the
-	 * validators, so a field carries one error, not a cascade.
-	 *
-	 * For a field where null is itself a legal value, use validators: a
-	 * normalizer is for fields whose null means "invalid". The message
-	 * follows the validator convention — %s becomes the element name.
-	 */
-	public function addNormalizer(
-		callable|Normalizer $normalizer,
-		?string $message = null,
-	): static
-	{
-		if($normalizer instanceof Normalizer === false)
-		{
-			$normalizer = new Normalizer\Callback($normalizer);
-		}
-		
-		if($message !== null)
-		{
-			$normalizer->setMessage(Normalizer::ERROR_NORMALIZER, $message);
-		}
-		
-		$this->normalizers[] = $normalizer;
-		
-		return $this;
-	}
-	
-	/**
-	 * @return Normalizer[]
-	 */
-	public function getNormalizers(): array
-	{
-		return $this->normalizers;
-	}
-	
-	/**
-	 * A post-validation transform, applied by getCastValue() only — after
-	 * filters, normalizers and validators have all seen the untransformed
-	 * value. For the storage form ("0 stores as null", "the full set
-	 * collapses", "the flag becomes 1/0") where transforming earlier would
-	 * hide what validation needs to see.
-	 */
+	/** Output conversion, applied only by getCastValue(). */
 	public function addCast(
-		callable $cast,
+		callable|Filter $cast,
 	): static
 	{
 		$this->casts[] = $cast;
@@ -340,239 +236,85 @@ class Element
 		return $this;
 	}
 	
-	/**
-	 * The value with the casts applied — the storage form
-	 */
+	/** Call after successful validation when preparing values for storage. */
 	public function getCastValue(): null|string|bool|int|float|array
 	{
 		$value = $this->getValue();
 		
 		foreach($this->casts as $cast)
 		{
-			$value = $cast($value);
+			$value = $cast instanceof Filter ? $cast->filter($value) : $cast($value);
 		}
 		
 		return $value;
 	}
 	
-	/**
-	 * Type the element as text: a non-scalar value (a JSON array or object
-	 * where a string belongs) is a single field error, and the storage form
-	 * (getCastValue()) is the string. NULL passes the gate — whether the
-	 * field may be absent or empty stays the business of the validators.
-	 *
-	 * The as*() family types the element the form's own way — on first
-	 * access, in the same chain that configures it:
-	 *
-	 *   $this->title->asText()->addValidator(new Validator\NotEmpty);
-	 *
-	 * The Element\Text|Number|Flag|Collection classes are the same thing
-	 * spelled as a class, for setElement().
-	 */
-	public function asText(
-		?string $message = null,
+	/** A failed input validator prevents filtering and subsequent validation. */
+	public function addInputValidator(
+		Validator $validator,
 	): static
 	{
-		$this->gate = new Validator\Text;
-		if($message !== null)
-		{
-			$this->gate->withMessage($message);
-		}
-		
-		return $this->addCast(static fn(mixed $value): ?string
-			=> $value === null ? null : (string)$value);
-	}
-	
-	/**
-	 * Type the element as a number: anything not numeric ("12abc") is a
-	 * single field error, never a silent (int) cast downstream. NULL and ''
-	 * pass the gate as "unset" (the notion Validator\Range uses) — pair with
-	 * Range(nullable: false) for a NOT NULL column. The storage form is the
-	 * actual int|float ("15" becomes 15); null and '' become null.
-	 */
-	public function asNumber(
-		?string $message = null,
-	): static
-	{
-		$this->gate = new Validator\Number;
-		if($message !== null)
-		{
-			$this->gate->withMessage($message);
-		}
-		
-		return $this->addCast(static fn(mixed $value): null|int|float
-			=> $value === null || $value === '' ? null : $value + 0);
-	}
-	
-	/**
-	 * Type the element as a whole number, the storage form an INT column
-	 * wants: the Number gate (the type — "12abc" is a field error), a
-	 * whole-number check (the step — 5.7 is refused, 60.0 is fine), and the
-	 * cast to int. NULL and '' pass as "unset" and store as NULL; pair with
-	 * Range(nullable: false) for a NOT NULL column.
-	 *
-	 * $message is the gate's text, exactly as asNumber() takes it, so a field
-	 * moving from asNumber() keeps its answer to junk; $wholeMessage is the
-	 * step's ("must be a whole number of minutes") and falls back to
-	 * $message — one field, one message, unless the two need to differ. The
-	 * step runs after the element's own validators, so a Range's bounds are
-	 * reported first.
-	 */
-	public function asInteger(
-		?string $message = null,
-		?string $wholeMessage = null,
-	): static
-	{
-		$this->gate = new Validator\Number;
-		if($message !== null)
-		{
-			$this->gate->withMessage($message);
-		}
-		$this->whole = new Validator\WholeNumber($wholeMessage ?? $message);
-		
-		return $this->addCast(static fn(mixed $value): ?int
-			=> $value === null || $value === '' ? null : (int)$value);
-	}
-	
-	/**
-	 * Type the element as one of a closed list: the Text gate, then the value
-	 * trimmed and lowercased and refused unless it is one of $choices — a
-	 * select's value, so anything else is a tampered payload, not a typo to
-	 * repair. $message answers both the wrong shape and the wrong word, and
-	 * defaults to "must be one of …" naming the list. Put '' in $choices when
-	 * "none" is an answer; an explicit null is read as ''.
-	 *
-	 * @param list<string> $choices lowercase
-	 */
-	public function asChoice(
-		array $choices,
-		?string $message = null,
-	): static
-	{
-		$message ??= 'must be one of ' . implode(', ', array_filter($choices, static fn(string $choice): bool => $choice !== ''));
-		
-		return $this->asText($message)
-			->addNormalizer(
-				static function(mixed $value) use ($choices): ?string
-				{
-					$token = strtolower(trim((string)($value ?? '')));
-					
-					return in_array($token, $choices, true) ? $token : null;
-				},
-				$message,
-			);
-	}
-	
-	/**
-	 * Type the element as an on/off switch. No gate and no rules: anything
-	 * truthy counts as on — a JSON true, an HTML checkbox's "on", a 1 — and
-	 * the storage form is 1/0, which is what a TINYINT column wants. A sent
-	 * null is off, so a NOT NULL column never meets a NULL.
-	 */
-	public function asFlag(): static
-	{
-		return $this->addCast(static fn(mixed $value): int => $value ? 1 : 0);
-	}
-	
-	/**
-	 * Type the element as a list: a scalar where an array belongs is a
-	 * single field error, before it could reach an array-shaped normalizer
-	 * or a JSON column. NULL passes the gate — for several list fields null
-	 * is itself a value ("no restriction"), and where it is not, the field's
-	 * normalizer or validators say so.
-	 *
-	 * Remember that FILTERS apply per item of an array value (the HTML
-	 * multi-input contract) — a whole-list transform belongs in a normalizer
-	 * or a cast, not a filter.
-	 */
-	public function asCollection(
-		?string $message = null,
-	): static
-	{
-		$this->gate = new Validator\Collection;
-		if($message !== null)
-		{
-			$this->gate->withMessage($message);
-		}
+		$this->inputValidators[] = ['validator' => $validator, 'breakOnFailure' => true];
+		$this->reset();
 		
 		return $this;
-	}
-	
-	/**
-	 * The type gate's validator — overwrite its message from outside exactly
-	 * as on any validator: getGate()?->withMessage(…)
-	 */
-	public function getGate(): ?Validator\Gate
-	{
-		return $this->gate;
 	}
 	
 	public function addValidator(
 		Validator $validator,
+		bool $breakOnFailure = false,
 	): static
 	{
-		$this->validators[] = $validator;
+		$this->validators[] = ['validator' => $validator, 'breakOnFailure' => $breakOnFailure];
 		
 		return $this;
 	}
 	
-	public function isValid(): bool
+	/** @return array{bool, Error[]} */
+	protected function validateValue(
+		mixed $value,
+		array $validators,
+	): array
 	{
-		$this->errors = []; // reset errors
+		$isValid = true;
+		$errors = [];
 		
-		// the type gate judges the RAW value — a wrong shape is this single
-		// field error, before a filter, normalizer or validator could trip
-		// over it
-		if($this->gate !== null)
+		foreach($validators as ['validator' => $validator])
 		{
-			$this->gate->setElement($this);
-			$this->gate->clearErrors();
-			
-			if($this->gate->isValid($this->getForm()
-				->getRawValue($this->getId(withFormId: false))) === false)
+			$validator->setElement($this);
+			$validator->clearErrors();
+		}
+		
+		foreach($validators as ['validator' => $validator, 'breakOnFailure' => $breakOnFailure])
+		{
+			if($validator->isValid($value) === false)
 			{
-				$this->addErrors($this->gate->getErrors());
-				
-				return false;
+				$isValid = false;
+				$errors = [...$errors, ...$validator->getErrors()];
+				if($breakOnFailure)
+				{
+					break;
+				}
 			}
 		}
 		
+		return [$isValid, $errors];
+	}
+	
+	public function isValid(): bool
+	{
+		$this->clearErrors();
 		$value = $this->getUserValue();
 		
-		// a normalizer rejected the value — its message is the field's one
-		// error, and the validators never see the rejected input
-		if($this->normalizerError !== null)
+		if($this->inputValid === false)
 		{
-			$this->addError(new Error(Normalizer::ERROR_NORMALIZER,
-				$this->normalizerError));
+			$this->addErrors($this->inputErrors);
 			
 			return false;
 		}
 		
-		$isValid = true;
-		
-		foreach($this->validators as $validator)
-		{
-			$validator->setElement($this);
-			if($validator->isValid($value) === false)
-			{
-				$isValid = false;
-				$this->addErrors($validator->getErrors());
-			}
-		}
-		
-		// asInteger()'s step, last — only once the other rules held, so the
-		// field carries one error and it is the most useful one
-		if($isValid && $this->whole !== null)
-		{
-			$this->whole->setElement($this);
-			$this->whole->clearErrors();
-			if($this->whole->isValid($value) === false)
-			{
-				$isValid = false;
-				$this->addErrors($this->whole->getErrors());
-			}
-		}
+		[$isValid, $errors] = $this->validateValue($value, $this->validators);
+		$this->addErrors($errors);
 		
 		return $isValid;
 	}

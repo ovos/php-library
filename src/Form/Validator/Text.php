@@ -4,19 +4,13 @@ declare(strict_types=1);
 namespace Ovos\Form\Validator;
 
 use Ovos\Form\Error;
+use Ovos\Form\Validator;
 
 use function is_scalar;
 use function sprintf;
 
-/**
- * Text — the value is a piece of text: null or a scalar. The type gate
- * behind Element::asText(), and usable standalone wherever a string shape
- * must hold. NULL passes: whether the field may be absent or empty stays
- * the business of NotEmpty.
- *
- * @author Marcin Gil <mg@ovos.at>
- */
-class Text extends Gate
+/** Accepts null or a scalar value. */
+class Text extends Validator
 {
 	// Errors
 	public const string ERROR_TEXT = 'type_text';
