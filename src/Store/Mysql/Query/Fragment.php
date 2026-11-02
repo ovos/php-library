@@ -3,7 +3,11 @@ declare(strict_types=1);
 
 namespace Ovos\Store\Mysql\Query;
 
-/** SQL with positional bindings. */
+/**
+ * SQL with positional bindings
+ *
+ * @author Marcin Gil <mg@ovos.at>
+ */
 final class Fragment
 {
 	public readonly array $values;
