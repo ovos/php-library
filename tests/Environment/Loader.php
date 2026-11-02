@@ -51,7 +51,7 @@ class Loader extends Test
 		return $environment instanceof Environment
 			&& $environment->getEnv() === 'development'
 			&& $environment->getConfig()['MYSQL']['HOST'] === 'db.local'
-			&& $this->store()->get(self::CACHE_ID) === null;
+			&& $this->store()->get(self::CACHE_ID, queue: false) === null;
 	}
 	
 	public function rememberedEnvironmentAnswersTheNextLoad(): bool
@@ -112,7 +112,7 @@ class Loader extends Test
 		$subject->remember(self::FILE, new Environment(['ENV' => 'remembered']), self::CACHE_ID);
 		$subject->forget(self::FILE, self::CACHE_ID);
 		
-		return $this->store()->get(self::CACHE_ID) === null
+		return $this->store()->get(self::CACHE_ID, queue: false) === null
 			&& $subject->load(self::FILE, self::CACHE_ID)?->getEnv() === 'development';
 	}
 }

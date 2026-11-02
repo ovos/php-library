@@ -12,6 +12,7 @@ use Ovos\Test\Exception\SkipException;
 use Closure;
 use RuntimeException;
 
+use function apcu_key_info;
 use function count;
 use function is_array;
 use function microtime;
@@ -29,6 +30,8 @@ use function usleep;
  */
 trait TraitStaleWhileRevalidate
 {
+	use TraitStoredTime;
+
 	protected const string STALE_TAG = 'stale-tag';
 	
 	protected const string SOFT_TAG = 'soft-tag';
@@ -166,12 +169,16 @@ trait TraitStaleWhileRevalidate
 		$key = $this->staleKey('refresh-lock-ttl');
 		$id = $this->staleId($store, $key);
 		$taken = null;
+		$lockTtl = null;
 		$this->writeAged($store, $key, 'old');
 		
-		$served = $store->get($key, function() use ($rival, $id, &$taken): string
+		$served = $store->get($key, function() use ($store, $rival, $id, &$taken, &$lockTtl): string
 		{
-			// past the default lock TTL (2 s on Redis, 1 s on APCu)
-			usleep(2200000);
+			// Inspect the real lock: the call's 6 s, not the default 1–2 s.
+			$lockKey = $id . ':lock';
+			$lockTtl = $store instanceof KeyValueRedis
+				? (int)$store->getClient()->pTtl($lockKey)
+				: (int)(apcu_key_info($lockKey)['ttl'] ?? 0) * 1000;
 			$taken = $rival->getMemoLock()->tryLock($id);
 			
 			return 'new';
@@ -183,6 +190,7 @@ trait TraitStaleWhileRevalidate
 		$store->delete($key);
 		
 		return $served === 'new'
+			&& $lockTtl > 5000 && $lockTtl <= 6000
 			&& $taken === false;
 	}
 	

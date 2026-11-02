@@ -15,7 +15,6 @@ use RuntimeException;
 
 use function count;
 use function microtime;
-use function usleep;
 
 /**
  * TraitCachePolicy
@@ -45,15 +44,16 @@ trait TraitCachePolicy
 		$key = $this->staleKey('computed-ttl');
 		$store->delete($key);
 		
-		$value = $store->get($key, fn() => new Computed('short-lived', ttl: 1), 60);
+		$value = $store->get($key, fn() => new Computed('short-lived', ttl: 10), 60);
 		$hit = $this->staleStore()->get($key, queue: false);
-		usleep(2100000);
-		$expired = $this->staleStore()->get($key, queue: false);
+		// Check the backend's actual data TTL, including Redis field expiry
+		// when the invalidation mark outlives the value.
+		$ttl = $this->storedTtlMs($store, $key);
 		$store->delete($key);
 		
 		return $value === 'short-lived'
 			&& $hit === 'short-lived'
-			&& $expired === null;
+			&& $ttl > 9000 && $ttl <= 10000;
 	}
 	
 	/**
@@ -295,7 +295,14 @@ trait TraitCachePolicy
 		$store->get($kept, fn() => 'kept', 1, stale: 1, staleIfError: 60);
 		$store->get($missed, fn() => 'old', 1, stale: 1, staleIfError: 60);
 		$store->get($noStale, fn() => 'kept without stale', 1, staleIfError: 60);
-		usleep(2600000);
+		// Verify retention before ageing the envelopes the real writer made.
+		// Dropping staleIfError from the write must still fail this test.
+		$keptTtl = $this->storedTtlMs($store, $kept);
+		$missedTtl = $this->storedTtlMs($store, $missed);
+		$noStaleTtl = $this->storedTtlMs($store, $noStale);
+		$this->ageStoredValue($store, $kept, 10);
+		$this->ageStoredValue($store, $missed, 10);
+		$this->ageStoredValue($store, $noStale, 10);
 		$served = $this->staleStore()->get($kept, $failing, 1, stale: 1, staleIfError: 60);
 		$reader = $this->staleStore();
 		$this->capture($reader, $deferred);
@@ -308,6 +315,9 @@ trait TraitCachePolicy
 		$store->delete($noStale);
 		
 		return $served === 'kept'
+			&& $keptTtl > 61000 && $keptTtl <= 62000
+			&& $missedTtl > 61000 && $missedTtl <= 62000
+			&& $noStaleTtl > 60000 && $noStaleTtl <= 61000
 			&& $computed === 'new' && $calls === 1 && $deferred === []
 			&& $servedWithoutStale === 'kept without stale';
 	}
