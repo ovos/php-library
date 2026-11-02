@@ -12,13 +12,7 @@ use function mb_strlen;
 use function sprintf;
 
 /**
- * Length — a string of between min and max CHARACTERS, either bound optional.
- *
- * Characters, not bytes: mb_strlen, because the cap this usually mirrors is a
- * VARCHAR(n) in utf8mb4, and counting bytes would refuse a name that fits.
- *
- * An unset value passes (NotEmpty's job). Unset is null or '' specifically —
- * see Range for why empty() is the wrong test.
+ * Checks text length in characters.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -62,9 +56,6 @@ class Length extends Validator
 			return true;
 		}
 		
-		// an array reaching a length rule is a form wiring mistake (a
-		// multi-select where a text field was declared), not user input to
-		// measure — say so rather than counting its elements
 		if(is_scalar($value) === false)
 		{
 			$this->fail(self::ERROR_NOT_A_STRING);

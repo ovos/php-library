@@ -4,16 +4,10 @@ declare(strict_types=1);
 namespace Ovos\Form\Element;
 
 use Ovos\Form\Element;
+use Ovos\Form\Filter;
 use Ovos\Form\Validator;
 
-/**
- * An element whose value is a piece of text — the class spelling of
- * Element::asText(), for setElement(). See asText() for the contract:
- * non-scalar values are a single field error (the Validator\Text gate),
- * null passes, and the storage form is the string.
- *
- * @author Marcin Gil <mg@ovos.at>
- */
+/** Text element. */
 class Text extends Element
 {
 	public const string ERROR_TYPE = Validator\Text::ERROR_TEXT;
@@ -22,6 +16,12 @@ class Text extends Element
 		?string $typeMessage = null,
 	)
 	{
-		$this->asText($typeMessage);
+		$validator = new Validator\Text;
+		if($typeMessage !== null)
+		{
+			$validator->withMessage($typeMessage);
+		}
+		$this->addInputValidator($validator);
+		$this->addCast(new Filter\Text);
 	}
 }

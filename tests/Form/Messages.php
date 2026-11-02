@@ -3,52 +3,42 @@ declare(strict_types=1);
 
 namespace Tests\Form;
 
+use Ovos\Form\Filter;
 use Ovos\Form\Json;
-use Ovos\Form\Normalizer;
 use Ovos\Form\Validator;
 use Ovos\Test;
 
-/**
- * The message contract: every message is a plain English default that lives
- * on its RULE — the validators' $messages, the type gate (a validator too),
- * the normalizer's own — each behind the same public setMessage()/
- * withMessage() API. A project overwrites any of them from outside, per
- * form, with a different variation or a translation. No translator runs
- * inside the machinery.
- *
- * @author Marcin Gil <mg@ovos.at>
- */
 class Messages extends Test
 {
-	/** untouched, the gate speaks its English default */
-	public function theGateMessageDefaultsToEnglish(): bool
+	public function theInputValidatorMessageDefaultsToEnglish(): bool
 	{
 		$form = new Json;
-		$form->period->asNumber();
+		$form->period->addInputValidator(new Validator\Number)
+			->addCast(new Filter\Number);
 		$form->setValues(['period' => '12abc']);
 		$form->isValid();
 		
 		return $form->getErrorMessages()['period'] === '"period" must be a number.';
 	}
 	
-	/** the gate is a validator — its message overwrites like any other */
-	public function theGateMessageIsOverwritable(): bool
+	public function theInputValidatorMessageIsOverwritable(): bool
 	{
 		$form = new Json;
-		$form->period->asNumber();
-		$form->period->getGate()->withMessage('"%s" muss eine Zahl sein.');
+		$validator = new Validator\Number;
+		$form->period->addInputValidator($validator);
+		$validator->withMessage('"%s" muss eine Zahl sein.');
 		$form->setValues(['period' => '12abc']);
 		$form->isValid();
 		
 		return $form->getErrorMessages()['period'] === '"period" muss eine Zahl sein.'
-			&& $form->period->getGate() instanceof Validator\Number;
+			&& $form->getErrors()[0]->getValidator() === $validator;
 	}
 	
-	/** …and the gate error carries its validator, like any other error */
-	public function aGateErrorCarriesItsValidator(): bool
+	public function anInputErrorCarriesItsValidator(): bool
 	{
 		$form = new Json;
-		$form->period->asNumber();
+		$form->period->addInputValidator(new Validator\Number)
+			->addCast(new Filter\Number);
 		$form->setValues(['period' => '12abc']);
 		$form->isValid();
 		
@@ -59,37 +49,36 @@ class Messages extends Test
 			&& $errors[0]->getValidator() instanceof Validator\Number;
 	}
 	
-	/** a normalizer owns its message, behind the same API */
-	public function theNormalizerMessageIsOverwritable(): bool
+	public function aNullResultReportsTheValidatorsMessage(): bool
 	{
-		$normalizer = new Normalizer\Callback(static fn(mixed $value): mixed => null);
-		$normalizer->setMessage(Normalizer::ERROR_NORMALIZER, '"%s" ist ungültig.');
+		$validator = new Validator\NotNull;
+		$validator->setMessage(Validator\NotNull::ERROR_NULL, '"%s" ist ung?ltig.');
 		
 		$form = new Json;
-		$form->slug->addNormalizer($normalizer);
+		$form->slug
+			->addFilter(new Filter\Callback(static fn(mixed $value): mixed => null), each: false)
+			->addValidator($validator);
 		$form->setValues(['slug' => 'x']);
-		$form->isValid();
 		
-		return $form->getErrorMessages()['slug'] === '"slug" ist ungültig.';
+		return $form->isValid() === false
+			&& $form->getErrorMessages()['slug'] === '"slug" ist ung?ltig.'
+			&& $form->getErrors()[0]->getValidator() === $validator;
 	}
 	
-	/** the addNormalizer() message parameter presets it, defaults stay English */
-	public function aNormalizerMessagePresetBeatsTheDefault(): bool
+	public function aNotNullMessageCanBePreset(): bool
 	{
 		$form = new Json;
-		$form->slug->addNormalizer(static fn(mixed $value): mixed => null,
-			'must be a slug');
-		$form->other->addNormalizer(static fn(mixed $value): mixed => null);
-		$form->setValues(['slug' => 'x', 'other' => 'y']);
+		$form->slug->addValidator(new Validator\NotNull('must be a slug'));
+		$form->other->addValidator(new Validator\NotNull);
+		$form->setValues(['slug' => null, 'other' => null]);
 		$form->isValid();
 		
-		$messages = $form->getErrorMessages();
-		
-		return $messages['slug'] === 'must be a slug'
-			&& $messages['other'] === '"other" is not valid.';
+		return $form->getErrorMessages() === [
+			'slug' => 'must be a slug',
+			'other' => '"other" is not valid.',
+		];
 	}
 	
-	/** validator messages overwrite through their public setter, as always */
 	public function aValidatorMessageIsOverwritable(): bool
 	{
 		$form = new Json;

@@ -15,19 +15,7 @@ use function is_scalar;
 use function sprintf;
 
 /**
- * InArray — the value is one of a known set (a <select>, a status column, an
- * enum a table stores).
- *
- * STRICT by default. A loose in_array() is the classic way a whitelist stops
- * being one: '0' == 'anything-non-numeric' under the old juggling rules, and
- * a status field would accept a word nobody listed.
- *
- * A LIST value (multi-select) is checked entry by entry, so one declaration
- * covers both shapes — that is the difference between "role" and "roles", and
- * writing the loop at every call site is how one of them ends up unchecked.
- *
- * An unset value passes (NotEmpty's job); an empty ARRAY is unset too, since
- * a multi-select with nothing chosen has nothing to check.
+ * Checks membership using strict comparison by default. Array values are checked item by item.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -44,19 +32,18 @@ class InArray extends Validator
 		self::ERROR_NOT_ALLOWED => '"%s" must be one of: %s.',
 	];
 	
-	/**
-	 * How many allowed values the message names before it gives up and just
-	 * says the field is wrong — a list of 200 country codes is not a message
-	 */
+	/** Maximum number of choices listed in an error message. */
 	public const int MESSAGE_MAX_VALUES = 12;
 	
 	/**
 	 * @param array $allowed the permitted values
+	 * @param bool $nullable whether unset values may bypass the membership check
 	 */
 	public function __construct(
 		protected array $allowed,
 		protected bool $strict = true,
 		?string $message = null,
+		protected bool $nullable = true,
 	)
 	{
 		if($message !== null)
@@ -69,9 +56,16 @@ class InArray extends Validator
 		mixed $value,
 	): bool
 	{
-		if($value === null || $value === '' || $value === [])
+		if($this->nullable && ($value === null || $value === '' || $value === []))
 		{
 			return true;
+		}
+		
+		if($value === [])
+		{
+			$this->fail();
+			
+			return false;
 		}
 		
 		foreach(is_array($value) ? $value : [$value] as $item)

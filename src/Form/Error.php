@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Form;
 
 /**
- * Element
+ * Error
  *
  * @author Marcin Gil <mg@ovos.at>
  */
