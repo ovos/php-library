@@ -5,24 +5,19 @@ namespace Ovos\Store\Mysql;
 
 use Ovos\Pdo\Expression;
 use Ovos\Store\Mysql\Query\Condition;
+use Ovos\Store\Mysql\Query\Fragment;
 
 use function array_fill;
 use function array_push;
-use function array_shift;
 use function array_values;
 use function count;
 use function implode;
-use function is_array;
 use function is_callable;
 
 /**
  * Query
  *
- * A query carries its values. A condition, a join or a HAVING clause given as
- * a tuple [sql, ...values] records them next to the SQL; INSERT and UPDATE
- * columns are PHP values (an Expression is SQL and is written as given); and
- * getValues() hands everything back in the order the SQL emits it.
- * Store\Mysql::statement() prepares, binds by position and executes.
+ * SQL fragments carry their bindings; getValues() returns them in SQL order.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -48,7 +43,7 @@ abstract class Query
 	protected array $columns = [];
 	
 	/**
-	 * The values of the column fragments: a SELECT tuple's, an UPDATE SET's
+	 * The values of the column fragments: a SELECT fragment's, an UPDATE SET's
 	 */
 	protected array $columnValues = [];
 	
@@ -105,18 +100,18 @@ abstract class Query
 	}
 	
 	/**
-	 * A join as a string, or as a tuple [sql, ...values] when its ON clause
+	 * A join as a string, or as a Fragment when its ON clause
 	 * carries `?` placeholders; joins are emitted in the order written
 	 */
 	public function innerJoin(
-		string|array ...$joins,
+		string|Fragment ...$joins,
 	): static
 	{
 		return $this->join(self::JOIN_INNER, $joins);
 	}
 	
 	public function leftJoin(
-		string|array ...$joins,
+		string|Fragment ...$joins,
 	): static
 	{
 		return $this->join(self::JOIN_LEFT, $joins);
@@ -149,22 +144,17 @@ abstract class Query
 	}
 	
 	/**
-	 * A fragment given as a string, or as a tuple [sql, ...values]
+	 * A fragment given as a string, or as a Fragment
 	 *
 	 * @return array{string, list<mixed>}
 	 */
 	protected static function fragment(
-		mixed $fragment,
+		string|Fragment $fragment,
 	): array
 	{
-		if(is_array($fragment) === false)
-		{
-			return [(string)$fragment, []];
-		}
-		
-		$sql = (string)array_shift($fragment);
-		
-		return [$sql, array_values($fragment)];
+		return $fragment instanceof Fragment
+			? [$fragment->sql, $fragment->values]
+			: [$fragment, []];
 	}
 	
 	/**
@@ -191,26 +181,26 @@ abstract class Query
 	}
 	
 	/**
-	 * Conditions, ANDed: a string, a tuple [sql, ...values], or a Closure
+	 * Conditions, ANDed: a string, a Fragment, or a callable
 	 * building a nested group. `where(fn($q) => $q->where('a = 1')->orWhere('b = 1'))`
 	 * emits `(a = 1 OR b = 1)`.
 	 */
 	public function where(
-		string|array|callable ...$conditions,
+		string|Fragment|callable ...$conditions,
 	): static
 	{
 		return $this->addConditions($conditions, Condition::OPERATOR_AND);
 	}
 	
 	public function andWhere(
-		string|array|callable ...$conditions,
+		string|Fragment|callable ...$conditions,
 	): static
 	{
 		return $this->where(...$conditions);
 	}
 	
 	public function orWhere(
-		string|array|callable ...$conditions,
+		string|Fragment|callable ...$conditions,
 	): static
 	{
 		return $this->addConditions($conditions, Condition::OPERATOR_OR);
@@ -223,8 +213,7 @@ abstract class Query
 	{
 		foreach($conditions as $condition)
 		{
-			// a tuple is never a callable here: arrays are [sql, ...values]
-			if(is_array($condition) === false && is_callable($condition))
+			if(is_callable($condition))
 			{
 				$nested = $this->getNestedCondition($condition, $operator);
 				if($nested !== null)
@@ -246,7 +235,7 @@ abstract class Query
 	}
 	
 	/**
-	 * The group a Closure builds on a clone of this query; its values join
+	 * The group a callable builds on a clone of this query; its values join
 	 * this query's where the group sits
 	 */
 	protected function getNestedCondition(

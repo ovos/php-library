@@ -78,11 +78,11 @@ class Select extends Query
 	}
 	
 	/**
-	 * A column as a string, or as a tuple [sql, ...values] when the
+	 * A column as a string, or as a Fragment when the
 	 * expression carries `?` placeholders
 	 */
 	public function select(
-		string|array ...$fields,
+		string|Fragment ...$fields,
 	): static
 	{
 		foreach($fields as $field)
@@ -131,10 +131,10 @@ class Select extends Query
 	}
 	
 	/**
-	 * HAVING conditions, ANDed: a string or a tuple [sql, ...values]
+	 * HAVING conditions, ANDed: a string or a Fragment
 	 */
 	public function having(
-		string|array ...$conditions,
+		string|Fragment ...$conditions,
 	): static
 	{
 		foreach($conditions as $condition)

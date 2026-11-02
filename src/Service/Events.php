@@ -35,11 +35,8 @@ class Events
 	 */
 	protected array $events = [];
 	
-	/**
-	 * Log writers, built lazily from what is registered (the file Logger and,
-	 * when the sender is registered, the console Writer). Null until first use.
-	 */
-	protected ?array $writers = null;
+	/** @var Writer[] */
+	protected array $writers = [];
 	
 	public function __construct()
 	{
@@ -95,16 +92,7 @@ class Events
 		set_exception_handler([$this, 'handleException']);
 	}
 	
-	/**
-	 * Logs an event (message/error/exception) by fanning it out to every
-	 * registered writer — the file Logger and, when the error console sender is
-	 * registered, the console Writer. Each writer is isolated so one failure
-	 * neither blocks the others nor re-enters the log path (which would recurse).
-	 *
-	 * The named priority argument selects the severity of a logged message —
-	 * log('disk almost full on %s', $host, priority: Priority::WARNING); a
-	 * plain string logs as NOTICE (see Normalizer for the full contract).
-	 */
+	/** Log to each writer; a failed writer does not block the others. */
 	public function log(
 		...$event,
 	): static
@@ -133,52 +121,22 @@ class Events
 		return $this;
 	}
 	
-	/**
-	 * The registered log writers, built lazily: the file Logger, plus the
-	 * console Writer when the sender is registered (the isRegistered gate keeps
-	 * the console optional per environment).
-	 *
-	 * @return Writer[]
-	 */
+	/** @return Writer[] */
 	protected function getWriters(): array
 	{
-		if($this->writers !== null)
-		{
-			return $this->writers;
-		}
-		
-		$this->writers = [];
-		
-		// file writer — the Logger service
-		if($this->container->isRegistered(Logger::SYMBOL))
-		{
-			$this->writers[] = $this->container->get(Logger::SYMBOL);
-		}
-		
-		// console writer — only when the error console sender is registered
-		if($this->container->isRegistered(Codesafe\Sender::SYMBOL))
-		{
-			$this->writers[] = new Codesafe\Writer(
-				$this->container->get(Codesafe\Sender::SYMBOL),
-			);
-		}
-		
 		return $this->writers;
 	}
 	
-	/**
-	 * Register an extra log writer beyond the file/console defaults.
-	 */
-	public function addWriter(
-		Writer $writer,
-	): static
+	public function addWriter(Writer $writer, ?string $key = null): static
 	{
-		if($this->writers === null)
+		if($key === null)
 		{
-			$this->getWriters();
+			$this->writers[] = $writer;
 		}
-		
-		$this->writers[] = $writer;
+		else
+		{
+			$this->writers[$key] = $writer;
+		}
 		
 		return $this;
 	}

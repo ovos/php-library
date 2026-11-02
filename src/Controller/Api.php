@@ -35,27 +35,12 @@ class Api extends Controller
 		return Body::json($maxBytes);
 	}
 	
-	/**
-	 * The request body as a typed Input reader (string/int/bool/array/
-	 * ids/email…), empty when the body is missing or malformed - the
-	 * recommended way to read a JSON payload without hand-rolled casts.
-	 */
+	/** Typed access to the body; malformed or absent input produces an empty reader. */
 	protected function input(
 		int $maxBytes = self::BODY_MAX_BYTES,
 	): Input
 	{
 		return Body::input($maxBytes);
-	}
-	
-	/**
-	 * A capped list of positive int ids from a single {id} or an {ids:[…]} body.
-	 */
-	protected function bodyIds(
-		array $body,
-		int $max = 100,
-	): array
-	{
-		return Body::ids($body, $max);
 	}
 	
 	/**

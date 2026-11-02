@@ -48,7 +48,7 @@ use const JSON_UNESCAPED_UNICODE;
  * is DROPPED rather than handed back to the search.
  *
  * The Logger is passed in rather than reached for: it carries the project's
- * own addRemove()/addUsernames() extensions, so a body must be scrubbed by
+ * own addRemove() extensions, so a body must be scrubbed by
  * THIS application's list and not a default one.
  *
  * @author Marcin Gil <mg@ovos.at>

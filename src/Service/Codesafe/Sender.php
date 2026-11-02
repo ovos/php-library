@@ -329,6 +329,17 @@ class Sender extends Service
 	
 	protected static bool $flushing = false;
 	
+	public function boot(Application $app): void
+	{
+		parent::boot($app);
+		$app->getServices()->events->addWriter(new Writer($this), static::SYMBOL);
+	}
+
+	public function terminate(): void
+	{
+		$this->flush();
+	}
+
 	public function __construct(
 		#[Inject('config')]
 		#[InjectArrayObject(self::CONFIG)]
@@ -537,22 +548,11 @@ class Sender extends Service
 	 * default. null leaves the kind's default (codesafe
 	 * docs/plans/sender-security-priority.md).
 	 *
-	 *   $sender->reportRefusal('auth_failure', 'login failed for ' . Sender::maskName($username),
+	 *   $sender->reportRefusal('auth_failure', 'login failed',
 	 *       [], ['userId' => (string)$user->id], Priority::ERROR);
 	 *
-	 * $kind must come from SECURITY_KINDS (anything else is a silent no-op —
-	 * codesafe refuses unknown kinds wholesale, so sending one would only
-	 * waste the request). $message is the human line and travels into an
-	 * INDEXED, displayed field: mask identifiers yourself — maskName() for
-	 * usernames — and never include a credential; the server scrub is a
-	 * backstop, not permission. The sender's own masking stops at secrets
-	 * (codesafe docs/plans/identity-round-2026-10.md): an e-mail address is
-	 * found by its shape in any text and masked and vaulted on arrival, but
-	 * a bare username in prose is not recognisable as one there, so it
-	 * would be stored in clear — that one stays this call site's to mask.
-	 *
-	 *   $sender->reportRefusal('auth_failure',
-	 *       'login failed for ' . Sender::maskName($username));
+	 * Unknown kinds are ignored. Put usernames in structured fields so the server
+	 * can recognize them; do not include credentials in the message.
 	 *
 	 * $context is the per-event word on the request context, merged over the
 	 * base the flush builds (array_replace — the caller wins). Its case is
@@ -563,7 +563,7 @@ class Sender extends Service
 	 * kind and account, never by its masked line.
 	 *
 	 *   $sender->reportRefusal('auth_success',
-	 *       'login succeeded for ' . Sender::maskName($username) . ' after 3 recent failures',
+	 *       'login succeeded after 3 recent failures',
 	 *       ['failures' => 3], ['userId' => (string)$user->id]);
 	 */
 	public function reportRefusal(
@@ -594,36 +594,6 @@ class Sender extends Service
 		}
 		
 		return $this;
-	}
-	
-	/**
-	 * A username reduced to every fourth character, the rest starred (bob ->
-	 * b**, marcin -> m***i*) — the same mask every scrub path applies, offered
-	 * here so a reportRefusal call site is a one-liner. The mask is as long as
-	 * the value it replaced, and past Logger::MASK_MAX it states the real
-	 * length instead ("[200]"); see Logger::maskName(), which this mirrors.
-	 */
-	public static function maskName(
-		string $value,
-	): string
-	{
-		if($value === ''
-			|| preg_match(Logger::MASKED_CUT_PATTERN, $value) === 1)
-		{
-			return $value;
-		}
-		
-		$length = mb_strlen($value);
-		$cut = min($length, Logger::MASK_MAX);
-		$masked = '';
-		for($index = 0; $index < $cut; $index++)
-		{
-			$masked.= $index % Logger::MASK_GROUP === 0
-				? mb_substr($value, $index, 1)
-				: '*';
-		}
-		
-		return $length > $cut ? $masked . '[' . $length . ']' : $masked;
 	}
 	
 	/**
@@ -1026,14 +996,8 @@ class Sender extends Service
 		
 		$logLevel = $this->getLogLevel();
 		$context = null;
-		// the shared scrub patterns live in the Logger service — its
-		// keepingIdentities() copy: every secret is dropped here as always,
-		// while e-mail addresses and usernames in the extras, the uri, the
-		// referer and the CLI arguments travel as sent — codesafe masks them
-		// on arrival and keeps the original encrypted for an audited REVEAL
-		// (codesafe docs/plans/identity-round-2026-10.md). The local log file
-		// never sees this copy and keeps masking
-		$logger = $this->getLogger()->keepingIdentities();
+		// Identity processing belongs to the server.
+		$logger = $this->getLogger();
 		
 		// the deploy label (git sha, svn revision, any string): codesafe.release,
 		// else the .release stamp — constant across the batch, read once
@@ -1285,21 +1249,15 @@ class Sender extends Service
 	{
 		$request = [];
 		
-		// the request data keeps its e-mail addresses and usernames: the
-		// codesafe masks them on arrival and keeps the original encrypted for
-		// an audited reveal and a replay (codesafe docs/plans/reveal-everything.md).
-		// Secrets are dropped here exactly as always
-		$bags = $logger->keepingIdentities();
-		
 		try
 		{
 			if(!empty($_GET))
 			{
-				$request['get'] = $bags->remove($_GET);
+				$request['get'] = $logger->remove($_GET);
 			}
 			if(!empty($_POST))
 			{
-				$request['post'] = $bags->remove($_POST);
+				$request['post'] = $logger->remove($_POST);
 			}
 			
 			$contentType = trim((string)($_SERVER['CONTENT_TYPE'] ?? ''));
@@ -1316,7 +1274,7 @@ class Sender extends Service
 			if($body !== '')
 			{
 				$reduced = Body::redact(
-					$bags,
+					$logger,
 					$body,
 					$contentType,
 					$this->requestBodyMode(),

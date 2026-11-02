@@ -5,12 +5,8 @@ namespace Ovos\Http;
 
 use JsonException;
 
-use function array_slice;
-use function ctype_digit;
 use function file_get_contents;
 use function is_array;
-use function is_int;
-use function is_string;
 use function json_decode;
 use function strlen;
 
@@ -105,44 +101,4 @@ final class Body
 		return is_array($data) ? $data : null;
 	}
 	
-	/**
-	 * A capped list of positive int ids from a decoded body carrying either a
-	 * single {id} or an {ids: […]} list — the bulk-id selection for JSON APIs.
-	 */
-	public static function ids(
-		array $body,
-		int $max = 100,
-		string $singleKey = 'id',
-		string $listKey = 'ids',
-	): array
-	{
-		$raw = is_array($body[$listKey] ?? null)
-			? $body[$listKey]
-			: [$body[$singleKey] ?? 0];
-		
-		$ids = [];
-		foreach(array_slice($raw, 0, $max) as $value)
-		{
-			// only real ints and digit strings qualify — a blind (int) cast
-			// coerces arrays and true to 1, so a malformed payload would
-			// mutate record id 1, which the request never named
-			if(is_int($value) === false)
-			{
-				if(is_string($value) === false
-					|| ctype_digit($value) === false)
-				{
-					continue;
-				}
-				
-				$value = (int)$value;
-			}
-			
-			if($value > 0)
-			{
-				$ids[] = $value;
-			}
-		}
-		
-		return $ids;
-	}
 }

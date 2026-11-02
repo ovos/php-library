@@ -730,8 +730,9 @@ CLI:  php cli.php controller action param1 value1
 
 ### Automatic Type Casting
 
-All URL and CLI parameters arrive as strings. The framework automatically casts them
-to match the type declarations on your action method using PHP reflection:
+Actions are invoked through PHP reflection, using PHP's native weak argument coercion
+for scalar and union types. Incompatible values raise `TypeError`. `preDispatch()` receives
+the parsed request arguments before conversion:
 
 ```php
 // GET /select/job/id/42/rating/3.5
@@ -1299,24 +1300,26 @@ $users = $store->find(
 `$this->query()` hands back a `QueryBuilder` for the store's table; `select()`, `insert()`,
 `update()` and `delete()` open the four query kinds.
 
-**A query carries its values.** A condition, a join or a HAVING clause written as a tuple
-`[sql, ...values]` records its values next to the SQL, INSERT and UPDATE columns are PHP
+**A query carries its values.** A condition, a join or a HAVING clause written as a `Fragment`
+(`new Fragment($sql, ...$values)`) records its values next to the SQL, INSERT and UPDATE columns are PHP
 values, and `getValues()` hands everything back in the order the SQL emits it — so there is
 nothing to pass alongside the query when it runs.
 
 #### SELECT
 
 ```php
+use Ovos\Store\Mysql\Query\Fragment;
+
 $query = $this->query()
-    ->select('u.id, u.username', ['IF(u.role = ?, 1, 0) AS staff', 'admin'])
+    ->select('u.id, u.username', new Fragment('IF(u.role = ?, 1, 0) AS staff', 'admin'))
     ->alias('u')
     ->leftJoin('orders o ON o.user_id = u.id')
-    ->innerJoin(['roles r ON r.id = u.role_id AND r.kind = ?', 'core'])
-    ->where(['u.active = ?', 1])
+    ->innerJoin(new Fragment('roles r ON r.id = u.role_id AND r.kind = ?', 'core'))
+    ->where(new Fragment('u.active = ?', 1))
     ->andWhere('u.deleted_at IS NULL')
     ->whereIn('u.status', ['open', 'muted'], bind: true)
     ->groupBy('u.id')
-    ->having(['COUNT(o.id) > ?', 2])
+    ->having(new Fragment('COUNT(o.id) > ?', 2))
     ->orderBy('u.created_at DESC')
     ->limit(10)
     ->offset(20);
@@ -1326,14 +1329,14 @@ $users = $this->fetchModels($query);
 
 | Method | Notes |
 |--------|-------|
-| `select(...$fields)` | a string, or a tuple `[sql, ...values]` when the expression carries `?` |
+| `select(...$fields)` | a string, or a `Fragment` when the expression carries `?` |
 | `from($table, $alias = null)` | SELECT only, and optional — the store's `TABLE` const is the default |
 | `alias($alias)` | aliases the primary table; on every kind that emits FROM (SELECT, UPDATE, DELETE) |
-| `innerJoin(...)`, `leftJoin(...)` | strings or tuples, emitted **in call order** — the two kinds live side by side |
-| `where()`, `andWhere()`, `orWhere()` | a string, a tuple, or a `Closure` building a nested group; every argument counts |
+| `innerJoin(...)`, `leftJoin(...)` | strings or fragments, emitted **in call order** — the two kinds live side by side |
+| `where()`, `andWhere()`, `orWhere()` | a string, a `Fragment`, or a callable building a nested group; every argument counts |
 | `whereIn($field, $values, bind: false)` | plus `andWhereIn`/`orWhereIn` and the `whereNotIn` trio; an empty list adds no condition |
 | `groupBy(...)`, `orderBy(...)` | varargs, comma-joined — `orderBy('a DESC', 'b')` |
-| `having(...)` | a string or a tuple, ANDed |
+| `having(...)` | a string or a `Fragment`, ANDed |
 | `limit(?int)`, `offset(?int)` | ints — a native prepare refuses a string-bound LIMIT |
 
 `orderBy()` and `limit()` are UPDATE's and DELETE's too (the batched write); `offset()` is
@@ -1341,14 +1344,14 @@ SELECT's alone.
 
 #### Values, and what binds
 
-A clause written as `[sql, ...values]` binds; a bare string is SQL as given. A `Closure`
+A clause written as `new Fragment($sql, ...$values)` binds; a bare string is SQL as given. A `Closure`
 opens a group, and its values land where the group sits:
 
 ```php
 $query = $this->query()
     ->select('id')
-    ->where(['created_at >= NOW() - INTERVAL ? DAY', 7])
-    ->where(fn($q) => $q->where(['active = ?', 1])->orWhere(['role = ?', 'admin']));
+    ->where(new Fragment('created_at >= NOW() - INTERVAL ? DAY', 7))
+    ->where(fn($q) => $q->where(new Fragment('active = ?', 1))->orWhere(new Fragment('role = ?', 'admin')));
 
 $query->getSql();     // WHERE created_at >= NOW() - INTERVAL ? DAY
                       // AND (active = ? OR role = ?)
@@ -1429,8 +1432,8 @@ $query = $this->query()
 $query = $this->query()
     ->update(state: 'resolved', modified_at: new Expression('NOW()'))
     ->alias('u')
-    ->innerJoin(['roles r ON r.id = u.role_id AND r.kind = ?', 'core'])
-    ->where(['u.id = ?', $id]);
+    ->innerJoin(new Fragment('roles r ON r.id = u.role_id AND r.kind = ?', 'core'))
+    ->where(new Fragment('u.id = ?', $id));
 
 // DELETE u FROM users u LEFT JOIN orders o … — the joined delete, aliases() naming
 // the table rows go from
@@ -1443,7 +1446,7 @@ $query = $this->query()
 
 // the batched purge
 $purged = $this->affected($this->query()
-    ->delete(['created_at < NOW() - INTERVAL ? DAY', 30])
+    ->delete(new Fragment('created_at < NOW() - INTERVAL ? DAY', 30))
     ->orderBy('id ASC')
     ->limit(1000));
 ```
@@ -1534,16 +1537,11 @@ public function index(): Response
 | `array($path, $default=[])` | any array |
 | `list($path, $default=[])` | a sequential list (a map does not qualify) |
 | `ids($max=100)` | capped **positive int** ids from `{id}` or `{ids:[…]}` |
-| `email($path)` | one validated email, or `null` |
-| `emails($path)` | a validated email list, or `null` if **any** entry is invalid |
 | `has($path)` / `get($path,$d)` / `all()` / `isEmpty()` | existence / raw / whole body / emptiness |
 
-For a bulk action:
-
-```php
-$body = $this->input(Body::BULK);
-$affected = $this->repository()->setChecked($body->ids(), $body->bool('checked', true));
-```
+Use forms for domain validation, including email addresses, recipient limits, and ID
+selections. Read raw values with `get()` or `all()` when validation must distinguish
+malformed input from an empty value. The reader's typed getters intentionally return defaults.
 
 The size tiers on `Http\Body` (`TINY` 4K, `SMALL` 16K, `MEDIUM` 64K, `BULK`
 256K) cap the accepted body so callers name a tier instead of a magic byte
@@ -1916,6 +1914,24 @@ class Auth extends Service
     }
 }
 ```
+
+### Service lifecycle
+
+Services listed in configuration are registered before any are booted. `boot(Application $app)`
+runs for each application, including reused service instances; overrides should call
+`parent::boot($app)`. `terminate()` runs after deferred response callbacks, in configuration
+order. Collected events remain available until all services have terminated.
+
+Log destinations register themselves with `events->addWriter($writer, $key)` during boot.
+A stable key replaces the writer on a later request. `Events` does not choose destinations.
+
+### Logger redaction
+
+`Logger::$remove` contains the field-name patterns used to redact credentials in arrays,
+text, URLs and CLI arguments. Extend these with `addRemove()`. Emails and usernames remain
+unchanged, including in local logs. The Codesafe sender uses the same rules; Codesafe handles
+identity masking and encryption on ingestion. Token shapes and generic query names such as
+`key` have no separate rules.
 
 ### Accessing Services
 

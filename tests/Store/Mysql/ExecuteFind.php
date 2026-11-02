@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Store\Mysql;
 
+use Ovos\Store\Mysql\Query\Fragment;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Model\Mysql as Model;
@@ -256,10 +257,10 @@ class ExecuteFind extends Test
 		
 		$updated = $store->affected($store->query()
 			->update(name: 'Iota', active: new Expression('1 - active'))
-			->where(['id = ?', 10]));
+			->where(new Fragment('id = ?', 10)));
 		$eta = $store->fetchModel($store->query()
 			->select('*')
-			->where(['id = ?', 10]));
+			->where(new Fragment('id = ?', 10)));
 		
 		return $inserted === 2
 			&& count($rows) === 2
