@@ -93,32 +93,12 @@ class Input extends Test
 			&& $in->list('missing') === [];
 	}
 	
-	public function idsAreCleanPositiveInts(): bool
-	{
-		$in = $this->input();
-		
-		// 1 and "2" qualify; 0, -3, "x", true are dropped
-		return $in->ids() === [1, 2];
-	}
-	
-	public function emailsValidateOrNull(): bool
-	{
-		$in = $this->input();
-		$bad = new Subject(['to' => ['a@example.com', 'not-an-email']]);
-		
-		return $in->emails('to') === ['a@example.com', 'b@example.com']
-			&& $in->email('to.0') === 'a@example.com'
-			&& $bad->emails('to') === null      // one invalid → whole payload rejected
-			&& $in->emails('missing') === [];
-	}
-	
 	public function emptyInput(): bool
 	{
 		$empty = new Subject;
 		
 		return $empty->isEmpty() === true
 			&& $empty->string('x', 'd') === 'd'
-			&& $empty->ids() === []
 			&& $this->input()->isEmpty() === false;
 	}
 }

@@ -8,7 +8,6 @@ use Ovos\Exception\RuntimeException;
 use Ovos\Exception\UnavailableException;
 use Ovos\Config\Loader as ConfigLoader;
 use Ovos\Response\Redirect;
-use Ovos\Service\Codesafe\Sender;
 use Ovos\Service\Memory;
 use Throwable;
 
@@ -93,6 +92,9 @@ class Application
 	 */
 	protected array $afterResponse = [];
 	
+	/** @var Service[] */
+	protected array $activeServices = [];
+
 	/**
 	 * Whether fastcgi_finish_request() released the client: the work after it
 	 * costs the visitor nothing (the codesafe sender's retry waits for it)
@@ -646,6 +648,7 @@ class Application
 			return $this;
 		}
 		
+		$symbols = [];
 		foreach($servicesToRegister as $service)
 		{
 			$serviceClass = self::resolveServiceClass(
@@ -653,10 +656,16 @@ class Application
 				$services::class,
 			);
 			
-			$services->register($serviceClass::SYMBOL, $serviceClass)
-				->get($serviceClass::SYMBOL);
+			$services->register($serviceClass::SYMBOL, $serviceClass);
+			$symbols[$serviceClass::SYMBOL] = $serviceClass::SYMBOL;
 		}
 		
+		foreach($symbols as $symbol)
+		{
+			$this->activeServices[$symbol] = $services->get($symbol);
+			$this->activeServices[$symbol]->boot($this);
+		}
+
 		return $this;
 	}
 	
@@ -900,10 +909,7 @@ class Application
 			$this->getServices()->events->log($throwable);
 		}
 		
-		// the response is sent — release the client, then run the deferred
-		// post-response callbacks (e.g. the codesafe flush), so the
-		// user never waits for them (best effort); a response finished early
-		// released it already (finishResponse())
+		// Release the client before deferred work unless finishResponse() already did.
 		if(function_exists('fastcgi_finish_request')
 			&& $this->isInterfaceHttp()
 			&& $this->responseSentEarly === false)
@@ -911,6 +917,16 @@ class Application
 			$this->responseFinished = fastcgi_finish_request();
 		}
 		
+		$this->terminateServices();
+
+		if($hasEvents)
+		{
+			exit(1); // exit with error status for github actions
+		}
+	}
+
+	protected function terminateServices(): void
+	{
 		foreach($this->afterResponse as $callback)
 		{
 			try
@@ -924,41 +940,27 @@ class Application
 		}
 		$this->afterResponse = [];
 		
-		// the codesafe sender flushes here, explicitly, as the last consumer:
-		// a cached sender on a warm worker cannot re-register an afterResponse
-		// hook on every new Application instance, and a request whose only
-		// errors arrive via events->add() (e.g. dispatch()) would otherwise
-		// never flush — its events silently lost to the drain below
-		try
+		foreach($this->activeServices as $service)
 		{
-			if($this->container->isRegistered(Sender::SYMBOL))
+			try
 			{
-				$this->container
-					->get(Sender::SYMBOL)
-					->flush();
+				$service->terminate();
+			}
+			catch(Throwable)
+			{
+				// A failed consumer must not prevent the others from finishing.
 			}
 		}
-		catch(Throwable)
-		{
-			// no codesafe sender — the events still drain below
-		}
+		$this->activeServices = [];
 		
-		// every post-response consumer (profiler stream, codesafe sender) has
-		// read the collected events by now — drain them here, once, so a
-		// reused worker does not re-report them on its next request; no
-		// single consumer may clear() and starve the ones after it
+		// Every consumer has now had access to the collected events.
 		try
 		{
 			$this->getServices()->events->clear();
 		}
 		catch(Throwable)
 		{
-			// events service unavailable — nothing to drain
-		}
-		
-		if($hasEvents)
-		{
-			exit(1); // exit with error status for github actions
+			// Shutdown may follow a failure before services were initialized.
 		}
 	}
 	

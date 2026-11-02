@@ -36,6 +36,18 @@ abstract class Service
 		return $this->enabled;
 	}
 	
+	/** Called for each application, including when this service is reused. */
+	public function boot(Application $app): void
+	{
+		$this->app = $app;
+		$this->request = $app->getRequest();
+	}
+
+	/** Called after response callbacks, before collected events are cleared. */
+	public function terminate(): void
+	{
+	}
+
 	public function getSymbol(): string
 	{
 		return static::SYMBOL;

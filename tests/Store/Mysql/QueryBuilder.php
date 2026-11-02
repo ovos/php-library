@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Store\Mysql;
 
+use Ovos\Store\Mysql\Query\Fragment;
 use Ovos\Pdo\Expression;
 use Ovos\Test;
 use Ovos\Store\Mysql\QueryBuilder as BaseQueryBuilder;
@@ -16,6 +17,28 @@ class QueryBuilder extends Test
 {
 	protected BaseQueryBuilder $queryBuilder;
 	
+	public function callableArraysBuildGroupsAlongsideBoundFragments(): bool
+	{
+		$conditions = new class
+		{
+			public function active(\Ovos\Store\Mysql\Query $query): void
+			{
+				$query->where(new Fragment('active = ?', 1));
+			}
+
+			public static function selected(\Ovos\Store\Mysql\Query $query): void
+			{
+				$query->where(new Fragment('id = ?', 2));
+			}
+		};
+		$query = $this->queryBuilder->select('id')
+			->where([$conditions, 'active'], new Fragment('role = ?', 'admin'))
+			->orWhere([$conditions::class, 'selected']);
+		return $query->getValues() === [1, 'admin', 2]
+			&& str_contains($query->getSql(), 'WHERE (active = ?)')
+			&& str_contains($query->getSql(), 'OR (id = ?)');
+	}
+
 	public function __construct()
 	{
 		$this->queryBuilder = new BaseQueryBuilder('tests');
@@ -254,23 +277,23 @@ class QueryBuilder extends Test
 	}
 	
 	/**
-	 * RULE: a clause given as a tuple [sql, ...values] records its values,
+	 * RULE: a clause given as a Fragment records its values,
 	 * and getValues() hands them back in the order the SQL emits them:
 	 * columns, joins, conditions (a nested group's where it sits), HAVING,
 	 * whatever order the clauses were written in.
 	 */
 	public function values(): bool
 	{
-		$query = $this->queryBuilder->select('t.id', ['IF(t.kind = ?, 1, 0) AS flagged', 'error'])
+		$query = $this->queryBuilder->select('t.id', new Fragment('IF(t.kind = ?, 1, 0) AS flagged', 'error'))
 			->alias('t')
-			->having(['COUNT(*) > ?', 2])
-			->where(['t.created_at >= NOW() - INTERVAL ? DAY', 7])
-			->innerJoin(['tests_groups tr ON tr.id_test = t.id AND tr.kind = ?', 'core'])
+			->having(new Fragment('COUNT(*) > ?', 2))
+			->where(new Fragment('t.created_at >= NOW() - INTERVAL ? DAY', 7))
+			->innerJoin(new Fragment('tests_groups tr ON tr.id_test = t.id AND tr.kind = ?', 'core'))
 			->where(function($query)
 			{
 				$query
-					->where(['t.active = ?', 1])
-					->orWhere(['t.role = ?', 'admin']);
+					->where(new Fragment('t.active = ?', 1))
+					->orWhere(new Fragment('t.role = ?', 'admin'));
 			})
 			->whereIn('t.status', ['open', 'muted'], bind: true)
 			->orWhereIn('t.kind', [3, 4])
@@ -292,7 +315,7 @@ class QueryBuilder extends Test
 	
 	/**
 	 * RULE: every argument of where() counts (a Closure is a group, a
-	 * string a condition, a tuple a condition with values) and a group that
+	 * string a condition, a Fragment a condition with values) and a group that
 	 * opens with orWhere() does not start with a dangling OR.
 	 */
 	public function whereClosureWithMore(): bool
@@ -303,7 +326,7 @@ class QueryBuilder extends Test
 				$query
 					->orWhere('a = 1')
 					->orWhere('b = 1');
-			}, 'c = 1', ['d = ?', 4]);
+			}, 'c = 1', new Fragment('d = ?', 4));
 		
 		return $query->getSql() === 'SELECT id'
 			. PHP_EOL . 'FROM tests'
@@ -342,8 +365,8 @@ class QueryBuilder extends Test
 	{
 		$query = $this->queryBuilder->update(state: 'resolved', modified_at: new Expression('NOW()'))
 			->alias('t')
-			->innerJoin(['tests_groups tr ON tr.id_test = t.id AND tr.kind = ?', 'core'])
-			->where(['t.id = ?', 5])
+			->innerJoin(new Fragment('tests_groups tr ON tr.id_test = t.id AND tr.kind = ?', 'core'))
+			->where(new Fragment('t.id = ?', 5))
 			->orderBy('t.id ASC')
 			->limit(10);
 		
@@ -359,11 +382,11 @@ class QueryBuilder extends Test
 	
 	/**
 	 * RULE: a DELETE may order and limit (the batched purge), and takes
-	 * tuple conditions straight from the builder
+	 * bound fragments straight from the builder
 	 */
 	public function deleteOrderedLimited(): bool
 	{
-		$query = $this->queryBuilder->delete(['created_at < NOW() - INTERVAL ? DAY', 30])
+		$query = $this->queryBuilder->delete(new Fragment('created_at < NOW() - INTERVAL ? DAY', 30))
 			->orderBy('id ASC')
 			->limit(1000);
 		

@@ -5,9 +5,7 @@ namespace Ovos\Http;
 
 use function array_is_list;
 use function array_key_exists;
-use function array_slice;
 use function explode;
-use function filter_var;
 use function is_array;
 use function is_bool;
 use function is_float;
@@ -18,20 +16,10 @@ use function json_decode;
 use function preg_match;
 use function trim;
 
-use const FILTER_VALIDATE_EMAIL;
-
 /**
  * Input
  *
- * A typed, forgiving reader over a decoded JSON request body, so API
- * actions stop hand-writing the same defensive casts
- * (is_string($body['x'] ?? null) ? ... : '', (int)($body['page'] ?? 1),
- * ($body['flag'] ?? true) === true). Dot-paths reach nested values
- * ("sort.field"); every getter returns the typed value or the default,
- * never a warning.
- *
- * Missing/malformed bodies produce an EMPTY Input (isEmpty() === true),
- * so the tolerant "$body ?? []" style becomes just $this->input().
+ * Typed access to decoded data. Missing or incompatible values use the supplied default.
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -243,56 +231,4 @@ final class Input
 			: $default;
 	}
 	
-	/**
-	 * The capped positive-int id selection: a single {id} or an {ids:[…]}
-	 * list at the body root (delegates to Body::ids)
-	 */
-	public function ids(
-		int $max = 100,
-		string $singleKey = 'id',
-		string $listKey = 'ids',
-	): array
-	{
-		return Body::ids($this->data, $max, $singleKey, $listKey);
-	}
-	
-	/**
-	 * A single validated email, or null
-	 */
-	public function email(
-		string $path,
-	): ?string
-	{
-		$value = trim($this->string($path));
-		
-		return $value !== ''
-			&& filter_var($value, FILTER_VALIDATE_EMAIL) !== false
-			? $value
-			: null;
-	}
-	
-	/**
-	 * A validated email list; returns null when ANY entry is invalid, so
-	 * the caller can 422 the whole payload rather than silently drop one
-	 *
-	 * @return string[]|null
-	 */
-	public function emails(
-		string $path,
-		int $max = 100,
-	): ?array
-	{
-		$emails = [];
-		foreach(array_slice($this->list($path), 0, $max) as $value)
-		{
-			if(is_string($value) === false
-				|| filter_var($value = trim($value), FILTER_VALIDATE_EMAIL) === false)
-			{
-				return null;
-			}
-			$emails[] = $value;
-		}
-		
-		return $emails;
-	}
 }

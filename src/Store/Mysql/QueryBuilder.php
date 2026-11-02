@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Store\Mysql;
 
 use Ovos\Store\Mysql\Query\Delete;
+use Ovos\Store\Mysql\Query\Fragment;
 use Ovos\Store\Mysql\Query\Insert;
 use Ovos\Store\Mysql\Query\Select;
 use Ovos\Store\Mysql\Query\Update;
@@ -39,10 +40,10 @@ class QueryBuilder
 	}
 	
 	/**
-	 * Conditions as where() takes them: strings, tuples [sql, ...values], Closures
+	 * Conditions as where() takes them: strings, Fragments or callables
 	 */
 	public function delete(
-		string|array|callable ...$conditions,
+		string|Fragment|callable ...$conditions,
 	): Delete
 	{
 		$query = new Delete($this->table);
@@ -66,7 +67,7 @@ class QueryBuilder
 	}
 	
 	public function select(
-		string|array ...$fields,
+		string|Fragment ...$fields,
 	): Select
 	{
 		$query = new Select($this->table);

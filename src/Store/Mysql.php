@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Store;
 
+use Ovos\Store\Mysql\Query\Fragment;
 use Ovos\Exception;
 use Ovos\Exception\UnavailableException;
 use Ovos\Connections;
@@ -112,7 +113,7 @@ abstract class Mysql extends Store
 	
 	/**
 	 * A builder for this store's table. The query it makes carries its values
-	 * (tuple conditions, PHP values for INSERT/UPDATE columns); statement() and
+	 * (bound fragments, PHP values for INSERT/UPDATE columns); statement() and
 	 * the fetchers run it with them, prepareQuery() hands back the bare prepared
 	 * statement.
 	 */
@@ -395,7 +396,7 @@ abstract class Mysql extends Store
 		
 		foreach($where as $property => $value)
 		{
-			$select->andWhere([$property . ' = ?', $value]);
+			$select->andWhere(new Fragment($property . ' = ?', $value));
 		}
 		
 		$orConditions = [];
@@ -407,7 +408,7 @@ abstract class Mysql extends Store
 		}
 		if($orConditions)
 		{
-			$select->andWhere(['(' . implode(' OR ', $orConditions) . ')', ...$orValues]);
+			$select->andWhere(new Fragment('(' . implode(' OR ', $orConditions) . ')', ...$orValues));
 		}
 		
 		foreach($whereIn as $property => $whereValues)
@@ -421,11 +422,11 @@ abstract class Mysql extends Store
 		
 		foreach($like as $property => $value)
 		{
-			$select->andWhere([$property . ' LIKE ?', $value]);
+			$select->andWhere(new Fragment($property . ' LIKE ?', $value));
 		}
 		foreach($notLike as $property => $value)
 		{
-			$select->andWhere([$property . ' NOT LIKE ?', $value]);
+			$select->andWhere(new Fragment($property . ' NOT LIKE ?', $value));
 		}
 		
 		foreach($isNull as $property)
