@@ -8,6 +8,31 @@ use Ovos\Measurement;
 use RuntimeException;
 use Throwable;
 
+use function array_key_exists;
+use function array_values;
+use function ceil;
+use function explode;
+use function fclose;
+use function fopen;
+use function http_build_query;
+use function ini_set;
+use function is_array;
+use function is_numeric;
+use function is_resource;
+use function is_string;
+use function json_decode;
+use function json_encode;
+use function preg_split;
+use function str_contains;
+use function str_starts_with;
+use function stream_context_create;
+use function stream_get_contents;
+use function stream_get_meta_data;
+use function strtolower;
+
+use const JSON_THROW_ON_ERROR;
+use const PREG_SPLIT_NO_EMPTY;
+
 /**
  * Request
  *
@@ -36,7 +61,9 @@ class Request
 		]
 	];
 	
-	protected ?array $content = null;
+	protected array|string|null $content = null;
+	
+	protected ?string $contentType = null;
 	
 	protected ?string $response = null;
 	
@@ -48,13 +75,10 @@ class Request
 	
 	protected Measurement $measurement;
 	
-	/**
-	 * Best-effort mode — see setBestEffort().
-	 */
 	protected bool $bestEffort = false;
 	
 	/**
-	 * Response body cap in bytes — see setResponseLimit(). Null reads it all.
+	 * Maximum response size in bytes; null reads to EOF.
 	 */
 	protected ?int $responseLimit = null;
 	
@@ -75,60 +99,82 @@ class Request
 		mixed $context = null,
 	): static
 	{
+		$this->response = null;
+		$this->responseMetaData = null;
+		$this->measurement = new Measurement;
 		$this->getMeasurement()->start();
 		
-		if($context === null)
+		try
 		{
-			$context = $this->createContext();
-		}
-		
-		$url = $this->url;
-		if($this->getMethod() === self::METHOD_GET
-			&& $content = $this->getContent())
-		{
-			// the URL may already carry a query string (health probes often
-			// do) — appending a second '?' would mangle both parameter sets
-			$url.= (str_contains($url, '?') ? '&' : '?')
-				. http_build_query($content);
-		}
-		
-		$stream = $this->openStream($url, $context);
-		
-		if($stream === false)
-		{
-			// best-effort degrades a transport failure (DNS, refused, TLS,
-			// timeout) to a null response; with it off a failure must surface —
-			// fopen already warns, but should that warning not be promoted to an
-			// exception, raise one so the failure is never silently swallowed
-			if($this->bestEffort === false)
+			$context ??= $this->createContext();
+			$url = $this->url;
+			$content = $this->getContent();
+			if($this->getMethod() === self::METHOD_GET && is_array($content) && $content !== [])
 			{
-				$this->getMeasurement()->stop();
-				
-				throw new RuntimeException('Stream\Request: failed to open ' . $this->url);
+				$url.= (str_contains($url, '?') ? '&' : '?') . http_build_query($content);
 			}
 			
-			$this->response = null;
-			$this->responseMetaData = null;
-			$this->getMeasurement()->stop();
-			
-			return $this;
+			try
+			{
+				if($this->bestEffort)
+				{
+					@$this->readResponse($url, $context);
+				}
+				else
+				{
+					$this->readResponse($url, $context);
+				}
+			}
+			catch(Throwable $exception)
+			{
+				if($this->bestEffort === false)
+				{
+					throw $exception;
+				}
+			}
 		}
-		
-		$this->responseMetaData = stream_get_meta_data($stream);
-		$this->response = stream_get_contents($stream, $this->responseLimit ?? -1);
-		fclose($stream);
-		
-		$this->getMeasurement()->stop();
+		finally
+		{
+			$this->getMeasurement()->stop();
+		}
 		
 		return $this;
 	}
 	
+	protected function readResponse(
+		string $url,
+		mixed $context,
+	): void
+	{
+		$stream = $this->openStream($url, $context);
+		if($stream === false)
+		{
+			throw new RuntimeException('Stream\Request: failed to open ' . $url);
+		}
+		
+		try
+		{
+			$response = stream_get_contents($stream, $this->responseLimit ?? -1);
+			$metadata = stream_get_meta_data($stream);
+			if($response === false || ($metadata['timed_out'] ?? false))
+			{
+				throw new RuntimeException('Stream\Request: failed to read ' . $url);
+			}
+		}
+		finally
+		{
+			if(is_resource($stream))
+			{
+				fclose($stream);
+			}
+		}
+		
+		$this->response = $response;
+		$this->responseMetaData = $metadata;
+	}
+	
 	/**
-	 * Open the request stream. The connection phase is bounded by a scoped
-	 * default_socket_timeout when a timeout is set (the http wrapper has no
-	 * separate connect-timeout knob); in best-effort mode a transport failure
-	 * is swallowed and returned as false so invoke() can degrade to a null
-	 * response, otherwise the fopen warning/exception surfaces as before.
+	 * Apply the configured socket timeout while opening the stream.
 	 *
 	 * @return resource|false
 	 */
@@ -144,19 +190,7 @@ class Request
 		
 		try
 		{
-			if($this->bestEffort === false)
-			{
-				return fopen($url, 'r', false, $context);
-			}
-			
-			try
-			{
-				return @fopen($url, 'r', false, $context);
-			}
-			catch(Throwable)
-			{
-				return false;
-			}
+			return fopen($url, 'r', false, $context);
 		}
 		finally
 		{
@@ -168,10 +202,7 @@ class Request
 	}
 	
 	/**
-	 * The connection-phase bound in whole seconds, derived from the effective
-	 * http.timeout so the read and connect limits never diverge (the http
-	 * wrapper has no separate connect-timeout knob the way curl does). Null when
-	 * no timeout is configured.
+	 * Socket timeout rounded up to whole seconds; null leaves the default.
 	 */
 	protected function socketTimeout(): ?int
 	{
@@ -181,13 +212,7 @@ class Request
 	}
 	
 	/**
-	 * The final HTTP status code from the response meta data. After following
-	 * redirects wrapper_data carries one status line per hop, so the last one
-	 * wins. Null when there is no response (e.g. a transport failure).
-	 *
-	 * 'wrapper_data' =>
-	 *   [0] =>
-	 *   string(15) "HTTP/1.1 200 OK"
+	 * Final HTTP status after redirects, or null when no response was read.
 	 */
 	public function getResponseStatusCode(): ?int
 	{
@@ -217,8 +242,7 @@ class Request
 	}
 	
 	/**
-	 * Whether the response carried a 2xx status. A transport failure leaves the
-	 * status null, so this returns false — the best-effort success test.
+	 * Whether the response has a 2xx status.
 	 */
 	public function isOk(): bool
 	{
@@ -237,38 +261,44 @@ class Request
 	}
 	
 	/**
-	 * Resolve the final stream context options. Split out from createContext()
-	 * so the request body / header handling stays unit-testable without
-	 * opening a socket.
+	 * Encode the body and apply its content type to the stream options.
 	 */
 	public function buildContextOptions(): array
 	{
 		$contextOptions = $this->contextOptions;
 		
-		if($this->contextOptions['http']['method'] === self::METHOD_POST)
+		if($this->content !== null
+			&& (is_array($this->content) === false || $this->getMethod() !== self::METHOD_GET))
 		{
-			if($this->content !== null
-				&& isset($contextOptions['http']['content']) === false)
-			{
-				$contextOptions['http']['content']
-					= http_build_query($this->content);
-			}
+			$contextOptions['http']['content'] = is_array($this->content)
+				? http_build_query($this->content)
+				: $this->content;
 			
-			if(isset($contextOptions['http']['content'])
+			$headers = self::headerLines($contextOptions['http']['header'] ?? []);
+			if($this->contentType !== null)
+			{
+				foreach($headers as $index => $header)
+				{
+					if(str_starts_with(strtolower($header), 'content-type:'))
+					{
+						unset($headers[$index]);
+					}
+				}
+				$headers[] = 'Content-Type: ' . $this->contentType;
+			}
+			elseif($this->getMethod() === self::METHOD_POST
 				&& $this->hasHeader($contextOptions, 'Content-Type') === false)
 			{
-				$headers = self::headerLines($contextOptions['http']['header'] ?? []);
 				$headers[] = 'Content-Type: application/x-www-form-urlencoded';
-				$contextOptions['http']['header'] = $headers;
 			}
+			$contextOptions['http']['header'] = array_values($headers);
 		}
 		
 		return $contextOptions;
 	}
 	
 	/**
-	 * Whether a header line is already present (case-insensitive name match),
-	 * so we never append a second, conflicting Content-Type.
+	 * Match header names without case sensitivity.
 	 */
 	protected function hasHeader(
 		array $contextOptions,
@@ -288,9 +318,7 @@ class Request
 	}
 	
 	/**
-	 * Normalize the http.header option to a line list. Streams also accept a
-	 * single CRLF-joined string, so coerce that to an array — otherwise an
-	 * append (addHeader, the urlencoded default) would fatal on a string.
+	 * Accept the array and string forms of the http.header option.
 	 */
 	protected static function headerLines(
 		mixed $header,
@@ -343,6 +371,12 @@ class Request
 		array $contextOptions,
 	): static
 	{
+		if(array_key_exists('content', $contextOptions['http'] ?? []))
+		{
+			$this->setContent($contextOptions['http']['content']);
+			unset($contextOptions['http']['content']);
+		}
+		
 		$this->contextOptions = Arrays::deepMerge(
 			$this->contextOptions,
 			$contextOptions,
@@ -353,13 +387,11 @@ class Request
 	
 	public function getContextOptions(): array
 	{
-		return $this->contextOptions;
+		return $this->buildContextOptions();
 	}
 	
 	/**
-	 * Overall timeout in seconds, stored as http.timeout — the single source of
-	 * truth, so the read and the connection bound (socketTimeout()) never
-	 * diverge even if http.timeout is later changed via setContextOptions().
+	 * Read timeout in seconds, also used for the socket timeout when connecting.
 	 */
 	public function setTimeout(
 		float $seconds,
@@ -371,8 +403,7 @@ class Request
 	}
 	
 	/**
-	 * Keep the response (and its status) on a 4xx/5xx instead of letting fopen
-	 * fail — required when the caller wants to read error statuses (e.g. probes).
+	 * Read the response body and status for HTTP errors too.
 	 */
 	public function setIgnoreErrors(
 		bool $ignoreErrors = true,
@@ -409,9 +440,7 @@ class Request
 	}
 	
 	/**
-	 * Append a request header. Unlike passing a header array through
-	 * setContextOptions() — whose deep-merge collides on numeric keys and would
-	 * overwrite an existing header — this always adds to the list.
+	 * Append a request header.
 	 */
 	public function addHeader(
 		string $header,
@@ -425,28 +454,20 @@ class Request
 	}
 	
 	/**
-	 * Send $data as a JSON request body (implies POST). Appends the JSON
-	 * Content-Type (keeping any existing headers), so buildContextOptions()
-	 * won't add the urlencoded one.
+	 * Set a JSON body and use POST. setMethod() can override the method.
 	 */
 	public function setJsonContent(
 		mixed $data,
 	): static
 	{
-		$this->setMethod(self::METHOD_POST);
-		$this->setContextOptions(['http' => [
-			'content' => json_encode($data, flags: JSON_THROW_ON_ERROR),
-		]]);
-		$this->addHeader('Content-Type: application/json; charset=UTF-8');
-		
-		return $this;
+		return $this->setContent(
+			json_encode($data, flags: JSON_THROW_ON_ERROR),
+			'application/json; charset=UTF-8',
+		)->setMethod(self::METHOD_POST);
 	}
 	
 	/**
-	 * Best-effort mode: a transport failure (DNS, connection refused, TLS,
-	 * timeout) degrades to a null response instead of surfacing the fopen
-	 * warning/exception — for probes and fire-and-forget posts that must not
-	 * abort the caller. Off by default, so existing callers still see failures.
+	 * Leave a null response on transport failures instead of throwing.
 	 */
 	public function setBestEffort(
 		bool $bestEffort = true,
@@ -458,11 +479,7 @@ class Request
 	}
 	
 	/**
-	 * Stop reading the body after $bytes. The status line and headers have
-	 * already arrived by then, so a probe that only wants the status code
-	 * does not have to download whatever the far end decided to send —
-	 * without this, one health URL answering with a gigabyte is the whole
-	 * cron run's memory. Null (the default) reads to the end as before.
+	 * Maximum response size in bytes; null reads to EOF.
 	 */
 	public function setResponseLimit(
 		?int $bytes,
@@ -473,16 +490,23 @@ class Request
 		return $this;
 	}
 	
+	/**
+	 * Arrays become GET parameters or a form body; strings are sent as given.
+	 */
 	public function setContent(
-		?array $content,
+		array|string|null $content,
+		?string $contentType = null,
 	): static
 	{
 		$this->content = $content;
+		$this->contentType = $contentType ?? (is_array($content)
+			? 'application/x-www-form-urlencoded'
+			: null);
 		
 		return $this;
 	}
 	
-	public function getContent(): ?array
+	public function getContent(): array|string|null
 	{
 		return $this->content;
 	}

@@ -465,6 +465,33 @@ class Container extends Test
 		return $result === 'root';
 	}
 	
+	public function callPreservesExplicitNull(): bool
+	{
+		$container = new BaseContainer;
+		$target = new NullableArguments;
+		
+		return $container->call($target, 'required', ['value' => null]) === null
+			&& $container->call($target, 'optional', ['value' => null]) === null
+			&& $container->call($target, 'optional') === 'default'
+			&& $container->call($target, 'dependency', ['value' => null]) === null
+			&& $container->call($target, 'dependency') instanceof Dependency1;
+	}
+	
+	public function constructorPreservesExplicitNull(): bool
+	{
+		$container = new BaseContainer;
+		$explicit = $container->injectClass(NullableArguments::class, [
+			'value' => null,
+			'dependency' => null,
+		]);
+		$implicit = $container->injectClass(NullableArguments::class);
+		
+		return $explicit->value === null
+			&& $explicit->dependency === null
+			&& $implicit->value === 'default'
+			&& $implicit->dependency instanceof Dependency1;
+	}
+	
 	/**
 	 * registerValue() used to bind resolved[$key] as a REFERENCE to
 	 * injectors[$key]. A reference survives an array copy, so a test helper
@@ -515,6 +542,37 @@ class Container extends Test
 			&& $kept->dependency2 instanceof Dependency2
 			&& $replaced->dependency1 !== $own
 			&& $replaced->dependency1 instanceof Dependency1;
+	}
+}
+
+class NullableArguments
+{
+	public function __construct(
+		public ?string $value = 'default',
+		public ?Dependency1 $dependency = null,
+	)
+	{
+	}
+	
+	public function required(
+		?string $value,
+	): ?string
+	{
+		return $value;
+	}
+	
+	public function optional(
+		?string $value = 'default',
+	): ?string
+	{
+		return $value;
+	}
+	
+	public function dependency(
+		?Dependency1 $value,
+	): ?Dependency1
+	{
+		return $value;
 	}
 }
 

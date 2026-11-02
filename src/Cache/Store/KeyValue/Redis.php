@@ -89,8 +89,8 @@ abstract class Redis extends Tags
 	{
 		parent::__construct($prefix, $config, $group);
 		
-		$this->setConnection($connection);
-		$this->setQueueConnection($queueConnection);
+		$this->connection = $connection;
+		$this->queueConnection = $queueConnection;
 		
 		$this->functions = new Functions(
 			static::LIBRARIES,
@@ -123,27 +123,9 @@ abstract class Redis extends Tags
 		return $this;
 	}
 	
-	public function setConnection(
-		Connection $connection,
-	): static
-	{
-		$this->connection = $connection;
-		
-		return $this;
-	}
-	
 	public function getConnection(): Connection
 	{
 		return $this->connection;
-	}
-	
-	public function setQueueConnection(
-		Connection $connection,
-	): static
-	{
-		$this->queueConnection = $connection;
-		
-		return $this;
 	}
 	
 	public function getQueueConnection(): Connection

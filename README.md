@@ -1344,8 +1344,12 @@ SELECT's alone.
 
 #### Values, and what binds
 
-A clause written as `new Fragment($sql, ...$values)` binds; a bare string is SQL as given. A `Closure`
-opens a group, and its values land where the group sits:
+A `Fragment` holds SQL and its positional values. It does not add parentheses.
+Use `new Fragment($sql, ...$values)` wherever a clause needs bound values; bare strings
+are SQL as given. The old `[$sql, ...$values]` form is no longer supported.
+
+A callable passed to `where()`, `andWhere()` or `orWhere()` builds a parenthesized
+group. Its values stay in the same order as its conditions:
 
 ```php
 $query = $this->query()
@@ -1358,8 +1362,31 @@ $query->getSql();     // WHERE created_at >= NOW() - INTERVAL ? DAY
 $query->getValues();  // [7, 1, 'admin']
 ```
 
-`whereIn()` writes its list into the SQL as given, which is what ints and fragments want.
-Pass `bind: true` for anything that came from outside — an IN list of names works then too:
+Callable arrays work too. For an existing object, `[$conditions, 'active']` tells
+the builder to call its `active()` method with the group:
+
+```php
+use Ovos\Store\Mysql\Query;
+use Ovos\Store\Mysql\Query\Fragment;
+
+class UserConditions
+{
+    public function active(Query $group): void
+    {
+        $group->where(new Fragment('active = ?', 1));
+    }
+}
+
+$conditions = new UserConditions;
+$query = $this->query()->select('id')->where([$conditions, 'active']);
+// WHERE (active = ?), values: [1]
+```
+
+`[ClassName::class, 'method']` works for a public static method. Use a closure when
+the conditions are needed in only one place.
+
+By default, `whereIn()` joins its values as SQL text. `Fragment` objects are not
+accepted as list entries. Pass `bind: true` to bind the list's PHP values:
 
 ```php
 ->whereIn('id', $ids)                    // id IN (1, 2, 3)

@@ -50,6 +50,13 @@ $store = $cacheService->getStore();                         // Redis/Redisearch
 $store = $cacheService->getStore(persistent: false);        // APCu
 ```
 
+Redis stores keep the main and queue connections supplied to their constructor.
+Create another store to use different connections; `setConnection()` and
+`setQueueConnection()` have been removed.
+
+Changing a versioned store's group with `setGroup()` discards its local rule state.
+Each group keeps its own shared rules in APCu.
+
 ## One call, and which option for which problem
 
 The call worth knowing is `get()` with a resolver. It reads the value; on a

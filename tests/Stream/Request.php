@@ -6,25 +6,22 @@ namespace Tests\Stream;
 use Ovos\Test;
 use Ovos\Stream\Request as HttpRequest;
 use Throwable;
+use RuntimeException;
 
+use function fopen;
+use function fwrite;
+use function rewind;
+use function stream_wrapper_register;
+use function stream_wrapper_unregister;
 use function stripos;
 
 /**
  * Request
  *
- * Network-free coverage of the probe-oriented helpers: context-option building
- * (JSON vs form body, timeout, ignore-errors, redirects, user-agent) and status
- * parsing. No socket is opened — buildContextOptions() and a faked wrapper_data
- * keep these deterministic.
- *
  * @author Marcin Gil <mg@ovos.at>
  */
 class Request extends Test
 {
-	/**
-	 * A JSON body implies POST, carries the encoded payload, sets the JSON
-	 * Content-Type and does NOT add the form-urlencoded one.
-	 */
 	public function jsonContentImpliesPostAndBody(): bool
 	{
 		$request = (new HttpRequest('http://localhost'))
@@ -37,10 +34,6 @@ class Request extends Test
 			&& $this->headerHas($options, 'application/x-www-form-urlencoded') === false;
 	}
 	
-	/**
-	 * setJsonContent must append its Content-Type, not clobber existing headers
-	 * (e.g. an Authorization carried in from the constructor / factory context).
-	 */
 	public function jsonContentPreservesExistingHeaders(): bool
 	{
 		$request = (new HttpRequest('http://localhost', ['http' => [
@@ -52,11 +45,6 @@ class Request extends Test
 			&& $this->headerHas($options, 'Content-Type: application/json');
 	}
 	
-	/**
-	 * http.header may arrive as a CRLF-joined string (a valid stream-context
-	 * form). addHeader / setJsonContent must coerce it to a list and append,
-	 * not fatal trying to push onto a string.
-	 */
 	public function jsonContentHandlesStringHeaderOption(): bool
 	{
 		$request = (new HttpRequest('http://localhost', ['http' => [
@@ -68,9 +56,6 @@ class Request extends Test
 			&& $this->headerHas($options, 'Content-Type: application/json');
 	}
 	
-	/**
-	 * The legacy array-content POST path still defaults to form-urlencoded.
-	 */
 	public function formContentDefaultsToUrlencoded(): bool
 	{
 		$request = (new HttpRequest('http://localhost'))
@@ -91,10 +76,6 @@ class Request extends Test
 		return ($options['http']['timeout'] ?? null) === 2.5;
 	}
 	
-	/**
-	 * The connection bound follows the effective http.timeout even after a later
-	 * setContextOptions() overrides it, so connect and read can't diverge.
-	 */
 	public function connectTimeoutTracksHttpTimeout(): bool
 	{
 		$request = new class('http://localhost') extends HttpRequest
@@ -125,10 +106,6 @@ class Request extends Test
 			&& ($off['http']['ignore_errors'] ?? null) === false;
 	}
 	
-	/**
-	 * Streams count the initial request in max_redirects, so N hops maps to
-	 * max_redirects = N + 1; zero hops disables following.
-	 */
 	public function followRedirectsMapsToMaxRedirects(): bool
 	{
 		$follow = (new HttpRequest('http://localhost'))
@@ -153,9 +130,6 @@ class Request extends Test
 		return ($options['http']['user_agent'] ?? null) === 'ovos-codesafe-uptime/1.0';
 	}
 	
-	/**
-	 * Status is parsed from wrapper_data, and isOk() is exactly the 2xx range.
-	 */
 	public function statusCodeAndOkFromMetaData(): bool
 	{
 		$ok = $this->withWrapperData(['HTTP/1.1 200 OK']);
@@ -167,10 +141,6 @@ class Request extends Test
 			&& $notFound->isOk() === false;
 	}
 	
-	/**
-	 * After following redirects wrapper_data holds a status line per hop; the
-	 * final response status wins, not the first.
-	 */
 	public function statusCodeIsFinalAfterRedirects(): bool
 	{
 		$request = $this->withWrapperData([
@@ -183,10 +153,6 @@ class Request extends Test
 			&& $request->isOk() === true;
 	}
 	
-	/**
-	 * Without a response (e.g. a transport failure) the status is null and the
-	 * best-effort success test is false.
-	 */
 	public function okRequiresResponse(): bool
 	{
 		$request = new HttpRequest('http://localhost');
@@ -195,11 +161,6 @@ class Request extends Test
 			&& $request->isOk() === false;
 	}
 	
-	/**
-	 * Best-effort mode swallows a transport failure (here: connection refused
-	 * on 127.0.0.1:1) and degrades to a null status instead of throwing — even
-	 * under the application error handler that turns warnings into exceptions.
-	 */
 	public function bestEffortSwallowsTransportFailure(): bool
 	{
 		$request = (new HttpRequest('http://127.0.0.1:1'))
@@ -211,12 +172,6 @@ class Request extends Test
 			&& $request->isOk() === false;
 	}
 	
-	/**
-	 * With best-effort off a transport failure must surface, not degrade to a
-	 * null response: under the app error handler the fopen warning becomes an
-	 * ErrorException, and without one invoke() raises its own — either way it
-	 * throws rather than returning a silent null.
-	 */
 	public function nonBestEffortSurfacesTransportFailure(): bool
 	{
 		$request = (new HttpRequest('http://127.0.0.1:1'))->setTimeout(1.0);
@@ -232,11 +187,6 @@ class Request extends Test
 		return false;
 	}
 	
-	/**
-	 * GET content becomes the query string; a URL that already carries one
-	 * gets '&', not a second '?' (which would mangle both parameter sets —
-	 * health probes commonly carry ?token=… URLs).
-	 */
 	public function getContentAppendsQueryString(): bool
 	{
 		$plain = $this->capturingRequest('http://localhost/health');
@@ -249,6 +199,140 @@ class Request extends Test
 		
 		return $plain->openedUrl === 'http://localhost/health?probe=1'
 			&& $existing->openedUrl === 'http://localhost/health?token=abc&probe=1';
+	}
+	
+	public function formContentReplacesJson(): bool
+	{
+		$request = (new HttpRequest('http://localhost'))
+			->setJsonContent(['old' => 1])
+			->setContent(['new' => 2]);
+		$options = $request->buildContextOptions();
+		
+		return $options['http']['content'] === 'new=2'
+			&& $options['http']['header'] === ['Content-Type: application/x-www-form-urlencoded'];
+	}
+	
+	public function jsonContentReplacesItsHeader(): bool
+	{
+		$request = (new HttpRequest('http://localhost', ['http' => [
+			'header' => "Authorization: Basic abc123\r\ncontent-type: text/plain",
+		]]))
+			->setJsonContent(['old' => 1])
+			->setJsonContent(['new' => 2]);
+		$options = $request->buildContextOptions();
+		
+		return $options['http']['content'] === '{"new":2}'
+			&& $options['http']['header'] === [
+				'Authorization: Basic abc123',
+				'Content-Type: application/json; charset=UTF-8',
+			];
+	}
+	
+	public function contextContentReplacesTheCurrentBody(): bool
+	{
+		$request = (new HttpRequest('http://localhost'))
+			->setJsonContent(['old' => 1])
+			->setContextOptions(['http' => [
+				'content' => 'new body',
+				'header' => ['Content-Type: text/plain'],
+			]]);
+		$options = $request->getContextOptions();
+		$request->setContent(null);
+		$cleared = $request->buildContextOptions();
+		
+		return $options['http']['content'] === 'new body'
+			&& $request->getContent() === null
+			&& $options['http']['header'] === ['Content-Type: text/plain']
+			&& isset($cleared['http']['content']) === false;
+	}
+	
+	public function formContentReplacesContextContent(): bool
+	{
+		$request = (new HttpRequest('http://localhost', ['http' => [
+			'method' => 'PUT',
+			'content' => 'old body',
+			'header' => ['Content-Type: text/plain'],
+		]]))->setContent(['new' => 2]);
+		$options = $request->buildContextOptions();
+		
+		return $options['http']['method'] === 'PUT'
+			&& $options['http']['content'] === 'new=2'
+			&& $options['http']['header'] === ['Content-Type: application/x-www-form-urlencoded'];
+	}
+	
+	public function bestEffortClosesStreamAfterReadFailure(): bool
+	{
+		return $this->readFailure(true);
+	}
+	
+	public function strictReadFailureClosesStreamAndThrows(): bool
+	{
+		return $this->readFailure(false);
+	}
+	
+	protected function readFailure(
+		bool $bestEffort,
+	): bool
+	{
+		ReadFailureStream::$closed = false;
+		stream_wrapper_register('ovosreadfailure', ReadFailureStream::class);
+		$request = (new HttpRequest('ovosreadfailure://response'))->setBestEffort($bestEffort);
+		$thrown = false;
+		try
+		{
+			try
+			{
+				$request->invoke();
+			}
+			catch(RuntimeException $exception)
+			{
+				$thrown = $exception->getMessage() === 'Read failed';
+			}
+			
+			return $thrown === ($bestEffort === false)
+				&& ReadFailureStream::$closed
+				&& $request->getResponse() === null
+				&& $request->getResponseMetaData() === null
+				&& $request->getMeasurement()->getTotalTime() !== null;
+		}
+		finally
+		{
+			stream_wrapper_unregister('ovosreadfailure');
+		}
+	}
+	
+	public function failedReuseClearsThePreviousResponse(): bool
+	{
+		$request = new class('http://localhost') extends HttpRequest
+		{
+			public bool $fail = false;
+			
+			protected function openStream(
+				string $url,
+				mixed $context,
+			): mixed
+			{
+				if($this->fail)
+				{
+					throw new RuntimeException('Open failed');
+				}
+				
+				$stream = fopen('php://memory', 'r+');
+				fwrite($stream, 'response');
+				rewind($stream);
+				
+				return $stream;
+			}
+		};
+		$request->invoke();
+		$first = $request->getResponse();
+		$request->fail = true;
+		$request->setBestEffort()->invoke();
+		
+		return $first === 'response'
+			&& $request->getResponse() === null
+			&& $request->getResponseMetaData() === null
+			&& $request->getMeasurement()->getTotalTime() !== null;
 	}
 	
 	protected function headerHas(
@@ -267,11 +351,6 @@ class Request extends Test
 		return false;
 	}
 	
-	/**
-	 * A Request that records the final URL instead of opening a socket.
-	 *
-	 * @return HttpRequest&object{openedUrl: ?string}
-	 */
 	protected function capturingRequest(
 		string $url,
 	): HttpRequest
@@ -292,10 +371,6 @@ class Request extends Test
 		};
 	}
 	
-	/**
-	 * A Request with a faked wrapper_data, so status parsing can be exercised
-	 * without opening a socket.
-	 */
 	protected function withWrapperData(
 		array $wrapperData,
 	): HttpRequest
@@ -312,5 +387,44 @@ class Request extends Test
 		$request->fakeResponse($wrapperData);
 		
 		return $request;
+	}
+}
+
+class ReadFailureStream
+{
+	public mixed $context;
+	
+	public static bool $closed = false;
+	
+	public function stream_open(
+		string $path,
+		string $mode,
+		int $options,
+		?string &$openedPath,
+	): bool
+	{
+		return true;
+	}
+	
+	public function stream_stat(): array
+	{
+		return [];
+	}
+	
+	public function stream_eof(): bool
+	{
+		return false;
+	}
+	
+	public function stream_read(
+		int $count,
+	): string
+	{
+		throw new RuntimeException('Read failed');
+	}
+	
+	public function stream_close(): void
+	{
+		self::$closed = true;
 	}
 }
