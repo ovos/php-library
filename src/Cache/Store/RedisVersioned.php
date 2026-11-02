@@ -173,6 +173,22 @@ class RedisVersioned extends Store
 	protected bool $ttlWarned = false;
 	
 	#[Override]
+	public function setGroup(
+		?string $group,
+	): static
+	{
+		if($this->group !== $group)
+		{
+			parent::setGroup($group);
+			$this->resetLocalRules();
+			$this->misses = [];
+			$this->staleDrops = [];
+		}
+		
+		return $this;
+	}
+	
+	#[Override]
 	public function setStoreOptions(
 		ArrayObject $options,
 	): static
@@ -614,9 +630,7 @@ class RedisVersioned extends Store
 	 */
 	protected function resetRulesCache(): void
 	{
-		$this->rules = null;
-		$this->rulesFetchedAtMs = null;
-		$this->rulesDirty = false;
+		$this->resetLocalRules();
 		
 		// the shared set described a stream that is gone for every worker:
 		// drop it whether or not this instance reads it
@@ -625,6 +639,15 @@ class RedisVersioned extends Store
 			$this->newSharedRules()
 				->forget();
 		}
+	}
+	
+	protected function resetLocalRules(): void
+	{
+		$this->rules = null;
+		$this->rulesFetchedAtMs = null;
+		$this->rulesDirty = false;
+		$this->sharedRules = null;
+		$this->clockOffsetMs = null;
 	}
 	
 	/**

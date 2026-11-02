@@ -21,6 +21,7 @@ use ReflectionUnionType;
 use ReflectionProperty;
 
 use function array_keys;
+use function array_key_exists;
 use function count;
 use function implode;
 
@@ -464,19 +465,7 @@ class Container
 			return [];
 		}
 		
-		$parameters = [];
-		foreach($constructor->getParameters() as $parameter)
-		{
-			if(($resolved
-				= $this->injectParameter($parameter, $values)) === null)
-			{
-				continue;
-			}
-			
-			$parameters[$parameter->getName()] = $resolved;
-		}
-		
-		return $parameters;
+		return $this->injectParameters($constructor->getParameters(), $values);
 	}
 	
 	/**
@@ -490,56 +479,43 @@ class Container
 	{
 		$reflector = new ReflectionMethod($target, $method);
 		
-		$parameters = [];
-		foreach($reflector->getParameters() as $parameter)
-		{
-			if(($resolved
-				= $this->injectParameter($parameter, $values)) === null)
-			{
-				continue;
-			}
-			
-			$parameters[$parameter->getName()] = $resolved;
-		}
+		$parameters = $this->injectParameters($reflector->getParameters(), $values);
 		
 		return $reflector->invokeArgs($target, $parameters);
 	}
 	
 	/**
-	 * Inject a single constructor parameter
+	 * @param ReflectionParameter[] $parameters
 	 */
-	protected function injectParameter(
-		ReflectionParameter $parameter,
-		array $values = [],
-	): mixed
-	{
-		$resolved = $this->injectValueByName($parameter->getName(),
-			$values)
-			?? $this->injectValueByKey($parameter)
-			?? $this->injectValueByType($parameter);
-		
-		if($resolved !== null)
-		{
-			return $this->processAttributes($parameter, $resolved);
-		}
-		
-		return null;
-	}
-	
-	/**
-	 * Match parameters by name (and return its value if found)
-	 */
-	protected function injectValueByName(
-		string $parameterName,
+	protected function injectParameters(
 		array $parameters,
-	): mixed
+		array $values = [],
+	): array
 	{
-		if(array_key_exists($parameterName, $parameters) !== false)
+		$arguments = [];
+		foreach($parameters as $parameter)
 		{
-			return $parameters[$parameterName];
+			$name = $parameter->getName();
+			if(array_key_exists($name, $values))
+			{
+				$value = $values[$name];
+			}
+			else
+			{
+				$value = $this->injectValueByKey($parameter)
+					?? $this->injectValueByType($parameter);
+				if($value === null)
+				{
+					continue;
+				}
+			}
+			
+			$arguments[$name] = $value === null
+				? null
+				: $this->processAttributes($parameter, $value);
 		}
 		
-		return null;
+		return $arguments;
 	}
 	
 	protected function injectValueByKey(
