@@ -191,6 +191,17 @@ class Sender extends Service
 	public const string CONFIG = 'codesafe';
 	
 	/**
+	 * The username fields codesafe masks and keeps encrypted on arrival, as
+	 * its Scrubber::USERNAME_PATTERNS. They travel raw; a username field the
+	 * application added to the Logger is masked before sending, since
+	 * codesafe would store it in clear.
+	 */
+	public const array USERNAMES = [
+		'~^user([_-]?(name|login))?$~i',
+		'~^login$~i',
+	];
+	
+	/**
 	 * Cap on explicitly captured payloads per flush cycle — an error loop
 	 * in a long-running CLI process must not grow the queue without bound
 	 * (codesafe's ingest caps batches server-side anyway). The flush-time
@@ -334,12 +345,12 @@ class Sender extends Service
 		parent::boot($app);
 		$app->getServices()->events->addWriter(new Writer($this), static::SYMBOL);
 	}
-
+	
 	public function terminate(): void
 	{
 		$this->flush();
 	}
-
+	
 	public function __construct(
 		#[Inject('config')]
 		#[InjectArrayObject(self::CONFIG)]
@@ -552,7 +563,8 @@ class Sender extends Service
 	 *       [], ['userId' => (string)$user->id], Priority::ERROR);
 	 *
 	 * Unknown kinds are ignored. Put usernames in structured fields so the server
-	 * can recognize them; do not include credentials in the message.
+	 * can recognize them; a username in the message is masked with maskName(),
+	 * since codesafe cannot recognize it there. Never include a credential.
 	 *
 	 * $context is the per-event word on the request context, merged over the
 	 * base the flush builds (array_replace — the caller wins). Its case is
@@ -594,6 +606,17 @@ class Sender extends Service
 		}
 		
 		return $this;
+	}
+	
+	/**
+	 * A username masked for a reportRefusal() message (bob -> b**, marcin ->
+	 * m***i*), the mask Logger::maskName() applies everywhere.
+	 */
+	public static function maskName(
+		string $value,
+	): string
+	{
+		return Logger::maskName($value);
 	}
 	
 	/**
@@ -996,8 +1019,10 @@ class Sender extends Service
 		
 		$logLevel = $this->getLogLevel();
 		$context = null;
-		// Identity processing belongs to the server.
-		$logger = $this->getLogger();
+		// secrets are dropped here; e-mail addresses and the usernames codesafe
+		// knows travel raw, since codesafe masks them and keeps the original
+		// encrypted for an audited reveal and a replay
+		$logger = $this->getLogger()->keepingIdentities(self::USERNAMES);
 		
 		// the deploy label (git sha, svn revision, any string): codesafe.release,
 		// else the .release stamp — constant across the batch, read once
