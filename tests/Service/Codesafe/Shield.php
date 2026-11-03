@@ -322,7 +322,7 @@ class Shield extends Test
 	 * vpatch on WordPress's REST route is left out at the pull and never
 	 * judged; with `wordpress` (a list or a comma list, any case; a word
 	 * without a module ignored, each module once) both carry WordPress's
-	 * module, the pull names `core,wordpress`, and the request to the route
+	 * module, the pull names `core,wordpress,wordpress-xmlrpc`, and the request to the route
 	 * is refused. Falsify: load the module whatever the config says — every
 	 * application reads `/wp-json/…` as WordPress's REST route.
 	 */
@@ -357,7 +357,7 @@ class Shield extends Test
 		return $core->platforms() === [] && $core->kernel()->platforms() === []
 			&& $names($wordpress->platforms()) === ['wordpress'] && $wordpress->kernel()->platforms() === $wordpress->platforms()
 			&& $names($listed->platforms()) === ['wordpress']
-			&& $pulls === [Kernel::PULL_FAILED, Kernel::PULL_FAILED] && in_array('X-Shield-Platforms: core', $sent, true) && in_array('X-Shield-Platforms: core,wordpress', $sent, true)
+			&& $pulls === [Kernel::PULL_FAILED, Kernel::PULL_FAILED] && in_array('X-Shield-Platforms: core', $sent, true) && in_array('X-Shield-Platforms: core,wordpress,wordpress-xmlrpc', $sent, true)
 			&& $verdicts[0]->isPass() && $verdicts[1]->isBlock() && ($verdicts[1]->rule['id'] ?? null) === 9;
 	}
 	
