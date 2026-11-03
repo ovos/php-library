@@ -1954,11 +1954,30 @@ A stable key replaces the writer on a later request. `Events` does not choose de
 
 ### Logger redaction
 
-`Logger::$remove` contains the field-name patterns used to redact credentials in arrays,
-text, URLs and CLI arguments. Extend these with `addRemove()`. Emails and usernames remain
-unchanged, including in local logs. The Codesafe sender uses the same rules; Codesafe handles
-identity masking and encryption on ingestion. Token shapes and generic query names such as
-`key` have no separate rules.
+The Logger redacts what an event carries before it is written: request arrays, text, URLs
+and CLI arguments. Secrets always go; identities follow a policy.
+
+| Rule | Where it applies | Extend with |
+|------|------------------|-------------|
+| `Logger::$remove`: field names such as `password`, `token`, `api_key`, `auth` | array keys, `name=value` pairs in text, URL query names, CLI `--name=value` and the argument after a bare name, the path segment after a name (`/token/<value>`) | `addRemove()` |
+| `Logger::$queryNames`: `key`, `code`, `sig`, `otp`, `pin`, `hash`, … | URL query parameters only (`?key=` is a reset token, a `key` field is a cache key) | `addQueryNames()` |
+| `looksSecret()`: a JWT, a uuid, a long hex run, a long mixed-case run with digits | URL path segments; slugs and content-hashed assets (`app.<hash>.js`) stay | — |
+| Identities: e-mail addresses (by value, domain kept) and username fields | arrays, text, URLs, CLI arguments, when the policy masks | `addUsernames()` |
+
+`logger.identities` sets the policy of the log file:
+
+```yaml
+logger:
+    identities: keep   # the default; `mask` masks e-mails (j***.***@example.com) and usernames (m***i*)
+```
+
+`maskingIdentities()` and `keepingIdentities()` return copies with the policy set in code.
+`keepingIdentities(?array $usernames)` is for a destination that masks and stores identities
+itself: secrets are dropped as always, e-mail addresses stay raw, and so do the username
+fields matching `$usernames` (every one when null); any other username field stays masked.
+The Codesafe Sender sends its reports through `keepingIdentities(Sender::USERNAMES)`, the
+username fields Codesafe masks and keeps encrypted on arrival. `Logger::maskName()` and
+`Sender::maskName()` give the username mask for a message.
 
 ### Accessing Services
 
