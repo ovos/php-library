@@ -4365,9 +4365,10 @@ final class Kernel
 					// an observe after a held vpatch: the earlier, held verdict wins
 					return $verdict->isBlock() ? $verdict : ($held ?? $verdict);
 				}
-				$unread = false;
-				$matched = $this->matched($rule, $facts, $unread);
-				if($matched === null && $unread === false)
+				// its own name: $unread holds the modules whose sub-requests went unread, which every vpatch after it asks
+				$gaveUp = false;
+				$matched = $this->matched($rule, $facts, $gaveUp);
+				if($matched === null && $gaveUp === false)
 				{
 					continue;
 				}
