@@ -28,6 +28,7 @@ use function is_array;
 use function is_dir;
 use function is_scalar;
 use function is_string;
+use function is_writable;
 use function max;
 use function mkdir;
 use function rtrim;
@@ -198,8 +199,11 @@ class Shield
 	
 	/**
 	 * The durable tier: `codesafe.shield.dir`, or the system temp dir's own
-	 * folder; the file is named by the install prefix and the key, so two
-	 * installs on one box never read each other's rules
+	 * folder, else the temp dir itself; the file is named by the install
+	 * prefix and the key, so two installs on one box never read each other's
+	 * rules. Never APCu alone: an idle eviction (apc.ttl) empties it, and past
+	 * the kernel's ceiling a site cut off from codesafe holds its blocking
+	 * rules only while there is a record to hold them
 	 */
 	public function file(): string
 	{
@@ -208,9 +212,11 @@ class Shield
 		{
 			$dir = rtrim(sys_get_temp_dir(), '/\\') . '/' . self::DIR;
 		}
-		if(is_dir($dir) === false)
+		// a folder that cannot be made or written (a file in its place, one another user of a shared temp dir made) falls
+		// back to the temp dir itself
+		if((is_dir($dir) === false && @mkdir($dir, 0700, true) === false) || is_writable($dir) === false)
 		{
-			@mkdir($dir, 0700, true);
+			$dir = rtrim(sys_get_temp_dir(), '/\\');
 		}
 		
 		return rtrim($dir, '/\\') . '/shield-' . substr(hash('sha256', $this->keyPrefix() . '|' . (string)$this->config?->key), 0, 16) . '.json';
