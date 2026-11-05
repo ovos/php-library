@@ -13,7 +13,11 @@ use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
+use function array_keys;
+use function array_values;
 use function bin2hex;
+use function count;
+use function is_array;
 use function is_int;
 use function random_bytes;
 use function sprintf;
@@ -333,6 +337,194 @@ abstract class Redis extends Tags
 		return ($replies[0] ?? false) === false
 			? $this->functions->call($function, $keys, $args)
 			: $replies[0];
+	}
+	
+	/**
+	 * The fields fetch() reads with its HMGET
+	 *
+	 * @return list<string>
+	 */
+	abstract protected function fetchedFields(): array;
+	
+	/**
+	 * fetch()'s verdict on what its HMGET read ($item: the reply)
+	 */
+	abstract protected function judge(
+		string $id,
+		mixed $item,
+	): mixed;
+	
+	/**
+	 * The write of $value under $key ($id) as set() sends it, guarded by
+	 * $miss (the miss it follows, or null: a write-through) - [function,
+	 * keys, args] of its Lua call
+	 *
+	 * @return array{0: string, 1: list<string>, 2: list<mixed>}
+	 */
+	abstract protected function writeCall(
+		string $id,
+		string $key,
+		mixed $value,
+		int $ttl,
+		array $tags,
+		?array $miss,
+	): array;
+	
+	/**
+	 * The miss a write of $id follows (see KeyValue::takeMiss())
+	 */
+	protected function writeMiss(
+		string $id,
+	): ?array
+	{
+		return $this->takeMiss($id);
+	}
+	
+	/**
+	 * Reads several items in one round trip on a standalone client - a
+	 * pipeline of the HMGET fetch() makes, each reply judged by its id's
+	 * place in the pipeline. A cluster: one by one (the items are of
+	 * different slots)
+	 */
+	#[Override]
+	protected function fetchMany(
+		array $ids,
+	): array
+	{
+		if($ids === [])
+		{
+			return [];
+		}
+		
+		if(($client = $this->getClient()) instanceof RedisClient === false)
+		{
+			return parent::fetchMany($ids);
+		}
+		
+		$found = [];
+		try
+		{
+			$pipeline = $client->pipeline();
+			foreach($ids as $id)
+			{
+				$pipeline->hMGet($id, $this->fetchedFields());
+			}
+			$replies = $pipeline->exec();
+			$found = $this->judgeMany(array_values($ids), is_array($replies) ? $replies : []);
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		// an item the read did not reach is a miss, as fetch() answers it
+		foreach($ids as $id)
+		{
+			$found[$id] ??= null;
+		}
+		
+		return $found;
+	}
+	
+	/**
+	 * The verdicts on a batch's HMGET replies, by id - $replies in the order
+	 * of $ids
+	 *
+	 * @param list<string> $ids
+	 * @param list<mixed> $replies
+	 * @return array<string, mixed>
+	 */
+	protected function judgeMany(
+		array $ids,
+		array $replies,
+	): array
+	{
+		$found = [];
+		foreach($ids as $index => $id)
+		{
+			$found[$id] = $this->judge($id, $replies[$index] ?? false);
+		}
+		
+		return $found;
+	}
+	
+	/**
+	 * Stores what a batch computed in one round trip on a standalone client:
+	 * every write as set() sends it, each with the release of the lock this
+	 * process holds for its key (see writeWithRelease()). A write whose reply
+	 * is an error goes again through call(), which self-heals a library gone;
+	 * a cluster (or no client): one set() per key
+	 */
+	#[Override]
+	protected function storeMany(
+		array $entries,
+	): array
+	{
+		if($this->getClient() instanceof RedisClient === false)
+		{
+			return parent::storeMany($entries);
+		}
+		
+		$memoLock = $this->memoLock instanceof MemoLock
+			? $this->memoLock
+			: null;
+		$stored = [];
+		$calls = [];
+		// by id: the write's call, its place in $calls, its release's
+		$writes = [];
+		
+		try
+		{
+			foreach($entries as $id => [$key, $value, $ttl, $tags])
+			{
+				$miss = $this->writeMiss($id);
+				// a negative TTL or a null value: a delete it is (see set())
+				if($ttl < 0 || $value === null)
+				{
+					$stored[$key] = $this->delete($key);
+					
+					continue;
+				}
+				
+				$call = $this->writeCall($id, $key, $value, $ttl, $tags, $miss);
+				$writes[$id] = [$key, $call, count($calls), null];
+				$calls[] = [$this->functions->functionsPrefix($call[0]), $call[1], $call[2]];
+				if(($release = $memoLock?->releaseCall($id)) !== null)
+				{
+					$writes[$id][3] = count($calls);
+					$calls[] = $release;
+				}
+			}
+			
+			$replies = $calls === []
+				? []
+				: $this->sendAll($calls);
+			foreach($writes as $id => [$key, [$function, $keys, $args], $at, $releaseAt])
+			{
+				if($replies !== null
+					&& $releaseAt !== null
+					&& ($replies[$releaseAt] ?? false) !== false)
+				{
+					$memoLock->released($id);
+				}
+				
+				$result = $replies === null || ($replies[$at] ?? false) === false
+					? $this->functions->call($function, $keys, $args)
+					: $replies[$at];
+				$stored[$key] = (int)$result === 1;
+			}
+		}
+		catch(RedisException $exception)
+		{
+			$this->log($exception);
+		}
+		finally
+		{
+			// a lock no write released goes now - a refused write's too
+			$memoLock?->releaseMany(array_keys($entries));
+		}
+		
+		return $stored;
 	}
 	
 	/**

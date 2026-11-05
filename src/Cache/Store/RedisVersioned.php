@@ -15,6 +15,8 @@ use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
+use function array_keys;
+use function array_values;
 use function count;
 use function explode;
 use function implode;
@@ -146,6 +148,12 @@ class RedisVersioned extends Store
 	protected ?float $rulesFetchedAtMs = null;
 	
 	/**
+	 * A batch judges its items against the rule set held (see judgeMany()):
+	 * getRules() hands it out as it is meanwhile
+	 */
+	protected bool $rulesHeld = false;
+	
+	/**
 	 * This instance appended a rule the held set has not seen yet: the next
 	 * read fetches the delta whatever the window says, so a process always
 	 * sees its own invalidations at once
@@ -235,16 +243,15 @@ class RedisVersioned extends Store
 		
 		$id = $this->prefixer
 			->prefix($key, $this->getType());
-		// a stale item this process read is overwritten here: nothing to drop
-		unset($this->staleDrops[$id]);
 		// the miss this write follows, if any: refused when the key was
 		// deleted (or written through) since, stamped with the watermark the
 		// miss saw (see KeyValue::rememberMiss()) - also past the window, where
 		// only the watermark still guards
-		$miss = $this->takeMiss($id, late: true);
+		$miss = $this->writeMiss($id);
 		
-		// a negative TTL expired the item at once - a delete it is
-		if($ttl < 0)
+		// a negative TTL expired the item at once - a delete it is; so is a
+		// null value (see KeyValue::set())
+		if($ttl < 0 || $value === null)
 		{
 			try
 			{
@@ -257,60 +264,9 @@ class RedisVersioned extends Store
 			}
 		}
 		
-		// an explicitly requested TTL above the retention is capped to it
-		// (see the class doc) - surface the surprise instead of hiding it
-		if($ttl > $this->rulesRetentionS && $this->ttlWarned === false)
-		{
-			$this->ttlWarned = true;
-			$this->log(sprintf(
-				'Cache TTL %d s exceeds rules_retention_s %d s and is capped to it - raise the retention to keep longer-lived items.',
-				$ttl,
-				$this->rulesRetentionS,
-			));
-		}
-		
 		try
 		{
-			// whether the value is soft rides with it: a read judges an
-			// invalidated hard value without decoding it (see fetch())
-			$soft = $value instanceof Stale && $value->isSoft() ? '1' : '0';
-			$value = $this->serializer
-				->serialize($value);
-			$value = $this->compressor
-				->compress($value);
-			
-			// a miss past the window: its epoch guards nothing any more, but the
-			// watermark it took holds for the rules' retention - written as a
-			// write-through stamped with it, so an invalidation made while it
-			// computed still reaches the value (unstamped: with the watermark held
-			// now, as any write-through)
-			if($miss !== null && $miss['late'] === true)
-			{
-				$result = $this->setCall($id, $value, $tags, $ttl, $miss['stamp'] ?? $this->watermark(), $this->writeThroughEpoch(), $soft);
-				
-				return (int)$result === 1;
-			}
-			
-			// the watermark the miss saw - taken right before the computation
-			// (stampMiss()); a miss nobody stamped takes the one held now, which
-			// still guards the epoch (a rule between the miss and now is the
-			// gap the stamp closes)
-			$mark = $miss === null
-				? null
-				: ($miss['stamp'] ?? $this->missStamp());
-			
-			$result = $mark === null
-				? $this->setCall($id, $value, $tags, $ttl, $this->watermark(), $miss === null ? $this->writeThroughEpoch() : '', $soft)
-				: $this->writeWithRelease($id, 'cache_versioned_set_guarded', [$id], [
-					$value,
-					implode(',', $tags),
-					$ttl * 1000, // ms
-					$this->rulesRetentionS * 1000, // ms
-					$mark,
-					$miss['epoch'],
-					$this->invalidationWindowMs,
-					$soft,
-				]);
+			$result = $this->writeWithRelease($id, ...$this->writeCall($id, $key, $value, $ttl, $tags, $miss));
 			
 			return (int)$result === 1;
 		}
@@ -446,7 +402,7 @@ class RedisVersioned extends Store
 	 * value computed before them would count as having seen them). One key:
 	 * cluster-safe
 	 */
-	protected function setCall(
+	protected function stampedCall(
 		string $id,
 		string $value,
 		array $tags,
@@ -454,9 +410,9 @@ class RedisVersioned extends Store
 		string $mark,
 		string $epoch = '', // a write-through's: marks the key (see KeyValue::rememberMiss())
 		string $soft = '', // '1' a soft value, '0' not (see fetch()); '' says nothing
-	): mixed
+	): array
 	{
-		return $this->writeWithRelease($id, 'cache_versioned_set_stamped', [$id], [
+		return ['cache_versioned_set_stamped', [$id], [
 			$value,
 			implode(',', $tags),
 			$ttl * 1000, // ms
@@ -465,7 +421,90 @@ class RedisVersioned extends Store
 			$epoch,
 			$this->invalidationWindowMs,
 			$soft,
-		]);
+		]];
+	}
+	
+	/**
+	 * The miss a write of $id follows - past the window too (see set()); a
+	 * stale item this process read is overwritten: nothing to drop
+	 */
+	#[Override]
+	protected function writeMiss(
+		string $id,
+	): ?array
+	{
+		unset($this->staleDrops[$id]);
+		
+		return $this->takeMiss($id, late: true);
+	}
+	
+	/**
+	 * The write set() sends (see KeyValue\Redis::writeCall()): guarded by
+	 * the miss's epoch and stamped with the watermark it saw
+	 * (cache_versioned_set_guarded), or - no miss, a miss past the window, or
+	 * one whose watermark could not be read - a write stamped with the
+	 * watermark held (cache_versioned_set_stamped)
+	 */
+	#[Override]
+	protected function writeCall(
+		string $id,
+		string $key,
+		mixed $value,
+		int $ttl,
+		array $tags,
+		?array $miss,
+	): array
+	{
+		// an explicitly requested TTL above the retention is capped to it
+		// (see the class doc) - surface the surprise instead of hiding it
+		if($ttl > $this->rulesRetentionS && $this->ttlWarned === false)
+		{
+			$this->ttlWarned = true;
+			$this->log(sprintf(
+				'Cache TTL %d s exceeds rules_retention_s %d s and is capped to it - raise the retention to keep longer-lived items.',
+				$ttl,
+				$this->rulesRetentionS,
+			));
+		}
+		
+		// whether the value is soft rides with it: a read judges an
+		// invalidated hard value without decoding it (see fetch())
+		$soft = $value instanceof Stale && $value->isSoft() ? '1' : '0';
+		$value = $this->serializer
+			->serialize($value);
+		$value = $this->compressor
+			->compress($value);
+		
+		// a miss past the window: its epoch guards nothing any more, but the
+		// watermark it took holds for the rules' retention - written as a
+		// write-through stamped with it, so an invalidation made while it
+		// computed still reaches the value (unstamped: with the watermark held
+		// now, as any write-through)
+		if($miss !== null && $miss['late'] === true)
+		{
+			return $this->stampedCall($id, $value, $tags, $ttl, $miss['stamp'] ?? $this->watermark(), $this->writeThroughEpoch(), $soft);
+		}
+		
+		// the watermark the miss saw - taken right before the computation
+		// (stampMiss()); a miss nobody stamped takes the one held now, which
+		// still guards the epoch (a rule between the miss and now is the
+		// gap the stamp closes)
+		$mark = $miss === null
+			? null
+			: ($miss['stamp'] ?? $this->missStamp());
+		
+		return $mark === null
+			? $this->stampedCall($id, $value, $tags, $ttl, $this->watermark(), $miss === null ? $this->writeThroughEpoch() : '', $soft)
+			: ['cache_versioned_set_guarded', [$id], [
+				$value,
+				implode(',', $tags),
+				$ttl * 1000, // ms
+				$this->rulesRetentionS * 1000, // ms
+				$mark,
+				$miss['epoch'],
+				$this->invalidationWindowMs,
+				$soft,
+			]];
 	}
 	
 	public function delete(
@@ -537,6 +576,142 @@ class RedisVersioned extends Store
 				return [true, null];
 			}
 		};
+	}
+	
+	/**
+	 * The locks of a batch and their second look in one round trip on a
+	 * standalone client (see MemoLock::lockMany()): SET NX per key and the
+	 * HMGET fetch() makes per key, pipelined, the looks judged as fetch()
+	 * judges them (one rule set for the batch). A cluster: none - the locks
+	 * and the items are of different slots
+	 */
+	#[Override]
+	protected function lockAndLookMany(): ?Closure
+	{
+		if(($client = $this->getClient()) instanceof RedisClient === false)
+		{
+			return null;
+		}
+		
+		return function(array $lockKeys, array $lockValues, int $ttlMs) use ($client): array
+		{
+			$pipeline = $client->pipeline();
+			foreach($lockKeys as $id => $lockKey)
+			{
+				$pipeline->set($lockKey, $lockValues[$id], ['NX', 'PX' => $ttlMs]);
+			}
+			foreach($lockKeys as $id => $lockKey)
+			{
+				$pipeline->hMGet($id, $this->fetchedFields());
+			}
+			$replies = $pipeline->exec();
+			$count = count($lockKeys);
+			
+			$taken = [];
+			$looked = [];
+			$index = 0;
+			foreach($lockKeys as $id => $lockKey)
+			{
+				$taken[$id] = [($replies[$index] ?? false) === true, null];
+				if($taken[$id][0])
+				{
+					$looked[$id] = $replies[$count + $index] ?? false;
+				}
+				$index++;
+			}
+			
+			// the locks are taken: a look the rules cannot judge is a miss, as
+			// in fetch(), so the MemoLock records the locks and they go with
+			// the writes (see lockAndLook())
+			try
+			{
+				$looks = $this->judgeMany(array_keys($looked), array_values($looked));
+			}
+			catch(RedisException|RedisClusterException $exception)
+			{
+				$this->log($exception);
+				$looks = [];
+			}
+			foreach($looked as $id => $reply)
+			{
+				$taken[$id][1] = $this->fresh($looks[$id] ?? null);
+			}
+			
+			return $taken;
+		};
+	}
+	
+	/**
+	 * The verdicts on a batch's replies against ONE rule set: refreshed (at
+	 * most) once, before the first, and held for the rest - a batch is one
+	 * read, whatever rules_cache_ms says
+	 */
+	#[Override]
+	protected function judgeMany(
+		array $ids,
+		array $replies,
+	): array
+	{
+		$this->getRules();
+		$this->rulesHeld = true;
+		try
+		{
+			return parent::judgeMany($ids, $replies);
+		}
+		finally
+		{
+			$this->rulesHeld = false;
+		}
+	}
+	
+	/**
+	 * Drops the stale items a batch's reads found (see afterRead()) - their
+	 * drops in one round trip on a standalone client, one by one otherwise
+	 */
+	#[Override]
+	protected function afterReadMany(
+		array $ids,
+	): void
+	{
+		$drops = [];
+		foreach($ids as $id)
+		{
+			if(isset($this->staleDrops[$id]))
+			{
+				$drops[$id] = $this->staleDrops[$id];
+				unset($this->staleDrops[$id]);
+			}
+		}
+		if($drops === [])
+		{
+			return;
+		}
+		
+		$calls = [];
+		foreach($drops as $id => $mark)
+		{
+			$calls[] = [
+				$this->functions->functionsPrefix('cache_versioned_drop_stale'),
+				[$id],
+				[$mark, (string)$this->invalidationWindowMs],
+			];
+		}
+		try
+		{
+			if($this->sendAll($calls) !== null)
+			{
+				return;
+			}
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+		}
+		
+		foreach($drops as $id => $mark)
+		{
+			$this->dropStale($id, $mark);
+		}
 	}
 	
 	/**
@@ -723,6 +898,11 @@ class RedisVersioned extends Store
 	 */
 	protected function getRules(): Rules
 	{
+		if($this->rulesHeld && $this->rules !== null)
+		{
+			return $this->rules;
+		}
+		
 		$nowMs = microtime(true) * 1000;
 		
 		if($this->rules !== null

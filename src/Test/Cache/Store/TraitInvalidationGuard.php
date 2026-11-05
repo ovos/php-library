@@ -8,6 +8,7 @@ use Ovos\Cache\Serializer;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
+use Closure;
 
 use function array_keys;
 use function bin2hex;
@@ -42,6 +43,24 @@ trait TraitInvalidationGuard
 	abstract protected function guardStore(
 		array $storeOptions = [],
 	): KeyValueRedis;
+	
+	/**
+	 * Waits until $done() says the server got there, bounded
+	 * (TraitStaleWhileRevalidate)
+	 */
+	abstract protected function awaitServer(
+		Closure $done,
+		int $boundMs = 5000,
+	): bool;
+	
+	/**
+	 * Whether the server expired the data field of every item of $keys
+	 * (TraitStaleWhileRevalidate)
+	 */
+	abstract protected function dataExpired(
+		KeyValueRedis $store,
+		array $keys,
+	): bool;
 	
 	/**
 	 * RULE: a value computed before another process deleted its key is never
@@ -197,7 +216,8 @@ trait TraitInvalidationGuard
 		$writer->delete($key);
 		$late->get($key, queue: false);
 		$late->set($key, 'short', 1);
-		usleep(1300000);
+		// the short item's data expired by the server (the key stays: the mark's)
+		$this->awaitServer(fn(): bool => $this->dataExpired($writer, [$key]));
 		$expired = $this->guardStore()->get($key, queue: false) === null;
 		$marked = (int)$writer->getClient()->hExists($id, KeyValueRedis::KEY_EPOCH) === 1;
 		$early->set($key, 'stale', 60);
@@ -327,7 +347,8 @@ trait TraitInvalidationGuard
 		$fields = array_keys((array)$client->hGetAll($id));
 		$ttl = (int)$client->pttl($id);
 		$miss = $this->guardStore()->get(self::GUARD_KEY, queue: false) === null;
-		usleep(450000);
+		// the tombstone expired by the server, at the end of its window
+		$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
 		$gone = (int)$client->exists($id) === 0;
 		
 		// the item's own expiry: none, or (the versioned stores) the retention

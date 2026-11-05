@@ -12,6 +12,7 @@ use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\Apcu as Store;
 use Ovos\Test;
 use Ovos\Test\Internal;
+use Ovos\Test\Cache\Store\TraitBatch;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
@@ -36,6 +37,7 @@ class Apcu extends Test
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
 	use TraitCachePolicy;
+	use TraitBatch;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -304,6 +306,14 @@ class Apcu extends Test
 		$writer->delete($key);
 		
 		return $refused && $through && $ownWritten;
+	}
+	
+	/**
+	 * APCu: no client to count the round trips of (TraitBatch)
+	 */
+	protected function batchProbe(): ?KeyValueRedis
+	{
+		return null;
 	}
 	
 	/**

@@ -153,6 +153,76 @@ abstract class MemoLock
 	): bool;
 	
 	/**
+	 * Whether a call waits for a computation in flight: the queue's setting,
+	 * unless the call says otherwise (get(queue:))
+	 */
+	public function queues(
+		?bool $queue = null,
+	): bool
+	{
+		return $queue ?? $this->queueEnabled;
+	}
+	
+	/**
+	 * The lock's TTL a call takes when it names none
+	 * Unit: milliseconds
+	 */
+	abstract public function getQueueLockTtlMs(): int;
+	
+	/**
+	 * How many times a batch waits for the keys another process computes
+	 * before it computes them itself (see KeyValue::getMany())
+	 */
+	public function getQueueWaitAttempts(): int
+	{
+		return 3;
+	}
+	
+	/**
+	 * Takes the locks of $ids that are free, without waiting - in one round
+	 * trip where the store can: $lockAndLookMany takes them and makes their
+	 * second look with them, fn(array<string, string> $lockKeys,
+	 * array<string, string> $lockValues, int $ttlMs): array<string,
+	 * array{0: bool, 1: mixed}> (both by id: whether the lock was taken, what
+	 * the look found). The ids locked - this process's to release - and, by
+	 * id, what a look made with the lock found; an id without a look was
+	 * locked without one. A lock that cannot be tried (the server
+	 * unreachable) is answered as taken, unrecorded: the caller computes, as
+	 * lockAndQueue() does then
+	 *
+	 * @param list<string> $ids
+	 * @return array{0: list<string>, 1: array<string, mixed>}
+	 */
+	abstract public function lockMany(
+		array $ids,
+		?int $queueLockTtlMs = null,
+		?Closure $lockAndLookMany = null,
+	): array;
+	
+	/**
+	 * Waits until a lock of $ids that another process holds is released, at
+	 * most $waitMs - and never much longer than such a lock can live (a
+	 * crashed holder never publishes). Whether one was released, or none is
+	 * held any more
+	 *
+	 * @param list<string> $ids
+	 */
+	abstract public function waitForAny(
+		array $ids,
+		float|int $waitMs,
+	): bool;
+	
+	/**
+	 * Releases this process's locks of $ids, telling their waiters - in one
+	 * round trip where it can; an id it does not hold is skipped
+	 *
+	 * @param list<string> $ids
+	 */
+	abstract public function releaseMany(
+		array $ids,
+	): void;
+	
+	/**
 	 * Takes the lock when it is free, without waiting: true when this
 	 * process holds it now (release it with releaseActiveLock()), false when
 	 * another holds it. Elects the one process that refreshes a stale value

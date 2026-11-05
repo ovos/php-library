@@ -58,6 +58,21 @@ class Apcu extends KeyValue
 		// the miss this write follows, if any: refused when a delete (or a
 		// write-through) marked the key since (see KeyValue::rememberMiss())
 		$miss = $this->takeMiss($id);
+		
+		// a null value: a delete it is (see KeyValue::set())
+		if($value === null)
+		{
+			try
+			{
+				return $this->delete($key);
+			}
+			finally
+			{
+				$this->getMemoLock()
+					->releaseActiveLock($id);
+			}
+		}
+		
 		$value = $this->serializer
 			->serialize($value);
 		$value = $this->compressor

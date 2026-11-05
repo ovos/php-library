@@ -10,6 +10,7 @@ use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\KeyValue\TagIndex;
 use Ovos\Test;
 use Ovos\Test\Internal;
+use Ovos\Test\Cache\Store\TraitBatch;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
@@ -24,8 +25,10 @@ use ReflectionMethod;
 
 use function count;
 use function array_diff;
+use function array_values;
 use function bin2hex;
 use function in_array;
+use function preg_match;
 use function random_bytes;
 
 /**
@@ -41,6 +44,7 @@ class Redis extends Test
 	use TraitStoredStrings;
 	use TraitCachePolicy;
 	use TraitTagIndexMiss;
+	use TraitBatch;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -435,6 +439,14 @@ class Redis extends Test
 	}
 	
 	/**
+	 * A fresh store whose client counts its round trips (TraitBatch)
+	 */
+	protected function batchProbe(): ?KeyValueRedis
+	{
+		return $this->roundTripStore(Store::class);
+	}
+	
+	/**
 	 * A fresh store - another process (TraitStaleWhileRevalidate)
 	 */
 	protected function staleStore(): KeyValueRedis
@@ -529,6 +541,77 @@ class Redis extends Test
 		{
 			$client->del($lockKey);
 		}
+	}
+	
+	/**
+	 * RULE: an invalidation matching all of its tags walks no tag to unlink
+	 * what it collected - each id is looked up in the tag, so the unlink
+	 * costs the ids, never the size of a tag they share with thousands of
+	 * other items (its HSCANs are the collection's alone)
+	 */
+	public function aMatchingAllInvalidationDoesNotWalkTheTag(): bool
+	{
+		$this->store->setCleanTags(false);
+		$tags = ['walk-wide', 'walk-b', 'walk-c'];
+		$this->store->set('walk-all', 'test', 60, $tags);
+		for($i = 0; $i < 2000; $i++)
+		{
+			$this->store->set('walk-wide-' . $i, 'test', 60, [$tags[0]]);
+		}
+		
+		$before = $this->commandCalls('hscan');
+		$ids = $this->store->getIdsMatchingAllTags($tags);
+		$collection = $this->commandCalls('hscan') - $before;
+		$before = $this->commandCalls('hscan');
+		$this->store->invalidateTags($tags, Store::MATCHING_ALL);
+		$invalidation = $this->commandCalls('hscan') - $before;
+		
+		return array_values($ids) === ['walk-all']
+			&& $this->store->get('walk-all', queue: false) === null
+			&& $this->store->get('walk-wide-0', queue: false) === 'test'
+			&& $this->store->get('walk-wide-1999', queue: false) === 'test'
+			&& $collection >= count($tags)
+			&& $invalidation === $collection;
+	}
+	
+	/**
+	 * RULE: a write re-links a tag whose index field is gone - the index is
+	 * the proof, not the item's own tag list: a field evicted, deleted by
+	 * hand or left by an older release kept the item out of every
+	 * invalidation of that tag until its tags changed
+	 */
+	public function aWriteRelinksATagWhoseIndexFieldIsGone(): bool
+	{
+		$tag = 'relink-tag';
+		$tagId = $this->store
+			->prefix($tag, $this->store->getType(Store::TYPE_TAGS));
+		$this->store->set(self::KEY_ITEM, 'first', 60, [$tag]);
+		$this->store->getClient()
+			->hDel($tagId, self::KEY_ITEM);
+		
+		$this->store->set(self::KEY_ITEM, 'second', 60, [$tag]);
+		$relinked = (bool)$this->store->getClient()
+			->hExists($tagId, self::KEY_ITEM);
+		$this->store->invalidateTags([$tag]);
+		
+		return $relinked
+			&& $this->store->get(self::KEY_ITEM, queue: false) === null;
+	}
+	
+	/**
+	 * How often the server ran $command so far (INFO commandstats - a command
+	 * a Lua function runs is counted too)
+	 */
+	protected function commandCalls(
+		string $command,
+	): int
+	{
+		$stats = $this->store->getClient()
+			->info('commandstats');
+		
+		return preg_match('/calls=(\d+)/', (string)($stats['cmdstat_' . $command] ?? ''), $match) === 1
+			? (int)$match[1]
+			: 0;
 	}
 	
 	/**

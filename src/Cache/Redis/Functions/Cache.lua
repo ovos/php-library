@@ -10,8 +10,8 @@
 	  on a cluster - the flag makes it fail fast with a clear error.
 	
 	The versioned (rule based) functions live in CacheVersioned.lua; the
-	Redisearch store's invalidation is here (cache_unlink_by_search), with
-	the item removal it shares with the tag-hash store.
+	Redisearch store's item removal is here (cache_remove_items), shared
+	with the tag-hash store.
 	
 	@author Marcin Gil <mg@ovos.at>
 ]]
@@ -175,12 +175,19 @@ end
 -- soft mark (the guard on, the invalidation not hard), any other goes - no
 -- tombstone: the invalidation stamped its tags first, and a write carrying a
 -- stamped tag whose miss came before is refused (cache_write_allowed()), so a
--- tombstone per item would only cost a write per item
-local function cache_remove_item(key, token, window_ms, hard)
+-- tombstone per item would only cost a write per item. once: a soft item
+-- that already carries this invalidation's token is left as it is (a
+-- caller that can reach an item twice - see cache_remove_items()); two soft
+-- invalidations running at once can still re-mark an item for each other
+-- until one cursor reads past the other's mark, a bounded overlap
+local function cache_remove_item(key, token, window_ms, hard, once)
 	if token and window_ms and window_ms > 0 and hard ~= true
 		and redis.call('TYPE', key)['ok'] == 'hash' then
 		local soft_ms = tonumber(redis.call('HGET', key, CACHE_SOFT) or '')
 		if soft_ms and soft_ms > 0 and redis.call('HEXISTS', key, 'data') == 1 then
+			if once and redis.call('HGET', key, CACHE_EPOCH) == token then
+				return CACHE_SOFT_MARKED
+			end
 			return cache_soft_mark(key, token, window_ms, soft_ms)
 		end
 	end
@@ -625,24 +632,11 @@ local function cache_unlink_ids_by_tag(keys, args)
 		return 1
 	end
 	
-	-- unlink every id matching input ids for the given tag
-	
-	-- collect all ids from the tag
-	local all_tag_ids = {}
-	cache_hscan_keys(prefix_tag_ids .. tag, 5000, function(id)
-		table.insert(all_tag_ids, id)
-	end)
-	
-	-- create a map of ids for quick lookup
-	local lookup = {}
-	for _, single_id in ipairs(ids) do
-		lookup[single_id] = true
-	end
-	
-	-- prepare a list of ids to be removed (comparison against lookup)
+	-- every id given that the tag holds, looked up one by one: a call costs
+	-- its ids, never the size of the tag (which may hold thousands more)
 	local rems = {}
-	for _, id in ipairs(all_tag_ids) do
-		if lookup[id] then
+	for _, id in ipairs(ids) do
+		if redis.call('HEXISTS', prefix_tag_ids .. tag, id) == 1 then
 			-- the item itself goes, and the id leaves the tag after the loop -
 			-- or it gets its soft mark, and the id stays (a hard invalidation
 			-- still reaches it)
@@ -844,10 +838,41 @@ local function cache_unlink_by_search(keys, args)
 		cache_remove_item(key, token, window_ms, hard)
 	end
 end
--- standalone-only: the matched keys are undeclared, of any slot
+-- standalone-only: the matched keys are undeclared, of any slot; kept for a
+-- caller of an older release while a rolling deploy runs - the store walks
+-- the matches itself (cache_remove_items)
 redis.register_function
 {
 	function_name = '[prefix]cache_unlink_by_search',
 	callback = cache_unlink_by_search,
+	flags = {'no-cluster'}
+}
+
+-- Removes the items given - one page of the matches the Redisearch store's
+-- invalidation reads through a cursor, so the server serves other clients
+-- between the pages. Each goes through cache_remove_item(): it goes, or a
+-- soft value's item gets its soft mark. The mark's HSET re-indexes the item
+-- as a new document, which the open cursor delivers once more: a soft item
+-- that already carries this invalidation's token is left as it is (once) -
+-- marked again, it would be re-indexed and delivered again, and the walk
+-- would only end once its marks expired
+-- keys: the items; args: [1] this invalidation's token (the soft mark's
+-- epoch), [2] window (ms), [3] '1': hard (soft values are removed too)
+local function cache_remove_items(keys, args)
+	local token = args[1]
+	local window_ms = tonumber(args[2])
+	local hard = args[3] == '1'
+	
+	for _, key in ipairs(keys) do
+		cache_remove_item(key, token, window_ms, hard, true)
+	end
+	
+	return #keys
+end
+-- standalone-only: the items are of any slot
+redis.register_function
+{
+	function_name = '[prefix]cache_remove_items',
+	callback = cache_remove_items,
 	flags = {'no-cluster'}
 }

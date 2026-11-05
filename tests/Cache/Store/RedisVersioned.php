@@ -15,6 +15,7 @@ use Ovos\Cache\Store\Redisearch;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\RedisVersionedProbe;
+use Ovos\Test\Cache\Store\TraitBatch;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
@@ -55,6 +56,7 @@ class RedisVersioned extends Test
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
 	use TraitCachePolicy;
+	use TraitBatch;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -1623,6 +1625,14 @@ class RedisVersioned extends Test
 	{
 		$this->store->getConnection()
 			->disconnect();
+	}
+	
+	/**
+	 * A fresh store whose client counts its round trips (TraitBatch)
+	 */
+	protected function batchProbe(): ?KeyValueRedis
+	{
+		return $this->roundTripStore(Store::class);
 	}
 	
 	/**

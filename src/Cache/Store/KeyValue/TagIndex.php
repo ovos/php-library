@@ -11,6 +11,7 @@ use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
+use function count;
 use function is_array;
 use function str_pad;
 
@@ -160,6 +161,64 @@ abstract class TagIndex extends Redis
 			}
 			
 			return [true, $look];
+		};
+	}
+	
+	/**
+	 * The locks of a batch, their second look and the misses' stamp in one
+	 * round trip (see MemoLock::lockMany()): SET NX per key, the HMGET
+	 * fetch() makes per key and TIME, pipelined - each look judged as fetch()
+	 * judges it, by its key's place in the pipeline, the server time the
+	 * stamp of every miss it leaves. The tag-index stores run standalone
+	 */
+	#[Override]
+	protected function lockAndLookMany(): ?Closure
+	{
+		$client = $this->getClient();
+		if($client instanceof RedisClient === false)
+		{
+			return null;
+		}
+		
+		return function(array $lockKeys, array $lockValues, int $ttlMs) use ($client): array
+		{
+			$pipeline = $client->pipeline();
+			foreach($lockKeys as $id => $lockKey)
+			{
+				$pipeline->set($lockKey, $lockValues[$id], ['NX', 'PX' => $ttlMs]);
+			}
+			foreach($lockKeys as $id => $lockKey)
+			{
+				$pipeline->hMGet($id, $this->fetchedFields());
+			}
+			$pipeline->time();
+			$replies = $pipeline->exec();
+			$count = count($lockKeys);
+			$stamp = $this->timeOf($replies[2 * $count] ?? null);
+			
+			$taken = [];
+			$index = 0;
+			foreach($lockKeys as $id => $lockKey)
+			{
+				if(($replies[$index] ?? false) !== true)
+				{
+					$taken[$id] = [false, null];
+					$index++;
+					
+					continue;
+				}
+				
+				$look = $this->fresh($this->judge($id, $replies[$count + $index] ?? false));
+				if($look === null
+					&& isset($this->misses[$id]))
+				{
+					$this->misses[$id]['stamp'] = $stamp;
+				}
+				$taken[$id] = [true, $look];
+				$index++;
+			}
+			
+			return $taken;
 		};
 	}
 	

@@ -91,6 +91,22 @@ trait TraitRedis
 		return $config;
 	}
 	
+	/**
+	 * A store of $storeClass on the persistent tier whose client counts its
+	 * round trips (CountingConnection) - for a probe of what a call sends
+	 */
+	protected function roundTripStore(
+		string $storeClass,
+		array $storeOptions = [],
+	): KeyValueRedis
+	{
+		$arguments = $this->storeArguments($storeOptions);
+		$arguments[0] = new CountingConnection($arguments[0]->getConfig());
+		
+		/** @var KeyValueRedis $storeClass */
+		return new $storeClass(...$arguments);
+	}
+	
 	protected function getMemoLock(): RedisMemoLock
 	{
 		$persistent = $this->container

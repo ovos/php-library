@@ -197,11 +197,12 @@ class Redis extends TagIndex
 			->prefix($key, $this->getType());
 		// the miss this write follows, if any: it is guarded against an
 		// invalidation since (see KeyValue::rememberMiss())
-		$miss = $this->takeMiss($id);
+		$miss = $this->writeMiss($id);
 		
 		// a negative TTL expired the item at once (EXPIRE with a negative
-		// value deletes the key) - a delete it is
-		if($ttl < 0)
+		// value deletes the key) - a delete it is; so is a null value (see
+		// KeyValue::set())
+		if($ttl < 0 || $value === null)
 		{
 			try
 			{
@@ -216,41 +217,8 @@ class Redis extends TagIndex
 		
 		try
 		{
-			// a soft value's item carries its stale time, so a tag invalidation
-			// marks it instead of removing it (see KeyValue\Redis::KEY_SOFT)
-			$soft = $value instanceof Stale && $value->isSoft()
-				? $value->staleFor * 1000
-				: null;
-			$value = $this->serializer->serialize($value);
-			$value = $this->compressor->compress($value);
-			
-			// the item and its tag index in one step (Lua cache_set): the
-			// item's tags are read there, an item written without tags drops
-			// the field, every tag field's HEXPIRE follows the item's TTL, the
-			// tags it no longer has release it - a guarded write is refused
-			// when the key was invalidated, a tag of it stamped or the store
-			// cleared since its miss (an unstamped miss: when any of them carries a
-			// stamp), and a write-through marks the key with a fresh epoch; a soft
-			// value goes through cache_set_soft - the same write, its stale time
-			// first. With the release of the lock a miss took, in one round trip
 			$client->clearLastError();
-			$result = $this
-				->writeWithRelease($id, $soft === null ? 'cache_set' : 'cache_set_soft', [
-					$id,
-					$this->stampKey(),
-				], [
-					...($soft === null ? [] : [$soft]),
-					$miss['epoch'] ?? static::UNGUARDED,
-					$miss === null ? '' : ($miss['stamp'] ?? ''),
-					$ttl,
-					$key,
-					$this->getType(static::TYPE_TAGS) . Prefixer::SEPARATOR_PREFIX,
-					$this->getType(static::TYPE_INVALIDATED) . Prefixer::SEPARATOR_PREFIX,
-					$miss === null ? $this->writeThroughEpoch() : '',
-					$this->invalidationWindowMs,
-					$value,
-					...array_values(array_unique($tags)),
-				]);
+			$result = $this->writeWithRelease($id, ...$this->writeCall($id, $key, $value, $ttl, $tags, $miss));
 			if($result === false && ($error = $client->getLastError()))
 			{
 				$this->log($error);
@@ -270,6 +238,53 @@ class Redis extends TagIndex
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * The write set() sends (see KeyValue\Redis::writeCall()): the item and
+	 * its tag index in one step (Lua cache_set) - the item's tags are read
+	 * there, an item written without tags drops the field, every tag field's
+	 * HEXPIRE follows the item's TTL, the tags it no longer has release it; a
+	 * guarded write is refused when the key was invalidated, a tag of it
+	 * stamped or the store cleared since its miss (an unstamped miss: when
+	 * any of them carries a stamp), and a write-through marks the key with a
+	 * fresh epoch; a soft value goes through cache_set_soft - the same write,
+	 * its stale time first
+	 */
+	#[Override]
+	protected function writeCall(
+		string $id,
+		string $key,
+		mixed $value,
+		int $ttl,
+		array $tags,
+		?array $miss,
+	): array
+	{
+		// a soft value's item carries its stale time, so a tag invalidation
+		// marks it instead of removing it (see KeyValue\Redis::KEY_SOFT)
+		$soft = $value instanceof Stale && $value->isSoft()
+			? $value->staleFor * 1000
+			: null;
+		$value = $this->serializer->serialize($value);
+		$value = $this->compressor->compress($value);
+		
+		return [$soft === null ? 'cache_set' : 'cache_set_soft', [
+			$id,
+			$this->stampKey(),
+		], [
+			...($soft === null ? [] : [$soft]),
+			$miss['epoch'] ?? static::UNGUARDED,
+			$miss === null ? '' : ($miss['stamp'] ?? ''),
+			$ttl,
+			$key,
+			$this->getType(static::TYPE_TAGS) . Prefixer::SEPARATOR_PREFIX,
+			$this->getType(static::TYPE_INVALIDATED) . Prefixer::SEPARATOR_PREFIX,
+			$miss === null ? $this->writeThroughEpoch() : '',
+			$this->invalidationWindowMs,
+			$value,
+			...array_values(array_unique($tags)),
+		]];
 	}
 	
 	/**

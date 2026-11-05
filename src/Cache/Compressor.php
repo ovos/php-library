@@ -84,30 +84,26 @@ class Compressor
 		}
 		
 		// use zstd if available, gzip otherwise
-		if(Zstd::isAvailable())
+		[$method, $compressed] = Zstd::isAvailable()
+			? ['zs', zstd_compress($value, 4)]
+			: ['gz', gzcompress($value, 3)];
+		if($compressed === false)
 		{
-			if(($compressed = zstd_compress($value, 4)) === false)
-			{
-				// compression failed
-				return $this->raw($value);
-			}
-			
-			$value = 'zs' . static::PREFIX_COMPRESS . $compressed;
-			unset($compressed);
-		}
-		else
-		{
-			if(($compressed = gzcompress($value, 3)) === false)
-			{
-				// compression failed
-				return $this->raw($value);
-			}
-			
-			$value = 'gz' . static::PREFIX_COMPRESS . $compressed;
-			unset($compressed);
+			// compression failed
+			return $this->raw($value);
 		}
 		
-		return $value;
+		$framed = $method . static::PREFIX_COMPRESS . $compressed;
+		unset($compressed);
+		// a value compression does not shrink (random or already compressed
+		// bytes) is stored as it is: its frame would cost bytes, and every
+		// read a decompression
+		if(strlen($framed) >= strlen($value))
+		{
+			return $this->raw($value);
+		}
+		
+		return $framed;
 	}
 	
 	public function decompress(

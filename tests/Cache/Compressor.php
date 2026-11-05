@@ -12,9 +12,12 @@ use Ovos\Test\Exception\SkipException;
 use stdClass;
 
 use function gzcompress;
+use function in_array;
+use function random_bytes;
 use function serialize;
 use function str_repeat;
 use function strlen;
+use function substr;
 use function zstd_compress;
 
 /**
@@ -93,6 +96,25 @@ class Compressor extends Test
 		$stored = $compressor->compress($value);
 		
 		return strlen($stored) < strlen($value)
+			&& $compressor->decompress($stored) === $value;
+	}
+	
+	/**
+	 * RULE: a value compression does not shrink (random bytes) is stored as
+	 * it is - no frame that costs bytes and a decompression on every read
+	 */
+	public function anIncompressibleValueIsStoredAsItIs(): bool
+	{
+		$compressor = new Subject;
+		$value = random_bytes(4096);
+		$stored = $compressor->compress($value);
+		$frames = [
+			'zs' . Subject::PREFIX_COMPRESS,
+			'gz' . Subject::PREFIX_COMPRESS,
+		];
+		
+		return in_array(substr($stored, 0, 5), $frames, true) === false
+			&& strlen($stored) <= strlen($value) + 5
 			&& $compressor->decompress($stored) === $value;
 	}
 }
