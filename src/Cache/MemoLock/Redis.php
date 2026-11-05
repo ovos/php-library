@@ -10,6 +10,7 @@ use Ovos\Cache\Prefixer;
 use Ovos\Cache\Redis\Functions;
 use Ovos\Connection\RedisCommon as Connection;
 use Closure;
+use Override;
 use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
 use RedisException;
@@ -17,7 +18,9 @@ use RedisClusterException;
 use Throwable;
 
 use function bin2hex;
+use function implode;
 use function random_bytes;
+use function max;
 use function min;
 use function random_int;
 use function array_key_exists;
@@ -101,6 +104,281 @@ class Redis extends MemoLock
 	public function getClient(): RedisClient|RedisClusterClient|null
 	{
 		return $this->connection->getClient();
+	}
+	
+	#[Override]
+	public function getQueueLockTtlMs(): int
+	{
+		return $this->queueLockTtlMs;
+	}
+	
+	#[Override]
+	public function getQueueWaitAttempts(): int
+	{
+		return $this->queueWaitAttempts;
+	}
+	
+	/**
+	 * Takes the free locks of $ids (see MemoLock::lockMany()): with their
+	 * look where the store sends both ($lockAndLookMany), else SET NX each -
+	 * pipelined on a standalone client, one by one on a cluster (the lock
+	 * keys are of different slots)
+	 */
+	#[Override]
+	public function lockMany(
+		array $ids,
+		?int $queueLockTtlMs = null,
+		?Closure $lockAndLookMany = null,
+	): array
+	{
+		if($ids === [])
+		{
+			return [[], []];
+		}
+		
+		if(($client = $this->getClient()) === null)
+		{
+			// no server to lock on: computed here, as lockAndQueue() does
+			return [$ids, []];
+		}
+		
+		$ttlMs = $queueLockTtlMs ?? $this->queueLockTtlMs;
+		$lockKeys = [];
+		$lockValues = [];
+		foreach($ids as $id)
+		{
+			$lockKeys[$id] = $this->prefixer
+				->prefix(static::TYPE_LOCK, $id);
+			$lockValues[$id] = bin2hex(random_bytes(16));
+		}
+		
+		try
+		{
+			$taken = $lockAndLookMany !== null
+				? $lockAndLookMany($lockKeys, $lockValues, $ttlMs)
+				: $this->setMany($client, $lockKeys, $lockValues, $ttlMs);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			// a failure to lock must not break the host application: the keys
+			// are computed here, unlocked
+			$this->connection->log($exception);
+			
+			return [$ids, []];
+		}
+		
+		$acquired = [];
+		$looks = [];
+		foreach($ids as $id)
+		{
+			if((($taken[$id] ?? [false])[0] ?? false) !== true)
+			{
+				continue;
+			}
+			
+			$this->queueLocks[$id] = $lockValues[$id];
+			$acquired[] = $id;
+			if($lockAndLookMany !== null)
+			{
+				$looks[$id] = $taken[$id][1] ?? null;
+			}
+		}
+		
+		return [$acquired, $looks];
+	}
+	
+	/**
+	 * SET NX of every lock - one pipeline on a standalone client, one by one
+	 * on a cluster; by id, whether it was taken
+	 *
+	 * @param array<string, string> $lockKeys
+	 * @param array<string, string> $lockValues
+	 * @return array<string, array{0: bool, 1: null}>
+	 */
+	protected function setMany(
+		RedisClient|RedisClusterClient $client,
+		array $lockKeys,
+		array $lockValues,
+		int $ttlMs,
+	): array
+	{
+		$taken = [];
+		if($client instanceof RedisClient)
+		{
+			$pipeline = $client->pipeline();
+			foreach($lockKeys as $id => $lockKey)
+			{
+				$pipeline->set($lockKey, $lockValues[$id], ['NX', 'PX' => $ttlMs]);
+			}
+			$replies = $pipeline->exec();
+			$index = 0;
+			foreach($lockKeys as $id => $lockKey)
+			{
+				$taken[$id] = [($replies[$index] ?? false) === true, null];
+				$index++;
+			}
+			
+			return $taken;
+		}
+		
+		foreach($lockKeys as $id => $lockKey)
+		{
+			$taken[$id] = [(bool)$client->set($lockKey, $lockValues[$id], ['NX', 'PX' => $ttlMs]), null];
+		}
+		
+		return $taken;
+	}
+	
+	/**
+	 * Waits for a release of any lock of $ids another process holds (see
+	 * MemoLock::waitForAny()): their PTTLs first - a lock gone needs no wait,
+	 * and the wait never outlasts the longest lock held - then one
+	 * subscription to all of their channels, ended by the first publication
+	 */
+	#[Override]
+	public function waitForAny(
+		array $ids,
+		float|int $waitMs,
+	): bool
+	{
+		if($ids === []
+			|| ($client = $this->getClient()) === null
+			|| $this->getQueueClient() === null)
+		{
+			return true;
+		}
+		
+		$lockKeys = [];
+		foreach($ids as $id)
+		{
+			$lockKeys[$id] = $this->prefixer
+				->prefix(static::TYPE_LOCK, $id);
+		}
+		
+		try
+		{
+			$remaining = $this->pttlMany($client, $lockKeys);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->connection->log($exception);
+			
+			return true;
+		}
+		
+		$channels = [];
+		$longestMs = 0;
+		foreach($remaining as $id => $remainingMs)
+		{
+			// gone: no publication will come, nothing to wait for
+			if($remainingMs === -2 || $remainingMs === false)
+			{
+				continue;
+			}
+			
+			$channels[] = $this->prefixer
+				->prefix(static::TYPE_CHANNEL, $id);
+			$longestMs = max($longestMs, (int)$remainingMs);
+		}
+		if($channels === [])
+		{
+			return true;
+		}
+		
+		return $this->waitForMessage($channels, $longestMs > 0
+			? min($waitMs, $longestMs + 25)
+			: $waitMs,
+		);
+	}
+	
+	/**
+	 * The PTTL of every lock - one pipeline on a standalone client, one by
+	 * one on a cluster
+	 *
+	 * @param array<string, string> $lockKeys
+	 * @return array<string, int|false>
+	 */
+	protected function pttlMany(
+		RedisClient|RedisClusterClient $client,
+		array $lockKeys,
+	): array
+	{
+		$remaining = [];
+		if($client instanceof RedisClient)
+		{
+			$pipeline = $client->pipeline();
+			foreach($lockKeys as $lockKey)
+			{
+				$pipeline->pttl($lockKey);
+			}
+			$replies = $pipeline->exec();
+			$index = 0;
+			foreach($lockKeys as $id => $lockKey)
+			{
+				$remaining[$id] = $replies[$index] ?? false;
+				$index++;
+			}
+			
+			return $remaining;
+		}
+		
+		foreach($lockKeys as $id => $lockKey)
+		{
+			$remaining[$id] = $client->pttl($lockKey);
+		}
+		
+		return $remaining;
+	}
+	
+	/**
+	 * Releases this process's locks of $ids (see MemoLock::releaseMany()):
+	 * their releases in one round trip on a standalone client, one by one
+	 * otherwise
+	 */
+	#[Override]
+	public function releaseMany(
+		array $ids,
+	): void
+	{
+		$calls = [];
+		$held = [];
+		foreach($ids as $id)
+		{
+			if(($call = $this->releaseCall($id)) !== null)
+			{
+				$calls[] = $call;
+				$held[] = $id;
+			}
+		}
+		if($calls === [])
+		{
+			return;
+		}
+		
+		try
+		{
+			$replies = $this->functions
+				->callAll($calls);
+		}
+		catch(Throwable $throwable)
+		{
+			// as releaseActiveLock(): the locks expire on their PX TTL anyway
+			$this->connection->log($throwable);
+			$replies = null;
+		}
+		
+		foreach($held as $index => $id)
+		{
+			if($replies !== null
+				&& ($replies[$index] ?? false) !== false)
+			{
+				$this->released($id);
+				
+				continue;
+			}
+			
+			$this->releaseActiveLock($id);
+		}
 	}
 	
 	/**
@@ -309,7 +587,7 @@ class Redis extends MemoLock
 	 * blocking the queue (pub/sub) connection for up to the given time
 	 */
 	protected function waitForMessage(
-		string $channelName,
+		string|array $channelName,
 		float|int $waitTimeMs,
 	): bool
 	{
@@ -326,15 +604,17 @@ class Redis extends MemoLock
 		
 		try
 		{
-			$this->debug('subscribe: ' . $channelName);
+			$channels = (array)$channelName;
+			$this->debug('subscribe: ' . implode(', ', $channels));
 			
-			// block and wait for a message on the channel or a timeout (when no message is received)
-			$queueClient->subscribe([$channelName],
-				function($client, $channelName, $message)
+			// block and wait for a message on a channel or a timeout (when no
+			// message is received); the first message ends the wait on all
+			$queueClient->subscribe($channels,
+				function($client, $channelName, $message) use ($channels)
 				{
 					$this->debug('unsubscribe: ' . $channelName);
 					
-					$client->unsubscribe([$channelName]);
+					$client->unsubscribe($channels);
 				}
 			);
 			
@@ -343,9 +623,9 @@ class Redis extends MemoLock
 		// we got no message, redis responded with "RedisException: read error on connection"
 		catch(RedisException|RedisClusterException $exception)
 		{
-			$queueClient->unsubscribe([$channelName]);
+			$queueClient->unsubscribe((array)$channelName);
 			
-			$this->debug('timeout: ' . $channelName
+			$this->debug('timeout: ' . implode(', ', (array)$channelName)
 				. PHP_EOL . $exception->getMessage(), timeout: true);
 			
 			return false;

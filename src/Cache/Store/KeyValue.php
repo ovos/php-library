@@ -15,12 +15,21 @@ use Ovos\Cache\Stale;
 use Closure;
 use Throwable;
 
+use function array_diff;
+use function array_fill_keys;
+use function array_flip;
+use function array_intersect_key;
+use function array_key_exists;
 use function array_key_first;
+use function array_keys;
+use function array_values;
 use function count;
+use function is_array;
 use function is_bool;
 use function is_scalar;
 use function max;
 use function microtime;
+use function random_int;
 
 /**
  * KeyValue
@@ -732,6 +741,630 @@ abstract class KeyValue
 		return null;
 	}
 	
+	/**
+	 * The values under $keys, in their order (a miss without a resolver:
+	 * null). The misses are computed by ONE call of the resolver, called as
+	 * function(KeyValue $store, array $keys): array - key => value, or a
+	 * Computed (see setFromResolver()); a key it does not answer is a miss:
+	 * nothing stored, its lock freed, null. One process computes a key, the
+	 * others wait for it (a lock per key); every write is guarded like a
+	 * miss's; the options are get()'s (stale:, soft:, staleIfError:,
+	 * refresh:, queue:, queueLockTtlMs:) and judge each item on its own. A key
+	 * given twice is computed once and answered at both places
+	 *
+	 * @return list<mixed>
+	 */
+	public function getMany(
+		array $keys,
+		?Closure $resolver = null,
+		int $ttl = 0,
+		array $tags = [],
+		mixed ...$options,
+	): array
+	{
+		$policy = Policy::from($options);
+		
+		// each key once, by its id; the answer follows the keys' order
+		$keyOf = [];
+		$positions = [];
+		foreach($keys as $key)
+		{
+			$key = (string)$key;
+			$id = $this->itemId($key);
+			$keyOf[$id] = $key;
+			$positions[] = $id;
+		}
+		if($keyOf === [])
+		{
+			return [];
+		}
+		
+		$values = $this->isConnected()
+			? $this->readMany($keyOf, $resolver, $ttl, $tags, $policy)
+			// no connection (fast path): computed, as get() does
+			: ($resolver === null ? [] : $this->resolveLocked(array_keys($keyOf), $keyOf, [], $resolver, $ttl, $tags, $policy));
+		
+		$answer = [];
+		foreach($positions as $id)
+		{
+			$answer[] = $values[$id] ?? null;
+		}
+		
+		return $answer;
+	}
+	
+	/**
+	 * Stores several values - key => value - in one round trip where the
+	 * store can, each as set() stores it (null removes); key => whether it
+	 * was stored
+	 *
+	 * @return array<string, bool>
+	 */
+	public function setMany(
+		array $values,
+		int $ttl = 0,
+		array $tags = [],
+	): array
+	{
+		$entries = [];
+		foreach($values as $key => $value)
+		{
+			$key = (string)$key;
+			$entries[$this->itemId($key)] = [$key, $value, $ttl, $tags];
+		}
+		
+		return $entries === []
+			? []
+			: $this->storeMany($entries);
+	}
+	
+	/**
+	 * getMany() on a store it reaches: the read, the stale values' refresh,
+	 * the misses' computation, by id
+	 *
+	 * @param array<string, string> $keyOf key by id
+	 * @return array<string, mixed>
+	 */
+	protected function readMany(
+		array $keyOf,
+		?Closure $resolver,
+		int $ttl,
+		array $tags,
+		Policy $policy,
+	): array
+	{
+		$ids = array_keys($keyOf);
+		$values = [];
+		// by id, the value kept for errors a miss falls back to (or null)
+		$misses = [];
+		// by id, the key of a value served while it is refreshed
+		$stale = [];
+		
+		try
+		{
+			if($policy->refresh)
+			{
+				// a forced refresh: no hit, every key a miss whose write is
+				// guarded (see forceMiss())
+				$this->forceMissMany($ids);
+				$misses = array_fill_keys($ids, null);
+			}
+			else
+			{
+				$revalidates = $policy->stale > 0 && $resolver !== null;
+				foreach($this->fetchMany($ids) as $id => $data)
+				{
+					// a value, or a fresh one written with a stale time
+					if($data instanceof Stale === false || $data->isFresh())
+					{
+						if(($value = $this->fresh($data)) !== null)
+						{
+							$values[$id] = $value;
+							
+							continue;
+						}
+					}
+					// past its fresh time, inside its stale time: served while
+					// it is refreshed (see served())
+					else if($revalidates && $data->isServable())
+					{
+						$values[$id] = $data->value;
+						$stale[$id] = $keyOf[$id];
+						
+						continue;
+					}
+					
+					$misses[$id] = $this->errorFallback($data, $policy->staleIfError);
+				}
+			}
+			
+			if($stale !== [])
+			{
+				foreach($this->revalidateMany($stale, $values, $resolver, $ttl, $tags, $policy) as $id => $value)
+				{
+					$values[$id] = $value;
+				}
+			}
+			
+			// without a resolver a batch only reads: no lock, nothing computed
+			if($misses === [] || $resolver === null)
+			{
+				return $values;
+			}
+			
+			foreach($this->computeMisses($misses, $keyOf, $resolver, $ttl, $tags, $policy) as $id => $value)
+			{
+				$values[$id] = $value;
+			}
+			
+			return $values;
+		}
+		finally
+		{
+			// what the reads left to do (see afterRead())
+			$this->afterReadMany($ids);
+		}
+	}
+	
+	/**
+	 * The values a batch serves past their fresh time, refreshed together
+	 * (see revalidate()): ONE closure - after the response where there is a
+	 * deferrer, inline otherwise - takes their locks without waiting, reads
+	 * them once more, and computes the ones still stale by one resolver call.
+	 * Inline the caller gets what was computed or what another process
+	 * refreshed meanwhile (as revalidate() answers it), else the stale value
+	 *
+	 * @param array<string, string> $stale key by id
+	 * @param array<string, mixed> $served the stale values, by id
+	 * @return array<string, mixed>
+	 */
+	protected function revalidateMany(
+		array $stale,
+		array $served,
+		Closure $resolver,
+		int $ttl,
+		array $tags,
+		Policy $policy,
+	): array
+	{
+		$run = function() use ($stale, $resolver, $ttl, $tags, $policy): array
+		{
+			$memoLock = $this->getMemoLock();
+			// one process refreshes each: the locks it does not get are another's
+			[$locked] = $memoLock->lockMany(array_keys($stale), $policy->queueLockTtlMs);
+			// by id, what the look found refreshed meanwhile (null: gone)
+			$refreshed = [];
+			
+			try
+			{
+				$due = [];
+				foreach($this->fetchMany($locked) as $id => $data)
+				{
+					if($data instanceof Stale && $data->isFresh() === false)
+					{
+						$due[$id] = $stale[$id];
+						
+						continue;
+					}
+					
+					// refreshed meanwhile, or gone: nothing to refresh
+					$refreshed[$id] = $this->fresh($data);
+				}
+				if($due === [])
+				{
+					return $refreshed;
+				}
+				
+				$this->stampMany(array_keys($due));
+				
+				return $refreshed + $this->resolveMany($due, $resolver, $ttl, $tags, $policy);
+			}
+			catch(Throwable $throwable)
+			{
+				// the stale values stay: the next read past their fresh time tries again
+				$this->log($throwable);
+				
+				return $refreshed;
+			}
+			finally
+			{
+				// a write releases its lock, a refused one too; the rest go here
+				$memoLock->releaseMany($locked);
+			}
+		};
+		
+		if($this->deferrer !== null)
+		{
+			($this->deferrer)($run);
+			
+			return [];
+		}
+		
+		$computed = $run();
+		$values = [];
+		foreach($stale as $id => $key)
+		{
+			$values[$id] = $computed[$id] ?? $served[$id];
+		}
+		
+		return $values;
+	}
+	
+	/**
+	 * The misses of a batch, by id ($misses: the value kept for errors each
+	 * falls back to): locked per key with their second look - those this
+	 * process locked are computed by one resolver call; the ones another
+	 * process holds are waited for, as lockAndQueue() waits (attempts,
+	 * halving, jitter, bounded by the locks' TTL), and read again; what the
+	 * wait did not bring is computed by a second call - locked where its lock
+	 * is free by then. Without a queue every miss is computed at once,
+	 * unlocked. A forced refresh takes the locks without a look and computes
+	 * every key, after the wait too
+	 *
+	 * @param array<string, ?Stale> $misses
+	 * @param array<string, string> $keyOf
+	 * @return array<string, mixed>
+	 */
+	protected function computeMisses(
+		array $misses,
+		array $keyOf,
+		Closure $resolver,
+		int $ttl,
+		array $tags,
+		Policy $policy,
+	): array
+	{
+		$ids = array_keys($misses);
+		$memoLock = $this->getMemoLock();
+		if($memoLock->queues($policy->queue) === false)
+		{
+			return $this->resolveLocked($ids, $keyOf, $misses, $resolver, $ttl, $tags, $policy);
+		}
+		
+		$lockTtlMs = $policy->queueLockTtlMs ?? $memoLock->getQueueLockTtlMs();
+		$look = $policy->refresh === false;
+		[$own, $values, $held] = $this->lockBatch($ids, $lockTtlMs, $look);
+		foreach($this->resolveLocked($own, $keyOf, $misses, $resolver, $ttl, $tags, $policy) as $id => $value)
+		{
+			$values[$id] = $value;
+		}
+		
+		// the keys another process computes: waited for, read again
+		$attempt = 0;
+		$waitMs = $waitJitterMs = $lockTtlMs;
+		while($held !== [] && $attempt < $memoLock->getQueueWaitAttempts())
+		{
+			if($memoLock->waitForAny($held, $waitJitterMs) === false)
+			{
+				// shorten the wait on the next attempt, with jitter (0-50%)
+				$waitMs/= 2;
+				$waitJitterMs = $waitMs + random_int(0, (int)($waitMs * 0.5));
+			}
+			if($look)
+			{
+				foreach($this->fetchMany($held) as $id => $data)
+				{
+					if(($value = $this->fresh($data)) !== null)
+					{
+						$values[$id] = $value;
+					}
+				}
+				$held = array_values(array_diff($held, array_keys($values)));
+			}
+			$attempt++;
+		}
+		if($held === [])
+		{
+			return $values;
+		}
+		
+		// what the wait did not bring: computed here, locked where the lock is
+		// free now - one held still is computed unlocked, as lockAndQueue()
+		// does after its attempts
+		[$own, $found, $stillHeld] = $this->lockBatch($held, $lockTtlMs, $look);
+		foreach($found as $id => $value)
+		{
+			$values[$id] = $value;
+		}
+		foreach($this->resolveLocked([...$own, ...$stillHeld], $keyOf, $misses, $resolver, $ttl, $tags, $policy) as $id => $value)
+		{
+			$values[$id] = $value;
+		}
+		
+		return $values;
+	}
+	
+	/**
+	 * Locks $ids for this process where they are free - with their second
+	 * look ($look) in the round trip a store can make of both (see
+	 * lockAndLookMany()), else read right after. The ids to compute (locked,
+	 * the look found nothing), by id what the look found (their locks
+	 * released, so the waiters read it), the ids another process holds
+	 *
+	 * @param list<string> $ids
+	 * @return array{0: list<string>, 1: array<string, mixed>, 2: list<string>}
+	 */
+	protected function lockBatch(
+		array $ids,
+		int $lockTtlMs,
+		bool $look,
+	): array
+	{
+		$memoLock = $this->getMemoLock();
+		[$acquired, $looks] = $memoLock->lockMany($ids, $lockTtlMs, $look ? $this->lockAndLookMany() : null);
+		$held = array_values(array_diff($ids, $acquired));
+		if($look === false)
+		{
+			return [$acquired, [], $held];
+		}
+		
+		// the second look of the locks taken without one
+		$unlooked = array_values(array_diff($acquired, array_keys($looks)));
+		foreach($this->fetchMany($unlooked) as $id => $data)
+		{
+			$looks[$id] = $this->fresh($data);
+		}
+		
+		$compute = [];
+		$found = [];
+		foreach($acquired as $id)
+		{
+			if(($looks[$id] ?? null) !== null)
+			{
+				$found[$id] = $looks[$id];
+				
+				continue;
+			}
+			
+			$compute[] = $id;
+		}
+		$memoLock->releaseMany(array_keys($found));
+		
+		return [$compute, $found, $held];
+	}
+	
+	/**
+	 * Computes $ids by one resolver call (see resolveMany()), their misses
+	 * stamped first. A resolver that throws releases every lock of $ids; with
+	 * a value kept for errors for every one of them (get(staleIfError:)) those
+	 * are answered, else it is rethrown
+	 *
+	 * @param list<string> $ids
+	 * @param array<string, string> $keyOf
+	 * @param array<string, ?Stale> $fallbacks
+	 * @return array<string, mixed>
+	 */
+	protected function resolveLocked(
+		array $ids,
+		array $keyOf,
+		array $fallbacks,
+		Closure $resolver,
+		int $ttl,
+		array $tags,
+		Policy $policy,
+	): array
+	{
+		if($ids === [])
+		{
+			return [];
+		}
+		
+		// the misses are stamped now, right before the values are computed
+		$this->stampMany($ids);
+		$keys = array_intersect_key($keyOf, array_flip($ids));
+		
+		try
+		{
+			return $this->resolveMany($keys, $resolver, $ttl, $tags, $policy);
+		}
+		catch(Throwable $throwable)
+		{
+			// nothing was written: every lock goes now, not at its TTL
+			$this->getMemoLock()
+				->releaseMany($ids);
+			
+			$kept = [];
+			foreach($ids as $id)
+			{
+				if(($fallbacks[$id] ?? null) === null)
+				{
+					throw $throwable;
+				}
+				
+				$kept[$id] = $fallbacks[$id]->value;
+			}
+			$this->log($throwable);
+			
+			return $kept;
+		}
+	}
+	
+	/**
+	 * Calls the resolver once with the keys of $keys (key by id) and stores
+	 * what it answers, as setFromResolver() does per key: a Computed is
+	 * unwrapped (its TTL, its tags, save: false), a value stored as a Stale
+	 * record with the policy's times; null, save: false and a key it does not
+	 * answer store nothing and free their locks at once. The values by id
+	 *
+	 * @param array<string, string> $keys
+	 * @return array<string, mixed>
+	 */
+	protected function resolveMany(
+		array $keys,
+		Closure $resolver,
+		int $ttl,
+		array $tags,
+		Policy $policy,
+	): array
+	{
+		$answer = $resolver($this, array_values($keys));
+		$answer = is_array($answer) ? $answer : [];
+		$values = [];
+		$entries = [];
+		$free = [];
+		foreach($keys as $id => $key)
+		{
+			// a key the resolver did not answer is a miss: nothing stored
+			if(array_key_exists($key, $answer) === false)
+			{
+				$values[$id] = null;
+				$free[] = $id;
+				
+				continue;
+			}
+			
+			$value = $answer[$key];
+			$keyTtl = $ttl;
+			$keyTags = $tags;
+			$save = true;
+			if($value instanceof Computed)
+			{
+				$keyTtl = $value->ttl ?? $ttl;
+				$keyTags = $value->tags ?? $tags;
+				$save = $value->save;
+				$value = $value->value;
+			}
+			$values[$id] = $value;
+			
+			if($save === false || $value === null)
+			{
+				$free[] = $id;
+				
+				continue;
+			}
+			
+			[$stored, $storedTtl] = Stale::wrap($value, $keyTtl, $policy->stale, $policy->soft, $policy->staleIfError);
+			$entries[$id] = [$key, $stored, $storedTtl, $keyTags];
+		}
+		
+		// nothing written: the locks go now, not at their TTL - the waiters
+		// compute instead of waiting
+		$this->getMemoLock()
+			->releaseMany($free);
+		if($entries !== [])
+		{
+			$this->storeMany($entries);
+		}
+		
+		return $values;
+	}
+	
+	/**
+	 * Stamps the misses of $ids right before their values are computed (see
+	 * stampMiss()) - one stamp read for them all; a miss stamped already
+	 * keeps its stamp
+	 *
+	 * @param list<string> $ids
+	 */
+	protected function stampMany(
+		array $ids,
+	): void
+	{
+		$read = false;
+		$stamp = null;
+		foreach($ids as $id)
+		{
+			if(isset($this->misses[$id]) === false
+				|| $this->misses[$id]['stamp'] !== null)
+			{
+				continue;
+			}
+			
+			if($read === false)
+			{
+				$stamp = $this->missStamp();
+				$read = true;
+			}
+			$this->misses[$id]['stamp'] = $stamp;
+		}
+	}
+	
+	/**
+	 * Reads several items by their prefixed ids - by id, what fetch() finds
+	 * for each; a store that can reads them in one round trip
+	 *
+	 * @param list<string> $ids
+	 * @return array<string, mixed>
+	 */
+	protected function fetchMany(
+		array $ids,
+	): array
+	{
+		$found = [];
+		foreach($ids as $id)
+		{
+			$found[$id] = $this->fetch($id);
+		}
+		
+		return $found;
+	}
+	
+	/**
+	 * Reads $ids for a forced refresh (see forceMiss())
+	 *
+	 * @param list<string> $ids
+	 */
+	protected function forceMissMany(
+		array $ids,
+	): void
+	{
+		$this->refreshing = true;
+		try
+		{
+			$this->fetchMany($ids);
+		}
+		finally
+		{
+			$this->refreshing = false;
+		}
+	}
+	
+	/**
+	 * Called once the reads of $ids are over (see afterRead())
+	 *
+	 * @param list<string> $ids
+	 */
+	protected function afterReadMany(
+		array $ids,
+	): void
+	{
+		foreach($ids as $id)
+		{
+			$this->afterRead($id);
+		}
+	}
+	
+	/**
+	 * The locks of a batch and their second look in one round trip, for the
+	 * MemoLock (see MemoLock::lockMany()) - none here: a store that can
+	 * pipeline its reads with the locks says so
+	 */
+	protected function lockAndLookMany(): ?Closure
+	{
+		return null;
+	}
+	
+	/**
+	 * Stores what a batch computed - by id, [key, value, ttl, tags] each, as
+	 * storeComputed() stores one; key => whether it was stored. A store that
+	 * can sends the writes in one round trip, with the releases of the locks
+	 *
+	 * @param array<string, array{0: string, 1: mixed, 2: int, 3: array}> $entries
+	 * @return array<string, bool>
+	 */
+	protected function storeMany(
+		array $entries,
+	): array
+	{
+		$stored = [];
+		foreach($entries as [$key, $value, $ttl, $tags])
+		{
+			$stored[$key] = $this->storeComputed($key, $value, $ttl, $tags);
+		}
+		
+		return $stored;
+	}
+	
 	public function releaseActiveLock(
 		string $key,
 	): bool
@@ -813,6 +1446,13 @@ abstract class KeyValue
 		return $this->set($key, $value, $ttl);
 	}
 	
+	/**
+	 * Stores $value under $key. set() with a null value removes the item, as
+	 * delete() does, and answers what the delete answers (true when an item
+	 * was there): null is what a reader gets for a miss, so a stored null
+	 * could never be read back - and the value before it must not be served
+	 * either
+	 */
 	abstract public function set(
 		string $key,
 		mixed $value,

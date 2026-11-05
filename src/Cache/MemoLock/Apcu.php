@@ -8,6 +8,7 @@ use Ovos\Invoker;
 use Ovos\Cache\MemoLock;
 use Ovos\Cache\Prefixer;
 use Closure;
+use Override;
 
 use function array_key_exists;
 use function apcu_add;
@@ -15,6 +16,7 @@ use function apcu_delete;
 use function apcu_entry;
 use function apcu_exists;
 use function apcu_fetch;
+use function apcu_store;
 use function bin2hex;
 use function ceil;
 use function microtime;
@@ -187,6 +189,77 @@ class Apcu extends MemoLock
 			$resolver,
 			$fetcher,
 		);
+	}
+	
+	#[Override]
+	public function getQueueLockTtlMs(): int
+	{
+		return $this->queueLockTtlS * 1000;
+	}
+	
+	/**
+	 * Takes the free locks of $ids (see MemoLock::lockMany()) - one by one,
+	 * APCu has no round trip to save; no look is made with them
+	 */
+	#[Override]
+	public function lockMany(
+		array $ids,
+		?int $queueLockTtlMs = null,
+		?Closure $lockAndLookMany = null,
+	): array
+	{
+		$acquired = [];
+		foreach($ids as $id)
+		{
+			if($this->tryLock($id, $queueLockTtlMs))
+			{
+				$acquired[] = $id;
+			}
+		}
+		
+		return [$acquired, []];
+	}
+	
+	/**
+	 * Waits for a release of any lock of $ids (see MemoLock::waitForAny()):
+	 * polled with the queue's backoff
+	 */
+	#[Override]
+	public function waitForAny(
+		array $ids,
+		float|int $waitMs,
+	): bool
+	{
+		$deadline = microtime(true) + $waitMs / 1000;
+		do
+		{
+			foreach($ids as $id)
+			{
+				if(apcu_exists($this->prefixer->prefix(static::TYPE_LOCK, $id)) === false)
+				{
+					return true;
+				}
+			}
+			
+			usleep(random_int(
+				$this->queueBackoffMinMs,
+				$this->queueBackoffMaxMs,
+			) * 1000);
+		}
+		while(microtime(true) < $deadline);
+		
+		return false;
+	}
+	
+	#[Override]
+	public function releaseMany(
+		array $ids,
+	): void
+	{
+		foreach($ids as $id)
+		{
+			$this->releaseActiveLock($id);
+		}
 	}
 	
 	/**

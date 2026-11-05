@@ -3,17 +3,21 @@ declare(strict_types=1);
 
 namespace Ovos\Test\Cache\Store;
 
+use Ovos\Cache\Computed;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\KeyValue\TagIndex;
 use Ovos\Cache\Store\KeyValue\Tags;
+use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
 use Closure;
+use RedisCluster as RedisClusterClient;
 use RuntimeException;
 
 use function apcu_key_info;
 use function count;
+use function intdiv;
 use function is_array;
 use function microtime;
 use function usleep;
@@ -306,6 +310,76 @@ trait TraitStaleWhileRevalidate
 	}
 	
 	/**
+	 * RULE: a refresh whose resolver answers null keeps the stale value -
+	 * nothing is stored, the lock is freed, and inline the caller gets the
+	 * stale value, never the null
+	 */
+	public function aRefreshReturningNullKeepsTheStaleValue(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->staleKey('null-refresh');
+		$id = $this->staleId($store, $key);
+		$this->capture($store, $deferred);
+		$this->writeAged($store, $key, 'old');
+		
+		$served = $store->get($key, fn() => null, 60, stale: 60);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$kept = $this->staleStore()->peek($key);
+		$probe = $this->staleStore();
+		$free = $probe->getMemoLock()->tryLock($id);
+		$probe->getMemoLock()->releaseActiveLock($id);
+		$inline = $this->staleStore()->get($key, fn() => null, 60, stale: 60);
+		$store->delete($key);
+		
+		return $served === 'old'
+			&& count($deferred) === 1
+			&& $kept instanceof Stale
+			&& $kept->value === 'old'
+			&& $free === true
+			&& $inline === 'old';
+	}
+	
+	/**
+	 * RULE: a refresh whose resolver says not to save (Computed, save: false)
+	 * keeps the stale value and frees the lock - inline the caller gets what
+	 * was computed
+	 */
+	public function aRefreshSayingNotToSaveKeepsTheStaleValue(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->staleKey('unsaved-refresh');
+		$id = $this->staleId($store, $key);
+		$unsaved = fn(): Computed => new Computed('new', save: false);
+		$this->capture($store, $deferred);
+		$this->writeAged($store, $key, 'old');
+		
+		$served = $store->get($key, $unsaved, 60, stale: 60);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$kept = $this->staleStore()->peek($key);
+		$probe = $this->staleStore();
+		$free = $probe->getMemoLock()->tryLock($id);
+		$probe->getMemoLock()->releaseActiveLock($id);
+		$inline = $this->staleStore()->get($key, $unsaved, 60, stale: 60);
+		$keptAfterInline = $this->staleStore()->peek($key);
+		$store->delete($key);
+		
+		return $served === 'old'
+			&& count($deferred) === 1
+			&& $kept instanceof Stale
+			&& $kept->value === 'old'
+			&& $free === true
+			&& $inline === 'new'
+			&& $keptAfterInline instanceof Stale
+			&& $keptAfterInline->value === 'old';
+	}
+	
+	/**
 	 * RULE: the lock's second look sees what get() sees - a value written
 	 * with a stale time comes back unwrapped while it is fresh, and is
 	 * nothing once it is not, so lockAndQueue() holds the lock for the caller
@@ -417,7 +491,7 @@ trait TraitStaleWhileRevalidate
 		$this->writeSoft($key, 'old', stale: 1);
 		$this->writeSoft($forever, 'old', ttl: 0, stale: 1);
 		$this->staleStore()->invalidateTags([self::SOFT_TAG]);
-		usleep(1300000);
+		$this->awaitSoftWindow($store, [$key, $forever], $this->serverMs($store) + 1000);
 		
 		$served = $store->get($key, $this->counting($calls, 'new'), 60, [self::SOFT_TAG], stale: 1, soft: true);
 		$servedForever = $store->get($forever, $this->counting($calls, 'new'), 0, [self::SOFT_TAG], stale: 1, soft: true);
@@ -781,6 +855,91 @@ trait TraitStaleWhileRevalidate
 		}
 		
 		$store->set($key, $aged, 60);
+	}
+	
+	/**
+	 * Waits until $done() says the server got there - polled every 20 ms,
+	 * at most $boundMs. An expiry is the server's, on its clock; a fixed
+	 * sleep on this host is no measure of it (a container's clock stalls
+	 * and slews against the host's). The bound is part of a rule - past
+	 * it, the rule judges what is there. Whether $done() came true
+	 */
+	protected function awaitServer(
+		Closure $done,
+		int $boundMs = 5000,
+	): bool
+	{
+		$deadline = microtime(true) + $boundMs / 1000;
+		while($done() === false)
+		{
+			if(microtime(true) >= $deadline)
+			{
+				return false;
+			}
+			
+			usleep(20000);
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * Waits until the server ended the soft window of $keys (see
+	 * awaitServer()): the tag-index stores expire the item's data field
+	 * then (its HPTTL answers -2), the versioned stores judge the window on
+	 * the server's clock ($untilMs, read from it)
+	 */
+	protected function awaitSoftWindow(
+		KeyValueRedis $store,
+		array $keys,
+		int $untilMs,
+	): bool
+	{
+		return $this->awaitServer(fn(): bool => $store instanceof TagIndex
+			? $this->dataExpired($store, $keys)
+			: $this->serverMs($store) >= $untilMs,
+		);
+	}
+	
+	/**
+	 * Whether the server expired the data field of every item of $keys
+	 * (HPTTL: -2 for a field, or a key, that is gone)
+	 */
+	protected function dataExpired(
+		KeyValueRedis $store,
+		array $keys,
+	): bool
+	{
+		$client = $store->getClient();
+		foreach($keys as $key)
+		{
+			$id = $this->staleId($store, $key);
+			// a cluster client's rawCommand() is routed by its first argument
+			$ttl = $client instanceof RedisClusterClient
+				? $client->rawCommand($id, 'HPTTL', $id, 'FIELDS', 1, KeyValueRedis::KEY_DATA)
+				: $client->rawCommand('HPTTL', $id, 'FIELDS', 1, KeyValueRedis::KEY_DATA);
+			if((int)($ttl[0] ?? 0) !== -2)
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * The server's clock in ms (a cluster: the node of the rules stream)
+	 */
+	protected function serverMs(
+		KeyValueRedis $store,
+	): int
+	{
+		$client = $store->getClient();
+		$time = $client instanceof RedisClusterClient
+			? $client->time($store instanceof RedisVersioned ? $store->getRulesKey() : $store->getType())
+			: $client->time();
+		
+		return (int)$time[0] * 1000 + intdiv((int)$time[1], 1000);
 	}
 	
 	/**

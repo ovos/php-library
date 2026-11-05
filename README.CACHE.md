@@ -118,6 +118,9 @@ is constant no matter how many items match.
 ### Redis (`Ovos\Cache\Store\Redis`)
 - Distributed cache shared across workers/servers.
 - Supports tags with `getTags()`, `invalidateTags()`, and `getAllTags()`.
+- A write links the item into each of its tags whose index field is missing
+  (`HEXISTS` on the tag hash, not the item's own tag list), so a field
+  evicted or deleted by hand is back with the item's next write.
 - Uses Redis Pub/Sub for MemoLock queueing (needs a separate queue connection).
 - Best for: shared state, session-adjacent data, anything needing tag invalidation.
 
@@ -126,10 +129,23 @@ is constant no matter how many items match.
 ### Redisearch (`Ovos\Cache\Store\Redisearch`)
 - Distributed cache with tag invalidation powered by RediSearch.
 - Uses a RediSearch TAG index for fast tag-based invalidation.
-- Requires the RediSearch module (bundled in Redis 8) and `MAXSEARCHRESULTS`
-  set to `-1`.
+- Requires the RediSearch module (bundled in Redis 8); the invalidation's
+  cursor is bounded by `MAXAGGREGATERESULTS`, which must stay unlimited
+  (its default).
 - Supports tags in `set()` and `invalidateTags()`, but does not expose
   `getTags()` or `getAllTags()`.
+- `invalidateTags()` reads the matches through a cursor (`FT.AGGREGATE …
+  WITHCURSOR`), 2500 per page (store option `invalidate_page`), and removes
+  each page in calls of 1000 items before it reads the next: no single
+  command holds the server for every match. An item is served until its
+  page is removed, as in the tag-hash store's batches of 7500; a value
+  computed before the invalidation is refused from the start (the stamps
+  come first). A soft value's mark re-indexes its item, so the cursor
+  delivers it once more; that delivery finds the invalidation's own token
+  and leaves it as it is. A value written through after the stamps (no
+  miss of its own) is re-indexed the same way and can be removed by the
+  walk: an over-invalidation, safe (the next read recomputes), as in the
+  tag-hash store's walk.
 - Best for: projects with many tagged cache entries where invalidation speed matters.
 
 ![Redisearch store - write, read and invalidate flow](docs/cache/redisearch.png)
@@ -223,7 +239,8 @@ invalidation backlog do not enter a read.
 ‡ RediSearch maintains the tag index itself: `set()` is a single write (no
 per-tag bookkeeping like the tag-hash store's O(T)), and `invalidateTags()`
 finds the N matches through the index instead of scanning a tag hash &mdash; the
-same O(N) eager delete, with a smaller constant.
+same O(N) eager delete, with a smaller constant, spread over ⌈N/2500⌉ cursor
+reads and ⌈N/1000⌉ removal calls, so other clients run in between.
 † `clear()` is O(1) logically (one rule); `clearPhysical()` is O(number of masters).
 
 - **Invalidation is the real fork.** Redis and Redisearch delete every matched
@@ -311,6 +328,61 @@ What the run confirms:
 
 (APCu is a different tier &mdash; in-process, no tags &mdash; so it is not part
 of this persistent-store run.)
+
+#### Bans
+
+A large ban, measured on its own: items filled in each store's own layout
+(64-byte values, one tag each), the ban sent through `invalidateTags()` in
+chunks of 50 tags while a second process `PING`s the server and records every
+latency. Redis 8.8 in Docker Desktop on Windows, PHP 8.5, phpredis 6.3; a
+range is two or three runs, a single figure one run. The Symfony rows are
+bastnic's figures for the same shape on a standalone Valkey.
+
+| Store | 1 000 tags × 1 000 items | 5 000 × 200 | Server work (1 000 × 1 000) | PING p50 / p99 / max, 1 000 × 1 000 | PING p50 / p99 / max, 5 000 × 200 | Memory after |
+|-------|---:|---:|------|---:|---:|------|
+| **Redis** (tag-hash) | 3.5 s | 5.9 s | 1 020 `FCALL`s: 1 000 000 `UNLINK`s, the tag hash walked 7 500 fields per call | 1.6 / 4.5 / 4.8 ms | 0.7 / 1.6 / 2.2 ms | freed (210 MB → 2.6 MB) |
+| **Redisearch**, matches read a page at a time | 6.2-6.4 s | &mdash; | a 2 500-match cursor page per read, 1 000 removals per call | 1.1-1.2 / 4.3-4.6 / 5.1-11.7 ms | &mdash; | freed |
+| Redisearch, every match of a chunk removed in one call (replaced) | 4.5-4.7 s | 3.9 s | 40 `FCALL`s | 0.7 / **230-237** / **231-242** ms | **25.1** / 37.6 / 38.5 ms | freed (329 MB → 20 MB) |
+| **RedisVersioned** | **12 ms** | **58 ms** | 20 `FCALL`s: 21 `XADD`s, 20 `XTRIM`s | 0.65 / 0.80 / 12.5 ms ¹ | 0.72 / 1.04 / 23.1 ms ¹ | unchanged: the items expire by their TTL |
+| Symfony `TagAwareAdapter` | 14 ms | 67 ms | 20 / 100 `UNLINK`s | 0.26 / &mdash; / 0.58 ms | &mdash; | unchanged |
+| Symfony `RedisTagAwareAdapter` | 2.0 s | 2.5 s | 1 001 000 `DEL`s in Lua | **58.6** / &mdash; / **166** ms | &mdash; | freed |
+
+¹ The maximum is a single scheduling outlier: 50 samples in a 12 ms ban.
+
+The versioned store is the "version" family with the numbers to show it: a
+ban is one rule per chunk, other clients do not notice it, and the memory
+stays until the items' TTL. The tag-hash store's walk is bounded per call, so
+no client waits more than a few milliseconds although the whole ban takes
+seconds. The Redisearch store pages its matches the same way; one call per
+chunk that removed every match held the other clients for up to 240 ms. A
+soft ban of 5 000 items on Redisearch marks each item once: 4 cursor reads,
+5 000 `HSET`s, 0.11 s.
+
+#### Round trips per request, N keys
+
+One round trip is one command or one pipeline (`exec()`); warm = every key a
+hit, cold = every key a miss with a resolver. **+r** = one `XRANGE` at most
+once per `rules_cache_ms` per server (the rule set is shared through APCu),
+**+d** = one `cache_versioned_drop_stale` per stale item a read found. The
+`getMany()` row is counted by the rules `aBatchReadIsOnePipeline` and
+`aBatchTakesOneRoundTripWarmAndThreeCold` (N = 100, a client that counts every
+command and every `exec()`), in php-library and in the CMS mirror alike; the
+other rows are counted from the code, the Symfony rows are bastnic's (100
+keys).
+
+| Path | warm, standalone | warm, cluster | cold, standalone | cold, cluster |
+|------|---:|---:|------|------|
+| `get()` loop, **Redis** / **Redisearch** | N | &mdash; | 3N: the read; `SET NX` + `HMGET` + `TIME`; the write with the lock's release | &mdash; |
+| `get()` loop, **versioned** stores | N +r +d | N +r +d | 3N +r: the read; `SET NX` + `HMGET`; the write with the lock's release | **5N** +r: the lock, the look, the write and the release one by one |
+| `getMany()` | **1** +r +d | N | **3** +r: one read pipeline; one pipeline of the locks with their look; one pipeline of the writes with their releases (+1 read per wait round under contention) | 5N |
+| Symfony `get()` loop, `TagAwareAdapter` | 200 | 200 | 400 | 400 |
+| Symfony `getItems()`, `RedisAdapter` / `TagAwareAdapter` / `RedisTagAwareAdapter` | 1 / 2 / 1 | 100 / 200 / 100 | 2 / 4 / 3 | 200 / 400 / 300 |
+
+`invalidateTags()` of one tag over N items: tag-hash one stamp + ⌈N/7 500⌉
+calls; Redisearch one stamp + ⌈N/2 500⌉ reads + ⌈N/1 000⌉ removals; versioned
+one call (one rule). `clear()` is one call (one rule on the versioned stores;
+`clearPhysical()` one per master). A cluster gains nothing from `getMany()`
+until phpredis ships `RedisCluster::pipeline()` (phpredis#2798).
 
 Selecting the store is done in config:
 
@@ -523,6 +595,9 @@ if($store->get('key') === null)
 }
 ```
 
+`set()` with a null value removes the item, as `delete()` does: null is what
+`get()` answers for a miss, so it could never be read back.
+
 ### Pattern 5: Stale-while-revalidate (`stale:`)
 
 A value that expires makes its next reader wait for the recomputation, and
@@ -652,6 +727,45 @@ $timetable = $store->get('timetable:' . $day, $this->fetchTimetable(...), ttl: 3
   (a soft invalidation keeps it for its window).
 - With it or without it, a value stops being served at the end of its stale
   time - its own times decide, not the store's TTL.
+
+### Many keys at once (`getMany()`)
+
+`getMany()` reads a list of keys and computes every miss by ONE call of the
+resolver - for a page that needs a hundred records, one query for the misses
+instead of one per key:
+
+```php
+$users = $store->getMany(
+    $ids,
+    resolver: fn(KeyValue $store, array $missing) => $this->usersById($missing),
+    ttl: 300,
+    tags: ['users'],
+);
+```
+
+- The answer is a list in the order of `$keys` (a key given twice is computed
+  once and answered at both places); a miss without a resolver is `null`.
+- The resolver gets the missing keys and answers `key => value`, or a
+  `Computed` per key (its own TTL, its own tags, `save: false`). A key it does
+  not answer is a miss: nothing stored, its lock freed, `null` in the answer.
+- One lock per key: the keys this process locks are computed by the resolver
+  call; a key another process computes is waited for and read again, and what
+  the wait did not bring is computed by a second call. With `stale:` and no
+  deferrer the refresh of the stale values runs inline as one more call, so a
+  batch calls the resolver at most three times. A resolver that throws frees
+  every lock of the batch.
+- Every item is judged on its own, with `get()`'s options: `stale:` serves a
+  value past its fresh time and refreshes all of them in ONE deferred call,
+  `soft:`, `staleIfError:` (when the resolver throws, every key kept for errors
+  gets its kept value; one without rethrows), `refresh:`, `queue:`,
+  `queueLockTtlMs:`. Every write is guarded like a single miss's.
+- `setMany($values, $ttl, $tags)` stores several values in one round trip
+  (`null` removes, as `set()` does).
+
+On a standalone server a batch costs one round trip warm and three cold,
+whatever N (a `get()` loop: N and 3N); the versioned stores add one `XRANGE`
+at most when their rule set is due (one rule set per batch). On a cluster the
+same calls go one by one. Every path is in [Measured](#round-trips-per-request-n-keys).
 
 ## Cache invalidation
 
@@ -840,7 +954,7 @@ cache:
   perishable:
     compression:
       enabled: yes
-      threshold: 2048                  # Compress values larger than 2KB
+      threshold: 2048                  # Compress values larger than 2KB (a value compression does not shrink is stored as it is)
     queue:                             # APCu MemoLock settings
       enabled: yes
       lock_ttl_s: 1                    # Lock duration in seconds
@@ -857,6 +971,7 @@ cache:
       rules_shared_cache: yes          # Versioned stores: share the rule set across the server's workers (APCu; default: on when available)
       rules_max_tags: 15000            # Versioned stores: rules held before a floor replaces the oldest (default 15000, 0: no bound)
       invalidation_window_ms: 60000    # Invalidation guard: how long an invalidation is remembered; 0 = off (see above)
+      invalidate_page: 2500            # Redisearch store: matches an invalidation reads per cursor page
     compression:
       enabled: yes
       threshold: 2048
@@ -905,7 +1020,8 @@ cache:
   one for data operations and one for MemoLock Pub/Sub. On a cluster, the
   pub/sub connection must be a standalone connection to a cluster node.
 - For Redisearch, ensure the RediSearch module is loaded and
-  `MAXSEARCHRESULTS` is set to `-1` (the store sets this during index creation).
+  `MAXAGGREGATERESULTS` is left unlimited (its default): the invalidation
+  reads its matches through an `FT.AGGREGATE` cursor.
 - A changed Lua library (`src/Cache/Redis/Functions/*.lua`) reloads itself:
   each carries a hash of the source it was built from, and the first call
   after a deploy finds another and loads the new build (REPLACE); a host that
@@ -915,4 +1031,31 @@ cache:
   registers, and the old library stays loaded until then - so the Redisearch
   store's `cache_unlink_by_search` (in `Cache.lua`) is the function
   `CacheSearch.lua` registered as `cache_search_unlink_by_tags`.
+- **Every read goes to a primary.** The cluster connection sets
+  `OPT_SLAVE_FAILOVER` to `FAILOVER_NONE`, a standalone connection names one
+  server; keep it so. On a replica, three things would read differently:
+  (a) a versioned store sees its own invalidation by re-reading the rules
+  stream, and a lagging replica can answer that re-read without the rule just
+  appended, so the held set is marked fresh without it - reading from replicas
+  would first need the store to take its own rule from `XADD`'s reply;
+  (b) a miss's second look only finds an older item, which the guard turns
+  into a refused write, never a stale one; (c) `SET NX` and every writing
+  `FCALL` go to the primary anyway, and an `FCALL_RO` on a replica that lacks
+  the library answers "Function not found" and loads it.
+- **Two compares run in PHP, each bounded.** The shared rule set is
+  compare-then-store in APCu: a slower refresh can roll it back, for at most
+  `rules_cache_ms` (the next worker sees the older fetch time and refreshes).
+  The APCu store's guarded `set()` checks, stores and checks again (APCu has no
+  atomic compare-and-store): a delete between the check and the store takes
+  the value back at once, and a reader can see it for that instant. Beyond
+  both, a computation longer than `invalidation_window_ms` writes through
+  (see the invalidation guard).
+- **Tag-hash items without a TTL.** On the `Redis` store a tag's field follows
+  its item's TTL; an item stored without one leaves its field in the tag hash
+  until `collectGarbage()` removes it. Run it from a cron where items without
+  a TTL come and go.
+- **The key prefix is a literal** (`cache.prefix`, `CACHE[PREFIX]`): no Redis
+  key derives from a path or a release, so a deploy to a new directory keeps
+  its cache. Only APCu entries do (a library's confirmation is keyed on the
+  file's path and mtime, for `Functions::CONFIRMED_TTL_S`).
 - Use `php cli.php system cache clear` to flush all cache tiers.

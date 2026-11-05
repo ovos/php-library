@@ -6,6 +6,7 @@ namespace Ovos\Test\Cache\Store;
 use Ovos\Cache\Computed;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue;
+use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
@@ -13,6 +14,7 @@ use ArgumentCountError;
 use InvalidArgumentException;
 use RuntimeException;
 
+use function apcu_exists;
 use function count;
 use function microtime;
 
@@ -122,6 +124,33 @@ trait TraitCachePolicy
 		return $value === null
 			&& $next === 'computed' && $calls === 1
 			&& $waited < 0.5;
+	}
+	
+	/**
+	 * RULE: set() with a null value removes the item, as delete() does - a
+	 * reader misses, the value before it is not served, and nothing of it is
+	 * left stored (null is what a miss reads as: stored, it read back as '',
+	 * or the versioned stores threw)
+	 */
+	public function aNullValueRemovesTheItem(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->staleKey('null-value');
+		$id = $this->staleId($store, $key);
+		$store->set($key, 'before', 60);
+		
+		$removed = $store->set($key, null, 60);
+		$read = $this->staleStore()->get($key, queue: false);
+		$peeked = $this->staleStore()->peek($key);
+		$left = $store instanceof KeyValueRedis
+			? $store->getClient()->hExists($id, KeyValueRedis::KEY_DATA)
+			: apcu_exists($id);
+		$store->delete($key);
+		
+		return $removed === true
+			&& $read === null
+			&& $peeked === null
+			&& $left === false;
 	}
 	
 	/**

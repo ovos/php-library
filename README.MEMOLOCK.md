@@ -267,6 +267,24 @@ $value = $cache->get(
 $cache->setQueueEnabled($wasEnabled);
 ```
 
+### Locks for a batch
+
+`getMany()` (see README.CACHE.md) takes one lock per key, through three calls:
+
+- `lockMany($ids, $ttlMs, $lockAndLookMany)` takes the free locks without
+  waiting - one pipeline of `SET NX` (one by one on a cluster), or with the
+  store's second look in the same round trip; it answers the ids locked and
+  what the look found.
+- `waitForAny($ids, $waitMs)` waits for the release of any lock of `$ids`
+  another process holds: their PTTLs first (a lock gone needs no wait, and the
+  wait never outlasts the longest lock), then one subscription to all of their
+  channels, ended by the first publication. APCu polls with its backoff.
+- `releaseMany($ids)` releases this process's locks of `$ids`, telling their
+  waiters, in one round trip where it can.
+
+The batch waits as `lockAndQueue()` does (`wait_attempts` rounds, halving,
+jitter) and then computes what the wait did not bring itself.
+
 ## Standalone MemoLock (without cache stores)
 
 You can use MemoLock directly for non-cache scenarios like file generation

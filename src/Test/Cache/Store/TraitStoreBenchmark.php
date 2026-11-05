@@ -6,6 +6,9 @@ namespace Ovos\Test\Cache\Store;
 use Ovos\Cache\Store\KeyValue;
 use Ovos\Test\Internal;
 
+use function array_chunk;
+use function array_fill_keys;
+
 /**
  * TraitStoreBenchmark
  *
@@ -228,6 +231,62 @@ trait TraitStoreBenchmark
 	public function invalidateRepeated(): void
 	{
 		$this->invalidateUnrelated(static::BACKLOG_LARGE);
+	}
+	
+	/**
+	 * The items read by getMany() in batches of a hundred, every one a hit -
+	 * readHits reads the same items one get() each
+	 */
+	public function readBatchWarm(): void
+	{
+		foreach(array_chunk($this->itemKeys(), 100) as $keys)
+		{
+			$this->store->getMany($keys);
+		}
+	}
+	
+	/**
+	 * As many new keys computed by getMany() in batches of a hundred, every
+	 * one a miss: one resolver call, and on a standalone server three round
+	 * trips, per batch
+	 */
+	public function readBatchCold(): void
+	{
+		foreach(array_chunk($this->itemKeys('batch'), 100) as $keys)
+		{
+			$this->store->getMany($keys, static fn(KeyValue $store, array $keys): array => array_fill_keys($keys, 'computed'), 60);
+		}
+	}
+	
+	/**
+	 * The same new keys computed one get() each (the baseline of
+	 * readBatchCold)
+	 */
+	public function readLoopCold(): void
+	{
+		foreach($this->itemKeys('batch') as $key)
+		{
+			$this->store->get($key, static fn(): string => 'computed', 60);
+		}
+	}
+	
+	/**
+	 * The keys of static::ITEMS items: fill()'s ("item1", ...), or new ones
+	 * of $prefix
+	 *
+	 * @return list<string>
+	 */
+	protected function itemKeys(
+		string $prefix = 'item',
+	): array
+	{
+		$keys = [];
+		for($i = 1; $i <= static::ITEMS; $i++)
+		{
+			$keys[] = $prefix . $i;
+		}
+		
+		return $keys;
 	}
 	
 	/**

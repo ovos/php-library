@@ -9,6 +9,7 @@ use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
+use Ovos\Test\Cache\Store\TraitBatch;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedisCluster;
@@ -33,6 +34,7 @@ class RedisClusterVersioned extends Test
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
 	use TraitCachePolicy;
+	use TraitBatch;
 	
 	public const string KEY_ITEM = 'item';
 	
@@ -348,13 +350,45 @@ class RedisClusterVersioned extends Test
 	}
 	
 	/**
+	 * RULE: a batch on a cluster falls back to single calls - the reads, the
+	 * locks and their looks, the writes and the releases one by one (the keys
+	 * are of different slots) - and answers as on a standalone server: hits,
+	 * misses computed by one call, a stale value refreshed by another
+	 */
+	public function aBatchOnAClusterFallsBackToSingleCalls(): bool
+	{
+		$store = $this->staleStore();
+		[$hit, $first, $second, $aged] = $keys = $this->batchKeys('cluster', 4);
+		$store->set($hit, 'hit', 60);
+		$this->writeAged($store, $aged, 'old');
+		$calls = [];
+		
+		$values = $this->staleStore()->getMany($keys, $this->batchResolver($calls), 60, stale: 60);
+		$again = $this->staleStore()->getMany($keys);
+		$this->batchDelete($keys);
+		$computed = ['hit', 'computed ' . $first, 'computed ' . $second, 'computed ' . $aged];
+		
+		return $values === $computed
+			&& $again === $computed
+			&& $calls === [[$aged], [$first, $second]];
+	}
+	
+	/**
+	 * No single standalone client to count the round trips of (TraitBatch)
+	 */
+	protected function batchProbe(): ?KeyValueRedis
+	{
+		return null;
+	}
+	
+	/**
 	 * A fresh store - another process (TraitStaleWhileRevalidate)
 	 */
 	protected function staleStore(): KeyValueRedis
 	{
 		return $this->guardStore();
 	}
-
+	
 	/**
 	 * A fresh store - another process (TraitInvalidationGuard); its rules read
 	 * exactly, so a reader sees an invalidation at once rather than within
