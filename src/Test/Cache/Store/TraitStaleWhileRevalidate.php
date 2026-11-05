@@ -913,12 +913,9 @@ trait TraitStaleWhileRevalidate
 		$client = $store->getClient();
 		foreach($keys as $key)
 		{
-			$id = $this->staleId($store, $key);
-			// a cluster client's rawCommand() is routed by its first argument
-			$ttl = $client instanceof RedisClusterClient
-				? $client->rawCommand($id, 'HPTTL', $id, 'FIELDS', 1, KeyValueRedis::KEY_DATA)
-				: $client->rawCommand('HPTTL', $id, 'FIELDS', 1, KeyValueRedis::KEY_DATA);
-			if((int)($ttl[0] ?? 0) !== -2)
+			// HEXISTS, the read's own view: in the millisecond the field expires
+			// HPTTL already answers -2 while HMGET still returns the data
+			if((int)$client->hExists($this->staleId($store, $key), KeyValueRedis::KEY_DATA) !== 0)
 			{
 				return false;
 			}
