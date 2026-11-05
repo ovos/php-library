@@ -101,7 +101,7 @@ production: &production
         backoff_max_ms: 25
     persistent: &cache-persistent
       connection: redis
-      store: Redis # Redis, Redisearch, RedisVersioned or RedisCluster
+      store: Redis # Redis, Redisearch, RedisVersioned or RedisClusterVersioned
       store_options:
         clean_tags: no # Redis store: remove ids from tags on invalidation
         # versioned stores: rules + maximum item lifetime (must be >= the
