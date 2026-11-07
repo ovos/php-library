@@ -919,9 +919,15 @@ class Application
 		
 		$this->terminateServices();
 
+		// exit with error status for github actions
 		if($hasEvents)
 		{
-			exit(1); // exit with error status for github actions
+			// a plain exit(1) here would skip the shutdown functions registered after this handler,
+			// among them the release of the cache reload flag (Versioned\SharedRules::lead())
+			register_shutdown_function(static function(): never
+			{
+				exit(1);
+			});
 		}
 	}
 

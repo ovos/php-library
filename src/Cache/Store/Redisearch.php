@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Store;
 
+use LengthException;
 use Ovos\ArrayObject;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\TagIndex;
@@ -91,6 +92,13 @@ class Redisearch extends TagIndex
 		// invalidation since (see KeyValue::rememberMiss())
 		$miss = $this->writeMiss($id);
 		
+		// A write after a failed read could only be refused, so the key is deleted instead (see
+		// dropUnread()).
+		if($this->isUnread($miss))
+		{
+			return $this->dropUnread($key, $id);
+		}
+		
 		// a negative TTL expired the item at once - a delete it is; so is a
 		// null value (see KeyValue::set())
 		if($ttl < 0 || $value === null)
@@ -120,6 +128,13 @@ class Redisearch extends TagIndex
 		catch(RedisException $exception)
 		{
 			$this->log($exception);
+		}
+		// The value is longer than the Compressor reads back, so it is not cached. An older value under the
+		// key is deleted, because it is not what the caller wrote.
+		catch(LengthException $exception)
+		{
+			$this->log($exception->getMessage());
+			$this->delete($key);
 		}
 		finally
 		{

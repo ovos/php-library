@@ -3,16 +3,17 @@ declare(strict_types=1);
 
 namespace Ovos\Cache;
 
+use LengthException;
 use Ovos\ArrayObject;
 use Ovos\Compression\Zstd;
 use Throwable;
 
 use function gzcompress;
 use function gzuncompress;
+use function sprintf;
 use function strlen;
 use function substr;
 use function zstd_compress;
-use function zstd_uncompress;
 
 /**
  * Compressor
@@ -23,6 +24,16 @@ class Compressor
 {
 	// Prefixes
 	public const string PREFIX_COMPRESS = ":\x1f\x8b";
+	
+	/**
+	 * The most a stored value may inflate to. Redis holds no string longer than that (the default of
+	 * proto-max-bulk-len). A longer value is not cached at all: compress() throws, and set() answers false
+	 * and removes what the key held, so an older value is not served in its place. A zstd frame that states
+	 * a larger size is refused before it is inflated, and one that inflates past it is refused as soon as
+	 * it does. For gzip the limit is approximate: a value up to an eighth longer may still be read.
+	 * Unit: bytes
+	 */
+	public const int MAX_BYTES = 536870912; // 512 MiB
 	
 	protected bool $compressionEnabled = true;
 	
@@ -73,6 +84,15 @@ class Compressor
 		if($value === null)
 		{
 			return null;
+		}
+		
+		// longer than a read will inflate, so it is not cached at all (see MAX_BYTES)
+		if(strlen($value) > static::MAX_BYTES)
+		{
+			throw new LengthException(sprintf('A cache value of %d bytes is longer than Compressor::MAX_BYTES (%d bytes): not cached.',
+				strlen($value),
+				static::MAX_BYTES,
+			));
 		}
 		
 		// off: stored as it is - escaped where it looks compressed, so a read
@@ -132,17 +152,26 @@ class Compressor
 						
 						break;
 					case 'zs':
-						if(Zstd::isAvailable() === false)
+						// A host without zstd cannot read it, and data that is not a zstd frame is no
+						// value this cache wrote. Either is a miss.
+						if(Zstd::isAvailable() === false
+							|| Zstd::isFramed($compressed) === false)
 						{
-							// a host without zstd cannot read it: a miss
 							return null;
 						}
 						
-						$value = zstd_uncompress($compressed);
+						// Read with a limit, because zstd_uncompress() reserves the size a frame's header
+						// states before it inflates anything, and returns the part a cut-short frame holds.
+						// Zstd::decompress() answers '' when it refuses the value, which is a miss.
+						$value = Zstd::decompress($compressed, static::MAX_BYTES);
+						if($value === '')
+						{
+							return null;
+						}
 						
 						break;
 					default:
-						$value = gzuncompress($compressed);
+						$value = gzuncompress($compressed, static::MAX_BYTES);
 				}
 			}
 			catch(Throwable)

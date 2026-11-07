@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Test\Cache\Store;
 
 use Ovos\Cache\Compressor;
+use Ovos\Cache\MemoLock\Redis as MemoLock;
 use Ovos\Cache\Serializer;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\RedisVersioned;
@@ -61,6 +62,13 @@ trait TraitInvalidationGuard
 		KeyValueRedis $store,
 		array $keys,
 	): bool;
+	
+	/**
+	 * A fresh instance whose client counts its round trips - and fails
+	 * reads when told (CountingClient); null where the store has no single
+	 * standalone client (TraitBatch)
+	 */
+	abstract protected function batchProbe(): ?KeyValueRedis;
 	
 	/**
 	 * RULE: a value computed before another process deleted its key is never
@@ -318,6 +326,186 @@ trait TraitInvalidationGuard
 		$writer->delete($key);
 		
 		return $gone && $written && $read === 'unguarded';
+	}
+	
+	/**
+	 * RULE (probe): a read that did not reach the item (the connection failed) is a miss, and no write
+	 * follows it. The key may have been deleted or invalidated without this process seeing it, and with the
+	 * queue off no second read checks it before the write. So the key is deleted instead.
+	 */
+	public function aWriteAfterAFailedReadDropsTheKey(): bool
+	{
+		$reader = $this->unreadProbe();
+		$other = $this->guardStore();
+		$key = $this->guardKey('unread');
+		$other->set($key, 'old', 60);
+		$reader->getConnection()->counter()->failingReads = 1;
+		
+		$value = $reader->get($key, function() use ($other, $key): string
+		{
+			// the source changes while the value is computed
+			$other->delete($key);
+			
+			return 'computed before the delete';
+		}, 60, queue: false);
+		$read = $this->guardStore()->get($key, queue: false);
+		$other->delete($key);
+		
+		return $value === 'computed before the delete'
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (probe): a forced refresh whose read failed leaves no outdated value behind. The write could only
+	 * be refused, so the key is deleted and the next reader computes.
+	 */
+	public function aForcedRefreshAfterAFailedReadLeavesNoOutdatedValue(): bool
+	{
+		$reader = $this->unreadProbe();
+		$other = $this->guardStore();
+		$key = $this->guardKey('refresh-unread');
+		$other->set($key, 'outdated', 60);
+		$reader->getConnection()->counter()->failingReads = 1;
+		
+		$value = $reader->get($key, fn(): string => 'refreshed', 60, refresh: true);
+		$read = $this->guardStore()->get($key, queue: false);
+		$other->delete($key);
+		
+		return $value === 'refreshed'
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (probe): a set() after a read-only get() whose read failed leaves no outdated value behind: it
+	 * answers false, and the key is deleted.
+	 */
+	public function aSetAfterAFailedReadLeavesNoOutdatedValue(): bool
+	{
+		$reader = $this->unreadProbe();
+		$other = $this->guardStore();
+		$key = $this->guardKey('set-unread');
+		$other->set($key, 'old', 60);
+		$reader->getConnection()->counter()->failingReads = 1;
+		
+		$missed = $reader->get($key, queue: false);
+		$written = $reader->set($key, 'new', 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$other->delete($key);
+		
+		return $missed === null
+			&& $written === false
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (probe): when the write after a failed read deletes the key instead, it leaves no lock behind. A
+	 * waiting worker computes at once; it does not wait for the lock's TTL.
+	 */
+	public function aDroppedWriteReleasesItsLock(): bool
+	{
+		$reader = $this->unreadProbe();
+		$other = $this->guardStore();
+		$key = $this->guardKey('drop-lock');
+		$other->set($key, 'outdated', 60);
+		$reader->getConnection()->counter()->failingReads = 1;
+		
+		$reader->get($key, fn(): string => 'refreshed', 60, refresh: true, queueLockTtlMs: 2000);
+		$lockKey = $reader->getMemoLock()
+			->getPrefixer()
+			->prefix(MemoLock::TYPE_LOCK, $reader->itemId($key));
+		$held = (int)$reader->getClient()->exists($lockKey);
+		$began = microtime(true);
+		$next = $this->guardStore()->get($key, fn(): string => 'next', 60);
+		$tookMs = (microtime(true) - $began) * 1000;
+		$reader->getClient()->del($lockKey);
+		$other->delete($key);
+		
+		return $held === 0
+			&& $next === 'next'
+			&& $tookMs < 1000;
+	}
+	
+	/**
+	 * RULE (probe): a failed read whose write comes after the guard window. On a tag-index store it is a miss
+	 * like any other: past the window a miss guards nothing, and the write is stored. On a versioned store
+	 * the write is still refused, once (the store's own computation leaves the key), and the next write is
+	 * stored.
+	 */
+	public function aWriteAfterAFailedReadPastTheWindow(): bool
+	{
+		$reader = $this->unreadProbe();
+		$reader->setInvalidationWindowMs(50);
+		$key = $this->guardKey('unread-late');
+		$reader->getConnection()->counter()->failingReads = 1;
+		
+		$value = $reader->get($key, function(): string
+		{
+			usleep(100000);
+			
+			return 'late';
+		}, 60, queue: false);
+		$read = $this->guardStore()->get($key, queue: false);
+		$written = $reader->set($key, 'next', 60);
+		$next = $this->guardStore()->get($key, queue: false);
+		$reader->delete($key);
+		
+		return $value === 'late'
+			&& $read === ($reader instanceof RedisVersioned ? null : 'late')
+			&& $written
+			&& $next === 'next';
+	}
+	
+	/**
+	 * RULE (probe): a read answered by an error reply (BUSY, LOADING, MASTERDOWN answer false and throw
+	 * nothing) is a failed read. A forced refresh after it leaves no outdated value behind.
+	 */
+	public function aForcedRefreshAfterAnErrorReplyLeavesNoOutdatedValue(): bool
+	{
+		$reader = $this->unreadProbe();
+		$other = $this->guardStore();
+		$key = $this->guardKey('refresh-erring');
+		$other->set($key, 'outdated', 60);
+		$reader->getConnection()->counter()->erringReads = 1;
+		
+		$value = $reader->get($key, fn(): string => 'refreshed', 60, refresh: true);
+		$read = $this->guardStore()->get($key, queue: false);
+		$other->delete($key);
+		
+		return $value === 'refreshed'
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (probe): a second read made with the lock that gets an error reply is a failed read too, not a key
+	 * found empty. The write after it is refused, and the key never holds the value computed.
+	 */
+	public function aLockLookAnsweredByAnErrorReplyIsAFailedRead(): bool
+	{
+		$reader = $this->unreadProbe();
+		$key = $this->guardKey('look-erring');
+		// the first read and the look made with the lock
+		$reader->getConnection()->counter()->erringReads = 2;
+		
+		$value = $reader->get($key, fn(): string => 'computed', 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$reader->delete($key);
+		
+		return $value === 'computed'
+			&& $read === null;
+	}
+	
+	/**
+	 * A fresh instance whose client fails reads when told (see batchProbe())
+	 */
+	protected function unreadProbe(): KeyValueRedis
+	{
+		$probe = $this->batchProbe();
+		if($probe === null)
+		{
+			throw new SkipException('no single standalone client to fail a read on');
+		}
+		
+		return $probe;
 	}
 	
 	/**

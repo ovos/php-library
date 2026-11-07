@@ -60,6 +60,9 @@ class RedisVersionedProbe extends RedisVersioned
 	/** run before each read of the rules stream - a test makes the read fail */
 	public ?Closure $beforeRuleFetch = null;
 	
+	/** the server's time cannot be read (see serverNowMs()) */
+	public bool $timeUnreadable = false;
+	
 	/**
 	 * The function names each sendAll() sent in one round trip
 	 *
@@ -69,6 +72,19 @@ class RedisVersionedProbe extends RedisVersioned
 	
 	/** the releases its MemoLock sent on their own, not with a write */
 	public int $releasesAlone = 0;
+	
+	/**
+	 * Builds the shared set in another medium than APCu - called with the
+	 * rules key and the identity, it answers a SharedRulesProbe (see
+	 * SharedRulesInFiles)
+	 */
+	public ?Closure $sharedRulesFactory = null;
+	
+	/** the times it shared the set its own rules went into */
+	public int $shares = 0;
+	
+	/** run at each of those shares - a test counts them past the instance */
+	public ?Closure $onShare = null;
 	
 	#[Override]
 	protected function fetch(
@@ -211,11 +227,20 @@ class RedisVersionedProbe extends RedisVersioned
 	#[Override]
 	protected function softly(
 		array $item,
-	): ?Stale
+		Rules $rules,
+	): Stale|false|null
 	{
 		$this->softlyCalls++;
 		
-		return parent::softly($item);
+		return parent::softly($item, $rules);
+	}
+	
+	#[Override]
+	protected function serverNowMs(): ?int
+	{
+		return $this->timeUnreadable
+			? null
+			: parent::serverNowMs();
 	}
 	
 	public function rules(): Rules
@@ -223,8 +248,52 @@ class RedisVersionedProbe extends RedisVersioned
 		return $this->getRules();
 	}
 	
-	public function sharedRules(): ?SharedRules
+	/**
+	 * The shared set, a SharedRulesProbe (see newSharedRules())
+	 */
+	public function sharedRules(): ?SharedRulesProbe
 	{
-		return $this->getSharedRules();
+		$shared = $this->getSharedRules();
+		
+		return $shared instanceof SharedRulesProbe
+			? $shared
+			: null;
+	}
+	
+	/**
+	 * The rule set held and its verdict, as readRules() takes them for a read
+	 *
+	 * @return array{0: ?Rules, 1: bool}
+	 */
+	public function readVerdict(): array
+	{
+		return $this->readRules();
+	}
+	
+	#[Override]
+	protected function sharesRules(): bool
+	{
+		return $this->sharedRulesFactory !== null
+			|| parent::sharesRules();
+	}
+	
+	#[Override]
+	protected function newSharedRules(): SharedRules
+	{
+		return $this->sharedRulesFactory !== null
+			? ($this->sharedRulesFactory)($this->getRulesKey(), $this->sharedRulesIdentity())
+			: new SharedRulesProbe($this->getRulesKey(), $this->sharedRulesIdentity());
+	}
+	
+	#[Override]
+	protected function shareHeldRules(): void
+	{
+		$this->shares++;
+		if($this->onShare !== null)
+		{
+			($this->onShare)();
+		}
+		
+		parent::shareHeldRules();
 	}
 }

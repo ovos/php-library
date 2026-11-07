@@ -5,6 +5,7 @@ namespace Ovos\Cache\Store;
 
 use Ovos\Cache\MemoLock\Apcu as MemoLock;
 use APCUIterator;
+use LengthException;
 use Override;
 
 use function apcu_cache_info;
@@ -73,10 +74,22 @@ class Apcu extends KeyValue
 			}
 		}
 		
-		$value = $this->serializer
-			->serialize($value);
-		$value = $this->compressor
-			->compress($value);
+		try
+		{
+			$value = $this->compressor
+				->compress($this->serializer->serialize($value));
+		}
+		// The value is longer than the Compressor reads back, so it is not cached. An older value under the
+		// key is deleted, because it is not what the caller wrote.
+		catch(LengthException $exception)
+		{
+			$this->log($exception->getMessage());
+			$this->delete($key);
+			$this->getMemoLock()
+				->releaseActiveLock($id);
+			
+			return false;
+		}
 		
 		try
 		{

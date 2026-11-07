@@ -56,17 +56,29 @@ abstract class TagIndex extends Redis
 		
 		try
 		{
-			// the data, the guard's epoch and a soft invalidation's mark in the
-			// one round trip a read makes
-			return $this->judge($id, $client->hMGet($id, $this->fetchedFields()));
+			// The data, the guard's epoch and the "invalidated" field a soft invalidation sets, in the one
+			// round trip a read makes.
+			$item = $client->hMGet($id, $this->fetchedFields());
 		}
-		// RedisClusterException does not extend RedisException, catch both
+		// RedisClusterException does not extend RedisException, catch both. Redis did not answer: a miss,
+		// and no write may follow it (see rememberUnread()).
 		catch(RedisException|RedisClusterException $exception)
 		{
 			$this->log($exception);
+			$this->rememberUnread($id);
+			
+			return null;
 		}
 		
-		return null;
+		// an error reply (BUSY, LOADING) is a failed read too (see failedReply())
+		if(is_array($item) === false)
+		{
+			$this->failedReply($id);
+			
+			return null;
+		}
+		
+		return $this->judge($id, $item);
 	}
 	
 	/**
@@ -84,8 +96,8 @@ abstract class TagIndex extends Redis
 	}
 	
 	/**
-	 * fetch()'s verdict on what its HMGET read ($item: the reply) - also the
-	 * second look's, made with the lock (see lockAndLook())
+	 * Checks what fetch()'s HMGET read ($item: the reply). Also used for the second read made together
+	 * with the lock (see lockAndLook()).
 	 */
 	protected function judge(
 		string $id,
@@ -153,7 +165,15 @@ abstract class TagIndex extends Redis
 				return [false, null];
 			}
 			
-			$look = $this->fresh($this->judge($id, $replies[1] ?? false));
+			// a second read that failed is a miss, with nothing to check
+			if(is_array($replies[1] ?? false) === false)
+			{
+				$this->failedReply($id);
+				
+				return [true, null];
+			}
+			
+			$look = $this->fresh($this->judge($id, $replies[1]));
 			if($look === null
 				&& isset($this->misses[$id]))
 			{
@@ -208,7 +228,18 @@ abstract class TagIndex extends Redis
 					continue;
 				}
 				
-				$look = $this->fresh($this->judge($id, $replies[$count + $index] ?? false));
+				// a second read that failed is a miss, with nothing to check
+				$reply = $replies[$count + $index] ?? false;
+				if(is_array($reply) === false)
+				{
+					$this->failedReply($id);
+					$taken[$id] = [true, null];
+					$index++;
+					
+					continue;
+				}
+				
+				$look = $this->fresh($this->judge($id, $reply));
 				if($look === null
 					&& isset($this->misses[$id]))
 				{

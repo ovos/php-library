@@ -160,25 +160,109 @@ is constant no matter how many items match.
   physically expire by their TTL.
 - The rule set is **shared by the workers of a server through APCu**
   (`rules_shared_cache`, on wherever APCu is enabled): a fresh process - every
-  request, under PHP-FPM - adopts it instead of loading the whole stream. When
-  the set turns stale, one worker is elected to refresh it and the others keep
-  it for that read; on a server whose APCu was just emptied, one worker loads
-  the stream and the others wait for it, briefly, instead of loading it too.
-  An invalidation made on a server is seen there at once - the next request
-  included: it leaves an "invalidated at" mark in APCu, and a set fetched
-  before the mark is never fresh; `rules_cache_ms` bounds only the staleness
-  between servers. Switched off, each process loads the rules of the whole
-  retention window once, before its first hit.
+  request, under PHP-FPM - adopts it instead of loading the whole stream.
+- **The rule set while it reloads.** Each worker checks a read against its
+  copy of the rule set, and one worker reloads that copy for the server about
+  once per `rules_cache_ms`. A read takes the first of five cases that applies:
+  1. **A young copy** - fetched less than `rules_cache_ms` ago, and holding
+     every invalidation made on this server - checks the read, with no round
+     trip. Exact reads (`rules_cache_ms: 0`) never take this case.
+  2. **An outage, or a reload hanging past a second.** The last attempt to
+     read the stream failed, or another worker's reload has run for more than
+     `RedisVersioned::SLOW_RELOAD_MS` (1 s): the copy checks the read whatever
+     its age. With no copy every item is a miss, computed for the caller
+     without the stampede lock and not stored. One worker tries the stream
+     again once the flag is free and `RedisVersioned::RETRY_MS` (1 s) has
+     passed since the last attempt *ended*.
+  3. **The flag is free.** This worker takes it, reloads the copy - one
+     `XRANGE` from its last id - and shares the result; a failed reload starts
+     an outage.
+  4. **Another worker reloads, for no more than a second.** A copy no more
+     than `rules_cache_ms` + 1 s old, holding this server's invalidations,
+     checks the read - exact reads too.
+  5. **Anything else** (an older copy, one that may lack an invalidation
+     made on this server, none at all): every item is a miss, computed
+     without the stampede lock - a worker waiting for the lock would read a
+     miss as well. With a copy the value is stored with the copy's last rule
+     id, which only makes it outdated sooner; with none, nothing is stored.
+
+  An example. `rules_cache_ms` is 1 s, and another server invalidates
+  `product:7` at 12:00:00.000. A worker here whose copy was fetched at
+  11:59:59.600 serves `product:7` until 12:00:00.600 (case 1). The first read
+  after that takes the flag and reloads (case 3); a millisecond later the
+  copy holds the rule, and every worker of the server adopts it. A worker
+  reading during that millisecond uses its copy (case 4: less than 2 s old);
+  one whose copy is older - the first request after an idle spell - misses
+  and computes (case 5), but never waits. Had the reload hung on a dead
+  node, the other workers would have gone on using their copies after a
+  second (case 2): only the reloader waits, and a node that stays down costs
+  the server one attempt a second.
+
+  The mechanism. The copy, the flag, the record of the last attempt and the
+  record of the newest invalidation made here live in APCu, beside each
+  other; the processes sharing one APCu are one server. The flag is a lease:
+  the moment the reload began and a nonce, taken with
+  `apcu_add()`/`apcu_cas()` and released only by its owner. It is free
+  again after `SharedRules::LEASE_MS` (30 s) - for a worker that died
+  without letting go; a reloader that dies of a fatal error lets go of it as
+  its process shuts down. A failure reported by an attempt that began before
+  the last success is ignored. A reload that finds the stream started over
+  (lost, then appended to again) replaces the shared copy whatever its ids.
+  Where APCu refuses to record the flag (full, under an `apc.ttl` that keeps
+  it from expunging), the worker loads the rules on its own - one fetch per
+  request while it lasts - shares nothing, and logs one warning; where it
+  takes the flag but refuses the copy, it logs one warning too (a newer copy
+  already there is no refusal). A write stores the last rule id of the copy
+  its read was checked against; a write with no read before it (a
+  write-through) takes its copy through the same five cases and stores that
+  copy's last id - the stream's newest id is never read for a write. With no
+  copy it is not stored (see *Invalidation guard*). Case 5 costs
+  computations, not waits: a cold server (no copy) at 300 requests a second,
+  20 cache reads each and a reload of 0.3 s computes about 1 800 values it
+  does not store.
+- **An invalidation made on this server.** The process that invalidates
+  usually holds a copy that ends right before its own rule - the reply of the
+  append names the id it followed. Then the rule goes into that copy, which
+  counts as fetched right before the invalidation call (everything appended
+  until then is in it), and the first invalidation of a store instance
+  shares the copy at once, before it records the invalidation for the
+  server: every other worker adopts it on its next read as a fresh copy,
+  with no fetch and no miss. Later invalidations of the same instance share
+  it once more, when the instance goes away (the end of the request), never
+  at a read: a loop of 10 000 single-tag invalidations copies the set twice,
+  not 10 000 times. Until then the other workers lack those later rules and
+  reload through the flag. When another rule was added in between, the copy
+  would skip it: nothing goes into it, the invalidating process lacks its
+  own rule like the others, and its copy keeps its old fetch time. The
+  record of the invalidation - the time taken once the append returned, and
+  the rule id - keeps every copy fetched before it and ending before the
+  rule from checking a read. Each of the two is raised in one APCu step and
+  never lowered, so two invalidations racing on one server always leave the
+  later one's.
+- **What it promises.** While Redis answers and reloads finish within a
+  second, an invalidation made on another server is seen within
+  `rules_cache_ms` + 1 s. While the rules can be read, an invalidation made
+  on this server is never served stale here. During an outage, or a reload
+  hanging past a second, invalidations made elsewhere are seen when the
+  stream answers again, and no request but one per server per second fetches
+  the rules. No value computed after a read without rules, or without its
+  epoch, is stored. **Keep the read timeout and the connect timeout of the
+  cache's Redis connection short**, well under a second for a node that
+  answers in milliseconds: a hanging node then stalls only the request that
+  reloads, and only for that long. Switched off (`rules_shared_cache: no`),
+  each process works alone: it loads the rules of the whole retention window
+  once, before its first hit.
 - The set is **bounded** (`rules_max_tags`, default 15 000; 0: no bound): a
   request copies it out of APCu, about 0.16 ms and 0.45 KB per thousand rules,
   and what grows it is the number of *distinct* tags invalidated within the
   retention - not how often one tag is. Past the bound it keeps its newest
   90 % and puts a floor in place of the rest, as a clear at the newest rule
-  it dropped: an item stamped before the floor is a miss (recomputed once,
-  never served stale), one stamped after it keeps its verdicts. Size it so
-  the floor stays behind the longest TTL in the group - a per-customer tag
-  invalidated on every login moves it by one rule per customer. A load from
-  the beginning reads the stream 10 000 entries at a time.
+  it dropped: an item written with a rule id before the floor is a miss
+  (recomputed once, never served stale), one written after it is checked as
+  before. Size it so the floor stays older than the longest TTL in the
+  group - a per-customer tag invalidated on every login moves it by one rule
+  per customer. A load from the beginning reads the stream 10 000 entries at
+  a time.
 - `clear()` is logical as well (one rule matching everything);
   `clearPhysical()` wipes the whole group for maintenance.
 - `rules_retention_s` (default 30 days) is the default **and maximum** item
@@ -187,7 +271,7 @@ is constant no matter how many items match.
 - The rules stream carries no TTL, so a `volatile-*` (or `noeviction`)
   eviction policy never evicts it - run one of those. Should it be lost anyway
   (`allkeys-*`, a `DEL`, a slot gone with a cluster node), the read path fails
-  safe: an item stamped with a rule the stream no longer remembers is a miss,
+  safe: an item written with a rule id the stream no longer holds is a miss,
   never a stale hit, at the price of recomputing the group once.
 - Does not expose `getTags()` or `getAllTags()`; no RediSearch module needed.
 - Best for: projects with very large tag invalidations, where deleting the
@@ -196,7 +280,7 @@ is constant no matter how many items match.
 ![RedisVersioned store - write, read and invalidate flow](docs/cache/redis-versioned.png)
 
 A closer look at the read path - how a `get()` fetches the item in one
-`HMGET` and uses its `mark` (the version it was stamped with) to evaluate,
+`HMGET` and uses its `mark` (the rule id it was written with) to evaluate,
 in PHP against the held rule set - the newest rule per tag, shared by the
 server's workers through APCu and refreshed incrementally at most once per
 `rules_cache_ms` - only the invalidation rules it has not seen yet
@@ -209,7 +293,7 @@ lazily unlinks a stale item:
 - The RedisVersioned store on a **Redis Cluster**: same data model and
   semantics; reads evaluate the invalidation rules on the PHP side against
   the same held, shared rule set (`rules_cache_ms`, `rules_shared_cache`),
-  and writes take their watermark from it, as on a standalone server.
+  and writes take their rule id from it, as on a standalone server.
 - Requires a `redis_cluster` connection (a `seeds` list) plus a standalone
   queue connection **pointed at a node of the same cluster** for MemoLock
   pub/sub (see the configuration reference below).
@@ -628,9 +712,11 @@ $value = $store->get(
 - One process refreshes: MemoLock elects it without waiting (`tryLock()`) when
   the refresh runs, and it reads the item once more first - another process
   may have refreshed it already. Everyone else gets the stale value; nobody
-  waits. A real miss (the first read, past `ttl + stale`, after an
-  invalidation or an eviction) still goes through MemoLock: one computes, the
-  rest wait for it.
+  waits. A store queues one deferred refresh per key until it runs: reading
+  the value stale again before that queues none (a batch leaves those keys
+  out of its refresh too). A real miss (the first read, past `ttl + stale`,
+  after an invalidation or an eviction) still goes through MemoLock: one
+  computes, the rest wait for it.
 - Only ageing serves a stale value. An invalidation (`delete()`, a tag,
   `clear()`) removes the item as before, and the refresh's write is guarded
   like a miss's: an invalidation during the refresh refuses it (see
@@ -677,8 +763,9 @@ $store->get('menu:main', fn() => $this->buildMenu(), ttl: 0, tags: ['menu'], sta
   invalidated value for a miss.
 - The window: the versioned stores count it from the NEWEST invalidation that
   reached the item (their rules keep the newest per tag); the tag-index stores
-  (Redis, Redisearch) from the first - the soft mark takes the item out of its
-  tags' indexes, its data and the mark expire with the window. The first stale
+  (Redis, Redisearch) from the first - a later soft invalidation never pushes
+  back the expiry of its data (it renews the mark's, which changes nothing:
+  without its data the item is a miss). The first stale
   read starts the refresh either way, so the window matters only when nobody
   reads or the refresh keeps failing.
 - The guard still holds: a value computed before the invalidation never reads
@@ -686,6 +773,11 @@ $store->get('menu:main', fn() => $this->buildMenu(), ttl: 0, tags: ['menu'], sta
   item's epoch and the tag's stamp refuses it too; the versioned stores let it
   land under the watermark it saw, older than the rule, so it can only be
   served stale, as the old value would be.
+- A versioned read that cannot read the server's clock (`TIME`) for the
+  window takes a softly invalidated value for a miss and leaves it in place:
+  the next read that can tell serves it. Its own computation is a miss's like
+  any other - guarded by the epoch it read, and written over the soft value
+  unless the key changed meanwhile.
 - APCu has no tags: nothing to soften, the parameter is accepted.
 - Redis: a soft value's item carries its stale time in a `soft` field, written
   by the new Lua function `cache_set_soft` (`cache_set` keeps the argument
@@ -814,9 +906,8 @@ $store->invalidateTags(['customer:42'], hard: true);
 - The versioned stores keep the newest hard rule per tag, so a soft
   invalidation that follows a hard one does not soften it, and a hard one that
   follows a soft one hardens it.
-- On the tag-index stores (Redis, Redisearch) a softly invalidated value has
-  left its tags' indexes, so a hard invalidation after it does not reach it: it
-  stays soft until its window ends.
+- On the tag-index stores (Redis, Redisearch) a softly invalidated value stays
+  in its tags' indexes, so a hard invalidation after it reaches it too.
 
 ### When to invalidate
 
@@ -862,18 +953,19 @@ writer that invalidates.
 
 How it works:
 
-- an invalidation leaves a mark for a window (`invalidation_window_ms`,
+- an invalidation leaves a trace for a window (`invalidation_window_ms`,
   default 60 000): `delete()` replaces the item with a *tombstone* (the key
   holds only an `epoch` token, no data - every reader takes it for a miss);
-  tag invalidation and `clear()` stamp the tags (Redis, Redisearch) or append
-  a rule (the versioned stores); APCu keeps a token beside the item
+  tag invalidation and `clear()` record their time on the tags (Redis,
+  Redisearch) or append a rule (the versioned stores); APCu keeps a token
+  beside the item
 - a miss remembers what it saw, and the write that follows it compares
   atomically (Lua; APCu checks, stores, re-checks and takes its value back) -
   a write that lost the race is refused: `set()` returns `false`, nothing is
   stored, the MemoLock lock is released, and the next reader recomputes
 - a `set()` with no miss of its own before it is a write-through: written as
-  before, and it marks the key, so an older recomputation still in flight is
-  refused in turn
+  before, and it gives the key a new epoch, so an older recomputation still
+  in flight is refused in turn
 
 Refusing a cache write is always safe; serving a stale value is the bug.
 No caller changes are needed: the `get()`/`set()` pair, the resolver and the
@@ -890,20 +982,52 @@ What callers may notice:
 - A deleted key exists (as a hash holding `epoch`) for the window: raw `EXISTS`
   checks and the Redisearch index see it. A key holding a non-hash value (a raw
   counter kept under the prefix) is removed as before - never tombstoned.
-- The tag stamps of the Redis and Redisearch stores compare the Redis server
-  clock (`TIME`): a clock stepped backwards can let a raced write through. A
-  tag invalidation removes the items it reaches (no tombstone each - the stamps
-  refuse a raced write), so a miss whose time could not be read (`peek()`
-  without `startComputing()`, a failed `TIME`) is refused while any stamp of
-  its write lives: the next reader recomputes.
+- The tag invalidation times of the Redis and Redisearch stores come from the
+  Redis server clock (`TIME`): a clock stepped backwards can let a raced
+  write through. A tag invalidation removes the items it reaches (no
+  tombstone each - the tags' invalidation times refuse a raced write), so a
+  miss whose time could not be read (`peek()` without `startComputing()`, a
+  failed `TIME`) is refused while any invalidation time of its write's tags
+  lives: the next reader recomputes.
 - During a rolling deploy, old and new code reload each other's Lua library
   (the source-hash check); correctness holds, the reloads stop once one
   version runs. A host checks a library it confirmed on a server at most once
   per `Functions::CONFIRMED_TTL_S` (60 s, APCu): until then it calls what the
   server holds, the other release's build included (a function that build
   lacks still self-heals: "Function not found" reloads and retries).
-- Bounds: a recomputation longer than the window is not covered (the mark is
-  gone); `invalidation_window_ms: 0` switches the guard off.
+- A read that failed - its `HMGET` met a connection error, or an error reply
+  (`BUSY`, `LOADING`, `MASTERDOWN` answer `false` and throw nothing) - knows
+  nothing of the key, which may have been invalidated without this process
+  seeing it. With the queue on, the key is read again together with the
+  lock: a value found there is served, a miss found there guards the write as
+  usual. Where nothing reads the key again before the write, no write
+  follows: `set()` answers `false` and the key is deleted instead, so neither
+  a value computed across an invalidation nor the one the write was meant to
+  replace is served, and the next reader computes. That is a `get()` or
+  `getMany()` with the queue off, a forced refresh (`refresh: true`, which
+  takes the lock without reading the key again), and a `set()` after
+  `peek()` or after a read-only `get()`/`getMany()`. On the versioned stores
+  the store's own computation after its miss leaves the key instead (it may
+  hold a valid item, which the rules still check), and the write is refused
+  past the window too, once.
+- On the versioned stores, when no copy of the invalidation rules was at hand
+  for a read (see *The rule set while it reloads*: an outage, or another
+  worker reloading, with no copy), nothing can check the value computed after
+  it: it is returned and not stored, and the lock is released; past the window
+  too, once. After the store's own computation of a miss (`get()`/`getMany()`
+  with a resolver, and the `set()` after a manual `lockAndQueue()`, which
+  behaves like `get()`) what the key holds stays - a valid item is not evicted
+  by a worker that could not check it. After a read whose caller replaces the
+  value - a forced refresh, a `set()` after `peek()` or after a read-only
+  `get()`/`getMany()`, or after `lockAndQueue()` and `releaseActiveLock()` -
+  the key is deleted, so the value it was meant to replace is not served. So
+  is a plain write - a `set()` or `setMany()` with no miss before it - by a
+  worker that holds no copy and may not load one: it has no rule id to be
+  written with, so it answers `false` and deletes the key. The same goes for
+  a value longer than the Compressor reads back: the store's own computation
+  leaves the key, any other write deletes it.
+- Bounds: a recomputation longer than the window is not covered (the trace
+  is gone); `invalidation_window_ms: 0` switches the guard off.
 
 ## Stampede protection (MemoLock)
 
@@ -954,7 +1078,7 @@ cache:
   perishable:
     compression:
       enabled: yes
-      threshold: 2048                  # Compress values larger than 2KB (a value compression does not shrink is stored as it is)
+      threshold: 2048                  # Compress values larger than 2KB (a value compression does not shrink is stored as it is; one longer than 512 MiB is not cached at all - set() answers false, logged, and the key is deleted; a zstd frame stating or inflating past 512 MiB, cut short or trailed by other bytes reads as a miss; gzip's bound is about 512 MiB, up to an eighth over may still read, and bytes after its stream are ignored)
     queue:                             # APCu MemoLock settings
       enabled: yes
       lock_ttl_s: 1                    # Lock duration in seconds
@@ -1034,10 +1158,11 @@ cache:
 - **Every read goes to a primary.** The cluster connection sets
   `OPT_SLAVE_FAILOVER` to `FAILOVER_NONE`, a standalone connection names one
   server; keep it so. On a replica, three things would read differently:
-  (a) a versioned store sees its own invalidation by re-reading the rules
-  stream, and a lagging replica can answer that re-read without the rule just
-  appended, so the held set is marked fresh without it - reading from replicas
-  would first need the store to take its own rule from `XADD`'s reply;
+  (a) a versioned store whose set does not end right before its own rule
+  reloads to see it, and a lagging replica can answer that reload without the
+  rule just appended, so the set would be taken for fresh without it -
+  reading from replicas would first need such a reload asked again of the
+  primary;
   (b) a miss's second look only finds an older item, which the guard turns
   into a refused write, never a stale one; (c) `SET NX` and every writing
   `FCALL` go to the primary anyway, and an `FCALL_RO` on a replica that lacks
