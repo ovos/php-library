@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Test\Cache\Store;
 
+use Ovos\Cache\Compressor;
 use Ovos\Cache\Computed;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue;
@@ -13,6 +14,7 @@ use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
 use Closure;
 use RedisCluster as RedisClusterClient;
+use ReflectionProperty;
 use RuntimeException;
 
 use function apcu_key_info;
@@ -20,6 +22,7 @@ use function count;
 use function intdiv;
 use function is_array;
 use function microtime;
+use function str_repeat;
 use function usleep;
 
 /**
@@ -806,6 +809,71 @@ trait TraitStaleWhileRevalidate
 	}
 	
 	/**
+	 * RULE: a value read stale again before its refresh ran queues no second refresh, because another would
+	 * not renew it any sooner. Once the queued refresh ran, the next stale read queues one again.
+	 */
+	public function aStaleValueQueuesOneRefreshUntilItRuns(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->staleKey('queued-once');
+		$this->capture($store, $deferred);
+		$calls = 0;
+		$this->writeAged($store, $key, 'old');
+		
+		$first = $store->get($key, $this->counting($calls, 'new'), 60, stale: 60);
+		$second = $store->get($key, $this->counting($calls, 'new'), 60, stale: 60);
+		$queued = count($deferred);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$this->writeAged($store, $key, 'aged again');
+		$third = $store->get($key, $this->counting($calls, 'newer'), 60, stale: 60);
+		$store->setDeferrer(null);
+		$store->delete($key);
+		
+		return $first === 'old'
+			&& $second === 'old'
+			&& $queued === 1
+			&& $calls === 1
+			&& $third === 'aged again'
+			&& count($deferred) === 2;
+	}
+	
+	/**
+	 * RULE: a value longer than the Compressor reads back is not cached at all. set() answers false, and an
+	 * older value under the key is deleted, so it is not served in its place. A batch still writes its other
+	 * values.
+	 */
+	public function aValueLongerThanTheCompressorTakesBackIsNotCached(): bool
+	{
+		$store = $this->staleStore();
+		$this->capCompressor($store);
+		$big = $this->staleKey('oversize');
+		$small = $this->staleKey('oversize-small');
+		$value = str_repeat('x', 4096);
+		
+		$store->set($big, 'older', 60);
+		$written = $store->set($big, $value, 60);
+		$read = $store->get($big, queue: false);
+		$store->set($big, 'older', 60);
+		$many = $store->setMany([
+			$big => $value,
+			$small => 'small',
+		], 60);
+		$readMany = [
+			$this->staleStore()->get($big, queue: false),
+			$this->staleStore()->get($small, queue: false),
+		];
+		$store->delete($small);
+		
+		return $written === false
+			&& $read === null
+			&& $many === [$big => false, $small => true]
+			&& $readMany === [null, 'small'];
+	}
+	
+	/**
 	 * Writes $value as a soft value (get(stale:, soft: true)) from another
 	 * process, tagged SOFT_TAG
 	 */
@@ -937,6 +1005,21 @@ trait TraitStaleWhileRevalidate
 			: $client->time();
 		
 		return (int)$time[0] * 1000 + intdiv((int)$time[1], 1000);
+	}
+	
+	/**
+	 * Gives $store a Compressor that takes back at most 1 KiB (MAX_BYTES), so
+	 * a value over it is cheap to make
+	 */
+	protected function capCompressor(
+		KeyValue $store,
+	): void
+	{
+		(new ReflectionProperty(KeyValue::class, 'compressor'))
+			->setValue($store, new class extends Compressor
+			{
+				public const int MAX_BYTES = 1024;
+			});
 	}
 	
 	/**

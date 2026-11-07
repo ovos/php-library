@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Test\Cache\Store;
 
 use Redis as BaseRedis;
+use RedisException;
 use Closure;
 
 use function count;
@@ -48,6 +49,32 @@ class CountingClient extends BaseRedis
 	 * another process acts between a read and the lock taken after it
 	 */
 	public ?Closure $beforeLock = null;
+	
+	/**
+	 * Runs once right before the next FCALL is sent: another process acts
+	 * between a moment its caller took and the call
+	 */
+	public ?Closure $beforeCall = null;
+	
+	/**
+	 * How many reads fail from now on, as on a connection that timed out: an
+	 * HMGET sent on its own throws, and so does the exec() of a pipeline that
+	 * holds one (the pipeline discarded)
+	 */
+	public int $failingReads = 0;
+	
+	/**
+	 * How many reads answer false from now on, as an error reply (BUSY,
+	 * LOADING, MASTERDOWN) makes them, without throwing: an HMGET sent on its
+	 * own, or each HMGET of a pipeline
+	 */
+	public int $erringReads = 0;
+	
+	/**
+	 * How many reads of a stream (XRANGE sent on its own) answer false from
+	 * now on, as an error reply makes them, without throwing
+	 */
+	public int $erringRanges = 0;
 	
 	public function resetCount(): void
 	{
@@ -95,11 +122,35 @@ class CountingClient extends BaseRedis
 	
 	public function exec(): BaseRedis|array|false
 	{
+		if($this->failingReads > 0
+			&& in_array('hMget', $this->queued, true))
+		{
+			$this->failingReads--;
+			$this->queued = [];
+			$this->discard();
+			
+			throw new RedisException('read error on connection');
+		}
+		
 		$this->roundTrips++;
 		$this->sent[] = $this->queued;
+		$queued = $this->queued;
 		$this->queued = [];
 		
-		return parent::exec();
+		$replies = parent::exec();
+		if(is_array($replies))
+		{
+			foreach($queued as $index => $command)
+			{
+				if($command === 'hMget' && $this->erringReads > 0)
+				{
+					$this->erringReads--;
+					$replies[$index] = false;
+				}
+			}
+		}
+		
+		return $replies;
 	}
 	
 	public function hMget(
@@ -107,6 +158,24 @@ class CountingClient extends BaseRedis
 		array $fields,
 	): BaseRedis|array|false
 	{
+		if($this->failingReads > 0
+			&& $this->getMode() === BaseRedis::ATOMIC)
+		{
+			$this->failingReads--;
+			
+			throw new RedisException('read error on connection');
+		}
+		
+		if($this->erringReads > 0
+			&& $this->getMode() === BaseRedis::ATOMIC)
+		{
+			$this->erringReads--;
+			$this->roundTrips++;
+			$this->sent[] = ['hMget'];
+			
+			return false;
+		}
+		
 		$this->counted('hMget');
 		
 		return parent::hMget($key, $fields);
@@ -163,6 +232,12 @@ class CountingClient extends BaseRedis
 		array $args = [],
 	): mixed
 	{
+		if($this->beforeCall !== null)
+		{
+			$beforeCall = $this->beforeCall;
+			$this->beforeCall = null;
+			$beforeCall();
+		}
 		$this->counted('fcall');
 		
 		return parent::fcall($fn, $keys, $args);
@@ -196,6 +271,16 @@ class CountingClient extends BaseRedis
 		int $count = -1,
 	): BaseRedis|array|bool
 	{
+		if($this->erringRanges > 0
+			&& $this->getMode() === BaseRedis::ATOMIC)
+		{
+			$this->erringRanges--;
+			$this->roundTrips++;
+			$this->sent[] = ['xRange'];
+			
+			return false;
+		}
+		
 		$this->counted('xRange');
 		
 		return parent::xRange($key, $start, $end, $count);

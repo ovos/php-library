@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Store;
 
+use LengthException;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
 use Ovos\Cache\Stale;
@@ -199,6 +200,13 @@ class Redis extends TagIndex
 		// invalidation since (see KeyValue::rememberMiss())
 		$miss = $this->writeMiss($id);
 		
+		// A write after a failed read could only be refused, so the key is deleted instead (see
+		// dropUnread()).
+		if($this->isUnread($miss))
+		{
+			return $this->dropUnread($key, $id);
+		}
+		
 		// a negative TTL expired the item at once (EXPIRE with a negative
 		// value deletes the key) - a delete it is; so is a null value (see
 		// KeyValue::set())
@@ -229,6 +237,13 @@ class Redis extends TagIndex
 		catch(RedisException $exception)
 		{
 			$this->log($exception);
+		}
+		// The value is longer than the Compressor reads back, so it is not cached. An older value under the
+		// key is deleted, because it is not what the caller wrote.
+		catch(LengthException $exception)
+		{
+			$this->log($exception->getMessage());
+			$this->delete($key);
 		}
 		finally
 		{
@@ -288,10 +303,9 @@ class Redis extends TagIndex
 	}
 	
 	/**
-	 * Invalidates the items carrying the tags; $hard: a soft value is a miss at
-	 * once too, not served for its stale time (a softly invalidated value has
-	 * left its tags, so a hard invalidation after it does not reach it - it
-	 * stays soft for its window)
+	 * Invalidates the items carrying the tags. With $hard, a soft value is a miss at once too, instead of
+	 * being served for its stale time. A softly invalidated value stays in its tags' index, so a hard
+	 * invalidation after it still reaches it.
 	 */
 	public function invalidateTags(
 		array $tags,

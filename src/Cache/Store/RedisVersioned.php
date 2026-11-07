@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Ovos\Cache\Store;
 
 use Closure;
+use LengthException;
 use Ovos\ArrayObject;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
@@ -22,47 +23,64 @@ use function explode;
 use function implode;
 use function intdiv;
 use function is_array;
+use function is_string;
 use function json_encode;
 use function max;
 use function microtime;
 use function sprintf;
-use function usleep;
 
 /**
  * RedisVersioned
  *
- * Logical (rule based) tag invalidation: invalidateTags() appends one
- * rule to a stream instead of deleting the matched items - O(1)
- * regardless of whether 10 or 700000 items match. A read fetches the item
- * with one HMGET and evaluates the rules it has not seen yet against its
- * tags in PHP, over a locally held rule set (see Rules); stale items are
- * lazily unlinked and physically expire by their TTL.
+ * An invalidation does not delete any item. invalidateTags() adds one rule to a list in Redis (a stream),
+ * such as "items tagged product:7 written before this rule are outdated". Every PHP worker keeps a copy of
+ * that list in memory and checks each item it reads against its copy.
  *
- * The rule set is compacted (the newest rule per tag) and follows the
- * stream incrementally: a refresh, at most once per rules_cache_ms, fetches
- * only the rules appended since the last id held. Where APCu is available
- * the set is shared by the workers of a server (see SharedRules), so a
- * fresh process - every request, under PHP-FPM - adopts it instead of
- * loading the whole stream; "rules_shared_cache: no" switches that off.
+ * So an invalidation costs one rule, whether 10 or 700000 items match. A read is still one HMGET, because
+ * the check runs in PHP. An outdated item is a miss. It is removed after that read, or expires by its TTL.
  *
- * "rules_retention_s" is the default AND maximum item lifetime of the
- * store: an item must never outlive the rule that made it stale, or it
- * would resurrect once the rule is trimmed. A ttl of 0 means "as long
- * as the store allows" (= the retention); a ttl above the retention is
- * capped to it and logs a warning - raise the retention to at least the
- * longest item TTL in use.
+ * Each item stores the id of the newest rule in its writer's copy (the item's "mark" field). Only a rule
+ * with a newer id can make the item outdated. The stream gives every rule an id in increasing order, so
+ * "newer" is decided by these ids and never by comparing clocks.
  *
- * Ordering is causal, not clock based: every item is stamped with the
- * rules stream's last entry id its writer holds (its watermark), and only
- * rules with a newer id can invalidate it - no clock comparison happens
- * anywhere (stream ids are generated monotonically by the rules node).
+ * The copy keeps only the newest rule per tag (see Rules), and a reload fetches only the rules added since
+ * the copy's newest one. The PHP workers that share one APCu are called a server here. Where APCu is
+ * available, they share one copy (see SharedRules). A new PHP-FPM request then takes that copy instead of
+ * loading the whole stream, and one worker reloads it for all of them about once per rules_cache_ms.
+ * "rules_shared_cache: no" turns the sharing off. readRules() decides which copy checks a read.
  *
- * The rules stream is the only record that an invalidation happened, so it
- * carries no TTL: under a volatile-* (or noeviction) policy it is then never
- * an eviction candidate - run one of those. Should it be lost anyway (an
- * allkeys-* policy, a DEL, a slot gone with a cluster node), the read path
- * fails safe: an item stamped with a rule the stream no longer remembers is
- * a miss, never a stale hit, at the price of recomputing the group once
+ * An example, with rules_cache_ms 1000. At 12:00:00.000 worker A on server web1 invalidates the tag
+ * product:7. Redis's reply names the rule that came before the new one. A's copy ends with that rule, so A
+ * adds the new rule to its copy and puts the copy in APCu for the other workers of web1 (see addRule()).
+ * A's next read of an item tagged product:7 is a miss, and the value is computed again. Worker B on server
+ * web2 fetched its copy at 11:59:59.600. B still serves the old product:7 item until 12:00:00.600, because
+ * until then its copy is less than rules_cache_ms old. B's first read after that gets a reloaded copy,
+ * which holds the rule, so the item is a miss for B too.
+ *
+ * When something goes wrong:
+ * - Redis does not answer when the rules are reloaded. The workers keep using the copy they have, whatever
+ *   its age. A worker with no copy treats every item as a miss and stores nothing it computes. One worker
+ *   of the server tries again RETRY_MS after the last attempt ended.
+ * - Another worker is reloading. A copy at most rules_cache_ms + SLOW_RELOAD_MS old is still used. With an
+ *   older copy, or none, every item is a miss, computed without the stampede lock, so nobody waits. The
+ *   value is stored with the older copy's newest rule id, and not stored when there is no copy. A reload
+ *   that runs longer than SLOW_RELOAD_MS is treated as if Redis were down.
+ * - A write races an invalidation. The value is stored with the newest rule id of the copy its read was
+ *   checked against, never with the stream's newest id. So a rule added while the value was computed
+ *   still reaches it on the next read.
+ *
+ * More in README.CACHE.md: "RedisVersioned" under "Store differences" (the parts "The rule set while it
+ * reloads" and "An invalidation made on this server"), and "Invalidation guard (stale writes)".
+ *
+ * "rules_retention_s" is the default and the maximum lifetime of an item. An item must never live longer
+ * than the rule that made it outdated, or it would be served again once that rule is trimmed from the
+ * stream. A ttl of 0 means "as long as the store allows", which is the retention. A ttl above the
+ * retention is cut to it and logs a warning, so set the retention to at least the longest TTL in use.
+ *
+ * The rules stream is the only record that an invalidation happened, so it has no TTL. Under a volatile-*
+ * (or noeviction) policy Redis then never evicts it, so run one of those. If the stream is lost anyway (an
+ * allkeys-* policy, a DEL, a slot lost with a cluster node), reads stay safe. An item that carries a rule
+ * id the stream no longer holds is a miss, never an outdated hit, and the group is computed again once
  * (see Rules::isStale()).
  *
  * @author Marcin Gil <mg@ovos.at>
@@ -82,87 +100,118 @@ class RedisVersioned extends Store
 	// Keys
 	public const string KEY_MARK = 'mark';
 	
+	/**
+	 * Recorded as a miss's rule id when no copy of the invalidation rules was at hand, either for its read
+	 * or when its rule id was taken. Then nothing can tell whether the value computed after it is already
+	 * outdated. That value goes back to the caller and is never stored (see KeyValue\Redis::refuseUnjudged()).
+	 * No stream id looks like this.
+	 */
+	public const string STAMP_UNREAD = 'unread';
+	
 	// Types
 	public const string TYPE_RULES = 'rules';
 	
 	/**
-	 * How long a worker holding no rules waits for the worker elected to load
-	 * the stream before loading it on its own - the cold start of a server
-	 * whose APCu was just emptied, where every request would otherwise load
-	 * the whole stream at once
+	 * While another worker reloads the rules, the others keep using their copy for up to this long past
+	 * $rulesCacheMs. A reload that runs longer than this is treated as if Redis were down (see readRules()).
 	 * Unit: milliseconds
 	 */
-	public const int COLD_WAIT_MS = 250;
+	public const int SLOW_RELOAD_MS = 1000;
 	
 	/**
-	 * How often that worker looks whether the load has landed
+	 * While the rules cannot be read, one worker of the server tries again once this long has passed since
+	 * the last attempt ended.
 	 * Unit: milliseconds
 	 */
-	public const int COLD_POLL_MS = 2;
+	public const int RETRY_MS = 1000;
 	
 	/**
-	 * Invalidation rules (and therefore items) live at most this long.
-	 * The default of 30 days sits above the longest TTL in use across
-	 * the projects (typical items live ~3 days); note an explicit TTL is
-	 * never extended - only a ttl of 0 inherits the retention.
+	 * Invalidation rules, and so items, live at most this long. The default of 30 days is above the longest
+	 * TTL used in the projects (items typically live about 3 days). An explicit TTL is never made longer;
+	 * only a ttl of 0 takes the retention.
 	 * Unit: seconds
 	 */
 	protected int $rulesRetentionS = 2592000; // 30 days
 	
 	/**
-	 * How long a fetched rule set may be reused before it is refreshed - the
-	 * read path evaluates against this held set, and a write takes its
-	 * watermark from it - a bounded staleness window. Set to 0 to refresh on every
-	 * read (exact, at a round trip each; the refresh is incremental, so it
-	 * carries only what was appended since).
+	 * How long a copy of the rules is used for reads before it is reloaded. So an invalidation made on
+	 * another server can go unseen for about this long. 0 reloads before every read ("exact" reads), at one
+	 * round trip each. A reload fetches only the rules added since, so it stays small.
 	 * Unit: milliseconds
 	 */
 	protected int $rulesCacheMs = 1000;
 	
 	/**
-	 * Whether the rule set is shared across the workers of a server through
-	 * APCu; null decides by availability (see SharedRules::isAvailable())
+	 * Whether the workers of a server share one copy of the rules through APCu. Null decides by whether
+	 * APCu is available (see SharedRules::isAvailable()).
 	 */
 	protected ?bool $rulesSharedCache = null;
 	
 	/**
-	 * How many rules the held set keeps before a floor takes the place of the
-	 * oldest (see Rules) - store option "rules_max_tags", 0: no bound
+	 * How many rules the copy keeps. Past that, a floor takes the place of the oldest rules (see Rules).
+	 * Store option "rules_max_tags"; 0 means no limit.
 	 */
 	protected int $rulesMaxTags = Rules::MAX_TAGS;
 	
 	/**
-	 * How many stream entries one fetch reads: a load from the beginning goes
-	 * batch by batch, never more than one in memory beside the set
+	 * How many stream entries one fetch reads. A load from the start of the stream goes batch by batch, so
+	 * at most one batch is in memory beside the copy.
 	 */
 	protected int $rulesBatch = 10000;
 	
 	/**
-	 * The rule set this instance holds
+	 * This instance's copy of the invalidation rules; null when it has none
 	 */
 	protected ?Rules $rules = null;
 	
 	/**
-	 * When the held set was last fetched from (or reconciled with) the server
+	 * When the fetch that read the copy began (ms). The copy's age counts from there, not from when the
+	 * fetch ended.
 	 */
 	protected ?float $rulesFetchedAtMs = null;
 	
 	/**
-	 * A batch judges its items against the rule set held (see judgeMany()):
-	 * getRules() hands it out as it is meanwhile
+	 * The newest invalidation this instance made: when (ms, this server's clock, taken after Redis added
+	 * the rule) and the rule id it got. Kept here too for a store that shares no copy; SharedRules keeps
+	 * the same record for the whole server.
 	 */
-	protected bool $rulesHeld = false;
+	protected ?float $writtenAtMs = null;
+	
+	protected string $writtenId = Rules::NONE;
 	
 	/**
-	 * This instance appended a rule the held set has not seen yet: the next
-	 * read fetches the delta whatever the window says, so a process always
-	 * sees its own invalidations at once
+	 * Whether this instance already shared, in an invalidation call, a copy its own rule went into (see
+	 * addRule())
 	 */
-	protected bool $rulesDirty = false;
+	protected bool $sharedInRequest = false;
 	
 	/**
-	 * Stale items a read found, by id: the mark each was read with - dropped
-	 * once the read is over, unless a write overwrote them (see afterRead())
+	 * The copy holds rules this instance added that the shared copy lacks. It is shared when the instance
+	 * goes away, so a loop of invalidations writes the copy to APCu twice, not once per call.
+	 */
+	protected bool $unshared = false;
+	
+	/**
+	 * Used when no copy is shared on this server: whether the last attempt to read the rules stream
+	 * failed, and when it ended. With a shared copy, SharedRules keeps this for all workers.
+	 */
+	protected bool $outage = false;
+	
+	protected ?float $attemptEndedAtMs = null;
+	
+	/**
+	 * APCu refused to record the reload flag the last time this worker tried to take it. Until APCu takes
+	 * it, this worker loads the rules on its own and shares nothing.
+	 */
+	protected bool $alone = false;
+	
+	protected bool $aloneWarned = false;
+	
+	protected bool $storeWarned = false;
+	
+	/**
+	 * Outdated items a read found, by id, each with the "mark" its read saw. They are removed once the read
+	 * is over, unless a write replaced them meanwhile (see afterRead()).
 	 *
 	 * @var array<string, string>
 	 */
@@ -171,9 +220,16 @@ class RedisVersioned extends Store
 	protected ?SharedRules $sharedRules = null;
 	
 	/**
-	 * The server clock minus the local one, in ms (see serverNowMs())
+	 * The Redis server's clock minus the local clock, in ms (see serverNowMs())
 	 */
 	protected ?float $clockOffsetMs = null;
+	
+	/**
+	 * The rule id for writes that have none of their own: a set() with no miss before it, or a miss older
+	 * than the guard window that never got one. Taken once per set() or batch (see writeStamp()).
+	 * STAMP_UNREAD when no copy of the rules was at hand.
+	 */
+	protected ?string $writeStamp = null;
 	
 	/**
 	 * The TTL-above-retention warning is logged once per instance
@@ -187,6 +243,9 @@ class RedisVersioned extends Store
 	{
 		if($this->group !== $group)
 		{
+			// The copy belongs to the old group. If it holds rules this instance added and has not
+			// shared yet, it is shared with the old group's workers first.
+			$this->shareUnshared();
 			parent::setGroup($group);
 			$this->resetLocalRules();
 			$this->misses = [];
@@ -243,14 +302,16 @@ class RedisVersioned extends Store
 		
 		$id = $this->prefixer
 			->prefix($key, $this->getType());
-		// the miss this write follows, if any: refused when the key was
-		// deleted (or written through) since, stamped with the watermark the
-		// miss saw (see KeyValue::rememberMiss()) - also past the window, where
-		// only the watermark still guards
+		// The miss this write follows, if any. The write is refused when the key was deleted or written
+		// by someone else since that miss (see KeyValue::rememberMiss()). The value is stored with the
+		// rule id the miss saw. The miss is taken even when it is older than the guard window, because
+		// its rule id still protects the write then.
 		$miss = $this->writeMiss($id);
+		// a write without a rule id of its own takes a new one for this call (see writeStamp())
+		$this->writeStamp = null;
 		
-		// a negative TTL expired the item at once - a delete it is; so is a
-		// null value (see KeyValue::set())
+		// A negative TTL would expire the item at once, so it is a delete. So is a null value (see
+		// KeyValue::set()).
 		if($ttl < 0 || $value === null)
 		{
 			try
@@ -264,6 +325,18 @@ class RedisVersioned extends Store
 			}
 		}
 		
+		// not stored when nothing could check it: the item read failed, or no copy of
+		// the invalidation rules was at hand for the read. A write that only fills a
+		// miss leaves the key alone; a write meant to replace the value deletes it, so
+		// the old one is not served (see refuseUnjudged())
+		if($this->isUnread($miss)
+			|| $this->isUnjudged($miss))
+		{
+			return $this->refuseUnjudged($key, $id, $miss);
+		}
+		
+		// One Lua call writes the value with its rule id. After a miss it is refused when the key
+		// changed since. The stampede lock is released in the same round trip (see writeWithRelease()).
 		try
 		{
 			$result = $this->writeWithRelease($id, ...$this->writeCall($id, $key, $value, $ttl, $tags, $miss));
@@ -274,6 +347,13 @@ class RedisVersioned extends Store
 		{
 			$this->log($exception);
 		}
+		// The value is longer than the Compressor reads back, so it is not cached (see dropRefused()).
+		catch(LengthException $exception)
+		{
+			$this->log($exception->getMessage());
+			$this->dropRefused($key, $miss);
+		}
+		// the lock is released whatever happened; a second release does nothing
 		finally
 		{
 			$this->getMemoLock()
@@ -285,15 +365,14 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Fetches an item with a single HMGET (data, tags, mark) and evaluates the
-	 * rules it has not seen yet (newer than its mark) in PHP, against the
-	 * held rule set - see getRules() / isStale() - instead of re-scanning the
-	 * rules stream on the server for every read. One round trip; the rules
-	 * are refreshed at most once per rules_cache_ms; a stale item is lazily
-	 * unlinked.
+	 * Reads an item with one HMGET (data, tags, mark, epoch, soft) and checks it in PHP against the copy of
+	 * the rules that readRules() picks. Only rules newer than the item's "mark" are checked. This avoids
+	 * scanning the rules stream in Redis for every read. One round trip; an outdated item is removed after
+	 * the read.
 	 *
-	 * This trades exact invalidation for a bounded staleness window
-	 * (rules_cache_ms) - set it to 0 to refresh the rules on every read.
+	 * The price: an invalidation made on another server can go unseen for up to rules_cache_ms (plus
+	 * SLOW_RELOAD_MS while another worker reloads). Set rules_cache_ms to 0 to reload the rules before
+	 * every read.
 	 */
 	#[Override]
 	protected function fetch(
@@ -307,16 +386,28 @@ class RedisVersioned extends Store
 		
 		try
 		{
-			// one HMGET brings data, tags and the watermark; the data is read
-			// outside any Lua VM and decompressed only on a fresh verdict
-			return $this->judge($id, $client->hMGet($id, $this->fetchedFields()));
+			// One HMGET brings the data, the tags and the "mark". The data is read outside any Lua script,
+			// and only decompressed when the item turns out to be fresh.
+			$item = $client->hMGet($id, $this->fetchedFields());
 		}
+		// Redis did not answer: a miss, and no write may follow it (see rememberUnread())
 		catch(RedisException|RedisClusterException $exception)
 		{
 			$this->log($exception);
+			$this->rememberUnread($id);
+			
+			return null;
 		}
 		
-		return null;
+		// an error reply (BUSY, LOADING) is a failed read too (see failedReply())
+		if(is_array($item) === false)
+		{
+			$this->failedReply($id);
+			
+			return null;
+		}
+		
+		return $this->judge($id, $item);
 	}
 	
 	/**
@@ -336,71 +427,156 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * fetch()'s verdict on what its HMGET read ($item: the reply) - also the
-	 * second look's, made with the lock (see lockAndLook())
+	 * Checks what fetch()'s HMGET read ($item: the reply) against the copy of the rules that readRules()
+	 * picks. Also used for the second read made together with the stampede lock (see lockAndLook()).
 	 */
 	protected function judge(
 		string $id,
 		mixed $item,
 	): mixed
 	{
-		// a missing "tags" field means the hash does not exist (an untagged
-		// item still stores tags as an empty string) or is a tombstone;
-		// "data" must be present too, to decompress
+		[$rules, $unlocked] = $this->readRules();
+		
+		return $this->judgeBy($id, $item, $rules, $unlocked);
+	}
+	
+	/**
+	 * Checks $item against the copy $rules and returns its value, or null for a miss. With no copy ($rules
+	 * null) every item is a miss. With $unlocked the copy may not be used for this read (see readRules()):
+	 * every item is a miss, and its value is computed without the stampede lock (see
+	 * KeyValue::$unlockedMisses).
+	 */
+	protected function judgeBy(
+		string $id,
+		mixed $item,
+		?Rules $rules,
+		bool $unlocked,
+	): mixed
+	{
+		// get() and getMany() look here to know whether this miss skips the stampede lock
+		if($unlocked)
+		{
+			$this->unlockedMisses[$id] = true;
+		}
+		else
+		{
+			unset($this->unlockedMisses[$id]);
+		}
+		
+		// the guard's token on the key (see KeyValue::rememberMiss()); false when there is none
+		$epoch = is_array($item)
+			? ($item[static::KEY_EPOCH] ?? false)
+			: false;
+		
+		// No copy of the rules, so nothing can tell whether the item is outdated. It is a miss, the item
+		// stays in Redis, and the value computed after it is not stored (see isUnjudged()).
+		if($rules === null)
+		{
+			$this->rememberMiss($id, $epoch);
+			$this->unjudged($id);
+			
+			return null;
+		}
+		
+		// a copy is at hand: check the item against it
+		$found = $this->verdict($id, $item, $rules, $unlocked, $epoch);
+		
+		// A miss records the copy's newest rule id now, and the value computed after it is stored with that
+		// id. The copy may lack the stream's latest rules, which only makes the item outdated sooner. So the
+		// computation does not need to go through readRules() again.
+		if(isset($this->misses[$id])
+			&& $this->misses[$id]['stamp'] === null)
+		{
+			$this->misses[$id]['stamp'] = $rules->last();
+		}
+		
+		return $found;
+	}
+	
+	/**
+	 * judgeBy()'s check of $item when a copy of the rules is at hand: the value, or null for a miss
+	 */
+	protected function verdict(
+		string $id,
+		mixed $item,
+		Rules $rules,
+		bool $unlocked,
+		mixed $epoch,
+	): mixed
+	{
+		// The copy may not be used for this read (another worker is reloading, see readRules()). So it is
+		// a miss, and the write after it is still guarded by the epoch.
+		if($unlocked)
+		{
+			$this->rememberMiss($id, $epoch);
+			
+			return null;
+		}
+		
+		// A missing "tags" field means the hash does not exist (an untagged item still stores tags as an
+		// empty string), or it is a tombstone that holds only an epoch. "data" must be there too, to
+		// decompress.
 		if(is_array($item) === false
 			|| ($item[static::KEY_TAGS] ?? false) === false
 			|| ($item[static::KEY_DATA] ?? false) === false)
 		{
-			$this->rememberMiss($id, is_array($item) ? $item[static::KEY_EPOCH] : false);
+			$this->rememberMiss($id, $epoch);
 			
 			return null;
 		}
 		
-		// only the rules newer than the item's mark are evaluated,
-		// against the held rule set
-		if($this->isStale(
-			(string)$item[static::KEY_TAGS],
-			(string)$item[static::KEY_MARK],
-		))
+		// only the rules newer than the item's "mark" are checked against its tags
+		$tags = (string)$item[static::KEY_TAGS];
+		if($rules->isStale($tags === '' ? [] : explode(',', $tags), (string)$item[static::KEY_MARK]))
 		{
-			// a soft value inside its stale time after the invalidation:
-			// handed out aged - served while it is refreshed, a miss to a
-			// read without stale: - and left in place, the refresh overwrites
-			// it (see softly()); a value its write said is not soft is a hard
-			// verdict without decoding it (an item written before the field
-			// is decoded to tell)
-			if(($item[static::KEY_SOFT] ?? false) !== '0'
-				&& ($aged = $this->softly($item)) !== null)
+			// The item is outdated. A soft value still inside its stale time comes back aged: a read with
+			// stale: serves it while it is refreshed, a read without stale: takes it for a miss. It stays
+			// in Redis until the refresh overwrites it (see softly()). An item whose write said it is not
+			// soft (soft field '0') is outdated without decoding it. An item written before that field
+			// existed is decoded to find out.
+			$aged = ($item[static::KEY_SOFT] ?? false) !== '0'
+				? $this->softly($item, $rules)
+				: null;
+			if($aged instanceof Stale)
 			{
-				return $this->found($id, $aged, $item[static::KEY_EPOCH]);
+				return $this->found($id, $aged, $epoch);
 			}
 			
-			// the stale item is dropped once the read is over - unless a
-			// write overwrote it meanwhile, the miss's own recomputation as a
-			// rule: no second round trip for the read (see afterRead()). The
-			// epoch the item carries stays for the window, so the miss
-			// remembers it
+			// The Redis server's time could not be read, so we cannot tell whether the soft value is
+			// still inside its stale time. It is a miss for this read only, and the item stays for the
+			// readers that can read the time.
+			if($aged === false)
+			{
+				$this->rememberMiss($id, $epoch);
+				
+				return null;
+			}
+			
+			// The item is outdated: a miss. It is removed once the read is over, unless a write replaced
+			// it meanwhile, which is usually this miss's own computation. So the read needs no second
+			// round trip (see afterRead()). The removal keeps the item's epoch for the guard window, so
+			// the miss remembers that epoch.
 			$this->staleDrops[$id] = (string)$item[static::KEY_MARK];
-			$this->rememberMiss($id, $item[static::KEY_EPOCH]);
+			$this->rememberMiss($id, $epoch);
 			
 			return null;
 		}
 		
+		// fresh: only now is the data decompressed
 		$value = $this->compressor
 			->decompress($item[static::KEY_DATA]);
 		
 		return $this->found($id,
 			$this->serializer->unserialize($value),
-			$item[static::KEY_EPOCH],
+			$epoch,
 		);
 	}
 	
 	/**
-	 * The write that follows no miss (a write-through, a miss past the
-	 * guard's window): stamped with $mark, the watermark its writer holds -
-	 * never the stream's head, which can hold rules the writer never saw (a
-	 * value computed before them would count as having seen them). One key:
-	 * cluster-safe
+	 * The write for a value that no miss guards: a set() with no miss before it, or a miss older than the
+	 * guard window. It is stored with $mark, the newest rule id of the writer's copy. Never with the
+	 * stream's newest id: the stream may hold rules the writer never saw, and a value computed before them
+	 * would then count as computed after them. One key, so it works on a cluster.
 	 */
 	protected function stampedCall(
 		string $id,
@@ -408,8 +584,8 @@ class RedisVersioned extends Store
 		array $tags,
 		int $ttl,
 		string $mark,
-		string $epoch = '', // a write-through's: marks the key (see KeyValue::rememberMiss())
-		string $soft = '', // '1' a soft value, '0' not (see fetch()); '' says nothing
+		string $epoch = '', // the key's new epoch, for a write with no miss (see KeyValue::rememberMiss())
+		string $soft = '', // '1' a soft value, '0' not (see verdict()); '' says nothing
 	): array
 	{
 		return ['cache_versioned_set_stamped', [$id], [
@@ -425,25 +601,123 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * The miss a write of $id follows - past the window too (see set()); a
-	 * stale item this process read is overwritten: nothing to drop
+	 * The miss a write of $id follows, also when it is older than the guard window (see set()). A miss
+	 * that never got a rule id takes the newest rule id of the copy now. That happens when no computation
+	 * ran under stampMiss(), as with peek() and then set(). The epoch still guards that write against a
+	 * delete. Only a rule id taken before the computation would catch a rule added between the miss and
+	 * the write.
 	 */
 	#[Override]
 	protected function writeMiss(
 		string $id,
 	): ?array
 	{
+		// the write replaces any outdated item this process read, so there is nothing left to remove
 		unset($this->staleDrops[$id]);
 		
-		return $this->takeMiss($id, late: true);
+		$miss = $this->takeMiss($id, late: true);
+		if($miss !== null
+			&& $miss['late'] === false
+			&& $miss['stamp'] === null)
+		{
+			$miss['stamp'] = $this->missStamp();
+		}
+		
+		return $miss;
 	}
 	
 	/**
-	 * The write set() sends (see KeyValue\Redis::writeCall()): guarded by
-	 * the miss's epoch and stamped with the watermark it saw
-	 * (cache_versioned_set_guarded), or - no miss, a miss past the window, or
-	 * one whose watermark could not be read - a write stamped with the
-	 * watermark held (cache_versioned_set_stamped)
+	 * Whether the read of $miss failed (see rememberUnread()). Here this holds past the guard window too.
+	 * The write after it is refused once, and then the miss is gone, because writeMiss() took it.
+	 */
+	#[Override]
+	protected function isUnread(
+		?array $miss,
+	): bool
+	{
+		return $miss !== null
+			&& $miss['epoch'] === static::EPOCH_UNREAD;
+	}
+	
+	/**
+	 * Whether the value written after $miss cannot be checked: no copy of the rules was at hand for its
+	 * read, or when its rule id was taken (see STAMP_UNREAD). This holds past the guard window too.
+	 */
+	#[Override]
+	protected function isUnjudged(
+		?array $miss,
+	): bool
+	{
+		// a write without a rule id of its own (no miss, or a late miss that never got one): whether
+		// writeStamp() found a copy of the rules
+		if($miss === null
+			|| $miss['stamp'] === null)
+		{
+			return $this->writeStamp() === static::STAMP_UNREAD;
+		}
+		
+		return $miss['stamp'] === static::STAMP_UNREAD;
+	}
+	
+	/**
+	 * Handles the key of a write that was not made, because the value is longer than the Compressor reads
+	 * back. If the store computed the value itself after its miss, the key stays, since it may hold a valid
+	 * item. Any other write deletes the key, so the value it was meant to replace is not served.
+	 */
+	#[Override]
+	protected function dropRefused(
+		string $key,
+		?array $miss,
+	): void
+	{
+		if(($miss['computing'] ?? false) === false)
+		{
+			$this->delete($key);
+		}
+	}
+	
+	/**
+	 * The rule id for a write with no rule id of its own, taken from the copy a read would use now (see
+	 * missStamp()). Taken once per set() or batch. STAMP_UNREAD when there is no copy.
+	 */
+	protected function writeStamp(): string
+	{
+		return $this->writeStamp ??= $this->missStamp();
+	}
+	
+	/**
+	 * One rule id for all the writes of a batch that have none of their own (see writeStamp())
+	 */
+	#[Override]
+	protected function storeMany(
+		array $entries,
+	): array
+	{
+		// a new batch takes a new rule id
+		$this->writeStamp = null;
+		
+		return parent::storeMany($entries);
+	}
+	
+	/**
+	 * Records that the miss of $id could not be checked, because no copy of the rules was at hand.
+	 * stampMiss() then keeps STAMP_UNREAD as its rule id, so nothing is stored after it.
+	 */
+	protected function unjudged(
+		string $id,
+	): void
+	{
+		if(isset($this->misses[$id]))
+		{
+			$this->misses[$id]['stamp'] = static::STAMP_UNREAD;
+		}
+	}
+	
+	/**
+	 * The write set() sends (see KeyValue\Redis::writeCall()). After a miss it is
+	 * cache_versioned_set_guarded: refused when the key's epoch changed, and stored with the rule id the
+	 * miss saw. With no miss, or one older than the guard window, it is cache_versioned_set_stamped, stored
+	 * with the newest rule id of the writer's copy.
 	 */
 	#[Override]
 	protected function writeCall(
@@ -455,8 +729,8 @@ class RedisVersioned extends Store
 		?array $miss,
 	): array
 	{
-		// an explicitly requested TTL above the retention is capped to it
-		// (see the class doc) - surface the surprise instead of hiding it
+		// A TTL above the retention is cut to it (see the class doc). That is logged once, so the shorter
+		// life is no silent surprise.
 		if($ttl > $this->rulesRetentionS && $this->ttlWarned === false)
 		{
 			$this->ttlWarned = true;
@@ -467,44 +741,41 @@ class RedisVersioned extends Store
 			));
 		}
 		
-		// whether the value is soft rides with it: a read judges an
-		// invalidated hard value without decoding it (see fetch())
+		// Whether the value is soft is stored beside it. Then a read takes an outdated hard value for a
+		// miss without decoding it (see verdict()).
 		$soft = $value instanceof Stale && $value->isSoft() ? '1' : '0';
 		$value = $this->serializer
 			->serialize($value);
 		$value = $this->compressor
 			->compress($value);
 		
-		// a miss past the window: its epoch guards nothing any more, but the
-		// watermark it took holds for the rules' retention - written as a
-		// write-through stamped with it, so an invalidation made while it
-		// computed still reaches the value (unstamped: with the watermark held
-		// now, as any write-through)
-		if($miss !== null && $miss['late'] === true)
+		// no miss before it: stored with the copy's newest rule id, and a new epoch for the key
+		if($miss === null)
 		{
-			return $this->stampedCall($id, $value, $tags, $ttl, $miss['stamp'] ?? $this->watermark(), $this->writeThroughEpoch(), $soft);
+			return $this->stampedCall($id, $value, $tags, $ttl, $this->writeStamp(), $this->writeThroughEpoch(), $soft);
 		}
 		
-		// the watermark the miss saw - taken right before the computation
-		// (stampMiss()); a miss nobody stamped takes the one held now, which
-		// still guards the epoch (a rule between the miss and now is the
-		// gap the stamp closes)
-		$mark = $miss === null
-			? null
-			: ($miss['stamp'] ?? $this->missStamp());
+		// A miss older than the guard window. Its epoch protects nothing any more, but its rule id stays
+		// valid for the rules' retention. So the value is written like a write with no miss, but with that
+		// rule id, and a rule added while it was computed still reaches it. A late miss without a rule id
+		// takes the copy's newest one, like any write with no miss.
+		if($miss['late'] === true)
+		{
+			return $this->stampedCall($id, $value, $tags, $ttl, $miss['stamp'] ?? $this->writeStamp(), $this->writeThroughEpoch(), $soft);
+		}
 		
-		return $mark === null
-			? $this->stampedCall($id, $value, $tags, $ttl, $this->watermark(), $miss === null ? $this->writeThroughEpoch() : '', $soft)
-			: ['cache_versioned_set_guarded', [$id], [
-				$value,
-				implode(',', $tags),
-				$ttl * 1000, // ms
-				$this->rulesRetentionS * 1000, // ms
-				$mark,
-				$miss['epoch'],
-				$this->invalidationWindowMs,
-				$soft,
-			]];
+		// The guarded write, with the rule id the miss saw. That id was taken right before the computation
+		// (stampMiss()), or by writeMiss() for a miss that never got one.
+		return ['cache_versioned_set_guarded', [$id], [
+			$value,
+			implode(',', $tags),
+			$ttl * 1000, // ms
+			$this->rulesRetentionS * 1000, // ms
+			$miss['stamp'],
+			$miss['epoch'],
+			$this->invalidationWindowMs,
+			$soft,
+		]];
 	}
 	
 	public function delete(
@@ -520,10 +791,11 @@ class RedisVersioned extends Store
 		{
 			$id = $this->prefixer
 				->prefix($key, $this->getType());
-			// its tombstone replaces a stale item this process read
+			// the delete replaces any outdated item this process read, so there is nothing left to remove
 			unset($this->staleDrops[$id]);
 			
-			// its tombstone (see KeyValue\Redis::rememberMiss())
+			// The key keeps only a new epoch for the guard window, so a value computed before this delete
+			// is refused (see KeyValue\Redis::tombstone()).
 			return $this->tombstone($id) > 0;
 		}
 		catch(RedisException|RedisClusterException $exception)
@@ -535,10 +807,10 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * The lock and the second look in one round trip on a standalone client
-	 * (see MemoLock::lockAndQueue()): SET NX and the HMGET fetch() makes,
-	 * pipelined, the look judged as fetch() judges it. A cluster: none - the
-	 * lock and the item are of different slots
+	 * Takes the stampede lock and reads the item a second time in one round trip, on a standalone client
+	 * (see MemoLock::lockAndQueue()). SET NX and fetch()'s HMGET go in one pipeline, and the second read is
+	 * checked as fetch() checks it. On a cluster: null, because the lock and the item are in different
+	 * slots.
 	 */
 	#[Override]
 	protected function lockAndLook(
@@ -561,29 +833,25 @@ class RedisVersioned extends Store
 				return [false, null];
 			}
 			
-			// the lock is taken: a look the rules cannot judge (none held, the
-			// stream unreadable - see getRules()) is a miss, as in fetch(), so
-			// MemoLock records the lock and it goes with the write; thrown, the
-			// lock stayed unrecorded until its TTL
-			try
+			// The lock is taken. A second read that failed, or one with no copy of the rules at hand, is
+			// a miss, as in fetch() (see judge()). So MemoLock records the lock, and the write releases it.
+			$look = $replies[1] ?? false;
+			if(is_array($look) === false)
 			{
-				return [true, $this->fresh($this->judge($id, $replies[1] ?? false))];
-			}
-			catch(RedisException|RedisClusterException $exception)
-			{
-				$this->log($exception);
+				$this->failedReply($id);
 				
 				return [true, null];
 			}
+			
+			return [true, $this->fresh($this->judge($id, $look))];
 		};
 	}
 	
 	/**
-	 * The locks of a batch and their second look in one round trip on a
-	 * standalone client (see MemoLock::lockMany()): SET NX per key and the
-	 * HMGET fetch() makes per key, pipelined, the looks judged as fetch()
-	 * judges them (one rule set for the batch). A cluster: none - the locks
-	 * and the items are of different slots
+	 * Takes the stampede locks of a batch and reads each item a second time in one round trip, on a
+	 * standalone client (see MemoLock::lockMany()). SET NX and fetch()'s HMGET per key go in one pipeline,
+	 * and the second reads are checked as fetch() checks them, against one copy of the rules for the whole
+	 * batch. On a cluster: null, because the locks and the items are in different slots.
 	 */
 	#[Override]
 	protected function lockAndLookMany(): ?Closure
@@ -613,25 +881,27 @@ class RedisVersioned extends Store
 			foreach($lockKeys as $id => $lockKey)
 			{
 				$taken[$id] = [($replies[$index] ?? false) === true, null];
-				if($taken[$id][0])
-				{
-					$looked[$id] = $replies[$count + $index] ?? false;
-				}
+				$look = $replies[$count + $index] ?? false;
 				$index++;
+				if($taken[$id][0] === false)
+				{
+					continue;
+				}
+				
+				// a second read that failed is a miss, with nothing to check
+				if(is_array($look) === false)
+				{
+					$this->failedReply($id);
+					
+					continue;
+				}
+				
+				$looked[$id] = $look;
 			}
 			
-			// the locks are taken: a look the rules cannot judge is a miss, as
-			// in fetch(), so the MemoLock records the locks and they go with
-			// the writes (see lockAndLook())
-			try
-			{
-				$looks = $this->judgeMany(array_keys($looked), array_values($looked));
-			}
-			catch(RedisException|RedisClusterException $exception)
-			{
-				$this->log($exception);
-				$looks = [];
-			}
+			// The locks are taken. A second read with no copy of the rules at hand is a miss, as in
+			// fetch() (see judgeMany()). So MemoLock records the locks, and the writes release them.
+			$looks = $this->judgeMany(array_keys($looked), array_values($looked));
 			foreach($looked as $id => $reply)
 			{
 				$taken[$id][1] = $this->fresh($looks[$id] ?? null);
@@ -642,9 +912,8 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * The verdicts on a batch's replies against ONE rule set: refreshed (at
-	 * most) once, before the first, and held for the rest - a batch is one
-	 * read, whatever rules_cache_ms says
+	 * Checks a batch's replies against ONE copy of the rules, picked once before the first. A batch counts
+	 * as one read, whatever rules_cache_ms says.
 	 */
 	#[Override]
 	protected function judgeMany(
@@ -652,21 +921,26 @@ class RedisVersioned extends Store
 		array $replies,
 	): array
 	{
-		$this->getRules();
-		$this->rulesHeld = true;
-		try
+		// nothing to check, so no copy of the rules is needed (a worker without one does not load it)
+		if($ids === [])
 		{
-			return parent::judgeMany($ids, $replies);
+			return [];
 		}
-		finally
+		
+		[$rules, $unlocked] = $this->readRules();
+		
+		$found = [];
+		foreach($ids as $index => $id)
 		{
-			$this->rulesHeld = false;
+			$found[$id] = $this->judgeBy($id, $replies[$index] ?? false, $rules, $unlocked);
 		}
+		
+		return $found;
 	}
 	
 	/**
-	 * Drops the stale items a batch's reads found (see afterRead()) - their
-	 * drops in one round trip on a standalone client, one by one otherwise
+	 * Removes the outdated items a batch's reads found (see afterRead()). On a standalone client all the
+	 * removals go in one round trip; otherwise, or if that fails, one by one.
 	 */
 	#[Override]
 	protected function afterReadMany(
@@ -715,49 +989,27 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * A miss stamps the rules watermark it saw - the held set's last id (see
-	 * watermark(), what every write is stamped with). It lags the stream's
-	 * head by at most rules_cache_ms, which only judges the item stale
-	 * sooner, never fresh wrongly; and it is consistent with what readers hold:
-	 * the stream's head is not - a reader whose held set is momentarily empty
-	 * (just after a physical clear) takes any real mark for a lost stream and
-	 * reads the item stale. The write that follows is stamped with it
-	 * (cache_versioned_set_guarded), so a rule appended since makes the item
-	 * stale on its next read. Null when the rules cannot be read: the write
-	 * goes unguarded, as before the guard
+	 * The rule id a miss records: the newest rule id of the copy a read would use now (readRules(), which
+	 * may make this worker the one that reloads). Never the stream's newest id. The copy may lack rules the
+	 * stream already has, which only makes the item outdated sooner, never fresh by mistake. The stream's
+	 * newest id would also not match what readers hold: a reader whose copy is empty for a moment (just
+	 * after a physical clear) takes any real rule id on an item as a sign of a lost stream, and reads the
+	 * item as outdated. The write that follows stores this id (cache_versioned_set_guarded), so a rule added
+	 * since makes the item outdated on its next read. STAMP_UNREAD when there is no copy: nothing is stored
+	 * after the miss (see isUnjudged()).
 	 */
 	#[Override]
-	protected function missStamp(): ?string
+	protected function missStamp(): string
 	{
-		try
-		{
-			return $this->watermark();
-		}
-		catch(RedisException|RedisClusterException $exception)
-		{
-			$this->log($exception);
-		}
+		[$rules] = $this->readRules();
 		
-		return null;
+		return $rules?->last() ?? static::STAMP_UNREAD;
 	}
 	
 	/**
-	 * The rules stream's last entry id ("<ms>-<seq>", "0-0" when empty) as
-	 * this process holds it (rules_cache_ms) - what readers judge an item by,
-	 * so a write is stamped with it: a rule appended within the window leaves
-	 * it behind, and the item is judged stale sooner - one extra miss, never a
-	 * value served past a rule its writer did not hold
-	 */
-	protected function watermark(): string
-	{
-		return $this->getRules()
-			->last();
-	}
-	
-	/**
-	 * Invalidates the items carrying the tags - one rule; $hard: a soft value
-	 * it reaches is a miss at once, not served for its stale time - also when a
-	 * soft rule follows it, or it follows a soft one (Rules keeps both)
+	 * Invalidates the items carrying the tags by adding one rule. With $hard, a soft value the rule reaches
+	 * is a miss at once instead of being served for its stale time. That also holds when a soft rule
+	 * follows the hard one, or the hard one follows a soft one, because Rules keeps both.
 	 */
 	public function invalidateTags(
 		array $tags,
@@ -774,8 +1026,8 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Logical clear: an "all" rule with no tags matches every item;
-	 * the items remain in memory until their TTL (see clearPhysical())
+	 * Clears logically: one "all" rule with no tags makes every item outdated. The items stay in Redis
+	 * until their TTL (see clearPhysical()).
 	 */
 	#[Override]
 	public function clear(): bool
@@ -784,49 +1036,71 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Physical cleanup of the whole group (items and rules),
-	 * normally not needed - clear() is logical and items expire by TTL
+	 * Deletes the whole group, items and rules. Normally not needed: clear() is logical, and items expire
+	 * by their TTL.
 	 */
 	public function clearPhysical(): bool|int
 	{
-		// the rules stream is wiped too - drop the held rules, here and in the
-		// shared cache, so a write that follows is not evaluated against rules
-		// that no longer exist
+		// The rules stream is deleted too. So the copy is dropped, here and in APCu, and a write that
+		// follows is not checked against rules that no longer exist.
 		$this->resetRulesCache();
 		
 		return parent::clear();
 	}
 	
 	/**
-	 * Drops the held rules, and the set shared with the other workers, so the
-	 * next read loads the stream afresh - for when the stream itself is gone
-	 * (a physical wipe). A rule appended by this instance does not need it:
-	 * addRule() marks the set dirty and the next read fetches the delta.
+	 * Drops this instance's copy and the shared copy, so the next read loads the stream from the start. For
+	 * when the stream itself is gone (a physical wipe).
 	 */
 	protected function resetRulesCache(): void
 	{
 		$this->resetLocalRules();
 		
-		// the shared set described a stream that is gone for every worker:
-		// drop it whether or not this instance reads it
-		if(SharedRules::isAvailable())
+		// The shared copy describes a stream that is gone for every worker. So it is dropped even when
+		// this instance does not use it.
+		if($this->sharesRules())
 		{
 			$this->newSharedRules()
 				->forget();
 		}
 	}
 	
+	/**
+	 * Forgets what this instance knows about the rules: its copy, its own invalidations and the reload
+	 * state
+	 */
 	protected function resetLocalRules(): void
 	{
 		$this->rules = null;
 		$this->rulesFetchedAtMs = null;
-		$this->rulesDirty = false;
+		$this->writtenAtMs = null;
+		$this->writtenId = Rules::NONE;
+		$this->sharedInRequest = false;
+		$this->unshared = false;
+		$this->outage = false;
+		$this->attemptEndedAtMs = null;
+		$this->alone = false;
 		$this->sharedRules = null;
 		$this->clockOffsetMs = null;
 	}
 	
 	/**
-	 * Appends one invalidation rule - O(1) regardless of the match count
+	 * Adds one invalidation rule to the stream: O(1), whatever the number of matching items.
+	 *
+	 * Redis's reply names the rule that came just before the new one. If this instance's copy ends with
+	 * that rule, the copy holds everything up to the new rule. Then the new rule goes into the copy
+	 * straight from the reply, with no fetch, and the copy counts as fetched right before the call.
+	 *
+	 * The first time this happens in an instance, the copy is shared at once. That happens before the
+	 * server's record of its newest invalidation is updated (see SharedRules::written()). So a worker that
+	 * sees that record finds a shared copy that already holds the rule, and takes it with no fetch and no
+	 * miss. Later invalidations of the same instance are shared once, when the instance goes away (see
+	 * shareUnshared()). Otherwise a loop of invalidations would write the whole copy to APCu on every call.
+	 *
+	 * If the copy ends anywhere else, another rule was added in between, and adding only the new rule would
+	 * skip that one. Then the copy is left as it is. Like every copy on this server fetched before now, it
+	 * may lack the new rule, so it checks no read until it is reloaded (unless the rules cannot be read,
+	 * see readRules()).
 	 */
 	protected function addRule(
 		string $mode,
@@ -839,10 +1113,13 @@ class RedisVersioned extends Store
 			return false;
 		}
 		
+		// Taken before the call. Any rule added before this moment comes at or before the rule the new one
+		// follows. So a copy that ends with that rule holds everything added until now.
+		$beforeMs = microtime(true) * 1000;
 		try
 		{
-			// a single-slot FCALL on the rules key
-			// (the stream generates the monotonic rule id)
+			// One FCALL on the rules key, so it works on a cluster. The stream gives the new rule its id,
+			// always higher than the ids before it.
 			$result = $this->functions
 				->call('cache_versioned_invalidate', [$this->getRulesKey()], [
 					$mode,
@@ -850,186 +1127,316 @@ class RedisVersioned extends Store
 					$this->rulesRetentionS * 1000, // ms
 					$hard ? '1' : '0',
 				]);
-			
-			if($result === false)
-			{
-				$this->logRefused('cache_versioned_invalidate');
-			}
-			
-			// the held set is behind the rule just written: the next read
-			// fetches it (and whatever anyone else appended) in one range
-			$this->rulesDirty = true;
-			// and so is every set fetched before it on this server: the next
-			// request here sees the rule too, not only this one
-			$this->getSharedRules()
-				?->written(microtime(true) * 1000);
-			
-			return (int)$result === 1;
 		}
+		// Redis did not answer: logged, and the invalidation reports failure
 		catch(RedisException|RedisClusterException $exception)
 		{
 			$this->log($exception);
+			
+			return false;
 		}
 		
-		return false;
+		// The previous release's Lua library answers 1 and names no ids. A host may still call it for up
+		// to Functions::CONFIRMED_TTL_S after a deploy. The rule is in the stream. The copy loses its fetch
+		// time, so it no longer counts as fresh, and the next read loads a copy first (see readRules()).
+		if($result === 1)
+		{
+			$this->rulesFetchedAtMs = null;
+			
+			return true;
+		}
+		
+		// any other answer than the new id: the call was refused
+		if(is_array($result) === false
+			|| is_string($id = $result[0] ?? null) === false)
+		{
+			$this->logRefused('cache_versioned_invalidate');
+			
+			return false;
+		}
+		
+		// the id of the rule just before the new one ('0-0' when the stream was empty)
+		$previous = $result[1] ?? null;
+		// Taken after the reply. A copy fetched before this moment may lack the new rule.
+		$atMs = microtime(true) * 1000;
+		
+		// The copy ends with the rule just before the new one, so it holds everything up to the new rule.
+		// The new rule goes into it from the reply.
+		if($this->rules !== null
+			&& $previous === $this->rules->last())
+		{
+			// the rule's fields, as the stream stores them
+			$fields = [
+				Rules::FIELD_MODE => $mode,
+				Rules::FIELD_TAGS => implode(',', $tags),
+				Rules::FIELD_FIRST => ($result[2] ?? null) === '1' ? '1' : '0',
+			];
+			if($hard)
+			{
+				$fields[Rules::FIELD_HARD] = '1';
+			}
+			
+			// The rule is added the way a fetch from the copy's newest id would bring it: that id first
+			// (unless the stream was empty), then the new rule. The copy counts as fetched right before the
+			// call, so other workers see it exactly as fresh as it is.
+			$this->rules->absorb($previous === Rules::NONE
+				? [$id => $fields]
+				: [$previous => [], $id => $fields]);
+			$this->rulesFetchedAtMs = $beforeMs;
+			
+			// The first invalidation of this instance shares the copy at once. Later ones only note that
+			// the copy is not shared yet; it is shared when the instance goes away.
+			if($this->sharedInRequest)
+			{
+				$this->unshared = true;
+			}
+			else
+			{
+				$this->sharedInRequest = true;
+				$this->shareHeldRules();
+			}
+		}
+		
+		// Record the newest invalidation, here and for every worker of this server. A copy fetched before
+		// now that does not hold this rule is then not used until it is reloaded (see
+		// behindLocalInvalidation()).
+		$this->writtenAtMs = $atMs;
+		$this->writtenId = $id;
+		$this->getSharedRules()
+			?->written($atMs, $id);
+		
+		return true;
 	}
 	
 	/**
-	 * The rule set, refreshed at most every rules_cache_ms - incrementally,
-	 * from the last id it holds, and shared with the other workers of this
-	 * server where APCu allows (see SharedRules).
+	 * Picks the copy of the rules that checks a read, and returns [copy, unlocked]. The copy is null when
+	 * there is none. With unlocked false, the copy checks the read. With unlocked true, every item read is a
+	 * miss. Its value is then stored with the copy's newest rule id (see missStamp()), or not stored at all
+	 * when there is no copy (see isUnjudged()). It is computed without the stampede lock: a worker waiting
+	 * for the lock would read a miss as well, so the lock would only make the workers queue.
 	 *
-	 * In order: the held set while it is fresh; the shared set, adopted
-	 * unless what is held is newer, and final when it is fresh - no round
-	 * trip; otherwise a refresh: one XRANGE from the last id held, absorbed,
-	 * stamped and stored for the next worker.
+	 * The first case that applies decides:
 	 *
-	 * Where several workers cross the window together, one is elected to
-	 * refresh (SharedRules::lead()) and the others keep the set they hold for
-	 * this read - one refresh away from exact, never blocked. A worker that
-	 * holds nothing, on a server whose APCu was just emptied, waits for the
-	 * leader's load for a bounded time (COLD_WAIT_MS) rather than join a herd
-	 * of full loads, then loads on its own. Exact reads (rules_cache_ms = 0)
-	 * elect nobody: every read refreshes.
+	 * 1. The copy was fetched less than rules_cache_ms ago, by this worker or by another worker of the
+	 *    server that shared it, and it holds every invalidation made on this server. It checks the read,
+	 *    with no round trip. With exact reads (rules_cache_ms 0) this case never applies.
+	 * 2. The rules cannot be read (the last attempt failed: an outage), or another worker's reload has run
+	 *    longer than SLOW_RELOAD_MS. The copy checks the read whatever its age, even if it lacks an
+	 *    invalidation made on this server. With no copy, every item is a miss. One worker tries the stream
+	 *    again once the reload flag is free and RETRY_MS has passed since the last attempt ended.
+	 * 3. The reload flag is free. This worker takes it and reloads the copy for the server (see reload()).
+	 *    If the fetch fails, the server is in an outage.
+	 * 4. Another worker's reload has run for at most SLOW_RELOAD_MS. A copy fetched at most rules_cache_ms
+	 *    + SLOW_RELOAD_MS ago that holds every invalidation made on this server checks the read, exact
+	 *    reads included.
+	 * 5. Otherwise every item is a miss until the reload is done.
 	 *
-	 * Fails safe: if the rules cannot be (re)loaded it reuses the last-known
-	 * set, or throws when none is held - the caller then treats the item as
-	 * a miss rather than serving data a rule it could not see might invalidate.
+	 * Only the worker holding the reload flag fetches the rules, or a worker whose APCu refuses to record
+	 * the flag (see reload()). This method never answers "no rules" while a copy is held, because an
+	 * outdated item would then read as fresh.
+	 *
+	 * @return array{0: ?Rules, 1: bool}
+	 */
+	protected function readRules(): array
+	{
+		// case 1: this worker's own copy is fresh
+		if($this->rules !== null
+			&& $this->rulesAreFresh())
+		{
+			return [$this->rules, false];
+		}
+		
+		// case 1 again, after taking the shared copy if another worker stored a newer one
+		$shared = $this->getSharedRules();
+		if($shared !== null
+			&& $this->adoptSharedRules($shared)
+			&& $this->rulesAreFresh())
+		{
+			return [$this->rules, false];
+		}
+		
+		// What the server knows: whether the last attempt to read the rules failed and when it ended, and
+		// since when another worker has been reloading (null: the reload flag is free).
+		[$outage, $endedAtMs] = $this->lastAttempt();
+		$startedAtMs = $shared?->reloadStartedAt();
+		
+		// case 2: the rules cannot be read, or another worker's reload has run too long
+		if($outage
+			|| ($startedAtMs !== null && microtime(true) * 1000 - $startedAtMs > static::SLOW_RELOAD_MS))
+		{
+			// With the flag free and RETRY_MS passed since the last attempt, this worker tries again. If
+			// that works, the read uses the new copy.
+			if($startedAtMs === null
+				&& $this->retryDue($endedAtMs))
+			{
+				$this->reload();
+			}
+			
+			// the copy checks the read whatever its age; with none, every item is a miss without the lock
+			return [$this->rules, $this->rules === null];
+		}
+		
+		// Case 3: the flag is free, so this worker reloads. If the fetch fails, the server is in an
+		// outage, and the read goes on as in case 2, with the copy held or with none.
+		if($startedAtMs === null
+			&& $this->reload())
+		{
+			return [$this->rules, $this->rules === null];
+		}
+		
+		// Cases 4 and 5: another worker is reloading (it may have taken the flag just now). A copy young
+		// enough that holds every local invalidation checks the read. Otherwise every item is a miss,
+		// computed without the lock.
+		return [$this->rules, $this->judgesWhileReloading() === false];
+	}
+	
+	/**
+	 * The copy of the rules a read would use now (see readRules()). Throws when there is none.
 	 */
 	protected function getRules(): Rules
 	{
-		if($this->rulesHeld && $this->rules !== null)
+		[$rules] = $this->readRules();
+		
+		return $rules ?? throw new RedisException('Cannot load invalidation rules: none are held.');
+	}
+	
+	/**
+	 * Takes the reload flag and reloads the copy. It fetches the rules from the copy's newest id with
+	 * XRANGE, one batch at a time, adds them to the copy, records when the fetch began, and stores the copy
+	 * in APCu for the other workers. If the stream was started over, the new copy replaces the shared one.
+	 * If APCu refuses to record the flag, this worker fetches on its own and writes nothing to APCu.
+	 *
+	 * Returns false when another worker holds the flag. Returns true when the copy this worker holds now is
+	 * the one the read should use: just reloaded, taken from another worker that finished meanwhile, or,
+	 * after a failed attempt, the copy held before.
+	 */
+	protected function reload(): bool
+	{
+		// Take the reload flag. Without a shared copy there is no flag, and this worker reloads for itself.
+		$shared = $this->getSharedRules();
+		$taken = $shared !== null
+			? $shared->lead()
+			: true;
+		// another worker holds the flag
+		if($taken === false)
 		{
-			return $this->rules;
+			return false;
 		}
 		
-		$nowMs = microtime(true) * 1000;
-		
-		if($this->rules !== null
-			&& $this->rulesDirty === false
-			&& $this->rulesAreFresh($nowMs))
+		// If APCu cannot record the flag, nobody could ever take it, and nobody would reload. So this
+		// worker loads the rules itself, shares nothing, and warns once.
+		$this->alone = $taken === null;
+		if($this->alone)
 		{
-			return $this->rules;
-		}
-		
-		// not after our own invalidation: the shared set cannot have it yet,
-		// and a process must see what it just invalidated
-		$shared = $this->rulesDirty
-			? null
-			: $this->getSharedRules();
-		$leading = false;
-		
-		if($shared !== null)
-		{
-			if($this->adoptSharedRules($shared)
-				&& $this->rulesAreFresh($nowMs))
+			$shared = null;
+			if($this->aloneWarned === false)
 			{
-				return $this->rules;
-			}
-			
-			// behind an invalidation made on this server, the set may lack it
-			// and a refresh in flight may have started before it: no election,
-			// this read fetches the delta itself
-			if($this->rulesCacheMs > 0
-				&& $this->behindLocalInvalidation() === false)
-			{
-				$leading = $shared->lead();
-				
-				if($leading === false)
-				{
-					// another worker is refreshing right now: what we hold is
-					// one refresh away from exact, good enough for this read
-					if($this->rules !== null)
-					{
-						return $this->rules;
-					}
-					
-					// holding nothing, wait for the leader's load instead
-					if($this->awaitSharedRules($shared))
-					{
-						return $this->rules;
-					}
-				}
+				$this->aloneWarned = true;
+				$this->log('APCu refused the rule set\'s reload flag: this worker loads the invalidation rules on its own and shares nothing until APCu takes it.');
 			}
 		}
 		
 		try
 		{
-			if($this->getClient() === null)
+			// Look again: another worker may have reloaded, or tried and failed, between this worker's
+			// first look and taking the flag. Then nothing is fetched.
+			if($shared !== null)
 			{
-				// no client to refresh from: reuse the last-known rules if we
-				// have them, otherwise fail safe (see the catch below) rather
-				// than report "no rules" and let stale items read as fresh
-				if($this->rules !== null)
+				// another worker stored a fresh copy meanwhile: use it
+				if($this->adoptSharedRules($shared)
+					&& $this->rulesAreFresh())
 				{
-					return $this->rules;
+					return true;
 				}
 				
-				throw new RedisException('Cannot load invalidation rules: no Redis client.');
+				// another worker's attempt failed less than RETRY_MS ago: no new attempt yet, the copy
+				// held is used
+				[$outage, $endedAtMs] = $shared->lastAttempt();
+				if($outage
+					&& $this->retryDue($endedAtMs) === false)
+				{
+					return true;
+				}
 			}
 			
+			// reload into the copy held, or into a new empty one
 			$rules = $this->rules ?? new Rules($this->rulesRetentionS * 1000, $this->rulesMaxTags);
+			// The time is taken before the fetch. So a copy fetched after an invalidation was recorded on
+			// this server holds that invalidation's rule (see behindLocalInvalidation()).
+			$startedAtMs = microtime(true) * 1000;
 			$reset = false;
+			$succeeded = $this->fetchRules($rules, $reset);
+			// record how the attempt went: a failure starts an outage, a success ends one
+			$this->attemptEnded($startedAtMs, $succeeded);
 			
-			try
+			// keep the new copy and share it; it replaces the shared one when the stream started over
+			if($succeeded)
 			{
-				// batch by batch, each from the last id held (inclusively, as a
-				// refresh): a load from the beginning never holds more than one
-				// beside the set; a batch that brings nothing new ends it
-				do
+				$this->rules = $rules;
+				$this->rulesFetchedAtMs = $startedAtMs;
+				if($shared !== null)
 				{
-					$before = $rules->last();
-					$entries = $this->fetchRuleEntries($before);
-					$rules->absorb($entries);
-					$reset = $reset || $rules->wasReset();
-				}
-				while(count($entries) >= max(2, $this->rulesBatch)
-					&& $rules->last() !== $before);
-			}
-			catch(RedisException|RedisClusterException $exception)
-			{
-				// fail safe: never report an item as fresh just because the
-				// rules could not be loaded. Reuse the last-known rules if we
-				// have them (still honouring the invalidations seen so far);
-				// otherwise let the error propagate so the read path treats the
-				// item as a miss and re-resolves, instead of serving stale data.
-				if($this->rules !== null)
-				{
-					$this->log($exception);
-					
-					return $this->rules;
+					$this->stored($shared->store($rules, $startedAtMs, $reset));
 				}
 				
-				throw $exception;
+				// fetched after this instance's own invalidations, so it holds them: nothing is left to share
+				$this->unshared = false;
 			}
 			
-			$this->rules = $rules;
-			$this->rulesFetchedAtMs = $nowMs;
-			$this->rulesDirty = false;
-			
-			$this->getSharedRules()
-				?->store($rules, $nowMs, $reset);
-			
-			return $rules;
+			// after a failure too: the copy held before is what the read uses
+			return true;
 		}
+		// the flag is let go whatever happened
 		finally
 		{
-			if($leading)
-			{
-				$shared->release();
-			}
+			$shared?->release();
 		}
 	}
 	
 	/**
-	 * Takes over the set another worker shared, unless what is held is newer.
-	 * True when a set was adopted - fresh or not - false when there was
-	 * nothing to adopt
+	 * Brings $rules up to date with the stream, batch by batch. Each batch starts at the copy's newest id
+	 * (inclusive), so a load from the start never holds more than one batch beside the copy. A batch that
+	 * is not full, or brings nothing new, ends the loop. $reset says whether the stream no longer held the
+	 * copy's newest id, so the copy was rebuilt from what the stream holds now. False when the stream could
+	 * not be read (a connection error, or an error reply).
+	 */
+	protected function fetchRules(
+		Rules $rules,
+		bool &$reset,
+	): bool
+	{
+		try
+		{
+			do
+			{
+				$before = $rules->last();
+				$entries = $this->fetchRuleEntries($before);
+				$rules->absorb($entries);
+				$reset = $reset || $rules->wasReset();
+			}
+			while(count($entries) >= max(2, $this->rulesBatch)
+				&& $rules->last() !== $before);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+			
+			return false;
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * Takes the copy another worker shared, when it holds a newer rule than this worker's copy or was
+	 * fetched later. A copy rebuilt after the stream started over has older ids but was fetched later, so
+	 * it is taken too. True when a copy was taken, fresh or not.
 	 */
 	protected function adoptSharedRules(
 		SharedRules $shared,
 	): bool
 	{
+		// none shared, or one that cannot be read
 		if(($loaded = $shared->load($this->rulesRetentionS * 1000, $this->rulesMaxTags)) === null)
 		{
 			return false;
@@ -1037,51 +1444,134 @@ class RedisVersioned extends Store
 		
 		[$rules, $fetchedAtMs] = $loaded;
 		
+		// the shared copy has no newer rule and was not fetched later: this worker's copy is kept
 		if($this->rules !== null
-			&& Rules::isNewerId($this->rules->last(), $rules->last()))
+			&& Rules::isNewerId($rules->last(), $this->rules->last()) === false
+			&& $fetchedAtMs <= ($this->rulesFetchedAtMs ?? 0.0))
 		{
 			return false;
 		}
 		
+		// a copy that ends at or after this instance's own rules holds them, so nothing is left to share
 		$this->rules = $rules;
 		$this->rulesFetchedAtMs = $fetchedAtMs;
+		$this->unshared = false;
 		
 		return true;
 	}
 	
 	/**
-	 * Waits, briefly, for the worker elected to load the stream to share it:
-	 * looks every COLD_POLL_MS for at most COLD_WAIT_MS, and gives up early
-	 * when the leader has gone without leaving a set. True when a set was
-	 * adopted
+	 * Stores the copy this instance added its own rule to, so the other workers of this server take it
+	 * instead of reloading. Its fetch time is the moment right before the call that added the rule (see
+	 * addRule()).
 	 */
-	protected function awaitSharedRules(
-		SharedRules $shared,
-	): bool
+	protected function shareHeldRules(): void
 	{
-		$deadline = microtime(true) + static::COLD_WAIT_MS / 1000;
+		$shared = $this->getSharedRules();
 		
-		do
+		// nothing is shared without a shared copy, or when APCu refused the reload flag to this worker
+		if($this->rules !== null
+			&& $this->rulesFetchedAtMs !== null
+			&& $shared !== null
+			&& $this->alone === false)
 		{
-			usleep(static::COLD_POLL_MS * 1000);
-			
-			// a leader that loaded before an invalidation made on this server
-			// shares a set that may lack it: not taken - waited past, or
-			// refreshed from once the wait is over
-			if($this->adoptSharedRules($shared)
-				&& $this->behindLocalInvalidation() === false)
-			{
-				return true;
-			}
+			$this->stored($shared->store($this->rules, $this->rulesFetchedAtMs));
 		}
-		while($shared->isRefreshing() && microtime(true) < $deadline);
 		
-		return false;
+		$this->unshared = false;
 	}
 	
 	/**
-	 * The one call to the server the rule set makes: the entries from $from
-	 * (inclusively; the beginning for Rules::NONE) to the head, oldest first
+	 * Shares the copy that this instance's later invalidations went into, if there is one. A newer copy
+	 * already in APCu stays (see SharedRules::store()).
+	 */
+	protected function shareUnshared(): void
+	{
+		if($this->unshared)
+		{
+			$this->shareHeldRules();
+		}
+	}
+	
+	/**
+	 * Warns once per instance when APCu refused to store the copy. The other workers then keep using the
+	 * older copy there, and nothing else would show it. A newer copy already there is not a refusal.
+	 */
+	protected function stored(
+		?bool $stored,
+	): void
+	{
+		// stored, or a newer copy was already there (see SharedRules::store()), or warned already
+		if($stored !== null
+			|| $this->storeWarned)
+		{
+			return;
+		}
+		
+		$this->storeWarned = true;
+		$this->log('APCu refused the rule set: the other workers of this server keep judging by the older one until it can be written.');
+	}
+	
+	/**
+	 * Whether the rules cannot be read right now (the last attempt failed), and when the last attempt to
+	 * read the stream ended. With a shared copy this is the server's record, from any of its workers.
+	 *
+	 * @return array{0: bool, 1: ?float}
+	 */
+	protected function lastAttempt(): array
+	{
+		// no shared copy, or APCu refused the reload flag: this instance's own record
+		$shared = $this->getSharedRules();
+		if($shared === null
+			|| $this->alone)
+		{
+			return [$this->outage, $this->attemptEndedAtMs];
+		}
+		
+		[$outage, $endedAtMs] = $shared->lastAttempt();
+		
+		return [$outage, $endedAtMs];
+	}
+	
+	/**
+	 * While the rules cannot be read: may this worker try again? True when RETRY_MS has passed since the
+	 * last attempt ended, or no attempt is known.
+	 */
+	protected function retryDue(
+		?float $endedAtMs,
+	): bool
+	{
+		return $endedAtMs === null
+			|| microtime(true) * 1000 - $endedAtMs >= static::RETRY_MS;
+	}
+	
+	/**
+	 * Records how an attempt to read the stream went: for the whole server where the copy is shared,
+	 * otherwise for this instance only
+	 */
+	protected function attemptEnded(
+		float $startedAtMs,
+		bool $succeeded,
+	): void
+	{
+		$endedAtMs = microtime(true) * 1000;
+		$shared = $this->getSharedRules();
+		
+		if($shared !== null
+			&& $this->alone === false)
+		{
+			$shared->attemptEnded($startedAtMs, $succeeded, $endedAtMs);
+			
+			return;
+		}
+		
+		$this->outage = $succeeded === false;
+		$this->attemptEndedAtMs = $endedAtMs;
+	}
+	
+	/**
+	 * The one Redis call for the rules: the stream entries from $from (inclusive; from the start for
+	 * Rules::NONE) to the newest, oldest first, at most one batch
 	 *
 	 * @return array id => fields
 	 */
@@ -1089,25 +1579,34 @@ class RedisVersioned extends Store
 		string $from,
 	): array
 	{
-		$entries = $this->getClient()
-			->xRange(
-				$this->getRulesKey(),
-				$from === Rules::NONE ? '-' : $from,
-				'+',
-				max(2, $this->rulesBatch),
-			);
+		if(($client = $this->getClient()) === null)
+		{
+			throw new RedisException('Cannot load invalidation rules: no Redis client.');
+		}
 		
-		// anything but a list of entries reads as an empty stream, which the
-		// set treats as a loss - a miss, never a stale hit
-		return is_array($entries)
-			? $entries
-			: [];
+		$entries = $client->xRange(
+			$this->getRulesKey(),
+			$from === Rules::NONE ? '-' : $from,
+			'+',
+			max(2, $this->rulesBatch),
+		);
+		
+		// An error reply (BUSY, LOADING, MASTERDOWN answer false and throw nothing) is a failed read. The
+		// copy held stays, and the server is in an outage (see readRules()). A stream that is gone answers
+		// [], which counts as a lost stream, not as a failed read.
+		if(is_array($entries) === false)
+		{
+			throw new RedisException(sprintf('Cannot load invalidation rules: %s',
+				$client->getLastError() ?? 'no reply',
+			));
+		}
+		
+		return $entries;
 	}
 	
 	/**
-	 * The read of $id is over: a stale item it found and nothing overwrote
-	 * (no resolver, a null result, save: false, a throw, peek()) is dropped
-	 * now
+	 * The read of $id is over. An outdated item it found that no write replaced (no resolver, a null
+	 * result, save: false, an exception, peek()) is removed now.
 	 */
 	#[Override]
 	protected function afterRead(
@@ -1125,10 +1624,9 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Removes a stale item - only while it is still that item (Lua
-	 * cache_versioned_drop_stale, by the mark the read saw): a delete()
-	 * between the read and the removal left a tombstone, and an UNLINK would
-	 * erase its epoch; the epoch the item carries stays for the window
+	 * Removes an outdated item, but only while it is still the item the read saw (Lua
+	 * cache_versioned_drop_stale compares the "mark"). A delete() between the read and the removal left a
+	 * tombstone, and a plain UNLINK would erase its epoch. The item's epoch stays for the guard window.
 	 */
 	protected function dropStale(
 		string $id,
@@ -1150,11 +1648,13 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Drops what a read left that no afterRead() reached (a manual
-	 * lockAndQueue() nothing was written after)
+	 * At the end of the request: shares the copy that this instance's later invalidations went into, and
+	 * removes the outdated items no afterRead() reached (a manual lockAndQueue() with no write after it).
 	 */
 	public function __destruct()
 	{
+		$this->shareUnshared();
+		
 		foreach($this->staleDrops as $id => $mark)
 		{
 			$this->dropStale($id, $mark);
@@ -1162,39 +1662,81 @@ class RedisVersioned extends Store
 		$this->staleDrops = [];
 	}
 	
-	protected function rulesAreFresh(
-		float $nowMs,
-	): bool
+	/**
+	 * Whether the copy may check a read without a reload: fetched less than rules_cache_ms ago, and not
+	 * missing an invalidation made on this server
+	 */
+	protected function rulesAreFresh(): bool
 	{
 		return $this->rulesFetchedAtMs !== null
-			&& $nowMs - $this->rulesFetchedAtMs < $this->rulesCacheMs
+			&& microtime(true) * 1000 - $this->rulesFetchedAtMs < $this->rulesCacheMs
 			&& $this->behindLocalInvalidation() === false;
 	}
 	
 	/**
-	 * Whether the set held was fetched before the latest invalidation a
-	 * process of this server made (SharedRules::written()) - it may lack that
-	 * rule, so it is never fresh. The fetch time is taken before the stream
-	 * is read, so a set fetched after the mark holds the rule. Holding no set
-	 * is not behind: there is nothing to serve from (see awaitSharedRules())
+	 * Whether the copy may check a read while another worker reloads: fetched at most rules_cache_ms +
+	 * SLOW_RELOAD_MS ago, and not missing an invalidation made on this server
+	 */
+	protected function judgesWhileReloading(): bool
+	{
+		return $this->rules !== null
+			&& $this->rulesFetchedAtMs !== null
+			&& microtime(true) * 1000 - $this->rulesFetchedAtMs <= $this->rulesCacheMs + static::SLOW_RELOAD_MS
+			&& $this->behindLocalInvalidation() === false;
+	}
+	
+	/**
+	 * Whether the copy may lack an invalidation made on this server. That is so when it was fetched before
+	 * the newest invalidation made here and ends before that rule's id. Then it checks no read until it is
+	 * reloaded. A copy fetched after that invalidation holds its rule, because a fetch's time is taken
+	 * before it starts. A copy that ends at or after the rule holds it, because addRule() added the rule
+	 * from Redis's reply.
+	 *
+	 * The server keeps the newest time and the newest rule id as two separate values (see
+	 * SharedRules::written()). Every rule made on this server is at or below both, so a copy that lacks
+	 * any of them is caught. And a copy that ends before the newest id really lacks that rule, so no copy
+	 * is held back for nothing.
 	 */
 	protected function behindLocalInvalidation(): bool
 	{
-		if($this->rulesFetchedAtMs === null)
+		// no copy: there is nothing to check with, so nothing to hold back
+		if($this->rules === null)
 		{
 			return false;
 		}
 		
-		$writtenAtMs = $this->getSharedRules()
-			?->writtenAtMs();
+		[$atMs, $id] = $this->newestWritten();
 		
-		return $writtenAtMs !== null
-			&& $this->rulesFetchedAtMs <= $writtenAtMs;
+		// an invalidation was made here, the copy was fetched no later, and it ends before that rule
+		return $atMs !== null
+			&& ($this->rulesFetchedAtMs === null || $this->rulesFetchedAtMs <= $atMs)
+			&& Rules::isNewerId($id, $this->rules->last());
 	}
 	
 	/**
-	 * The set shared with the other workers of this server; null when the
-	 * option is off, or APCu is not there to hold it
+	 * The newest invalidation made by this instance or, through SharedRules, by any process of this
+	 * server: its time and its rule id, each the newest on its own
+	 *
+	 * @return array{0: ?float, 1: string}
+	 */
+	protected function newestWritten(): array
+	{
+		$atMs = $this->writtenAtMs;
+		$id = $this->writtenId;
+		
+		// with the server's record, the newer of each value counts
+		if(($mark = $this->getSharedRules()?->writtenMark()) !== null)
+		{
+			$atMs = max($atMs ?? $mark[0], $mark[0]);
+			$id = Rules::isNewerId($mark[1], $id) ? $mark[1] : $id;
+		}
+		
+		return [$atMs, $id];
+	}
+	
+	/**
+	 * The copy shared with the other workers of this server; null when sharing is off, or APCu is not
+	 * available
 	 */
 	protected function getSharedRules(): ?SharedRules
 	{
@@ -1205,7 +1747,8 @@ class RedisVersioned extends Store
 		
 		if($this->sharedRules === null)
 		{
-			if(SharedRules::isAvailable() === false)
+			// no APCu here: sharing stays off for this instance
+			if($this->sharesRules() === false)
 			{
 				$this->rulesSharedCache = false;
 				
@@ -1218,6 +1761,14 @@ class RedisVersioned extends Store
 		return $this->sharedRules;
 	}
 	
+	/**
+	 * Whether a copy can be shared here at all (see SharedRules::isAvailable())
+	 */
+	protected function sharesRules(): bool
+	{
+		return SharedRules::isAvailable();
+	}
+	
 	protected function newSharedRules(): SharedRules
 	{
 		return new SharedRules(
@@ -1227,8 +1778,8 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * What tells this store's Redis from another one on the same server -
-	 * two environments sharing an FPM pool and a prefix must not share rules
+	 * What tells this store's Redis apart from another one used on the same server. Two environments that
+	 * share an FPM pool and a prefix must not share rules.
 	 */
 	protected function sharedRulesIdentity(): string
 	{
@@ -1244,18 +1795,20 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Soft invalidation: the item a rule invalidated, aged, when it holds a
-	 * soft value (get(stale:, soft: true)) and the newest rule that reached it
-	 * is younger than the value's stale time - null otherwise (a hard verdict;
-	 * also when the rules lost what the item saw, or the server's time cannot
-	 * be read). The data is read only here, for an invalidated item
+	 * Soft invalidation, for an item a rule has made outdated. Returns the value aged when the item holds a
+	 * soft value (get(stale:, soft: true)) and the newest rule that reached it is younger than the value's
+	 * stale time. Null otherwise: the item is a plain miss (also when the rules lost what the item saw).
+	 * False when the Redis server's time cannot be read, so it cannot tell either way. Only here is the
+	 * data of an outdated item decoded.
 	 *
 	 * @param array<string, mixed> $item the HMGET fetch() made
 	 */
 	protected function softly(
 		array $item,
-	): ?Stale
+		Rules $rules,
+	): Stale|false|null
 	{
+		// not a soft value: a plain miss
 		$value = $this->serializer
 			->unserialize($this->compressor->decompress($item[static::KEY_DATA]));
 		if($value instanceof Stale === false
@@ -1264,28 +1817,33 @@ class RedisVersioned extends Store
 			return null;
 		}
 		
+		// when the newest rule that reached the item was added; none known: a plain miss
 		$tags = (string)$item[static::KEY_TAGS];
-		$invalidatedAt = $this->getRules()
-			->invalidatedAt(
-				$tags === '' ? [] : explode(',', $tags),
-				(string)$item[static::KEY_MARK],
-			);
-		if($invalidatedAt === null
-			|| ($now = $this->serverNowMs()) === null)
+		$invalidatedAt = $rules->invalidatedAt(
+			$tags === '' ? [] : explode(',', $tags),
+			(string)$item[static::KEY_MARK],
+		);
+		if($invalidatedAt === null)
 		{
 			return null;
 		}
 		
+		// the rule's time is the Redis server's, so it is compared with the server's time
+		if(($now = $this->serverNowMs()) === null)
+		{
+			return false;
+		}
+		
+		// still inside its stale time since that rule: served aged; past it: a plain miss
 		return $now - $invalidatedAt < $value->staleFor * 1000
 			? $value->invalidated()
 			: null;
 	}
 	
 	/**
-	 * The server's time in ms - the clock the rules' ids come from, the
-	 * stream's own node on a cluster - read once per instance and then kept
-	 * as an offset to the local clock (a host and a container drift apart by
-	 * seconds; a soft window must not)
+	 * The Redis server's time in ms. That is the clock the rule ids come from (on a cluster, the node of
+	 * the rules stream). It is read once per instance and then kept as an offset to the local clock. A host
+	 * and a container can drift apart by seconds, and a soft value's stale time must not.
 	 */
 	protected function serverNowMs(): ?int
 	{
@@ -1320,23 +1878,5 @@ class RedisVersioned extends Store
 		}
 		
 		return (int)(microtime(true) * 1000 + $this->clockOffsetMs);
-	}
-	
-	/**
-	 * Is the item stale under the rules it has not seen? (see Rules::isStale())
-	 *
-	 * @param string $tags the item's tags, comma separated as stored
-	 * @param string $mark the item's watermark
-	 */
-	protected function isStale(
-		string $tags,
-		string $mark,
-	): bool
-	{
-		return $this->getRules()
-			->isStale(
-				$tags === '' ? [] : explode(',', $tags),
-				$mark,
-			);
 	}
 }

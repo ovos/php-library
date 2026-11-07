@@ -16,6 +16,7 @@ use Closure;
 use Throwable;
 
 use function array_diff;
+use function array_diff_key;
 use function array_fill_keys;
 use function array_flip;
 use function array_intersect_key;
@@ -85,10 +86,41 @@ abstract class KeyValue
 	protected ?Closure $deferrer = null;
 	
 	/**
+	 * The ids whose refresh is queued to run later and has not run yet. Another stale read of one of them
+	 * queues no second refresh (see revalidate()).
+	 *
+	 * @var array<string, true>
+	 */
+	protected array $refreshQueued = [];
+	
+	/**
 	 * A forced refresh's read is under way: what it finds is a miss (see
 	 * forceMiss())
 	 */
 	protected bool $refreshing = false;
+	
+	/**
+	 * The ids whose next write fills a miss the store computed itself: get() and getMany() with a resolver
+	 * (not a forced refresh), and the set() after lockAndQueue(). The write takes the id together with the
+	 * miss; a release drops it. If nothing could check the value, such a write leaves the key as it is,
+	 * because it may hold a valid item. Any other unchecked write (a forced refresh, a caller's set() after
+	 * its own read) deletes the key, so the value it would have replaced is not served (see
+	 * KeyValue\Redis::refuseUnjudged()).
+	 *
+	 * @var array<string, true>
+	 */
+	protected array $computingMisses = [];
+	
+	/**
+	 * The ids whose read was a miss only because the store could not check the item: RedisVersioned while
+	 * another worker reloads its rules, or with no copy of the rules while Redis does not answer. get() and
+	 * getMany() compute them without the stampede lock. A worker waiting for the lock would read a miss as
+	 * well, so the lock would only make it queue. A manual lockAndQueue() keeps its lock, because the
+	 * caller asked for it.
+	 *
+	 * @var array<string, true>
+	 */
+	protected array $unlockedMisses = [];
 	
 	public function __construct(
 		?string $prefix = null,
@@ -236,10 +268,12 @@ abstract class KeyValue
 	}
 	
 	/**
-	 * What a miss stamps beside the epoch, so that an invalidation the key's
-	 * own mark cannot show is seen too: the versioned stores' rules
-	 * watermark, the tag-index stores' server time (their tag stamps). ''
-	 * when the store needs none, null when it could not be read
+	 * What a miss records beside the epoch (its "stamp"), so that a tag invalidation, which leaves the
+	 * key's epoch alone, is seen too. The versioned stores record the newest rule id of their copy of the
+	 * rules; the tag-index stores record the Redis server time, to compare with their tags' invalidation
+	 * times. '' when the store needs nothing. Null when it could not be read and the store's write refuses
+	 * such a miss by itself (on the tag-index stores, any invalidation of its tags within the guard window
+	 * refuses it).
 	 */
 	protected function missStamp(): ?string
 	{
@@ -247,12 +281,12 @@ abstract class KeyValue
 	}
 	
 	/**
-	 * The miss a write follows - taken, so it guards one write only; none
-	 * when it is older than the window, unless $late: then it comes back
-	 * flagged 'late' - its epoch guards nothing any more, a versioned store's
-	 * rules stamp still does (see RedisVersioned::set())
+	 * The miss a write follows. It is taken out, so it guards one write only. A miss older than the guard
+	 * window is not returned, unless $late: then it comes back flagged 'late'. Its epoch protects nothing
+	 * any more, but a versioned store's rule id still does (see RedisVersioned::set()). "computing" says
+	 * whether the store computed the value itself (see computingMisses).
 	 *
-	 * @return array{epoch: string, stamp: ?string, at: float, late: bool}|null
+	 * @return array{epoch: string, stamp: ?string, at: float, late: bool, computing: bool}|null
 	 */
 	protected function takeMiss(
 		string $id,
@@ -261,6 +295,8 @@ abstract class KeyValue
 	{
 		$miss = $this->misses[$id] ?? null;
 		unset($this->misses[$id]);
+		$computing = isset($this->computingMisses[$id]);
+		unset($this->computingMisses[$id]);
 		
 		if($miss === null)
 		{
@@ -268,6 +304,7 @@ abstract class KeyValue
 		}
 		
 		$miss['late'] = (microtime(true) - $miss['at']) * 1000 > $this->invalidationWindowMs;
+		$miss['computing'] = $computing;
 		
 		return $miss['late'] === true && $late === false
 			? null
@@ -328,6 +365,7 @@ abstract class KeyValue
 		}
 		finally
 		{
+			unset($this->unlockedMisses[$id]);
 			$this->afterRead($id);
 		}
 	}
@@ -504,15 +542,13 @@ abstract class KeyValue
 	}
 	
 	/**
-	 * Stale-while-revalidate: returns the stale value at once and refreshes
-	 * the item - after the response where there is one (the deferrer), inline
-	 * otherwise, the caller then getting what was computed. One process
-	 * refreshes: MemoLock elects it when the refresh runs, without waiting
-	 * (tryLock()), and it reads the item once more - another process may have
-	 * refreshed it meanwhile, or an invalidation removed it (the next read
-	 * computes). That read remembers the epoch the item carries, so the
-	 * refresh's write is guarded like a miss's: an invalidation during the
-	 * refresh refuses it
+	 * Stale-while-revalidate: returns the stale value at once and refreshes the item. Where there is a
+	 * response, the refresh runs after it (the deferrer, queued once per id until it runs). Otherwise it
+	 * runs inline, and the caller gets the new value. One process refreshes: when the refresh runs,
+	 * MemoLock picks it without waiting (tryLock()). It reads the item once more first, because another
+	 * process may have refreshed it meanwhile, or an invalidation removed it (then the next read computes).
+	 * That read remembers the item's epoch, so the refresh's write is guarded like a miss's write: an
+	 * invalidation during the refresh refuses it.
 	 */
 	protected function revalidate(
 		string $id,
@@ -523,6 +559,8 @@ abstract class KeyValue
 	{
 		$run = function() use ($id, $refresh, $lockTtlMs): mixed
 		{
+			// running: a stale read from now on queues the next refresh
+			unset($this->refreshQueued[$id]);
 			$memoLock = $this->getMemoLock();
 			// held as long as the call said a computation may take - a lock
 			// gone before the refresh ends would elect a second one
@@ -554,6 +592,7 @@ abstract class KeyValue
 			}
 			finally
 			{
+				unset($this->unlockedMisses[$id]);
 				// set() releases it when it writes, a refused write too; twice is a no-op
 				$memoLock->releaseActiveLock($id);
 			}
@@ -561,7 +600,12 @@ abstract class KeyValue
 		
 		if($this->deferrer !== null)
 		{
-			($this->deferrer)($run);
+			// Queued once per id until it runs. A second refresh queued now would not run any sooner.
+			if(isset($this->refreshQueued[$id]) === false)
+			{
+				$this->refreshQueued[$id] = true;
+				($this->deferrer)($run);
+			}
 			
 			return $stale;
 		}
@@ -636,11 +680,25 @@ abstract class KeyValue
 		$id = $this->itemId($key);
 		$compute = function() use ($id, $key, $resolver, $ttl, $tags, $policy): mixed
 		{
-			// the miss is stamped now, right before the value is computed
-			// (the caller's own computation, too, when there is no resolver)
+			// The miss takes its "stamp" now, right before the value is computed (see stampMiss()). This
+			// covers the caller's own computation too, when there is no resolver.
 			$this->stampMiss($id);
+			// The store computes this miss itself (see computingMisses). A forced refresh does not count,
+			// because it replaces a value.
+			if($policy->refresh === false)
+			{
+				$this->computingMisses[$id] = true;
+			}
 			
-			return $this->setFromResolver($key, $resolver, $ttl, $tags, $policy);
+			try
+			{
+				return $this->setFromResolver($key, $resolver, $ttl, $tags, $policy);
+			}
+			// dropped once the value is written, or the computation failed
+			finally
+			{
+				unset($this->computingMisses[$id]);
+			}
 		};
 		
 		try
@@ -653,7 +711,7 @@ abstract class KeyValue
 				$this->forceMiss($id);
 				
 				return $this->getMemoLock()
-					->lockAndQueue($id, null, $compute, $policy->queue, $policy->queueLockTtlMs);
+					->lockAndQueue($id, null, $compute, $this->lockQueue($id, $policy->queue), $policy->queueLockTtlMs);
 			}
 			
 			// initial hit check (fast path); past its ttl, a value written with
@@ -674,16 +732,31 @@ abstract class KeyValue
 					$id,
 					fn() => $this->fresh($this->fetch($id)),
 					fn() => $this->computeOrFallback($id, $compute, $fallback),
-					$policy->queue,
+					$this->lockQueue($id, $policy->queue),
 					$policy->queueLockTtlMs,
 					$this->lockAndLook($id),
 				);
 		}
 		finally
 		{
+			unset($this->unlockedMisses[$id]);
 			// what the read left to do (see afterRead())
 			$this->afterRead($id);
 		}
+	}
+	
+	/**
+	 * Whether the miss of $id waits for a computation that is already running: the call's $queue, but
+	 * false for a miss the store could not check (see unlockedMisses)
+	 */
+	protected function lockQueue(
+		string $id,
+		?bool $queue,
+	): ?bool
+	{
+		return isset($this->unlockedMisses[$id])
+			? false
+			: $queue;
 	}
 	
 	/**
@@ -716,9 +789,11 @@ abstract class KeyValue
 				fn() => $this->fresh($this->fetch($id)),
 				function() use ($id, $resolver): mixed
 				{
-					// the miss is stamped now, right before this process
-					// computes (see get())
+					// The miss takes its "stamp" now, right before this process computes (see get()). The
+					// set() that follows writes the store's own computation (see computingMisses), unless
+					// the lock is released first.
 					$this->stampMiss($id);
+					$this->computingMisses[$id] = true;
 					
 					return $this->invoker
 						->invoke($resolver);
@@ -901,6 +976,10 @@ abstract class KeyValue
 		}
 		finally
 		{
+			foreach($ids as $id)
+			{
+				unset($this->unlockedMisses[$id]);
+			}
 			// what the reads left to do (see afterRead())
 			$this->afterReadMany($ids);
 		}
@@ -927,8 +1006,24 @@ abstract class KeyValue
 		Policy $policy,
 	): array
 	{
+		// Queued once per id until it runs (see revalidate()). Ids already queued are left out, and if none
+		// is left, nothing is queued.
+		if($this->deferrer !== null)
+		{
+			$stale = array_diff_key($stale, $this->refreshQueued);
+			if($stale === [])
+			{
+				return [];
+			}
+		}
+		
 		$run = function() use ($stale, $resolver, $ttl, $tags, $policy): array
 		{
+			// running: a stale read from now on queues the next refresh
+			foreach($stale as $id => $key)
+			{
+				unset($this->refreshQueued[$id]);
+			}
 			$memoLock = $this->getMemoLock();
 			// one process refreshes each: the locks it does not get are another's
 			[$locked] = $memoLock->lockMany(array_keys($stale), $policy->queueLockTtlMs);
@@ -968,6 +1063,10 @@ abstract class KeyValue
 			}
 			finally
 			{
+				foreach($locked as $id)
+				{
+					unset($this->unlockedMisses[$id]);
+				}
 				// a write releases its lock, a refused one too; the rest go here
 				$memoLock->releaseMany($locked);
 			}
@@ -975,6 +1074,8 @@ abstract class KeyValue
 		
 		if($this->deferrer !== null)
 		{
+			// these ids count as queued until the refresh runs
+			$this->refreshQueued+= array_fill_keys(array_keys($stale), true);
 			($this->deferrer)($run);
 			
 			return [];
@@ -991,15 +1092,14 @@ abstract class KeyValue
 	}
 	
 	/**
-	 * The misses of a batch, by id ($misses: the value kept for errors each
-	 * falls back to): locked per key with their second look - those this
-	 * process locked are computed by one resolver call; the ones another
-	 * process holds are waited for, as lockAndQueue() waits (attempts,
-	 * halving, jitter, bounded by the locks' TTL), and read again; what the
-	 * wait did not bring is computed by a second call - locked where its lock
-	 * is free by then. Without a queue every miss is computed at once,
-	 * unlocked. A forced refresh takes the locks without a look and computes
-	 * every key, after the wait too
+	 * Computes the misses of a batch, by id ($misses: the value kept for errors each falls back to). Each
+	 * key is locked and read a second time with its lock. The keys this process locked are computed by one
+	 * resolver call, together with the misses the store could not check (see unlockedMisses), which take
+	 * no lock. The keys another process holds are waited for, as lockAndQueue() waits (attempts, halving,
+	 * jitter, bounded by the locks' TTL), and read again. What the wait did not bring is computed by a
+	 * second call, locked where its lock is free by then. Without a queue every miss is computed at once,
+	 * without locks. A forced refresh takes the locks without the second read and computes every key,
+	 * after the wait too.
 	 *
 	 * @param array<string, ?Stale> $misses
 	 * @param array<string, string> $keyOf
@@ -1015,16 +1115,20 @@ abstract class KeyValue
 	): array
 	{
 		$ids = array_keys($misses);
+		// the misses the store could not check: computed without a lock
+		$unlocked = array_keys(array_intersect_key($misses, $this->unlockedMisses));
 		$memoLock = $this->getMemoLock();
-		if($memoLock->queues($policy->queue) === false)
+		// no queue, or no key that needs a lock: all computed at once
+		if($memoLock->queues($policy->queue) === false
+			|| count($unlocked) === count($ids))
 		{
 			return $this->resolveLocked($ids, $keyOf, $misses, $resolver, $ttl, $tags, $policy);
 		}
 		
 		$lockTtlMs = $policy->queueLockTtlMs ?? $memoLock->getQueueLockTtlMs();
 		$look = $policy->refresh === false;
-		[$own, $values, $held] = $this->lockBatch($ids, $lockTtlMs, $look);
-		foreach($this->resolveLocked($own, $keyOf, $misses, $resolver, $ttl, $tags, $policy) as $id => $value)
+		[$own, $values, $held] = $this->lockBatch(array_values(array_diff($ids, $unlocked)), $lockTtlMs, $look);
+		foreach($this->resolveLocked([...$unlocked, ...$own], $keyOf, $misses, $resolver, $ttl, $tags, $policy) as $id => $value)
 		{
 			$values[$id] = $value;
 		}
@@ -1149,9 +1253,15 @@ abstract class KeyValue
 			return [];
 		}
 		
-		// the misses are stamped now, right before the values are computed
+		// the misses take their "stamp" now, right before the values are computed
 		$this->stampMany($ids);
 		$keys = array_intersect_key($keyOf, array_flip($ids));
+		// The store computes these misses itself (see computingMisses). A forced refresh does not count,
+		// because it replaces values.
+		if($policy->refresh === false)
+		{
+			$this->computingMisses+= array_fill_keys($ids, true);
+		}
 		
 		try
 		{
@@ -1176,6 +1286,14 @@ abstract class KeyValue
 			$this->log($throwable);
 			
 			return $kept;
+		}
+		// dropped once the values are written, or the computation failed
+		finally
+		{
+			foreach($ids as $id)
+			{
+				unset($this->computingMisses[$id]);
+			}
 		}
 	}
 	
@@ -1370,6 +1488,9 @@ abstract class KeyValue
 	): bool
 	{
 		$id = $this->itemId($key);
+		// Released without a write, so a set() after this is the caller's own write, not the store's
+		// computation (see computingMisses).
+		unset($this->computingMisses[$id]);
 		
 		return $this->getMemoLock()
 			->releaseActiveLock($id);

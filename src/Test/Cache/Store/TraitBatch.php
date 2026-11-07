@@ -531,6 +531,130 @@ trait TraitBatch
 	}
 	
 	/**
+	 * RULE (probe): a batch read that fails on the connection is a miss for every key, and no write follows
+	 * it. A key may have been deleted or invalidated without this process seeing it, as for get()
+	 * (TraitInvalidationGuard). The keys are deleted.
+	 */
+	public function aBatchWriteAfterAFailedReadDropsTheKeys(): bool
+	{
+		$probe = $this->requireBatchProbe();
+		$other = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('unread', 2);
+		$other->set($a, 'old a', 60);
+		$probe->getConnection()->counter()->failingReads = 1;
+		
+		$values = $probe->getMany($keys, function(KeyValue $store, array $keys) use ($other, $a): array
+		{
+			// the source changes while the values are computed
+			$other->delete($a);
+			
+			return $this->computedFor($keys);
+		}, 60, queue: false);
+		$read = array_map(fn(string $key): mixed => $this->staleStore()->get($key, queue: false), $keys);
+		$this->batchDelete($keys);
+		
+		return $values === ['computed ' . $a, 'computed ' . $b]
+			&& $read === [null, null];
+	}
+	
+	/**
+	 * RULE (probe): a forced refresh of a batch whose read failed leaves no outdated value behind. Its writes
+	 * could only be refused, so the keys are deleted.
+	 */
+	public function aForcedBatchRefreshAfterAFailedReadLeavesNoOutdatedValue(): bool
+	{
+		$probe = $this->requireBatchProbe();
+		$other = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('refresh-unread', 2);
+		$other->set($a, 'outdated a', 60);
+		$other->set($b, 'outdated b', 60);
+		$probe->getConnection()->counter()->failingReads = 1;
+		
+		$values = $probe->getMany($keys, $this->batchResolver($calls), 60, refresh: true);
+		$read = array_map(fn(string $key): mixed => $this->staleStore()->get($key, queue: false), $keys);
+		$this->batchDelete($keys);
+		
+		return $values === ['computed ' . $a, 'computed ' . $b]
+			&& $read === [null, null];
+	}
+	
+	/**
+	 * RULE (probe): in a batch read, a key answered by an error reply is a failed read, not a key found
+	 * empty. A forced refresh after it leaves no outdated value behind.
+	 */
+	public function aBatchErrorReplyIsAFailedRead(): bool
+	{
+		$probe = $this->requireBatchProbe();
+		$other = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('erring', 2);
+		$other->set($a, 'outdated a', 60);
+		$other->set($b, 'outdated b', 60);
+		$probe->getConnection()->counter()->erringReads = 2;
+		
+		$values = $probe->getMany($keys, $this->batchResolver($calls), 60, refresh: true);
+		$read = array_map(fn(string $key): mixed => $this->staleStore()->get($key, queue: false), $keys);
+		$this->batchDelete($keys);
+		
+		return $values === ['computed ' . $a, 'computed ' . $b]
+			&& $read === [null, null];
+	}
+	
+	/**
+	 * RULE (probe): the second reads made with a batch's locks that get an error reply are failed reads too,
+	 * not keys found empty. The writes after them are refused, and the keys never hold the values computed.
+	 */
+	public function aBatchLockLookAnsweredByAnErrorReplyIsAFailedRead(): bool
+	{
+		$probe = $this->requireBatchProbe();
+		[$a, $b] = $keys = $this->batchKeys('look-erring', 2);
+		// the batch read and the looks made with the locks
+		$probe->getConnection()->counter()->erringReads = 4;
+		
+		$values = $probe->getMany($keys, $this->batchResolver($calls), 60);
+		$read = array_map(fn(string $key): mixed => $this->staleStore()->get($key, queue: false), $keys);
+		$this->batchDelete($keys);
+		
+		return $values === ['computed ' . $a, 'computed ' . $b]
+			&& $read === [null, null];
+	}
+	
+	/**
+	 * RULE: values of a batch that are read stale again before their refresh ran queue no second refresh, and
+	 * a key whose refresh get() queued is left out of the batch's refresh. Another refresh would not renew
+	 * them any sooner. Once the refresh ran, a stale read queues one again.
+	 */
+	public function aStaleValueInABatchQueuesOneRefreshUntilItRuns(): bool
+	{
+		$store = $this->staleStore();
+		$this->capture($store, $deferred);
+		[$a, $b] = $keys = $this->batchKeys('queued-once', 2);
+		$this->writeAged($store, $a, 'old a');
+		$this->writeAged($store, $b, 'old b');
+		$resolver = $this->batchResolver($calls);
+		
+		$single = $store->get($a, fn(): string => 'single ' . $a, 60, stale: 60);
+		$served = $store->getMany($keys, $resolver, 60, stale: 60);
+		$again = $store->getMany($keys, $resolver, 60, stale: 60);
+		$queued = count($deferred);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$this->writeAged($store, $b, 'aged b');
+		$after = $store->getMany([$b], $resolver, 60, stale: 60);
+		$store->setDeferrer(null);
+		$this->batchDelete($keys);
+		
+		return $single === 'old a'
+			&& $served === ['old a', 'old b']
+			&& $again === ['old a', 'old b']
+			&& $queued === 2
+			&& $calls === [[$b]]
+			&& $after === ['aged b']
+			&& count($deferred) === 3;
+	}
+	
+	/**
 	 * Keys of their own for one rule
 	 *
 	 * @return list<string>

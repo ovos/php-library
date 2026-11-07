@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Store\KeyValue;
 
+use LengthException;
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
 use Ovos\Cache\Redis\Functions;
@@ -13,6 +14,7 @@ use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
+use function array_key_exists;
 use function array_keys;
 use function array_values;
 use function bin2hex;
@@ -53,6 +55,13 @@ abstract class Redis extends Tags
 	 * miss of this instance came before it (a write-through)
 	 */
 	public const string UNGUARDED = '*';
+	
+	/**
+	 * Recorded as a miss's epoch when reading the item failed, so we do not know which epoch is stored. No
+	 * key ever has this value (an epoch is hex, see newEpoch()), so the guarded write that follows is
+	 * refused. The key may have been invalidated without this process seeing it.
+	 */
+	public const string EPOCH_UNREAD = '-';
 	
 	/**
 	 * Statuses
@@ -381,10 +390,9 @@ abstract class Redis extends Tags
 	}
 	
 	/**
-	 * Reads several items in one round trip on a standalone client - a
-	 * pipeline of the HMGET fetch() makes, each reply judged by its id's
-	 * place in the pipeline. A cluster: one by one (the items are of
-	 * different slots)
+	 * Reads several items in one round trip on a standalone client: a pipeline of fetch()'s HMGET, each
+	 * reply checked as the item at its place in the pipeline. On a cluster: one by one, because the items
+	 * are in different slots.
 	 */
 	#[Override]
 	protected function fetchMany(
@@ -410,25 +418,179 @@ abstract class Redis extends Tags
 				$pipeline->hMGet($id, $this->fetchedFields());
 			}
 			$replies = $pipeline->exec();
-			$found = $this->judgeMany(array_values($ids), is_array($replies) ? $replies : []);
+			$replies = is_array($replies) ? $replies : [];
+			
+			// a reply that is a hash is checked as fetch() checks it; any other reply is a failed read
+			$judged = [];
+			$read = [];
+			$failed = [];
+			foreach(array_values($ids) as $index => $id)
+			{
+				if(is_array($replies[$index] ?? false))
+				{
+					$judged[] = $id;
+					$read[] = $replies[$index];
+					
+					continue;
+				}
+				
+				$failed[] = $id;
+			}
+			$found = $this->judgeMany($judged, $read);
+			foreach($failed as $id)
+			{
+				$this->failedReply($id);
+				$found[$id] = null;
+			}
 		}
 		catch(RedisException $exception)
 		{
 			$this->log($exception);
 		}
 		
-		// an item the read did not reach is a miss, as fetch() answers it
+		// An item the read did not reach is a miss, as in fetch(), and no write may follow it (see
+		// rememberUnread()).
 		foreach($ids as $id)
 		{
-			$found[$id] ??= null;
+			if(array_key_exists($id, $found) === false)
+			{
+				$this->rememberUnread($id);
+				$found[$id] = null;
+			}
 		}
 		
 		return $found;
 	}
 	
 	/**
-	 * The verdicts on a batch's HMGET replies, by id - $replies in the order
-	 * of $ids
+	 * Remembers a miss whose read failed (see EPOCH_UNREAD). The key may have been deleted or invalidated
+	 * without this process seeing it, so no write may follow (see dropUnread()). The exception is a second
+	 * read of the key before the write, made together with the lock when the queue is on.
+	 */
+	protected function rememberUnread(
+		string $id,
+	): void
+	{
+		$this->rememberMiss($id, static::EPOCH_UNREAD);
+	}
+	
+	/**
+	 * A read whose reply is not a hash. An error reply (BUSY, LOADING, MASTERDOWN) answers false and throws
+	 * nothing, but it is a failed read all the same (see rememberUnread()).
+	 */
+	protected function failedReply(
+		string $id,
+	): void
+	{
+		$this->log(sprintf('Cache read of "%s" failed: %s',
+			$id,
+			$this->getClient()?->getLastError() ?? 'no reply',
+		));
+		$this->rememberUnread($id);
+	}
+	
+	/**
+	 * Whether the read of $miss failed (see rememberUnread()), inside the guard window. Past the window a
+	 * miss guards nothing.
+	 *
+	 * @param array{epoch: string, late?: bool}|null $miss
+	 */
+	protected function isUnread(
+		?array $miss,
+	): bool
+	{
+		return $miss !== null
+			&& $miss['epoch'] === static::EPOCH_UNREAD
+			&& ($miss['late'] ?? false) === false;
+	}
+	
+	/**
+	 * Used instead of the write that follows a failed read. That write could only be refused. The value the
+	 * read did not see may be the one the caller replaces (a forced refresh, a set() after a read-only
+	 * get()). So the key is deleted, and the next reader computes. Returns false, as for a refused write,
+	 * and releases the lock of $id.
+	 */
+	protected function dropUnread(
+		string $key,
+		string $id,
+	): bool
+	{
+		try
+		{
+			$this->delete($key);
+		}
+		finally
+		{
+			$this->getMemoLock()
+				->releaseActiveLock($id);
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * Handles the key of a write that was not made: after a failed read, or for a value longer than the
+	 * Compressor reads back. The key is deleted, so the value it was meant to replace is not served. A
+	 * versioned store leaves the key after its own computation (see RedisVersioned::dropRefused()).
+	 *
+	 * @param array{computing?: bool}|null $miss
+	 */
+	protected function dropRefused(
+		string $key,
+		?array $miss,
+	): void
+	{
+		$this->delete($key);
+	}
+	
+	/**
+	 * Whether the value written after $miss cannot be checked. Never here: only the versioned stores need
+	 * a copy of their rules to check an item (see RedisVersioned::isUnjudged()).
+	 *
+	 * @param array{epoch: string, stamp: ?string}|null $miss
+	 */
+	protected function isUnjudged(
+		?array $miss,
+	): bool
+	{
+		return false;
+	}
+	
+	/**
+	 * Used instead of the write after a miss whose value nothing could check: no copy of the rules was at
+	 * hand, or, on the versioned stores, the read failed. Nothing is stored. If the store computed the
+	 * value itself after its miss, the key stays as it is, because it may hold a valid item. After a read
+	 * whose caller replaces the value (a forced refresh, a set() after peek() or after a read-only get()),
+	 * the key is deleted, so the value it would have replaced is not served. Returns false, as for a
+	 * refused write, and releases the lock of $id.
+	 */
+	protected function refuseUnjudged(
+		string $key,
+		string $id,
+		?array $miss,
+	): bool
+	{
+		try
+		{
+			// only a write that replaces a value deletes the key
+			if(($miss['computing'] ?? false) === false)
+			{
+				$this->delete($key);
+			}
+		}
+		// the lock is released whatever happened
+		finally
+		{
+			$this->getMemoLock()
+				->releaseActiveLock($id);
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * Checks a batch's HMGET replies as judge() checks one, and returns the values by id. $replies are in
+	 * the order of $ids.
 	 *
 	 * @param list<string> $ids
 	 * @param list<mixed> $replies
@@ -478,6 +640,14 @@ abstract class Redis extends Tags
 			foreach($entries as $id => [$key, $value, $ttl, $tags])
 			{
 				$miss = $this->writeMiss($id);
+				// no write after a failed read; dropRefused() handles the key
+				if($this->isUnread($miss))
+				{
+					$this->dropRefused($key, $miss);
+					$stored[$key] = false;
+					
+					continue;
+				}
 				// a negative TTL or a null value: a delete it is (see set())
 				if($ttl < 0 || $value === null)
 				{
@@ -485,8 +655,32 @@ abstract class Redis extends Tags
 					
 					continue;
 				}
+				// Nothing could check the value, so it is not stored, and a value the caller replaces is
+				// deleted (see refuseUnjudged()).
+				if($this->isUnjudged($miss))
+				{
+					if(($miss['computing'] ?? false) === false)
+					{
+						$this->delete($key);
+					}
+					$stored[$key] = false;
+					
+					continue;
+				}
 				
-				$call = $this->writeCall($id, $key, $value, $ttl, $tags, $miss);
+				// a value longer than the Compressor reads back is not cached (see dropRefused())
+				try
+				{
+					$call = $this->writeCall($id, $key, $value, $ttl, $tags, $miss);
+				}
+				catch(LengthException $exception)
+				{
+					$this->log($exception->getMessage());
+					$this->dropRefused($key, $miss);
+					$stored[$key] = false;
+					
+					continue;
+				}
 				$writes[$id] = [$key, $call, count($calls), null];
 				$calls[] = [$this->functions->functionsPrefix($call[0]), $call[1], $call[2]];
 				if(($release = $memoLock?->releaseCall($id)) !== null)
