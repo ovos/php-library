@@ -42,6 +42,7 @@ use function count;
 use function defined;
 use function end;
 use function file_get_contents;
+use function floor;
 use function gc_collect_cycles;
 use function glob;
 use function in_array;
@@ -3327,8 +3328,70 @@ class RedisVersioned extends Test
 		return $none === Rules::NONE
 			&& $fits === $ms . '-1048575'
 			&& $past === ($ms + 1) . '-0'
-			&& $older[0] >= $nowMs
+			&& $older[0] >= $nowMs * 1000
 			&& $older[1] === ($ms + 1) . '-0';
+	}
+	
+	/**
+	 * RULE: the server's record keeps the invalidation's time in microseconds. A copy whose fetch began a
+	 * fraction of a millisecond after the invalidation was recorded is not held back, even when it lacks the
+	 * rule (the stream lost it): it checks the read with no extra fetch. A whole millisecond, rounded up,
+	 * would hold back every copy fetched within that millisecond, and each of its reads would reload.
+	 */
+	public function aCopyFetchedJustAfterAnInvalidationIsNotHeldBack(): bool
+	{
+		$this->requireSharedRules();
+		
+		[$invalidator, $group, $last] = $this->keptAndGone();
+		$rules = $invalidator->rules();
+		$shared = $invalidator->sharedRules();
+		// A clean record for the server: an invalidation whose rule the stream no longer holds, and a copy
+		// whose fetch began 0.3 ms after it, within the same millisecond.
+		$shared->forget();
+		$atMs = floor(microtime(true) * 1000) + 0.1;
+		[$lastMs] = Rules::split($last);
+		$shared->written($atMs, ($lastMs + 5) . '-0');
+		$shared->store($rules, $atMs + 0.3);
+		$worker = $this->probe(['rules_cache_ms' => 60000]);
+		$worker->setGroup($group);
+		
+		$read = $worker->get('kept', queue: false);
+		$invalidator->clearPhysical();
+		
+		return $read === 'kept'
+			&& $worker->fetchedFrom === [];
+	}
+	
+	/**
+	 * RULE: with no shared copy, the instance's own record of its invalidation holds back its copy too:
+	 * after a rule from elsewhere landed before its own, the copy lacks both, so the next read reloads and
+	 * sees both
+	 */
+	public function withoutASharedCopyAnInstanceIsBehindItsOwnInvalidation(): bool
+	{
+		$group = 'reload-' . bin2hex(random_bytes(4));
+		$store = $this->probe([
+			'rules_cache_ms' => 60000,
+			'rules_shared_cache' => false,
+		]);
+		$store->setGroup($group);
+		$store->invalidateTags(['unrelated']);
+		$store->set('kept', 'kept', 60, ['kept']);
+		$store->set('gone', 'gone', 60, ['gone']);
+		$last = $store->rules()
+			->last();
+		$store->getClient()
+			->xAdd($store->getRulesKey(), '*', ['mode' => 'any', 'tags' => 'kept', 'first' => '0']);
+		
+		$store->invalidateTags(['gone']);
+		$read = [
+			$store->get('kept', queue: false),
+			$store->get('gone', queue: false),
+		];
+		$store->clearPhysical();
+		
+		return $read === [null, null]
+			&& $store->fetchedFrom === [Rules::NONE, $last];
 	}
 	
 	/**
