@@ -57,7 +57,7 @@ class SharedRulesProbe extends SharedRules
 		string $key,
 	): bool
 	{
-		return $key === $this->markAtKey
+		return $key === $this->markAtUsKey
 			|| $key === $this->markIdKey;
 	}
 	

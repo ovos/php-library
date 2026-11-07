@@ -234,9 +234,10 @@ is constant no matter how many items match.
   reload through the flag. When another rule was added in between, the copy
   would skip it: nothing goes into it, the invalidating process lacks its
   own rule like the others, and its copy keeps its old fetch time. The
-  record of the invalidation - the time taken once the append returned, and
-  the rule id - keeps every copy fetched before it and ending before the
-  rule from checking a read. Each of the two is raised in one APCu step and
+  record of the invalidation - the time taken once the append returned, to
+  the microsecond, and the rule id - keeps every copy fetched before it and
+  ending before the rule from checking a read: a copy fetched a fraction of a
+  millisecond later is trusted. Each of the two is raised in one APCu step and
   never lowered, so two invalidations racing on one server always leave the
   later one's.
 - **What it promises.** While Redis answers and reloads finish within a

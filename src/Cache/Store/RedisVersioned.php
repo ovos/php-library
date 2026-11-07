@@ -18,6 +18,7 @@ use RedisException;
 
 use function array_keys;
 use function array_values;
+use function ceil;
 use function count;
 use function explode;
 use function implode;
@@ -1705,33 +1706,37 @@ class RedisVersioned extends Store
 			return false;
 		}
 		
-		[$atMs, $id] = $this->newestWritten();
+		[$atUs, $id] = $this->newestWritten();
 		
-		// an invalidation was made here, the copy was fetched no later, and it ends before that rule
-		return $atMs !== null
-			&& ($this->rulesFetchedAtMs === null || $this->rulesFetchedAtMs <= $atMs)
+		// an invalidation was made here, the copy was fetched no later (in microseconds), and it ends
+		// before that rule
+		return $atUs !== null
+			&& ($this->rulesFetchedAtMs === null || $this->rulesFetchedAtMs * 1000 <= $atUs)
 			&& Rules::isNewerId($id, $this->rules->last());
 	}
 	
 	/**
 	 * The newest invalidation made by this instance or, through SharedRules, by any process of this
-	 * server: its time and its rule id, each the newest on its own
+	 * server: its time in microseconds, rounded up as SharedRules records it, and its rule id, each the
+	 * newest on its own
 	 *
-	 * @return array{0: ?float, 1: string}
+	 * @return array{0: ?int, 1: string}
 	 */
 	protected function newestWritten(): array
 	{
-		$atMs = $this->writtenAtMs;
+		$atUs = $this->writtenAtMs !== null
+			? (int)ceil($this->writtenAtMs * 1000)
+			: null;
 		$id = $this->writtenId;
 		
 		// with the server's record, the newer of each value counts
 		if(($mark = $this->getSharedRules()?->writtenMark()) !== null)
 		{
-			$atMs = max($atMs ?? $mark[0], $mark[0]);
+			$atUs = max($atUs ?? $mark[0], $mark[0]);
 			$id = Rules::isNewerId($mark[1], $id) ? $mark[1] : $id;
 		}
 		
-		return [$atMs, $id];
+		return [$atUs, $id];
 	}
 	
 	/**

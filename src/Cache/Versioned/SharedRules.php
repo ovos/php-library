@@ -101,7 +101,7 @@ class SharedRules
 	
 	protected const string SUFFIX_LEASE = ':lease';
 	
-	protected const string SUFFIX_MARK_AT = ':mark-at';
+	protected const string SUFFIX_MARK_AT_US = ':mark-at-us';
 	
 	protected const string SUFFIX_MARK_ID = ':mark-id';
 	
@@ -128,10 +128,10 @@ class SharedRules
 	protected string $leaseKey;
 	
 	/**
-	 * The newest invalidation made on this server, as two integers that only ever go up: its time in ms,
-	 * and its rule id (see written())
+	 * The newest invalidation made on this server, as two integers that only ever go up: its time in
+	 * microseconds, and its rule id (see written())
 	 */
-	protected string $markAtKey;
+	protected string $markAtUsKey;
 	
 	protected string $markIdKey;
 	
@@ -166,7 +166,7 @@ class SharedRules
 			. static::SEPARATOR_IDENTITY
 			. hash('xxh64', $identity);
 		$this->leaseKey = $this->key . static::SUFFIX_LEASE;
-		$this->markAtKey = $this->key . static::SUFFIX_MARK_AT;
+		$this->markAtUsKey = $this->key . static::SUFFIX_MARK_AT_US;
 		$this->markIdKey = $this->key . static::SUFFIX_MARK_ID;
 		$this->attemptKey = $this->key . static::SUFFIX_LAST_ATTEMPT;
 	}
@@ -264,29 +264,30 @@ class SharedRules
 	): void
 	{
 		$this->raise($this->markIdKey, static::packId($id));
-		// Whole ms, rounded up: a fetch that began within that millisecond counts as begun before the
-		// invalidation, so its copy is not trusted to hold the rule.
-		$this->raise($this->markAtKey, (int)ceil($atMs));
+		// Whole microseconds, rounded up: a fetch that began within that microsecond counts as begun
+		// before the invalidation, so its copy is not trusted to hold the rule. A fetch begun a fraction
+		// of a millisecond later is trusted: whole ms would make every read of that millisecond reload.
+		$this->raise($this->markAtUsKey, (int)ceil($atMs * 1000));
 	}
 	
 	/**
-	 * The newest invalidation made on this server: the newest time (ms, this server's clock) and the
-	 * newest rule id that written() recorded, each on its own. Null when none is recorded.
+	 * The newest invalidation made on this server: the newest time (microseconds, this server's clock)
+	 * and the newest rule id that written() recorded, each on its own. Null when none is recorded.
 	 *
-	 * @return array{float, string}|null
+	 * @return array{int, string}|null
 	 */
 	public function writtenMark(): ?array
 	{
-		$atMs = $this->fetch($this->markAtKey);
+		$atUs = $this->fetch($this->markAtUsKey);
 		$id = $this->fetch($this->markIdKey);
 		
-		if(is_int($atMs) === false
+		if(is_int($atUs) === false
 			|| is_int($id) === false)
 		{
 			return null;
 		}
 		
-		return [(float)$atMs, static::unpackId($id)];
+		return [$atUs, static::unpackId($id)];
 	}
 	
 	/**
@@ -462,7 +463,7 @@ class SharedRules
 	public function forget(): bool
 	{
 		$this->remove($this->leaseKey);
-		$this->remove($this->markAtKey);
+		$this->remove($this->markAtUsKey);
 		$this->remove($this->markIdKey);
 		$this->remove($this->attemptKey);
 		
