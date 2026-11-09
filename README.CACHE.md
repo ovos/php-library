@@ -208,9 +208,11 @@ is constant no matter how many items match.
   its process shuts down. A failure reported by an attempt that began before
   the last success is ignored. A reload that finds the stream started over
   (lost, then appended to again) replaces the shared copy whatever its ids.
-  Where APCu refuses to record the flag (full, under an `apc.ttl` that keeps
-  it from expunging), the worker loads the rules on its own - one fetch per
-  request while it lasts - shares nothing, and logs one warning; where it
+  The flag and the note are written with no expiry: they change only through
+  `apcu_cas()`, which keeps the expiry an entry was created with. Where APCu
+  refuses to record the flag (it does not with the default settings: a full
+  APCu empties itself instead), the worker loads the rules on its own - one
+  fetch per request while it lasts - shares nothing, and logs one warning; where it
   takes the flag but refuses the copy, it logs one warning too (a newer copy
   already there is no refusal). A write stores the last rule id of the copy
   its read was checked against; a write with no read before it (a

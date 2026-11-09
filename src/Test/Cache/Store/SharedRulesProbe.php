@@ -7,6 +7,9 @@ use Closure;
 use Ovos\Cache\Versioned\SharedRules;
 use Override;
 
+use function apcu_key_info;
+use function is_array;
+
 /**
  * SharedRulesProbe
  *
@@ -59,6 +62,31 @@ class SharedRulesProbe extends SharedRules
 	{
 		return $key === $this->markAtUsKey
 			|| $key === $this->markIdKey;
+	}
+	
+	/**
+	 * The expiry APCu holds for each entry of this instance, in seconds (0: none), keyed by what the
+	 * entry is; null for an entry that is not there
+	 *
+	 * @return array<string, int|null>
+	 */
+	public function expiries(): array
+	{
+		$expiries = [];
+		foreach([
+			'copy' => $this->key,
+			'lease' => $this->leaseKey,
+			'mark-at' => $this->markAtUsKey,
+			'mark-id' => $this->markIdKey,
+		] as $name => $key)
+		{
+			$info = apcu_key_info($key);
+			$expiries[$name] = is_array($info)
+				? (int)$info['ttl']
+				: null;
+		}
+		
+		return $expiries;
 	}
 	
 	#[Override]
