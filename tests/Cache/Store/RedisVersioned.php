@@ -3315,13 +3315,20 @@ class RedisVersioned extends Test
 		
 		$shared = new SharedRulesProbe('tests:expiry-' . bin2hex(random_bytes(4)));
 		$nowMs = microtime(true) * 1000;
-		$led = $shared->lead();
-		$shared->written($nowMs, (int)$nowMs . '-0');
-		$shared->written($nowMs + 1, (int)$nowMs . '-1');
-		$stored = $shared->store(new Rules(3600000), $nowMs);
-		$expiries = $shared->expiries();
-		$shared->release();
-		$shared->forget();
+		
+		try
+		{
+			$led = $shared->lead();
+			$shared->written($nowMs, (int)$nowMs . '-0');
+			$shared->written($nowMs + 1, (int)$nowMs . '-1');
+			$stored = $shared->store(new Rules(3600000), $nowMs);
+			$expiries = $shared->expiries();
+		}
+		finally
+		{
+			$shared->release();
+			$shared->forget();
+		}
 		
 		return $led === true
 			&& $stored === true

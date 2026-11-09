@@ -208,17 +208,18 @@ is constant no matter how many items match.
   its process shuts down. A failure reported by an attempt that began before
   the last success is ignored. A reload that finds the stream started over
   (lost, then appended to again) replaces the shared copy whatever its ids.
-  The flag and the note are written with no expiry: they change only through
+  The flag and the note of the newest invalidation made on this server (its
+  time and rule id) are written with no expiry: they change only through
   `apcu_cas()`, which keeps the expiry an entry was created with. Where APCu
   refuses to record the flag (it does not with the default settings: a full
   APCu empties itself instead), the worker loads the rules on its own - one
-  fetch per request while it lasts - shares nothing, and logs one warning; where it
-  takes the flag but refuses the copy, it logs one warning too (a newer copy
-  already there is no refusal). A write stores the last rule id of the copy
-  its read was checked against; a write with no read before it (a
-  write-through) takes its copy through the same five cases and stores that
-  copy's last id - the stream's newest id is never read for a write. With no
-  copy it is not stored (see *Invalidation guard*). Case 5 costs
+  fetch per request while it lasts - shares nothing, and logs one warning;
+  where it takes the flag but refuses the copy, it logs one warning too (a
+  newer copy already there is no refusal). A write stores the last rule id
+  of the copy its read was checked against; a write with no read before it
+  (a write-through) takes its copy through the same five cases and stores
+  that copy's last id - the stream's newest id is never read for a write.
+  With no copy it is not stored (see *Invalidation guard*). Case 5 costs
   computations, not waits: a cold server (no copy) at 300 requests a second,
   20 cache reads each and a reload of 0.3 s computes about 1 800 values it
   does not store.
