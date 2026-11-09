@@ -3304,6 +3304,36 @@ class RedisVersioned extends Test
 	}
 	
 	/**
+	 * RULE: the reload flag and the server's record of its newest invalidation have no expiry in APCu,
+	 * while the copy keeps its own. They change only through apcu_cas(), which keeps the expiry an entry
+	 * was created with, so with one they would vanish a day after they were first written, however often
+	 * they changed.
+	 */
+	public function theFlagAndTheMarkHaveNoExpiry(): bool
+	{
+		$this->requireSharedRules();
+		
+		$shared = new SharedRulesProbe('tests:expiry-' . bin2hex(random_bytes(4)));
+		$nowMs = microtime(true) * 1000;
+		$led = $shared->lead();
+		$shared->written($nowMs, (int)$nowMs . '-0');
+		$shared->written($nowMs + 1, (int)$nowMs . '-1');
+		$stored = $shared->store(new Rules(3600000), $nowMs);
+		$expiries = $shared->expiries();
+		$shared->release();
+		$shared->forget();
+		
+		return $led === true
+			&& $stored === true
+			&& $expiries === [
+				'copy' => SharedRules::TTL_S,
+				'lease' => 0,
+				'mark-at' => 0,
+				'mark-id' => 0,
+			];
+	}
+	
+	/**
 	 * RULE: the server's record keeps a rule id exactly up to a sequence of 2^20 - 1 within its millisecond.
 	 * Past that it records the next millisecond: later, never earlier. '0-0' stays '0-0', and an older
 	 * invalidation lowers neither the time nor the id.

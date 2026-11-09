@@ -60,7 +60,9 @@ use function register_shutdown_function;
  *   over), and written() only ever raises the recorded time and id, so the later invalidation's record
  *   stands.
  * - A reloader dies. Its flag is free again after LEASE_MS, and a fatal error lets it go at shutdown.
- * - APCu is full and refuses the flag. lead() answers null, and that worker loads the rules on its own.
+ * - APCu refuses to store the flag, which it does not do with the default settings: a full APCu empties
+ *   itself instead, and the copy, the flag and the note go with it. lead() then answers null, and that
+ *   worker loads the rules on its own.
  *
  * More in README.CACHE.md: "RedisVersioned" under "Store differences", the parts "The rule set while it
  * reloads" (its paragraph "The mechanism") and "An invalidation made on this server".
@@ -71,7 +73,8 @@ use function register_shutdown_function;
  *
  * All entries are keyed by the rules key and a hash of the connection, so two environments that share one
  * FPM pool and one prefix never read each other's rules. Whether a copy is fresh is decided by the fetch
- * time stored with it. The APCu TTL only cleans up entries of groups nobody reads any more.
+ * time stored with it. The APCu TTL only cleans up the copies and attempt records of groups nobody reads any
+ * more; the flag and the note have none (see add()).
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -317,8 +320,8 @@ class SharedRules
 	
 	/**
 	 * Takes the reload flag for this instance. True when it holds the flag now, false when another
-	 * worker's lease holds it, null when APCu refused to record it (full, under an apc.ttl that keeps it
-	 * from expunging entries).
+	 * worker's lease holds it, null when APCu refused to record it (which it does not do with the default
+	 * settings).
 	 */
 	public function lead(): ?bool
 	{
@@ -568,12 +571,17 @@ class SharedRules
 			: null;
 	}
 	
+	/**
+	 * Adds the flag or a part of the note, with no expiry: they are changed only with swap(), and
+	 * apcu_cas() keeps the expiry an entry was created with, so with one they would vanish a day after
+	 * they were first written, however often they changed
+	 */
 	protected function add(
 		string $key,
 		mixed $entry,
 	): bool
 	{
-		return apcu_add($key, $entry, static::TTL_S) === true;
+		return apcu_add($key, $entry) === true;
 	}
 	
 	protected function write(
