@@ -40,7 +40,7 @@ use function register_shutdown_function;
  * Beside the copy, APCu holds what the workers of the server must agree on:
  * - the reload flag: only the worker holding it reloads the copy (see lead());
  * - the result of the last attempt to read the stream, and when it ended (see attemptEnded());
- * - the time and rule id of the newest invalidation made on this server (see written()).
+ * - the note of the newest invalidation made on this server: its time and rule id (see written()).
  *
  * An example on one server. At 12:00:00.000 worker A invalidates the tag product:7. A's copy ended right
  * before the new rule, so A adds the rule to its copy, stores the copy here, and only then records the
