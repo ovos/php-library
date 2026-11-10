@@ -5,6 +5,7 @@ namespace Ovos\Cache\Store;
 
 use Closure;
 use Ovos\ArrayObject;
+use Ovos\Cache\Prefixer;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Ovos\Cache\Versioned\Rules;
@@ -15,6 +16,8 @@ use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
+use function addcslashes;
+use function array_chunk;
 use function array_keys;
 use function array_values;
 use function ceil;
@@ -27,6 +30,7 @@ use function is_string;
 use function json_encode;
 use function max;
 use function microtime;
+use function preg_match;
 use function sprintf;
 
 /**
@@ -117,6 +121,11 @@ class RedisVersioned extends Store
 	 * Unit: milliseconds
 	 */
 	public const int RETRY_MS = 1000;
+	
+	/**
+	 * How many keys one step of the prune's walk asks SCAN for (see collectGarbage())
+	 */
+	public const int PRUNE_BATCH = 500;
 	
 	/**
 	 * Invalidation rules, and so items, live at most this long. The default of 30 days is above the longest
@@ -390,56 +399,88 @@ class RedisVersioned extends Store
 			return null;
 		}
 		
-		// only the rules newer than the item's "mark" are checked against its tags
-		$tags = (string)$item[static::KEY_TAGS];
-		if($rules->isStale($tags === '' ? [] : explode(',', $tags), (string)$item[static::KEY_MARK]))
+		$outdated = $this->outdated($item, $rules);
+		
+		// fresh: only now is the data decompressed
+		if($outdated === null)
 		{
-			// The item is outdated. A soft value still inside its stale time comes back aged: a read with
-			// stale: serves it while it is refreshed, a read without stale: takes it for a miss. It stays
-			// in Redis until the refresh overwrites it (see softly()). An item whose write said it is not
-			// soft (soft field '0') is outdated without decoding it. An item written before that field
-			// existed is decoded to find out.
-			$aged = ($item[static::KEY_SOFT] ?? false) !== '0'
-				? $this->softly($item, $rules)
-				: null;
-			if($aged instanceof Stale)
-			{
-				return $this->found($id, $aged, $epoch);
-			}
+			$value = $this->compressor
+				->decompress($item[static::KEY_DATA]);
 			
-			// The Redis server's time could not be read, so we cannot tell whether the soft value is
-			// still inside its stale time. It is a miss for this read only, and the item stays for the
-			// readers that can read the time.
-			if($aged === false)
-			{
-				$this->rememberMiss($id, $epoch);
-				
-				return null;
-			}
-			
-			// The item is outdated: a miss. It is removed once the read is over, unless a write replaced
-			// it meanwhile, which is usually this miss's own computation. So the read needs no second
-			// round trip (see afterRead()). The removal keeps the item's epoch for the guard window, so
-			// the miss remembers that epoch.
+			return $this->found($id,
+				$this->serializer->unserialize($value),
+				$epoch,
+			);
+		}
+		
+		// A soft value still inside its stale time comes back aged: a read with stale: serves it while it is
+		// refreshed, a read without stale: takes it for a miss. It stays in Redis until the refresh
+		// overwrites it (see softly()).
+		if($outdated instanceof Stale)
+		{
+			return $this->found($id, $outdated, $epoch);
+		}
+		
+		// The item is outdated: a miss. It is removed once the read is over, unless a write replaced it
+		// meanwhile, which is usually this miss's own computation. So the read needs no second round trip
+		// (see afterRead()). The removal keeps the item's epoch for the guard window, so the miss remembers
+		// that epoch. When the Redis server's time could not be read (false), nobody can tell whether a soft
+		// value is still inside its stale time: a miss for this read only, and the item stays for the
+		// readers that can read the time.
+		if($outdated === true)
+		{
 			$this->staleDrops[$id] = (string)$item[static::KEY_MARK];
-			$this->rememberMiss($id, $epoch);
-			
+		}
+		$this->rememberMiss($id, $epoch);
+		
+		return null;
+	}
+	
+	/**
+	 * What the copy $rules makes of an item read whole: null when it is fresh. An outdated item answers what
+	 * a read does with it: its value aged (a soft value inside its stale time, served while it is
+	 * refreshed), false (the Redis server's time could not be read to tell: a miss that leaves the item), or
+	 * true (a miss that removes the item). The prune drops what a read removes (see collectGarbage()).
+	 *
+	 * @param array<string, mixed> $item the HMGET fetch() made
+	 */
+	protected function outdated(
+		array $item,
+		Rules $rules,
+	): Stale|bool|null
+	{
+		if($this->isInvalidated($item, $rules) === false)
+		{
 			return null;
 		}
 		
-		// fresh: only now is the data decompressed
-		$value = $this->compressor
-			->decompress($item[static::KEY_DATA]);
+		// An item whose write said it is not soft (soft field '0') is outdated without decoding it. An item
+		// written before that field existed is decoded to find out.
+		$aged = ($item[static::KEY_SOFT] ?? false) !== '0'
+			? $this->softly($item, $rules)
+			: null;
 		
-		return $this->found($id,
-			$this->serializer->unserialize($value),
-			$epoch,
-		);
+		return $aged ?? true;
+	}
+	
+	/**
+	 * Whether a rule the item has not seen reaches it: only the rules newer than its "mark" are checked
+	 * against its tags
+	 */
+	protected function isInvalidated(
+		array $item,
+		Rules $rules,
+	): bool
+	{
+		$tags = (string)$item[static::KEY_TAGS];
+		
+		return $rules->isStale($tags === '' ? [] : explode(',', $tags), (string)$item[static::KEY_MARK]);
 	}
 	
 	/**
 	 * The miss a write of $id follows, also when it is older than the guard window: its rule id still
-	 * protects the write then (see writeCall())
+	 * protects the write then, and so does its epoch when the store computed or refreshed the value itself
+	 * (see writeCall())
 	 */
 	#[Override]
 	protected function writeMiss(
@@ -507,10 +548,11 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * The write set() sends (see KeyValue\Redis::writeCall()). After a miss inside the guard window it is
-	 * cache_versioned_set_guarded: refused when the key's epoch changed, and stored with the rule id the
-	 * miss saw. Any other write is cache_versioned_set_stamped, with a new epoch for the key. One key, so
-	 * it works on a cluster.
+	 * The write set() sends (see KeyValue\Redis::writeCall()). After a miss inside the guard window, and
+	 * after the store's own computation or refresh at any age, it is cache_versioned_set_guarded: refused
+	 * when the key holds an epoch other than the one the miss saw, and stored with the rule id the miss
+	 * saw. Any other write is cache_versioned_set_stamped, with a new epoch for the key. One key, so it
+	 * works on a cluster.
 	 */
 	#[Override]
 	protected function writeCall(
@@ -541,10 +583,14 @@ class RedisVersioned extends Store
 		$value = $this->compressor
 			->compress($value);
 		
-		// A miss older than the guard window protects nothing with its epoch any more, but its rule id stays
-		// valid for the rules' retention, so a rule added while the value was computed still reaches it.
+		// The write after a miss compares the key's epoch. A deliberate set() after a read older than the
+		// window does not: the caller chose to write, and a fresh read first is the way to have it checked.
+		// The store's own computation, and its refresh of a value, compares at any age, so a delete or a
+		// write made within the window before it is seen however long it computed. Either way the rule id
+		// the miss saw stays valid for the rules' retention, so a rule added while the value was computed
+		// still reaches it.
 		$guarded = $miss !== null
-			&& $miss['late'] === false;
+			&& ($miss['late'] === false || $miss['own']);
 		
 		return [$guarded ? 'cache_versioned_set_guarded' : 'cache_versioned_set_stamped', [$id], [
 			$value,
@@ -722,18 +768,9 @@ class RedisVersioned extends Store
 			return;
 		}
 		
-		$calls = [];
-		foreach($drops as $id => $mark)
-		{
-			$calls[] = [
-				$this->functions->functionsPrefix('cache_versioned_drop_stale'),
-				[$id],
-				[$mark, (string)$this->invalidationWindowMs],
-			];
-		}
 		try
 		{
-			if($this->sendAll($calls) !== null)
+			if($this->sendAll($this->dropCalls($drops)) !== null)
 			{
 				return;
 			}
@@ -747,6 +784,30 @@ class RedisVersioned extends Store
 		{
 			$this->dropStale($id, $mark);
 		}
+	}
+	
+	/**
+	 * The removals of outdated items, each only while it is still the item its read saw (see dropStale()),
+	 * as calls for sendAll()
+	 *
+	 * @param array<string, string> $drops the mark each read saw, by id
+	 * @return list<array{0: string, 1: list<string>, 2: list<mixed>}>
+	 */
+	protected function dropCalls(
+		array $drops,
+	): array
+	{
+		$calls = [];
+		foreach($drops as $id => $mark)
+		{
+			$calls[] = [
+				$this->functions->functionsPrefix('cache_versioned_drop_stale'),
+				[$id],
+				[$mark, (string)$this->invalidationWindowMs],
+			];
+		}
+		
+		return $calls;
 	}
 	
 	/**
@@ -813,6 +874,244 @@ class RedisVersioned extends Store
 		$this->resetRulesCache();
 		
 		return parent::clear();
+	}
+	
+	/**
+	 * Removes the outdated items no read has reached, so they do not wait for their TTL (up to the
+	 * retention). The walk goes over the keys under the pool's item prefix, one SCAN step at a time, on
+	 * every master of a cluster. Each step is judged as a read is, against the copy of the rules a read
+	 * would use at that moment (see outdated()); a step no copy may judge is left as it is. Only a hash
+	 * shaped exactly as this store writes its items is judged (see isItem()): a tombstone, a lock, the
+	 * rules stream and every other key under the prefix stay, as another part of the application may keep
+	 * its own keys there. An item goes only where a read would drop it, with the same script (see
+	 * dropStale()): a soft value inside its stale time stays, the epoch an item carries stays for the
+	 * window, and an item written again since the walk read it stays. The walk reads the small fields; the
+	 * data only for an outdated item that may be soft, one value at a time. Answers how many items were
+	 * dropped, false when the keys could not be read or a step could not be judged.
+	 */
+	#[Override]
+	public function collectGarbage(): bool|int
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		$dropped = 0;
+		$unjudged = false;
+		try
+		{
+			foreach($this->scanItems() as $ids)
+			{
+				// The copy is taken for each step: one taken at the start of a long walk could be empty, and
+				// it would take the items written since for items whose rules were lost.
+				[$rules, $unlocked] = $this->readRules();
+				if($rules === null
+					|| $unlocked)
+				{
+					$unjudged = true;
+					
+					continue;
+				}
+				
+				$drops = [];
+				foreach($this->readItems($ids) as $id => $item)
+				{
+					// the verdict decodes the data only for an outdated item that may be soft: read it now
+					if($item[static::KEY_SOFT] !== '0'
+						&& $this->isInvalidated($item, $rules))
+					{
+						$item[static::KEY_DATA] = $client->hGet($id, static::KEY_DATA);
+						// gone since the walk read it: nothing to judge
+						if(is_string($item[static::KEY_DATA]) === false)
+						{
+							continue;
+						}
+					}
+					
+					if($this->outdated($item, $rules) === true)
+					{
+						$drops[$id] = (string)$item[static::KEY_MARK];
+					}
+				}
+				$dropped+= $this->pruneDrops($drops);
+			}
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+			
+			return false;
+		}
+		
+		if($unjudged)
+		{
+			$this->log('Cache prune: no copy of the invalidation rules could judge some of the items, they stay.');
+			
+			return false;
+		}
+		
+		return $dropped;
+	}
+	
+	/**
+	 * The keys under the pool's item prefix, one SCAN step at a time, on every master of a cluster (SCAN
+	 * sees the node it is sent to only). Throws when a step is answered by an error.
+	 *
+	 * @return iterable<list<string>>
+	 */
+	protected function scanItems(): iterable
+	{
+		$client = $this->getClient();
+		// MATCH takes the prefix literally: its glob characters are escaped
+		$pattern = addcslashes($this->getType() . Prefixer::SEPARATOR_PREFIX, '\\*?[]') . '*';
+		
+		foreach($client instanceof RedisClusterClient ? $client->_masters() : [null] as $node)
+		{
+			$cursor = null;
+			do
+			{
+				$client->clearLastError();
+				$keys = $node === null
+					? $client->scan($cursor, $pattern, static::PRUNE_BATCH)
+					: $client->scan($cursor, $node, $pattern, static::PRUNE_BATCH);
+				// an error reply answers false and throws nothing, and the cursor did not move
+				if(is_array($keys) === false)
+				{
+					throw new RedisException(sprintf('Cache prune: SCAN failed: %s',
+						$client->getLastError() ?? 'no reply',
+					));
+				}
+				
+				if($keys !== [])
+				{
+					yield $keys;
+				}
+			}
+			while((int)$cursor !== 0);
+		}
+	}
+	
+	/**
+	 * The keys of one step that hold an item of this store (see isItem()), by id, with their small fields:
+	 * one pipeline on a standalone client, key by key on a cluster (the keys are in different slots)
+	 *
+	 * @param list<string> $ids
+	 * @return array<string, array<string, mixed>>
+	 */
+	protected function readItems(
+		array $ids,
+	): array
+	{
+		$client = $this->getClient();
+		$fields = [
+			static::KEY_TAGS,
+			static::KEY_MARK,
+			static::KEY_EPOCH,
+			static::KEY_SOFT,
+		];
+		
+		$replies = [];
+		if($client instanceof RedisClient)
+		{
+			$pipeline = $client->pipeline();
+			foreach($ids as $id)
+			{
+				$pipeline->hMGet($id, $fields);
+				$pipeline->hExists($id, static::KEY_DATA);
+				$pipeline->hLen($id);
+			}
+			if(is_array($flat = $pipeline->exec()) === false)
+			{
+				throw new RedisException(sprintf('Cache prune: a read failed: %s',
+					$client->getLastError() ?? 'no reply',
+				));
+			}
+			$replies = array_chunk($flat, 3);
+		}
+		else
+		{
+			foreach($ids as $id)
+			{
+				$replies[] = [
+					$client->hMGet($id, $fields),
+					$client->hExists($id, static::KEY_DATA),
+					$client->hLen($id),
+				];
+			}
+		}
+		
+		$items = [];
+		foreach($ids as $index => $id)
+		{
+			[$item, $hasData, $length] = $replies[$index] ?? [false, false, false];
+			if($this->isItem($item, $hasData, $length))
+			{
+				$items[$id] = $item;
+			}
+		}
+		
+		return $items;
+	}
+	
+	/**
+	 * Whether a key holds an item exactly as this store writes it: data, tags and a rule id as its mark,
+	 * with epoch and soft the only other fields. A key of another type answers false to all three reads.
+	 */
+	protected function isItem(
+		mixed $item,
+		mixed $hasData,
+		mixed $length,
+	): bool
+	{
+		return is_array($item)
+			&& $hasData === true
+			&& is_string($item[static::KEY_TAGS] ?? false)
+			&& preg_match('/^\d+-\d+$/', (string)($item[static::KEY_MARK] ?? '')) === 1
+			// data, tags and mark, then epoch and soft where they are: no field of anything else
+			&& $length === 3 + (int)is_string($item[static::KEY_EPOCH] ?? false) + (int)is_string($item[static::KEY_SOFT] ?? false);
+	}
+	
+	/**
+	 * Drops what one step found outdated (the mark each read saw, by id), with the script a read's removal
+	 * uses, and answers how many went. A call answered by an error is sent again on its own.
+	 *
+	 * @param array<string, string> $drops
+	 */
+	protected function pruneDrops(
+		array $drops,
+	): int
+	{
+		if($drops === [])
+		{
+			return 0;
+		}
+		
+		$replies = $this->sendAll($this->dropCalls($drops));
+		$dropped = 0;
+		$index = 0;
+		foreach($drops as $id => $mark)
+		{
+			// none on a cluster (one by one), false for an error reply
+			$reply = $replies[$index] ?? false;
+			$index++;
+			if($reply === false)
+			{
+				$reply = $this->functions
+					->call('cache_versioned_drop_stale', [$id], [
+						$mark,
+						(string)$this->invalidationWindowMs,
+					]);
+			}
+			if($reply === false)
+			{
+				$this->logRefused('cache_versioned_drop_stale');
+			}
+			
+			$dropped+= (int)$reply === 1 ? 1 : 0;
+		}
+		
+		return $dropped;
 	}
 	
 	/**

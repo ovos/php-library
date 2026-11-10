@@ -57,6 +57,9 @@ class RedisVersionedProbe extends RedisVersioned
 	/** run right before the lock with its look - a test lands a value meanwhile */
 	public ?Closure $beforeLock = null;
 	
+	/** run before the prune drops what one step found outdated - a test writes an item again meanwhile */
+	public ?Closure $beforePruneDrops = null;
+	
 	/** run before each read of the rules stream - a test makes the read fail */
 	public ?Closure $beforeRuleFetch = null;
 	
@@ -222,6 +225,20 @@ class RedisVersionedProbe extends RedisVersioned
 		$this->dropped++;
 		
 		parent::dropStale($id, $mark);
+	}
+	
+	#[Override]
+	protected function pruneDrops(
+		array $drops,
+	): int
+	{
+		if($drops !== []
+			&& $this->beforePruneDrops !== null)
+		{
+			($this->beforePruneDrops)();
+		}
+		
+		return parent::pruneDrops($drops);
 	}
 	
 	#[Override]

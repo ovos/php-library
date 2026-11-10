@@ -53,12 +53,15 @@ local function cache_versioned_write(item_key, mark, data, tags, ttl_ms, retenti
 	end
 	
 	-- a key carrying an epoch keeps it for the window: the data fields expire
-	-- at the TTL, the key at the window's end (a full window when it had no
-	-- expiry of its own) - a short-lived item cannot take the mark with it
+	-- at the TTL, the key at the window's end - a short-lived item cannot take
+	-- the mark with it. A write that brings a new epoch keeps it a full window,
+	-- so every guarded write within the window after it sees it, also on a key
+	-- that had only moments left; a guarded write keeps the epoch it compared,
+	-- and so what was left of the key's life
 	local keep_ms = 0
 	if window_ms and window_ms > 0 and redis.call('HEXISTS', item_key, 'epoch') == 1 then
 		keep_ms = window_ms
-		if rem_ms > 0 and rem_ms < window_ms then
+		if rem_ms > 0 and rem_ms < window_ms and not (new_epoch and new_epoch ~= '') then
 			keep_ms = rem_ms
 		end
 	end
@@ -73,8 +76,9 @@ local function cache_versioned_write(item_key, mark, data, tags, ttl_ms, retenti
 end
 
 -- Store an item stamped with the rule id its writer holds - its copy's
--- newest id for a write-through, the one a miss past the guard's window
--- took for its late write: every versioned write that follows no miss
+-- newest id for a write-through, the one a miss took for a deliberate set()
+-- made after a read older than the guard's window: every versioned write
+-- that compares no epoch
 -- cluster-safe: one declared key
 local function cache_versioned_set_stamped(keys, args)
 	return cache_versioned_write(
@@ -92,14 +96,17 @@ end
 redis.register_function('[prefix]cache_versioned_set_stamped', cache_versioned_set_stamped)
 
 -- Store an item a recomputation produced - the write that follows a miss:
--- refused (0) when the key was invalidated since that miss (delete() left
--- its tombstone, whose "epoch" the item keeps - see Cache.lua), and stamped
--- with the rule id the MISS saw, so a rule appended between the miss and
--- this write makes the item stale on its next read
+-- refused (0) when the key holds an epoch other than the one the miss saw
+-- (a delete() since the miss left its tombstone with a new one - see
+-- Cache.lua - and a plain write brought its own). The same epoch, or none,
+-- takes the write: every delete and plain write leaves its epoch for a full
+-- window, so a key without one had neither within the window. Stamped with
+-- the rule id the MISS saw, so a rule appended between the miss and this
+-- write makes the item stale on its next read
 -- cluster-safe: one declared key
 local function cache_versioned_set_guarded(keys, args)
-	local epoch = redis.call('HGET', keys[1], 'epoch') or ''
-	if epoch ~= args[6] then
+	local epoch = redis.call('HGET', keys[1], 'epoch')
+	if epoch and epoch ~= args[6] then
 		return 0
 	end
 	
@@ -131,9 +138,11 @@ local function cache_versioned_drop_stale(keys, args)
 	end
 	if redis.call('HEXISTS', keys[1], 'epoch') == 1 then
 		redis.call('HDEL', keys[1], 'data', 'tags', 'mark', 'soft')
-		-- the epoch guards a miss for the window only: a miss older than that
-		-- goes unguarded, so beyond it the key is memory and nothing else (an
-		-- item's TTL runs up to the retention)
+		-- the epoch is kept for the window only: a delete or a write is seen by
+		-- the writes made within the window after it, and a write whose miss saw
+		-- this epoch is taken whether it is still there or gone, so beyond the
+		-- window the key is memory and nothing else (an item's TTL runs up to
+		-- the retention)
 		local window_ms = tonumber(args[2])
 		if window_ms ~= nil then
 			if window_ms <= 0 then

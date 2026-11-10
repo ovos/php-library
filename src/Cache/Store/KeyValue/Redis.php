@@ -57,9 +57,10 @@ abstract class Redis extends Tags
 	public const string UNGUARDED = '*';
 	
 	/**
-	 * Recorded as a miss's epoch when reading the item failed, so we do not know which epoch is stored. No
-	 * key ever has this value (an epoch is hex, see newEpoch()), so the guarded write that follows is
-	 * refused. The key may have been invalidated without this process seeing it.
+	 * Recorded as a miss's epoch when reading the item failed, so we do not know which epoch is stored. The
+	 * key may have been invalidated without this process seeing it. No key ever has this value (an epoch is
+	 * hex, see newEpoch()), but that alone does not refuse the write: the versioned stores' guarded write
+	 * takes a key that holds no epoch at all. So set() refuses it itself, before any call (see isUnread()).
 	 */
 	public const string EPOCH_UNREAD = '-';
 	
@@ -251,12 +252,14 @@ abstract class Redis extends Tags
 	}
 	
 	/**
-	 * Reclaims whatever a store accumulates that does not expire on its own.
-	 * The default is a no-op: items carry a TTL and there is no side index to
-	 * sweep. The tag-hash store overrides this to prune dangling tag -> id
-	 * references; the versioned stores keep the default (their rules stream
-	 * self-trims and stale items expire by TTL). Defined here so the cache
-	 * maintenance cron can call collectGarbage() on any persistent store.
+	 * Reclaims what a store keeps that nothing needs any more, ahead of its
+	 * expiry. The default is a no-op: items carry a TTL and there is no side
+	 * index to sweep. The tag-hash store overrides this to prune dangling tag
+	 * -> id references; the versioned stores drop the items their rules made
+	 * outdated that no read has removed (see RedisVersioned::collectGarbage()).
+	 * Defined here so the cache maintenance cron can call collectGarbage() on
+	 * any persistent store: the number of items removed, true when there is
+	 * nothing to collect, false on an error.
 	 */
 	public function collectGarbage(): bool|int
 	{
@@ -607,9 +610,10 @@ abstract class Redis extends Tags
 	}
 	
 	/**
-	 * Whether the read of $miss failed (see rememberUnread()). The tag-index stores take no miss older
-	 * than the guard window (see writeMiss()); a versioned store takes it, so there this holds past the
-	 * window too, and the write after it is refused once.
+	 * Whether the read of $miss failed (see rememberUnread()). Checked in PHP, before any call: a versioned
+	 * store's guarded write would take the marker on a key without an epoch (see EPOCH_UNREAD). The
+	 * tag-index stores take no miss older than the guard window (see writeMiss()); a versioned store takes
+	 * it, so there this holds past the window too, and the write after it is refused once.
 	 *
 	 * @param array{epoch: string}|null $miss
 	 */

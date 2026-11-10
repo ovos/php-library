@@ -157,7 +157,8 @@ is constant no matter how many items match.
   item in one `HMGET` and evaluate it in PHP against a held rule set - the
   newest rule per tag, refreshed at most once per `rules_cache_ms` by fetching
   only what was appended since; stale items are lazily unlinked and
-  physically expire by their TTL.
+  physically expire by their TTL, or earlier by `collectGarbage()` (the
+  nightly prune, see *Operational notes*).
 - The rule set is **shared by the workers of a server through APCu**
   (`rules_shared_cache`, on wherever APCu is enabled): a fresh process - every
   request, under PHP-FPM - adopts it instead of loading the whole stream.
@@ -895,7 +896,9 @@ $store->invalidateTags(['user:42', 'products'], $store::MATCHING_ALL);
 
 On the versioned stores (RedisVersioned, RedisClusterVersioned) the matched items are
 not deleted: they become invisible immediately and physically expire by their
-TTL - which is what makes the call O(1) regardless of the match count.
+TTL - which is what makes the call O(1) regardless of the match count. A read
+that finds one removes it, and `collectGarbage()` removes the ones no read
+reached.
 
 `hard: true` makes a tag invalidation a miss at once for soft values too
 (see "Soft invalidation") - for a change the old value must not outlive, such
@@ -967,6 +970,13 @@ How it works:
   atomically (Lua; APCu checks, stores, re-checks and takes its value back) -
   a write that lost the race is refused: `set()` returns `false`, nothing is
   stored, the MemoLock lock is released, and the next reader recomputes
+- on the versioned stores the write is refused when the key holds a token
+  other than the one its read saw (a delete or somebody's write since the
+  read); the same token or none is taken. Every delete and every plain write
+  leaves its token for a full window, so a key without one had neither within
+  the window - a token that merely ran out refuses nothing. The write always
+  carries the rule id its read saw, so a tag invalidation or a `clear()` made
+  meanwhile makes it outdated on the next read
 - a `set()` with no miss of its own before it is a write-through: written as
   before, and it gives the key a new epoch, so an older recomputation still
   in flight is refused in turn
@@ -1030,8 +1040,18 @@ What callers may notice:
   written with, so it answers `false` and deletes the key. The same goes for
   a value longer than the Compressor reads back: the store's own computation
   leaves the key, any other write deletes it.
-- Bounds: a recomputation longer than the window is not covered (the trace
-  is gone); `invalidation_window_ms: 0` switches the guard off.
+- Bounds: a delete is seen by every write made within the guard window after
+  it. If a value can take longer than the guard window to compute, raise the
+  window above it. On the versioned stores tag invalidations and `clear()` are
+  always seen (the rule id travels with the write), whatever the computation
+  takes, and the store's own computation compares the token at any age:
+  `get()`/`getMany()` with a resolver, the `set()` after a manual
+  `lockAndQueue()`, a forced refresh, a stale value's refresh, and the write
+  after `peek()` + `startComputing()`. A deliberate `set()` after a read older
+  than the window (a read-only `get()`, `peek()` alone) is not checked against
+  the token: take a fresh read first when that matters. On the tag-index
+  stores a recomputation longer than the window is not covered (the trace is
+  gone). `invalidation_window_ms: 0` switches the guard off.
 
 ## Stampede protection (MemoLock)
 
@@ -1177,12 +1197,26 @@ cache:
   The APCu store's guarded `set()` checks, stores and checks again (APCu has no
   atomic compare-and-store): a delete between the check and the store takes
   the value back at once, and a reader can see it for that instant. Beyond
-  both, a computation longer than `invalidation_window_ms` writes through
-  (see the invalidation guard).
+  both, a delete is seen for `invalidation_window_ms` after it, no longer: a
+  computation that outlasts the window misses an older delete on the
+  versioned stores, and writes through on the tag-index stores (see the
+  invalidation guard).
 - **Tag-hash items without a TTL.** On the `Redis` store a tag's field follows
   its item's TTL; an item stored without one leaves its field in the tag hash
   until `collectGarbage()` removes it. Run it from a cron where items without
   a TTL come and go.
+- **The versioned stores' prune.** An item a rule made outdated stays in Redis
+  until a read finds it or its TTL ends (up to `rules_retention_s`).
+  `collectGarbage()` walks the keys under the pool's item prefix (`SCAN`, in
+  batches; on a cluster every master), judges each item as a read does
+  against one copy of the rules, and drops what a read would drop, with the
+  same script: a soft value inside its stale time stays, an item's token
+  stays for the window. Only a hash shaped exactly as the store writes its
+  items is judged; a tombstone, a lock, the rules stream and any other key
+  under the prefix are left alone, so a prefix shared with other data is
+  safe. It answers the number of items dropped (`false` when the rules or the
+  keys could not be read). The system collector's `System\Collector::collect`
+  runs it nightly (`cache: no` in its entry skips it).
 - **The key prefix is a literal** (`cache.prefix`, `CACHE[PREFIX]`): no Redis
   key derives from a path or a release, so a deploy to a new directory keeps
   its cache. Only APCu entries do (a library's confirmation is keyed on the

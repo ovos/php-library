@@ -6,10 +6,12 @@ namespace Ovos\Test\Cache\Store;
 use Ovos\Cache\Compressor;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
 use Ovos\Cache\Serializer;
+use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
 use Closure;
+use RuntimeException;
 
 use function array_keys;
 use function bin2hex;
@@ -24,9 +26,10 @@ use function usleep;
  * the test of every Redis store: a value computed before another process
  * invalidated it is never served after it - whatever the store's way to make
  * sure (a refused write, an item read stale) - while a write-through, the
- * store's own invalidation and a recomputation older than the window write
- * as they did before the guard. Two store instances stand for two processes:
- * one misses and recomputes, the other invalidates in between.
+ * store's own invalidation and a deliberate set() after a read older than the
+ * window write as they did before the guard (on a tag-index store, a
+ * recomputation older than the window too). Two store instances stand for two
+ * processes: one misses and recomputes, the other invalidates in between.
  *
  * The using class provides guardStore()
  *
@@ -398,6 +401,28 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
+	 * RULE (probe): a set() after a failed read of a key that holds no token is refused, and nothing is
+	 * stored. A versioned store's guarded write takes a key without a token whatever token the miss
+	 * names, so the failed read's marker is refused in PHP, before any call.
+	 */
+	public function aSetAfterAFailedReadOfAKeyWithoutATokenIsRefused(): bool
+	{
+		$reader = $this->unreadProbe();
+		$key = $this->guardKey('unread-none');
+		$id = $reader->itemId($key);
+		$reader->getConnection()->counter()->failingReads = 1;
+		
+		$missed = $reader->get($key, queue: false);
+		$written = $reader->set($key, 'new', 60);
+		$stored = (int)$reader->getClient()->hExists($id, KeyValueRedis::KEY_DATA);
+		$reader->delete($key);
+		
+		return $missed === null
+			&& $written === false
+			&& $stored === 0;
+	}
+	
+	/**
 	 * RULE (probe): when the write after a failed read deletes the key instead, it leaves no lock behind. A
 	 * waiting worker computes at once; it does not wait for the lock's TTL.
 	 */
@@ -573,10 +598,11 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE: a recomputation older than the window goes unguarded again - the
-	 * guard covers the window, no longer
+	 * RULE: a deliberate set() after a read older than the window goes
+	 * unguarded, on every store: the caller chose to write, and a fresh read
+	 * first is the way to have it checked
 	 */
-	public function aMissOlderThanTheWindowGoesUnguarded(): bool
+	public function aDeliberateSetAfterAReadOlderThanTheWindowGoesUnguarded(): bool
 	{
 		// the writer's tombstone outlives the reader's window: only the age of
 		// the READER's miss lets the write through
@@ -592,6 +618,513 @@ trait TraitInvalidationGuard
 		$writer->delete(self::GUARD_KEY);
 		
 		return $written && $read === 'late';
+	}
+	
+	/**
+	 * RULE: the store's own computation older than the window, with another
+	 * process's tombstone still there at the write. A tag-index store guards
+	 * the window only, so the write is stored. A versioned store compares the
+	 * token at any age: the write is refused, and the next read does not get
+	 * the value computed before the delete.
+	 */
+	public function anOwnComputationOlderThanTheWindowSeesALiveTombstone(): bool
+	{
+		// the writer's tombstone outlives the reader's window and its computation
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 10000]);
+		$key = $this->guardKey('own-late');
+		
+		$value = $reader->get($key, function() use ($writer, $key): string
+		{
+			// the source changes while the value is computed
+			$writer->delete($key);
+			usleep(250000);
+			
+			return 'computed before the delete';
+		}, 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'computed before the delete'
+			&& $read === ($reader instanceof RedisVersioned ? null : 'computed before the delete');
+	}
+	
+	/**
+	 * RULE: a computation that outlasts the tombstone its read saw is stored,
+	 * on every store: nothing was deleted or written since the read, the token
+	 * only ran out
+	 */
+	public function aComputationThatOutlastsItsTombstoneIsStored(): bool
+	{
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('outlasted');
+		$id = $writer->itemId($key);
+		$writer->delete($key);
+		
+		$value = $reader->get($key, function() use ($client, $id): string
+		{
+			// the tombstone the read saw runs out, and the read grows older than its window
+			$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
+			usleep(150000);
+			
+			return 'computed';
+		}, 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'computed'
+			&& $read === 'computed';
+	}
+	
+	/**
+	 * RULE: a read younger than the window whose token ran out before the write
+	 * (a tombstone near its end). A versioned store takes the write: a delete
+	 * or a write since the read would have left a token that lives a full
+	 * window. A tag-index store compares the token as it is and refuses it.
+	 */
+	public function aYoungReadWhoseTokenRanOut(): bool
+	{
+		$writer = $this->guardStore(['invalidation_window_ms' => 400]);
+		// the read stays younger than its window for the whole rule
+		$reader = $this->guardStore(['invalidation_window_ms' => 10000]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('young-ran-out');
+		$id = $writer->itemId($key);
+		$writer->delete($key);
+		usleep(250000);
+		// the read must still see the tombstone's token: a slow run that missed it proves nothing
+		$tombstoned = (int)$client->exists($id) === 1;
+		
+		$value = $reader->get($key, function() use ($client, $id): string
+		{
+			$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
+			
+			return 'computed';
+		}, 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $tombstoned
+			&& $value === 'computed'
+			&& $read === ($reader instanceof RedisVersioned ? 'computed' : null);
+	}
+	
+	/**
+	 * RULE: a delete made during a computation is not seen once its tombstone
+	 * ran out before the write, on every store. The guard sees a delete for the
+	 * window after it, no longer: a computation longer than the window needs a
+	 * longer window.
+	 */
+	public function aDeleteOlderThanTheWindowAtTheWriteIsNotSeen(): bool
+	{
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('bound');
+		$id = $writer->itemId($key);
+		// the read sees a token, so a check of the token as it is would refuse
+		$writer->delete($key);
+		
+		$value = $reader->get($key, function() use ($writer, $key, $client, $id): string
+		{
+			$writer->delete($key);
+			$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
+			usleep(150000);
+			
+			return 'computed before the delete';
+		}, 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'computed before the delete'
+			&& $read === 'computed before the delete';
+	}
+	
+	/**
+	 * RULE (versioned): a computation that outlasts the token of the outdated
+	 * item its read found is stored once. Another reader removed the item, which
+	 * keeps its token for the window only; the value computed after the tag
+	 * invalidation is fresh, and the next read takes it without computing.
+	 */
+	public function aComputationAfterATagInvalidationThatOutlastsTheTokenIsStoredOnce(): bool
+	{
+		$writer = $this->versionedGuardStore(['invalidation_window_ms' => 200]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 200]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('tag-outlasted');
+		$id = $writer->itemId($key);
+		// a write-through: the item carries a token for as long as it lives
+		$writer->set($key, 'old', 60, [self::GUARD_TAG]);
+		$writer->invalidateTags([self::GUARD_TAG]);
+		$computed = 0;
+		
+		$value = $reader->get($key, function() use ($key, $client, $id, &$computed): string
+		{
+			$computed++;
+			// another reader finds the item outdated and removes it: its token stays the window only
+			$this->guardStore(['invalidation_window_ms' => 200])
+				->get($key, queue: false);
+			$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
+			
+			return 'new';
+		}, 60, [self::GUARD_TAG]);
+		$next = $this->guardStore()->get($key, function() use (&$computed): string
+		{
+			$computed++;
+			
+			return 'computed again';
+		}, 60, [self::GUARD_TAG]);
+		$writer->delete($key);
+		
+		return $value === 'new'
+			&& $next === 'new'
+			&& $computed === 1;
+	}
+	
+	/**
+	 * RULE (versioned): a clear() during a computation whose token then ran
+	 * out. The write is stored, with the rule id its read saw, so the next read
+	 * takes it for outdated and misses.
+	 */
+	public function aClearDuringAComputationWhoseTokenRanOutLeavesAMiss(): bool
+	{
+		$writer = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('clear-outlasted');
+		$id = $writer->itemId($key);
+		// the read sees this tombstone's token
+		$writer->delete($key);
+		
+		$value = $reader->get($key, function() use ($writer, $client, $id): string
+		{
+			$writer->clear();
+			$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
+			
+			return 'computed before the clear';
+		}, 60);
+		$stored = (int)$client->hExists($id, KeyValueRedis::KEY_DATA) === 1;
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'computed before the clear'
+			&& $stored
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (versioned): somebody's plain set() during the store's own
+	 * computation, its token still there at the write, the read older than the
+	 * window: the computation is refused, and the set() value stays
+	 */
+	public function aPlainSetDuringAnOldComputationRefusesIt(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore();
+		$key = $this->guardKey('set-outlasted');
+		
+		$value = $reader->get($key, function() use ($writer, $key): string
+		{
+			$writer->set($key, 'new', 60);
+			usleep(250000);
+			
+			return 'computed before the set';
+		}, 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'computed before the set'
+			&& $read === 'new';
+	}
+	
+	/**
+	 * RULE (versioned): after a read older than the window, with another
+	 * process's token alive on the key, a deliberate set() is written while the
+	 * store's own computation is refused
+	 */
+	public function anOldReadWritesADeliberateSetAndRefusesTheOwnComputation(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore();
+		$deliberate = $this->guardKey('deliberate-old');
+		$own = $this->guardKey('own-old');
+		
+		// a read-only get(), somebody's set(), then the caller's own set()
+		$reader->get($deliberate, queue: false);
+		$writer->set($deliberate, 'other', 60);
+		usleep(250000);
+		$written = $reader->set($deliberate, 'mine', 60);
+		$readDeliberate = $this->guardStore()->get($deliberate, queue: false);
+		
+		// the same order, the value computed by the store
+		$computed = $reader->get($own, function() use ($writer, $own): string
+		{
+			$writer->set($own, 'other', 60);
+			usleep(250000);
+			
+			return 'mine';
+		}, 60);
+		$readOwn = $this->guardStore()->get($own, queue: false);
+		$writer->delete($deliberate);
+		$writer->delete($own);
+		
+		return $written
+			&& $readDeliberate === 'mine'
+			&& $computed === 'mine'
+			&& $readOwn === 'other';
+	}
+	
+	/**
+	 * RULE (versioned): a plain set() with a TTL shorter than the window, onto a
+	 * key with little life left (a tombstone), keeps its new token a full
+	 * window. A computation whose read came before that set() is refused after
+	 * the short value expired.
+	 */
+	public function aShortLivedSetKeepsItsTokenAFullWindow(): bool
+	{
+		$deleter = $this->versionedGuardStore(['invalidation_window_ms' => 300]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 10000]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 10000]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('short-set');
+		$id = $writer->itemId($key);
+		// a tombstone that lives 300 ms
+		$deleter->delete($key);
+		$kept = 0;
+		
+		$value = $reader->get($key, function() use ($writer, $key, $client, $id, &$kept): string
+		{
+			$writer->set($key, 'short', 1);
+			$kept = (int)$client->pTtl($id);
+			$this->awaitServer(fn(): bool => $this->dataExpired($writer, [$key]));
+			
+			return 'computed before the set';
+		}, 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'computed before the set'
+			&& $kept > 1000
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (versioned): a forced refresh is the store's own computation. Past the window it still sees a
+	 * delete made within the window before its write: refused, and the next read misses.
+	 */
+	public function aForcedRefreshPastTheWindowSeesADelete(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		// the tombstone outlives the refresh
+		$writer = $this->guardStore(['invalidation_window_ms' => 10000]);
+		$key = $this->guardKey('forced-late');
+		$writer->set($key, 'old', 60);
+		
+		$value = $reader->get($key, function() use ($writer, $key): string
+		{
+			$writer->delete($key);
+			usleep(250000);
+			
+			return 'refreshed before the delete';
+		}, 60, refresh: true);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'refreshed before the delete'
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (versioned): a forced refresh past the window whose token ran out meanwhile (the item it
+	 * replaces expired, its token with it) is stored
+	 */
+	public function aForcedRefreshPastTheWindowWhoseTokenRanOutIsStored(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('forced-ran-out');
+		$id = $writer->itemId($key);
+		// written through, so the item carries a token, which expires with it in a second
+		$writer->set($key, 'old', 1);
+		
+		$value = $reader->get($key, function() use ($client, $id): string
+		{
+			$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
+			
+			return 'refreshed';
+		}, 60, refresh: true);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'refreshed'
+			&& $read === 'refreshed';
+	}
+	
+	/**
+	 * RULE (versioned): a stale value's refresh is the store's own computation, alone (get()) and in a
+	 * batch (getMany()). Past the window it still sees another process's write made within the window
+	 * before its own: refused, and that write's value stays.
+	 */
+	public function aStaleRefreshPastTheWindowSeesAWrite(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore();
+		$alone = $this->guardKey('stale-late');
+		$batched = $this->guardKey('stale-late-batch');
+		$writer->set($alone, new Stale('old', microtime(true) - 1, 60), 60);
+		$writer->set($batched, new Stale('old', microtime(true) - 1, 60), 60);
+		
+		$reader->get($alone, function() use ($writer, $alone): string
+		{
+			$writer->set($alone, 'other', 60);
+			usleep(250000);
+			
+			return 'refreshed before the write';
+		}, 60, stale: 60);
+		$reader->getMany([$batched], function(KeyValueRedis $store, array $keys) use ($writer, $batched): array
+		{
+			$writer->set($batched, 'other', 60);
+			usleep(250000);
+			
+			return [$batched => 'refreshed before the write'];
+		}, 60, stale: 60);
+		$readAlone = $this->guardStore()->get($alone, queue: false);
+		$readBatched = $this->guardStore()->get($batched, queue: false);
+		$writer->delete($alone);
+		$writer->delete($batched);
+		
+		return $readAlone === 'other'
+			&& $readBatched === 'other';
+	}
+	
+	/**
+	 * RULE (versioned): a stale value's refresh past the window whose token ran out meanwhile (the stale
+	 * item expired, its token with it) is stored
+	 */
+	public function aStaleRefreshPastTheWindowWhoseTokenRanOutIsStored(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('stale-ran-out');
+		$id = $writer->itemId($key);
+		// written through, so the item carries a token, which expires with it in a second
+		$writer->set($key, new Stale('old', microtime(true) - 1, 60), 1);
+		
+		$reader->get($key, function() use ($client, $id): string
+		{
+			$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
+			
+			return 'refreshed';
+		}, 60, stale: 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $read === 'refreshed';
+	}
+	
+	/**
+	 * RULE (versioned): the page cache's refresh (peek(), then startComputing()) is the store's own
+	 * computation. Past the window it still sees a delete made within the window before its write:
+	 * refused, and the next read misses.
+	 */
+	public function aPageRefreshPastTheWindowSeesADelete(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		// the tombstone outlives the refresh
+		$writer = $this->guardStore(['invalidation_window_ms' => 10000]);
+		$key = $this->guardKey('page-late');
+		$writer->set($key, new Stale('old page', microtime(true) - 1, 60), 60);
+		
+		$reader->peek($key);
+		$reader->startComputing($key);
+		$writer->delete($key);
+		usleep(250000);
+		$written = $reader->set($key, 'new page', 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $written === false
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (versioned): the page cache's refresh past the window whose token ran out meanwhile (the page it
+	 * replaces expired, its token with it) is stored
+	 */
+	public function aPageRefreshPastTheWindowWhoseTokenRanOutIsStored(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('page-ran-out');
+		$id = $writer->itemId($key);
+		// written through, so the page carries a token, which expires with it in a second
+		$writer->set($key, new Stale('old page', microtime(true) - 1, 60), 1);
+		
+		$reader->peek($key);
+		$reader->startComputing($key);
+		$this->awaitServer(fn(): bool => (int)$client->exists($id) === 0);
+		$written = $reader->set($key, 'new page', 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $written
+			&& $read === 'new page';
+	}
+	
+	/**
+	 * RULE (versioned): a manual lockAndQueue() whose resolver throws leaves nothing behind that makes a
+	 * later write the store's own. The caller reads again (peek()); its deliberate set() after that read,
+	 * older than the window, is written over another process's newer value.
+	 */
+	public function aThrownComputationLeavesADeliberateSetUnguarded(): bool
+	{
+		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore();
+		$key = $this->guardKey('thrown');
+		
+		try
+		{
+			$reader->lockAndQueue($key, function(): never
+			{
+				throw new RuntimeException('the computation failed');
+			});
+		}
+		catch(RuntimeException)
+		{
+			// the caller goes on
+		}
+		// a read that computes nothing: only the read itself can drop what the failed computation left
+		$reader->peek($key);
+		$writer->set($key, 'other', 60);
+		usleep(250000);
+		$written = $reader->set($key, 'mine', 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $written
+			&& $read === 'mine';
+	}
+	
+	/**
+	 * A fresh versioned store - another process; skips a rule on a tag-index
+	 * store
+	 */
+	protected function versionedGuardStore(
+		array $storeOptions = [],
+	): RedisVersioned
+	{
+		$store = $this->guardStore($storeOptions);
+		if($store instanceof RedisVersioned === false)
+		{
+			throw new SkipException('only the versioned stores compare the token of a computation at any age');
+		}
+		
+		return $store;
 	}
 	
 	/**
