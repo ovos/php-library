@@ -42,7 +42,7 @@ abstract class Tags extends KeyValue
 	/**
 	 * Invalidates the values carrying the tags - any of them, or (MATCHING_ALL)
 	 * all of them; $hard: a soft value is a miss at once too, not served for
-	 * its stale time
+	 * its stale time. No tags invalidate nothing, and the answer is true
 	 */
 	abstract public function invalidateTags(
 		array $tags,

@@ -233,6 +233,20 @@ class Redisearch extends Test
 	}
 	
 	/**
+	 * RULE (probe): an invalidation of no tags answers true and sends nothing, whatever the matching
+	 */
+	public function anEmptyInvalidationAnswersTrueAndSendsNothing(): bool
+	{
+		$probe = $this->batchProbe();
+		$counter = $probe->getConnection()->counter();
+		$counter->resetCount();
+		
+		return $probe->invalidateTags([]) === true
+			&& $probe->invalidateTags([], Store::MATCHING_ALL) === true
+			&& $counter->sent === [];
+	}
+	
+	/**
 	 * RULE: a removal call that fails is reported though the calls after it
 	 * succeed - the invalidation answers false and logs the error (each call
 	 * clears the client's last error, so read once per page it was gone)

@@ -283,8 +283,8 @@ abstract class KeyValue
 	/**
 	 * The miss a write follows. It is taken out, so it guards one write only. A miss older than the guard
 	 * window is not returned, unless $late: then it comes back flagged 'late'. Its epoch protects nothing
-	 * any more, but a versioned store's rule id still does (see RedisVersioned::set()). "computing" says
-	 * whether the store computed the value itself (see computingMisses).
+	 * any more, but a versioned store's rule id still does (see RedisVersioned::writeCall()). "computing"
+	 * says whether the store computed the value itself (see computingMisses).
 	 *
 	 * @return array{epoch: string, stamp: ?string, at: float, late: bool, computing: bool}|null
 	 */

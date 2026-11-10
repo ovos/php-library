@@ -599,6 +599,53 @@ class Redis extends Test
 	}
 	
 	/**
+	 * RULE (probe): a null value is a delete, also after a failed read - set() deletes the key and answers
+	 * what the delete answered (true: an item was there), and setMany() does the same for each of its keys
+	 */
+	public function aNullWriteAfterAFailedReadIsADelete(): bool
+	{
+		$probe = $this->batchProbe();
+		$counter = $probe->getConnection()->counter();
+		$other = $this->guardStore();
+		$key = $this->guardKey('null-unread');
+		[$a, $b] = $keys = [$this->guardKey('null-unread-a'), $this->guardKey('null-unread-b')];
+		$other->set($key, 'old', 60);
+		$other->set($a, 'old a', 60);
+		
+		// a read that fails, then a null value
+		$counter->failingReads = 1;
+		$missed = $probe->get($key, queue: false);
+		$deleted = $probe->set($key, null);
+		
+		// the same for a batch: $a held an item, $b did not
+		$counter->failingReads = 1;
+		$probe->getMany($keys, queue: false);
+		$stored = $probe->setMany([$a => null, $b => null]);
+		
+		$reader = $this->guardStore();
+		
+		return $missed === null
+			&& $deleted === true
+			&& $reader->get($key, queue: false) === null
+			&& $stored === [$a => true, $b => false]
+			&& $reader->get($a, queue: false) === null;
+	}
+	
+	/**
+	 * RULE (probe): an invalidation of no tags answers true and sends nothing, whatever the matching
+	 */
+	public function anEmptyInvalidationAnswersTrueAndSendsNothing(): bool
+	{
+		$probe = $this->batchProbe();
+		$counter = $probe->getConnection()->counter();
+		$counter->resetCount();
+		
+		return $probe->invalidateTags([]) === true
+			&& $probe->invalidateTags([], Store::MATCHING_ALL) === true
+			&& $counter->sent === [];
+	}
+	
+	/**
 	 * How often the server ran $command so far (INFO commandstats - a command
 	 * a Lua function runs is counted too)
 	 */

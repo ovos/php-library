@@ -5,6 +5,7 @@ namespace Tests\Cache\Store;
 
 use Ovos\Cache\Computed;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
+use Ovos\Cache\Redis\Functions;
 use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\RedisVersioned as Store;
 use Ovos\Cache\Versioned\Rules;
@@ -364,6 +365,89 @@ class RedisVersioned extends Test
 		{
 			$client->del($probe->getRulesKey());
 		}
+	}
+	
+	/**
+	 * RULE (probe): an invalidation answered with 1 instead of the new rule's id is refused - answered false
+	 * and logged, as any other answer that names no rule
+	 */
+	public function anInvalidationAnsweredWithOneIsRefused(): bool
+	{
+		$probe = new class(...$this->storeArguments()) extends RedisVersionedProbe
+		{
+			/**
+			 * cache_versioned_invalidate answers 1 from now on, without a call to the server
+			 */
+			public function answerOne(): void
+			{
+				$this->functions = new class(static::LIBRARIES, $this->connection, $this->prefixer->getPrefix()) extends Functions
+				{
+					#[Override]
+					public function call(
+						string $function,
+						array $keys = [],
+						array $args = [],
+						bool $readOnly = false,
+						bool $long = false,
+					): mixed
+					{
+						return $function === 'cache_versioned_invalidate'
+							? 1
+							: parent::call($function, $keys, $args, $readOnly, $long);
+					}
+				};
+			}
+		};
+		$probe->answerOne();
+		
+		$invalidated = $probe->invalidateTags(['tag1']);
+		$logged = $probe->logged[0][0] ?? null;
+		
+		return $invalidated === false
+			&& count($probe->logged) === 1
+			&& $logged instanceof RedisException
+			&& str_contains($logged->getMessage(), 'cache_versioned_invalidate');
+	}
+	
+	/**
+	 * RULE (probe): a write the server refuses (an error reply, not an exception) is logged and answered
+	 * false - never lost quietly
+	 */
+	public function aRefusedWriteIsLogged(): bool
+	{
+		$probe = $this->probe();
+		$key = $this->guardKey('refused-write');
+		$id = $probe->itemId($key);
+		$client = $probe->getClient();
+		// a plain string under the item's key: the write's HSET is refused (WRONGTYPE)
+		$client->set($id, 'not a hash');
+		
+		try
+		{
+			return $probe->set($key, 'value', 60) === false
+				&& $this->countLogged($probe, 'WRONGTYPE') === 1;
+		}
+		finally
+		{
+			$client->del($id);
+		}
+	}
+	
+	/**
+	 * RULE (probe): an invalidation of no tags answers true and sends nothing - no rule is added, whatever
+	 * the matching
+	 */
+	public function anEmptyInvalidationAnswersTrueAndSendsNothing(): bool
+	{
+		/** @var RedisVersionedProbe $probe */
+		$probe = $this->roundTripStore(RedisVersionedProbe::class);
+		$counter = $probe->getConnection()->counter();
+		$counter->resetCount();
+		
+		return $probe->invalidateTags([]) === true
+			&& $probe->invalidateTags([], Store::MATCHING_ALL) === true
+			&& $counter->sent === []
+			&& $probe->logged === [];
 	}
 	
 	/**

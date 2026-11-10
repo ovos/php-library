@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Ovos\Cache\Store;
 
 use Closure;
-use LengthException;
 use Ovos\ArrayObject;
 use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
@@ -58,17 +57,10 @@ use function sprintf;
  * until then its copy is less than rules_cache_ms old. B's first read after that gets a reloaded copy,
  * which holds the rule, so the item is a miss for B too.
  *
- * When something goes wrong:
- * - Redis does not answer when the rules are reloaded. The workers keep using the copy they have, whatever
- *   its age. A worker with no copy treats every item as a miss and stores nothing it computes. One worker
- *   of the server tries again RETRY_MS after the last attempt ended.
- * - Another worker is reloading. A copy at most rules_cache_ms + SLOW_RELOAD_MS old is still used. With an
- *   older copy, or none, every item is a miss, computed without the stampede lock, so nobody waits. The
- *   value is stored with the older copy's newest rule id, and not stored when there is no copy. A reload
- *   that runs longer than SLOW_RELOAD_MS is treated as if Redis were down.
- * - A write races an invalidation. The value is stored with the newest rule id of the copy its read was
- *   checked against, never with the stream's newest id. So a rule added while the value was computed
- *   still reaches it on the next read.
+ * When Redis does not answer, or another worker is reloading, readRules() decides which copy checks a
+ * read, if any. A write that races an invalidation is stored with the newest rule id of the copy its read
+ * was checked against, so a rule added while the value was computed still reaches it on the next read
+ * (see missStamp()).
  *
  * More in README.CACHE.md: "RedisVersioned" under "Store differences" (the parts "The rule set while it
  * reloads" and "An invalidation made on this server"), and "Invalidation guard (stale writes)".
@@ -206,9 +198,12 @@ class RedisVersioned extends Store
 	 */
 	protected bool $alone = false;
 	
-	protected bool $aloneWarned = false;
-	
-	protected bool $storeWarned = false;
+	/**
+	 * The warnings this instance logged already, by name (see warnOnce())
+	 *
+	 * @var array<string, true>
+	 */
+	protected array $warned = [];
 	
 	/**
 	 * Outdated items a read found, by id, each with the "mark" its read saw. They are removed once the read
@@ -226,16 +221,9 @@ class RedisVersioned extends Store
 	protected ?float $clockOffsetMs = null;
 	
 	/**
-	 * The rule id for writes that have none of their own: a set() with no miss before it, or a miss older
-	 * than the guard window that never got one. Taken once per set() or batch (see writeStamp()).
-	 * STAMP_UNREAD when no copy of the rules was at hand.
+	 * The rule id of the writes with no miss before them, taken once per set() or batch (see writeStamp())
 	 */
 	protected ?string $writeStamp = null;
-	
-	/**
-	 * The TTL-above-retention warning is logged once per instance
-	 */
-	protected bool $ttlWarned = false;
 	
 	#[Override]
 	public function setGroup(
@@ -288,6 +276,9 @@ class RedisVersioned extends Store
 		return $this->getType(static::TYPE_RULES);
 	}
 	
+	/**
+	 * A write with no rule id of its own takes a new one for this call (see writeStamp())
+	 */
 	#[Override]
 	public function set(
 		string $key,
@@ -296,119 +287,9 @@ class RedisVersioned extends Store
 		array $tags = [],
 	): bool
 	{
-		if($this->getClient() === null)
-		{
-			return false;
-		}
-		
-		$id = $this->prefixer
-			->prefix($key, $this->getType());
-		// The miss this write follows, if any. The write is refused when the key was deleted or written
-		// by someone else since that miss (see KeyValue::rememberMiss()). The value is stored with the
-		// rule id the miss saw. The miss is taken even when it is older than the guard window, because
-		// its rule id still protects the write then.
-		$miss = $this->writeMiss($id);
-		// a write without a rule id of its own takes a new one for this call (see writeStamp())
 		$this->writeStamp = null;
 		
-		// A negative TTL would expire the item at once, so it is a delete. So is a null value (see
-		// KeyValue::set()).
-		if($ttl < 0 || $value === null)
-		{
-			try
-			{
-				return $this->delete($key);
-			}
-			finally
-			{
-				$this->getMemoLock()
-					->releaseActiveLock($id);
-			}
-		}
-		
-		// not stored when nothing could check it: the item read failed, or no copy of
-		// the invalidation rules was at hand for the read. A write that only fills a
-		// miss leaves the key alone; a write meant to replace the value deletes it, so
-		// the old one is not served (see refuseUnjudged())
-		if($this->isUnread($miss)
-			|| $this->isUnjudged($miss))
-		{
-			return $this->refuseUnjudged($key, $id, $miss);
-		}
-		
-		// One Lua call writes the value with its rule id. After a miss it is refused when the key
-		// changed since. The stampede lock is released in the same round trip (see writeWithRelease()).
-		try
-		{
-			$result = $this->writeWithRelease($id, ...$this->writeCall($id, $key, $value, $ttl, $tags, $miss));
-			
-			return (int)$result === 1;
-		}
-		catch(RedisException|RedisClusterException $exception)
-		{
-			$this->log($exception);
-		}
-		// The value is longer than the Compressor reads back, so it is not cached (see dropRefused()).
-		catch(LengthException $exception)
-		{
-			$this->log($exception->getMessage());
-			$this->dropRefused($key, $miss);
-		}
-		// the lock is released whatever happened; a second release does nothing
-		finally
-		{
-			$this->getMemoLock()
-				->debug('save: ' . $id)
-				->releaseActiveLock($id);
-		}
-		
-		return false;
-	}
-	
-	/**
-	 * Reads an item with one HMGET (data, tags, mark, epoch, soft) and checks it in PHP against the copy of
-	 * the rules that readRules() picks. Only rules newer than the item's "mark" are checked. This avoids
-	 * scanning the rules stream in Redis for every read. One round trip; an outdated item is removed after
-	 * the read.
-	 *
-	 * The price: an invalidation made on another server can go unseen for up to rules_cache_ms (plus
-	 * SLOW_RELOAD_MS while another worker reloads). Set rules_cache_ms to 0 to reload the rules before
-	 * every read.
-	 */
-	#[Override]
-	protected function fetch(
-		string $id,
-	): mixed
-	{
-		if(($client = $this->getClient()) === null)
-		{
-			return null;
-		}
-		
-		try
-		{
-			// One HMGET brings the data, the tags and the "mark". The data is read outside any Lua script,
-			// and only decompressed when the item turns out to be fresh.
-			$item = $client->hMGet($id, $this->fetchedFields());
-		}
-		// Redis did not answer: a miss, and no write may follow it (see rememberUnread())
-		catch(RedisException|RedisClusterException $exception)
-		{
-			$this->log($exception);
-			$this->rememberUnread($id);
-			
-			return null;
-		}
-		
-		// an error reply (BUSY, LOADING) is a failed read too (see failedReply())
-		if(is_array($item) === false)
-		{
-			$this->failedReply($id);
-			
-			return null;
-		}
-		
-		return $this->judge($id, $item);
+		return parent::set($key, $value, $ttl, $tags);
 	}
 	
 	/**
@@ -428,8 +309,10 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Checks what fetch()'s HMGET read ($item: the reply) against the copy of the rules that readRules()
-	 * picks. Also used for the second read made together with the stampede lock (see lockAndLook()).
+	 * Checks what fetch()'s HMGET read ($item: the reply) in PHP against the copy of the rules that
+	 * readRules() picks. Only rules newer than the item's "mark" are checked, so no read scans the rules
+	 * stream in Redis, and the data is only decompressed when the item turns out to be fresh. Also used for
+	 * the second read made together with the stampede lock (see lockAndLookMany()).
 	 */
 	protected function judge(
 		string $id,
@@ -442,10 +325,9 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Checks $item against the copy $rules and returns its value, or null for a miss. With no copy ($rules
-	 * null) every item is a miss. With $unlocked the copy may not be used for this read (see readRules()):
-	 * every item is a miss, and its value is computed without the stampede lock (see
-	 * KeyValue::$unlockedMisses).
+	 * Checks $item against the copy $rules and returns its value, or null for a miss. With $unlocked the
+	 * copy may not be used for this read, or there is none (see readRules()): every item is a miss, and its
+	 * value is computed without the stampede lock (see KeyValue::$unlockedMisses).
 	 */
 	protected function judgeBy(
 		string $id,
@@ -454,66 +336,48 @@ class RedisVersioned extends Store
 		bool $unlocked,
 	): mixed
 	{
-		// get() and getMany() look here to know whether this miss skips the stampede lock
-		if($unlocked)
-		{
-			$this->unlockedMisses[$id] = true;
-		}
-		else
-		{
-			unset($this->unlockedMisses[$id]);
-		}
-		
 		// the guard's token on the key (see KeyValue::rememberMiss()); false when there is none
 		$epoch = is_array($item)
 			? ($item[static::KEY_EPOCH] ?? false)
 			: false;
 		
-		// No copy of the rules, so nothing can tell whether the item is outdated. It is a miss, the item
-		// stays in Redis, and the value computed after it is not stored (see isUnjudged()).
-		if($rules === null)
+		// A miss that leaves the item in Redis; the write after it is still guarded by the epoch. get() and
+		// getMany() look at unlockedMisses to know that this miss skips the stampede lock.
+		if($unlocked)
 		{
+			$this->unlockedMisses[$id] = true;
 			$this->rememberMiss($id, $epoch);
-			$this->unjudged($id);
-			
-			return null;
+			$found = null;
 		}
-		
-		// a copy is at hand: check the item against it
-		$found = $this->verdict($id, $item, $rules, $unlocked, $epoch);
+		else
+		{
+			unset($this->unlockedMisses[$id]);
+			$found = $this->verdict($id, $item, $rules, $epoch);
+		}
 		
 		// A miss records the copy's newest rule id now, and the value computed after it is stored with that
 		// id. The copy may lack the stream's latest rules, which only makes the item outdated sooner. So the
-		// computation does not need to go through readRules() again.
+		// computation does not need to go through readRules() again. With no copy, nothing computed after the
+		// miss is stored (see isUnjudged()).
 		if(isset($this->misses[$id])
 			&& $this->misses[$id]['stamp'] === null)
 		{
-			$this->misses[$id]['stamp'] = $rules->last();
+			$this->misses[$id]['stamp'] = $rules?->last() ?? static::STAMP_UNREAD;
 		}
 		
 		return $found;
 	}
 	
 	/**
-	 * judgeBy()'s check of $item when a copy of the rules is at hand: the value, or null for a miss
+	 * judgeBy()'s check of $item when the copy may check the read: the value, or null for a miss
 	 */
 	protected function verdict(
 		string $id,
 		mixed $item,
 		Rules $rules,
-		bool $unlocked,
 		mixed $epoch,
 	): mixed
 	{
-		// The copy may not be used for this read (another worker is reloading, see readRules()). So it is
-		// a miss, and the write after it is still guarded by the epoch.
-		if($unlocked)
-		{
-			$this->rememberMiss($id, $epoch);
-			
-			return null;
-		}
-		
 		// A missing "tags" field means the hash does not exist (an untagged item still stores tags as an
 		// empty string), or it is a tombstone that holds only an epoch. "data" must be there too, to
 		// decompress.
@@ -574,39 +438,8 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * The write for a value that no miss guards: a set() with no miss before it, or a miss older than the
-	 * guard window. It is stored with $mark, the newest rule id of the writer's copy. Never with the
-	 * stream's newest id: the stream may hold rules the writer never saw, and a value computed before them
-	 * would then count as computed after them. One key, so it works on a cluster.
-	 */
-	protected function stampedCall(
-		string $id,
-		string $value,
-		array $tags,
-		int $ttl,
-		string $mark,
-		string $epoch = '', // the key's new epoch, for a write with no miss (see KeyValue::rememberMiss())
-		string $soft = '', // '1' a soft value, '0' not (see verdict()); '' says nothing
-	): array
-	{
-		return ['cache_versioned_set_stamped', [$id], [
-			$value,
-			implode(',', $tags),
-			$ttl * 1000, // ms
-			$this->rulesRetentionS * 1000, // ms
-			$mark,
-			$epoch,
-			$this->invalidationWindowMs,
-			$soft,
-		]];
-	}
-	
-	/**
-	 * The miss a write of $id follows, also when it is older than the guard window (see set()). A miss
-	 * that never got a rule id takes the newest rule id of the copy now. That happens when no computation
-	 * ran under stampMiss(), as with peek() and then set(). The epoch still guards that write against a
-	 * delete. Only a rule id taken before the computation would catch a rule added between the miss and
-	 * the write.
+	 * The miss a write of $id follows, also when it is older than the guard window: its rule id still
+	 * protects the write then (see writeCall())
 	 */
 	#[Override]
 	protected function writeMiss(
@@ -616,54 +449,27 @@ class RedisVersioned extends Store
 		// the write replaces any outdated item this process read, so there is nothing left to remove
 		unset($this->staleDrops[$id]);
 		
-		$miss = $this->takeMiss($id, late: true);
-		if($miss !== null
-			&& $miss['late'] === false
-			&& $miss['stamp'] === null)
-		{
-			$miss['stamp'] = $this->missStamp();
-		}
-		
-		return $miss;
-	}
-	
-	/**
-	 * Whether the read of $miss failed (see rememberUnread()). Here this holds past the guard window too.
-	 * The write after it is refused once, and then the miss is gone, because writeMiss() took it.
-	 */
-	#[Override]
-	protected function isUnread(
-		?array $miss,
-	): bool
-	{
-		return $miss !== null
-			&& $miss['epoch'] === static::EPOCH_UNREAD;
+		return $this->takeMiss($id, late: true);
 	}
 	
 	/**
 	 * Whether the value written after $miss cannot be checked: no copy of the rules was at hand for its
-	 * read, or when its rule id was taken (see STAMP_UNREAD). This holds past the guard window too.
+	 * read, or when its rule id was taken (see STAMP_UNREAD). This holds past the guard window too. A write
+	 * with no miss asks whether there is a copy now (see writeStamp()).
 	 */
 	#[Override]
 	protected function isUnjudged(
 		?array $miss,
 	): bool
 	{
-		// a write without a rule id of its own (no miss, or a late miss that never got one): whether
-		// writeStamp() found a copy of the rules
-		if($miss === null
-			|| $miss['stamp'] === null)
-		{
-			return $this->writeStamp() === static::STAMP_UNREAD;
-		}
-		
-		return $miss['stamp'] === static::STAMP_UNREAD;
+		return ($miss === null ? $this->writeStamp() : $miss['stamp']) === static::STAMP_UNREAD;
 	}
 	
 	/**
-	 * Handles the key of a write that was not made, because the value is longer than the Compressor reads
-	 * back. If the store computed the value itself after its miss, the key stays, since it may hold a valid
-	 * item. Any other write deletes the key, so the value it was meant to replace is not served.
+	 * Handles the key of a write that was not made: one nothing could check (see refuseUnjudged()), or a
+	 * value longer than the Compressor reads back. If the store computed the value itself after its miss,
+	 * the key stays, since it may hold a valid item. Any other write deletes the key, so the value it was
+	 * meant to replace is not served.
 	 */
 	#[Override]
 	protected function dropRefused(
@@ -701,24 +507,10 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Records that the miss of $id could not be checked, because no copy of the rules was at hand.
-	 * stampMiss() then keeps STAMP_UNREAD as its rule id, so nothing is stored after it.
-	 */
-	protected function unjudged(
-		string $id,
-	): void
-	{
-		if(isset($this->misses[$id]))
-		{
-			$this->misses[$id]['stamp'] = static::STAMP_UNREAD;
-		}
-	}
-	
-	/**
-	 * The write set() sends (see KeyValue\Redis::writeCall()). After a miss it is
+	 * The write set() sends (see KeyValue\Redis::writeCall()). After a miss inside the guard window it is
 	 * cache_versioned_set_guarded: refused when the key's epoch changed, and stored with the rule id the
-	 * miss saw. With no miss, or one older than the guard window, it is cache_versioned_set_stamped, stored
-	 * with the newest rule id of the writer's copy.
+	 * miss saw. Any other write is cache_versioned_set_stamped, with a new epoch for the key. One key, so
+	 * it works on a cluster.
 	 */
 	#[Override]
 	protected function writeCall(
@@ -732,10 +524,9 @@ class RedisVersioned extends Store
 	{
 		// A TTL above the retention is cut to it (see the class doc). That is logged once, so the shorter
 		// life is no silent surprise.
-		if($ttl > $this->rulesRetentionS && $this->ttlWarned === false)
+		if($ttl > $this->rulesRetentionS)
 		{
-			$this->ttlWarned = true;
-			$this->log(sprintf(
+			$this->warnOnce('ttl', sprintf(
 				'Cache TTL %d s exceeds rules_retention_s %d s and is capped to it - raise the retention to keep longer-lived items.',
 				$ttl,
 				$this->rulesRetentionS,
@@ -750,30 +541,20 @@ class RedisVersioned extends Store
 		$value = $this->compressor
 			->compress($value);
 		
-		// no miss before it: stored with the copy's newest rule id, and a new epoch for the key
-		if($miss === null)
-		{
-			return $this->stampedCall($id, $value, $tags, $ttl, $this->writeStamp(), $this->writeThroughEpoch(), $soft);
-		}
+		// A miss older than the guard window protects nothing with its epoch any more, but its rule id stays
+		// valid for the rules' retention, so a rule added while the value was computed still reaches it.
+		$guarded = $miss !== null
+			&& $miss['late'] === false;
 		
-		// A miss older than the guard window. Its epoch protects nothing any more, but its rule id stays
-		// valid for the rules' retention. So the value is written like a write with no miss, but with that
-		// rule id, and a rule added while it was computed still reaches it. A late miss without a rule id
-		// takes the copy's newest one, like any write with no miss.
-		if($miss['late'] === true)
-		{
-			return $this->stampedCall($id, $value, $tags, $ttl, $miss['stamp'] ?? $this->writeStamp(), $this->writeThroughEpoch(), $soft);
-		}
-		
-		// The guarded write, with the rule id the miss saw. That id was taken right before the computation
-		// (stampMiss()), or by writeMiss() for a miss that never got one.
-		return ['cache_versioned_set_guarded', [$id], [
+		return [$guarded ? 'cache_versioned_set_guarded' : 'cache_versioned_set_stamped', [$id], [
 			$value,
 			implode(',', $tags),
 			$ttl * 1000, // ms
 			$this->rulesRetentionS * 1000, // ms
-			$miss['stamp'],
-			$miss['epoch'],
+			// the rule id the miss saw, or with no miss the newest one of the writer's copy (see missStamp())
+			$miss['stamp'] ?? $this->writeStamp(),
+			// the epoch the guarded write compares, or the key's new epoch (see KeyValue::rememberMiss())
+			$guarded ? $miss['epoch'] : $this->writeThroughEpoch(),
 			$this->invalidationWindowMs,
 			$soft,
 		]];
@@ -808,43 +589,22 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Takes the stampede lock and reads the item a second time in one round trip, on a standalone client
-	 * (see MemoLock::lockAndQueue()). SET NX and fetch()'s HMGET go in one pipeline, and the second read is
-	 * checked as fetch() checks it. On a cluster: null, because the lock and the item are in different
-	 * slots.
+	 * Takes the stampede lock and reads the item a second time in one round trip (see
+	 * MemoLock::lockAndQueue()): lockAndLookMany() for a batch of one. On a cluster: null.
 	 */
 	#[Override]
 	protected function lockAndLook(
 		string $id,
 	): ?Closure
 	{
-		if(($client = $this->getClient()) instanceof RedisClient === false)
+		if(($lockAndLookMany = $this->lockAndLookMany()) === null)
 		{
 			return null;
 		}
 		
-		return function(string $lockKey, string $lockValue, int $ttlMs) use ($client, $id): array
+		return function(string $lockKey, string $lockValue, int $ttlMs) use ($lockAndLookMany, $id): array
 		{
-			$replies = $client->pipeline()
-				->set($lockKey, $lockValue, ['NX', 'PX' => $ttlMs])
-				->hMGet($id, $this->fetchedFields())
-				->exec();
-			if(($replies[0] ?? false) !== true)
-			{
-				return [false, null];
-			}
-			
-			// The lock is taken. A second read that failed, or one with no copy of the rules at hand, is
-			// a miss, as in fetch() (see judge()). So MemoLock records the lock, and the write releases it.
-			$look = $replies[1] ?? false;
-			if(is_array($look) === false)
-			{
-				$this->failedReply($id);
-				
-				return [true, null];
-			}
-			
-			return [true, $this->fresh($this->judge($id, $look))];
+			return $lockAndLookMany([$id => $lockKey], [$id => $lockValue], $ttlMs)[$id];
 		};
 	}
 	
@@ -1018,9 +778,15 @@ class RedisVersioned extends Store
 		bool $hard = false,
 	): bool
 	{
-		if(count($tags) === 0)
+		if($this->getClient() === null)
 		{
 			return false;
+		}
+		
+		// no tags: nothing to invalidate, and no rule is added
+		if(count($tags) === 0)
+		{
+			return true;
 		}
 		
 		return $this->addRule($matching, $tags, $hard);
@@ -1137,16 +903,6 @@ class RedisVersioned extends Store
 			return false;
 		}
 		
-		// The previous release's Lua library answers 1 and names no ids. A host may still call it for up
-		// to Functions::CONFIRMED_TTL_S after a deploy. The rule is in the stream. The copy loses its fetch
-		// time, so it no longer counts as fresh, and the next read loads a copy first (see readRules()).
-		if($result === 1)
-		{
-			$this->rulesFetchedAtMs = null;
-			
-			return true;
-		}
-		
 		// any other answer than the new id: the call was refused
 		if(is_array($result) === false
 			|| is_string($id = $result[0] ?? null) === false)
@@ -1211,10 +967,11 @@ class RedisVersioned extends Store
 	
 	/**
 	 * Picks the copy of the rules that checks a read, and returns [copy, unlocked]. The copy is null when
-	 * there is none. With unlocked false, the copy checks the read. With unlocked true, every item read is a
-	 * miss. Its value is then stored with the copy's newest rule id (see missStamp()), or not stored at all
-	 * when there is no copy (see isUnjudged()). It is computed without the stampede lock: a worker waiting
-	 * for the lock would read a miss as well, so the lock would only make the workers queue.
+	 * there is none, and unlocked is then true. With unlocked false, the copy checks the read. With
+	 * unlocked true, every item read is a miss. Its value is then stored with the copy's newest rule id
+	 * (see missStamp()), or not stored at all when there is no copy (see isUnjudged()). It is computed
+	 * without the stampede lock: a worker waiting for the lock would read a miss as well, so the lock would
+	 * only make the workers queue.
 	 *
 	 * The first case that applies decides:
 	 *
@@ -1241,8 +998,7 @@ class RedisVersioned extends Store
 	protected function readRules(): array
 	{
 		// case 1: this worker's own copy is fresh
-		if($this->rules !== null
-			&& $this->rulesAreFresh())
+		if($this->rulesAreFresh())
 		{
 			return [$this->rules, false];
 		}
@@ -1265,8 +1021,7 @@ class RedisVersioned extends Store
 		if($outage
 			|| ($startedAtMs !== null && microtime(true) * 1000 - $startedAtMs > static::SLOW_RELOAD_MS))
 		{
-			// With the flag free and RETRY_MS passed since the last attempt, this worker tries again. If
-			// that works, the read uses the new copy.
+			// the flag is free and RETRY_MS has passed: this worker tries again
 			if($startedAtMs === null
 				&& $this->retryDue($endedAtMs))
 			{
@@ -1277,17 +1032,14 @@ class RedisVersioned extends Store
 			return [$this->rules, $this->rules === null];
 		}
 		
-		// Case 3: the flag is free, so this worker reloads. If the fetch fails, the server is in an
-		// outage, and the read goes on as in case 2, with the copy held or with none.
+		// case 3: the flag is free, so this worker reloads; a failed fetch goes on as in case 2
 		if($startedAtMs === null
 			&& $this->reload())
 		{
 			return [$this->rules, $this->rules === null];
 		}
 		
-		// Cases 4 and 5: another worker is reloading (it may have taken the flag just now). A copy young
-		// enough that holds every local invalidation checks the read. Otherwise every item is a miss,
-		// computed without the lock.
+		// cases 4 and 5: another worker is reloading (it may have taken the flag just now)
 		return [$this->rules, $this->judgesWhileReloading() === false];
 	}
 	
@@ -1302,10 +1054,10 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Takes the reload flag and reloads the copy. It fetches the rules from the copy's newest id with
-	 * XRANGE, one batch at a time, adds them to the copy, records when the fetch began, and stores the copy
-	 * in APCu for the other workers. If the stream was started over, the new copy replaces the shared one.
-	 * If APCu refuses to record the flag, this worker fetches on its own and writes nothing to APCu.
+	 * Takes the reload flag, brings the copy up to date (see fetchRules()), records when the fetch began,
+	 * and stores the copy in APCu for the other workers. If the stream was started over, the new copy
+	 * replaces the shared one. If APCu refuses to record the flag, this worker fetches on its own and
+	 * writes nothing to APCu.
 	 *
 	 * Returns false when another worker holds the flag. Returns true when the copy this worker holds now is
 	 * the one the read should use: just reloaded, taken from another worker that finished meanwhile, or,
@@ -1330,11 +1082,7 @@ class RedisVersioned extends Store
 		if($this->alone)
 		{
 			$shared = null;
-			if($this->aloneWarned === false)
-			{
-				$this->aloneWarned = true;
-				$this->log('APCu refused the rule set\'s reload flag: this worker loads the invalidation rules on its own and shares nothing until APCu takes it.');
-			}
+			$this->warnOnce('alone', 'APCu refused the rule set\'s reload flag: this worker loads the invalidation rules on its own and shares nothing until APCu takes it.');
 		}
 		
 		try
@@ -1470,9 +1218,9 @@ class RedisVersioned extends Store
 	{
 		$shared = $this->getSharedRules();
 		
-		// nothing is shared without a shared copy, or when APCu refused the reload flag to this worker
-		if($this->rules !== null
-			&& $this->rulesFetchedAtMs !== null
+		// Nothing is shared without a copy (its fetch time is set with it) or a shared copy, or when APCu
+		// refused the reload flag to this worker.
+		if($this->rulesFetchedAtMs !== null
 			&& $shared !== null
 			&& $this->alone === false)
 		{
@@ -1502,15 +1250,29 @@ class RedisVersioned extends Store
 		?bool $stored,
 	): void
 	{
-		// stored, or a newer copy was already there (see SharedRules::store()), or warned already
-		if($stored !== null
-			|| $this->storeWarned)
+		// null: refused; true: stored; false: a newer copy was already there (see SharedRules::store())
+		if($stored === null)
+		{
+			$this->warnOnce('store', 'APCu refused the rule set: the other workers of this server keep judging by the older one until it can be written.');
+		}
+	}
+	
+	/**
+	 * Logs $message the first time this instance gives the warning $name, so a condition that holds on
+	 * every call is logged once, not once per call
+	 */
+	protected function warnOnce(
+		string $name,
+		string $message,
+	): void
+	{
+		if(isset($this->warned[$name]))
 		{
 			return;
 		}
 		
-		$this->storeWarned = true;
-		$this->log('APCu refused the rule set: the other workers of this server keep judging by the older one until it can be written.');
+		$this->warned[$name] = true;
+		$this->log($message);
 	}
 	
 	/**
@@ -1680,8 +1442,7 @@ class RedisVersioned extends Store
 	 */
 	protected function judgesWhileReloading(): bool
 	{
-		return $this->rules !== null
-			&& $this->rulesFetchedAtMs !== null
+		return $this->rulesFetchedAtMs !== null
 			&& microtime(true) * 1000 - $this->rulesFetchedAtMs <= $this->rulesCacheMs + static::SLOW_RELOAD_MS
 			&& $this->behindLocalInvalidation() === false;
 	}
@@ -1697,21 +1458,17 @@ class RedisVersioned extends Store
 	 * SharedRules::written()). Every rule made on this server is at or below both, so a copy that lacks
 	 * any of them is caught. And a copy that ends before the newest id really lacks that rule, so no copy
 	 * is held back for nothing.
+	 *
+	 * Asked only about a copy with a fetch time; the copy and its fetch time are set together.
 	 */
 	protected function behindLocalInvalidation(): bool
 	{
-		// no copy: there is nothing to check with, so nothing to hold back
-		if($this->rules === null)
-		{
-			return false;
-		}
-		
 		[$atUs, $id] = $this->newestWritten();
 		
 		// an invalidation was made here, the copy was fetched no later (in microseconds), and it ends
 		// before that rule
 		return $atUs !== null
-			&& ($this->rulesFetchedAtMs === null || $this->rulesFetchedAtMs * 1000 <= $atUs)
+			&& $this->rulesFetchedAtMs * 1000 <= $atUs
 			&& Rules::isNewerId($id, $this->rules->last());
 	}
 	
