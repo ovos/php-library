@@ -22,6 +22,7 @@ use Ovos\Test\Cache\Store\SharedRulesInFiles;
 use Ovos\Test\Cache\Store\SharedRulesProbe;
 use Ovos\Test\Cache\Store\TraitBatch;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
+use Ovos\Test\Cache\Store\TraitPrune;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
@@ -84,6 +85,7 @@ class RedisVersioned extends Test
 {
 	use TraitRedis;
 	use TraitInvalidationGuard;
+	use TraitPrune;
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
 	use TraitCachePolicy;
@@ -4064,8 +4066,9 @@ class RedisVersioned extends Test
 	
 	/**
 	 * RULE: a stale item's cleanup keeps its epoch for the window, not for the
-	 * item's remaining lifetime: past the window the epoch guards no miss (an
-	 * older one goes unguarded), so an epoch-only hash kept for up to the
+	 * item's remaining lifetime: a delete or a write is seen by the writes made
+	 * within the window after it, and a write whose miss saw the epoch is taken
+	 * whether it is still there or not, so an epoch-only hash kept for up to the
 	 * retention is memory and nothing else
 	 */
 	public function aStaleCleanupKeepsTheEpochForTheWindowOnly(): bool
@@ -4089,6 +4092,42 @@ class RedisVersioned extends Test
 			&& $fields === [KeyValueRedis::KEY_EPOCH]
 			&& $ttl > 0
 			&& $ttl <= $reader->getInvalidationWindowMs();
+	}
+	
+	/**
+	 * RULE: the prune drops an item only while it is the item the walk read: one written again between the
+	 * walk's read and its drop stays, and is not counted
+	 */
+	public function thePruneKeepsAnItemWrittenAgainSinceItsRead(): bool
+	{
+		$group = 'prune-' . bin2hex(random_bytes(4));
+		$probe = $this->probe([
+			'rules_cache_ms' => 0,
+			'rules_shared_cache' => false,
+		]);
+		$probe->setGroup($group);
+		$writer = $this->guardStore();
+		$writer->setGroup($group);
+		
+		try
+		{
+			$probe->set('rewritten', 'old', 60, [self::GUARD_TAG]);
+			$probe->invalidateTags([self::GUARD_TAG]);
+			$probe->beforePruneDrops = function() use ($writer): void
+			{
+				$writer->set('rewritten', 'new', 60, [self::GUARD_TAG]);
+			};
+			
+			$pruned = $probe->collectGarbage();
+			
+			return $pruned === 0
+				&& $writer->get('rewritten', queue: false) === 'new';
+		}
+		finally
+		{
+			$probe->beforePruneDrops = null;
+			$probe->clearPhysical();
+		}
 	}
 	
 	/**

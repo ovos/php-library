@@ -8,6 +8,7 @@ use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\TraitInvalidationGuard;
+use Ovos\Test\Cache\Store\TraitPrune;
 use Ovos\Test\Cache\Store\TraitStaleWhileRevalidate;
 use Ovos\Test\Cache\Store\TraitBatch;
 use Ovos\Test\Cache\Store\TraitCachePolicy;
@@ -31,6 +32,7 @@ class RedisClusterVersioned extends Test
 {
 	use TraitRedisCluster;
 	use TraitInvalidationGuard;
+	use TraitPrune;
 	use TraitStaleWhileRevalidate;
 	use TraitStoredStrings;
 	use TraitCachePolicy;
@@ -437,8 +439,9 @@ class RedisClusterVersioned extends Test
 	
 	/**
 	 * RULE: a stale item's cleanup keeps its epoch for the window, not for the
-	 * item's remaining lifetime: past the window the epoch guards no miss (an
-	 * older one goes unguarded), so an epoch-only hash kept for up to the
+	 * item's remaining lifetime: a delete or a write is seen by the writes made
+	 * within the window after it, and a write whose miss saw the epoch is taken
+	 * whether it is still there or not, so an epoch-only hash kept for up to the
 	 * retention is memory and nothing else
 	 */
 	public function aStaleCleanupKeepsTheEpochForTheWindowOnly(): bool

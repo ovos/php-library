@@ -18,7 +18,7 @@ use RedisException;
  * check it in PHP against their copy of the rules - and so is the write:
  * one single-key Lua call, with the rule id taken from the copy.
  * Invalidation is inherited untouched (a single-slot FCALL on the rules
- * key); clearing runs per master.
+ * key); clearing and the prune's walk run per master.
  *
  * No RediSearch module is required - the tags live in the item hash.
  *

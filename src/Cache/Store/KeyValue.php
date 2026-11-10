@@ -62,9 +62,12 @@ abstract class KeyValue
 	
 	/**
 	 * The invalidation guard's window: how long an invalidation is remembered
-	 * (a tombstone, a stamp, an epoch), and the longest recomputation the
-	 * guard covers - a write that follows its own miss by more goes
-	 * unguarded, as before the guard. 0 switches the guard off. Store option
+	 * (a tombstone, a stamp, an epoch). On the tag-index stores it is also the
+	 * longest recomputation the guard covers: a write that follows its own
+	 * miss by more is stored without any check. The versioned stores compare
+	 * the store's own computation (its refreshes too) at any age, so a delete
+	 * made within the window before its write is seen (see
+	 * RedisVersioned::writeCall()). 0 switches the guard off. Store option
 	 * "invalidation_window_ms" (the tier's store_options)
 	 * Unit: milliseconds
 	 */
@@ -100,14 +103,16 @@ abstract class KeyValue
 	protected bool $refreshing = false;
 	
 	/**
-	 * The ids whose next write fills a miss the store computed itself: get() and getMany() with a resolver
-	 * (not a forced refresh), and the set() after lockAndQueue(). The write takes the id together with the
-	 * miss; a release drops it. If nothing could check the value, such a write leaves the key as it is,
-	 * because it may hold a valid item. Any other unchecked write (a forced refresh, a caller's set() after
-	 * its own read) deletes the key, so the value it would have replaced is not served (see
-	 * KeyValue\Redis::refuseUnjudged()).
+	 * The ids whose next write the store computes itself: true for get() and getMany() with a resolver and
+	 * the set() after lockAndQueue(), false for a refresh (refresh: true, a stale value's, or one started
+	 * with startComputing()). The write takes the id together with the miss; a release drops it, and so
+	 * does the next read of the id (get(), getMany(), peek()). A versioned store guards every one of them
+	 * at any age (see RedisVersioned::writeCall()). If nothing could check the value, a true one leaves the
+	 * key as it is, because it may hold a valid item. Any other unchecked write (a refresh, which replaces
+	 * a value, a caller's set() after its own read) deletes the key, so the value it would have replaced is
+	 * not served (see KeyValue\Redis::refuseUnjudged()).
 	 *
-	 * @var array<string, true>
+	 * @var array<string, bool>
 	 */
 	protected array $computingMisses = [];
 	
@@ -282,11 +287,13 @@ abstract class KeyValue
 	
 	/**
 	 * The miss a write follows. It is taken out, so it guards one write only. A miss older than the guard
-	 * window is not returned, unless $late: then it comes back flagged 'late'. Its epoch protects nothing
-	 * any more, but a versioned store's rule id still does (see RedisVersioned::writeCall()). "computing"
-	 * says whether the store computed the value itself (see computingMisses).
+	 * window is not returned, unless $late: then it comes back flagged 'late'. A versioned store still
+	 * stamps the write with its rule id then, and compares its epoch when the store computed or refreshed
+	 * the value itself (see RedisVersioned::writeCall()). "own" says whether the store computed or
+	 * refreshed the value itself, "computing" whether it computed it for a miss, not as a refresh (see
+	 * computingMisses).
 	 *
-	 * @return array{epoch: string, stamp: ?string, at: float, late: bool, computing: bool}|null
+	 * @return array{epoch: string, stamp: ?string, at: float, late: bool, computing: bool, own: bool}|null
 	 */
 	protected function takeMiss(
 		string $id,
@@ -295,7 +302,7 @@ abstract class KeyValue
 	{
 		$miss = $this->misses[$id] ?? null;
 		unset($this->misses[$id]);
-		$computing = isset($this->computingMisses[$id]);
+		$computing = $this->computingMisses[$id] ?? null;
 		unset($this->computingMisses[$id]);
 		
 		if($miss === null)
@@ -304,7 +311,8 @@ abstract class KeyValue
 		}
 		
 		$miss['late'] = (microtime(true) - $miss['at']) * 1000 > $this->invalidationWindowMs;
-		$miss['computing'] = $computing;
+		$miss['computing'] = $computing === true;
+		$miss['own'] = $computing !== null;
 		
 		return $miss['late'] === true && $late === false
 			? null
@@ -358,6 +366,8 @@ abstract class KeyValue
 	): mixed
 	{
 		$id = $this->itemId($key);
+		// a flag a computation left without writing goes: this read starts afresh (see computingMisses)
+		unset($this->computingMisses[$id]);
 		
 		try
 		{
@@ -385,13 +395,16 @@ abstract class KeyValue
 	 * Says that this process computes $key's value now, outside get() - it
 	 * holds the lock itself (the page cache's refresh): the read it made
 	 * (peek()) is stamped as the miss its write follows, so an invalidation
-	 * made while it computes reaches that write
+	 * made while it computes reaches that write. The write counts as the
+	 * store's own refresh (see computingMisses).
 	 */
 	public function startComputing(
 		string $key,
 	): void
 	{
-		$this->stampMiss($this->itemId($key));
+		$id = $this->itemId($key);
+		$this->stampMiss($id);
+		$this->computingMisses[$id] = false;
 	}
 	
 	/**
@@ -580,6 +593,8 @@ abstract class KeyValue
 				}
 				
 				$this->stampMiss($id);
+				// the store refreshes the value itself (see computingMisses)
+				$this->computingMisses[$id] = false;
 				
 				return $refresh();
 			}
@@ -593,6 +608,8 @@ abstract class KeyValue
 			finally
 			{
 				unset($this->unlockedMisses[$id]);
+				// dropped once the value is written, or the refresh failed
+				unset($this->computingMisses[$id]);
 				// set() releases it when it writes, a refused write too; twice is a no-op
 				$memoLock->releaseActiveLock($id);
 			}
@@ -678,17 +695,17 @@ abstract class KeyValue
 		}
 		
 		$id = $this->itemId($key);
+		// A flag a computation left without writing (a manual lockAndQueue() that threw, or was never
+		// released) goes: this read starts afresh (see computingMisses).
+		unset($this->computingMisses[$id]);
 		$compute = function() use ($id, $key, $resolver, $ttl, $tags, $policy): mixed
 		{
 			// The miss takes its "stamp" now, right before the value is computed (see stampMiss()). This
 			// covers the caller's own computation too, when there is no resolver.
 			$this->stampMiss($id);
-			// The store computes this miss itself (see computingMisses). A forced refresh does not count,
-			// because it replaces a value.
-			if($policy->refresh === false)
-			{
-				$this->computingMisses[$id] = true;
-			}
+			// The store computes this miss itself (see computingMisses). A forced refresh is marked as a
+			// refresh, because it replaces a value.
+			$this->computingMisses[$id] = $policy->refresh === false;
 			
 			try
 			{
@@ -848,6 +865,8 @@ abstract class KeyValue
 			$id = $this->itemId($key);
 			$keyOf[$id] = $key;
 			$positions[] = $id;
+			// a flag a computation left without writing goes: this read starts afresh (see computingMisses)
+			unset($this->computingMisses[$id]);
 		}
 		if($keyOf === [])
 		{
@@ -1051,6 +1070,8 @@ abstract class KeyValue
 				}
 				
 				$this->stampMany(array_keys($due));
+				// the store refreshes these values itself (see computingMisses)
+				$this->computingMisses+= array_fill_keys(array_keys($due), false);
 				
 				return $refreshed + $this->resolveMany($due, $resolver, $ttl, $tags, $policy);
 			}
@@ -1066,6 +1087,8 @@ abstract class KeyValue
 				foreach($locked as $id)
 				{
 					unset($this->unlockedMisses[$id]);
+					// dropped once the value is written, or the refresh failed
+					unset($this->computingMisses[$id]);
 				}
 				// a write releases its lock, a refused one too; the rest go here
 				$memoLock->releaseMany($locked);
@@ -1256,12 +1279,9 @@ abstract class KeyValue
 		// the misses take their "stamp" now, right before the values are computed
 		$this->stampMany($ids);
 		$keys = array_intersect_key($keyOf, array_flip($ids));
-		// The store computes these misses itself (see computingMisses). A forced refresh does not count,
-		// because it replaces values.
-		if($policy->refresh === false)
-		{
-			$this->computingMisses+= array_fill_keys($ids, true);
-		}
+		// The store computes these misses itself (see computingMisses). A forced refresh is marked as a
+		// refresh, because it replaces values.
+		$this->computingMisses+= array_fill_keys($ids, $policy->refresh === false);
 		
 		try
 		{
