@@ -303,6 +303,84 @@ abstract class Redis extends Tags
 	}
 	
 	/**
+	 * Stores $value under $key. A null value or a negative TTL is a delete (see KeyValue::set()). A value
+	 * nothing could check is not stored (see refuseUnjudged()). Any other value goes in one Lua call, with
+	 * the release of the stampede lock (see writeWithRelease()).
+	 */
+	#[Override]
+	public function set(
+		string $key,
+		mixed $value,
+		int $ttl = 0,
+		array $tags = [],
+	): bool
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return false;
+		}
+		
+		$id = $this->itemId($key);
+		// The miss this write follows, if any. The write is refused when the key was deleted or invalidated
+		// since that miss (see KeyValue::rememberMiss()).
+		$miss = $this->writeMiss($id);
+		
+		// A negative TTL would expire the item at once, so it is a delete. So is a null value.
+		if($ttl < 0 || $value === null)
+		{
+			try
+			{
+				return $this->delete($key);
+			}
+			finally
+			{
+				$this->getMemoLock()
+					->releaseActiveLock($id);
+			}
+		}
+		
+		// The read failed, or on a versioned store no copy of the rules was at hand for it. The write could
+		// only be refused, so it is not sent (see refuseUnjudged()).
+		if($this->isUnread($miss)
+			|| $this->isUnjudged($miss))
+		{
+			return $this->refuseUnjudged($key, $id, $miss);
+		}
+		
+		try
+		{
+			$client->clearLastError();
+			$result = $this->writeWithRelease($id, ...$this->writeCall($id, $key, $value, $ttl, $tags, $miss));
+			// an error reply (OOM, WRONGTYPE, a read-only replica) answers false and throws nothing
+			if($result === false && ($error = $client->getLastError()))
+			{
+				$this->log($error);
+			}
+			
+			return (int)$result === 1;
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+		}
+		// The value is longer than the Compressor reads back, so it is not cached (see dropRefused()).
+		catch(LengthException $exception)
+		{
+			$this->log($exception->getMessage());
+			$this->dropRefused($key, $miss);
+		}
+		// the lock is released whatever happened; a second release does nothing
+		finally
+		{
+			$this->getMemoLock()
+				->debug('save: ' . $id)
+				->releaseActiveLock($id);
+		}
+		
+		return false;
+	}
+	
+	/**
 	 * Sends the write $function makes of $id ($keys: the call's keys) - with
 	 * the release of the lock this process holds for $id, if any, in the same
 	 * round trip (a standalone client): its waiters are told as the value
@@ -346,6 +424,45 @@ abstract class Redis extends Tags
 		return ($replies[0] ?? false) === false
 			? $this->functions->call($function, $keys, $args)
 			: $replies[0];
+	}
+	
+	/**
+	 * Reads an item with one HMGET of fetchedFields() and leaves the reply to judge(). The data is read
+	 * outside any Lua script, in the one round trip a read makes.
+	 */
+	#[Override]
+	protected function fetch(
+		string $id,
+	): mixed
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$item = $client->hMGet($id, $this->fetchedFields());
+		}
+		// RedisClusterException does not extend RedisException, catch both. Redis did not answer: a miss,
+		// and no write may follow it (see rememberUnread()).
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+			$this->rememberUnread($id);
+			
+			return null;
+		}
+		
+		// an error reply (BUSY, LOADING) is a failed read too (see failedReply())
+		if(is_array($item) === false)
+		{
+			$this->failedReply($id);
+			
+			return null;
+		}
+		
+		return $this->judge($id, $item);
 	}
 	
 	/**
@@ -464,8 +581,8 @@ abstract class Redis extends Tags
 	
 	/**
 	 * Remembers a miss whose read failed (see EPOCH_UNREAD). The key may have been deleted or invalidated
-	 * without this process seeing it, so no write may follow (see dropUnread()). The exception is a second
-	 * read of the key before the write, made together with the lock when the queue is on.
+	 * without this process seeing it, so no write may follow (see refuseUnjudged()). The exception is a
+	 * second read of the key before the write, made together with the lock when the queue is on.
 	 */
 	protected function rememberUnread(
 		string $id,
@@ -490,48 +607,25 @@ abstract class Redis extends Tags
 	}
 	
 	/**
-	 * Whether the read of $miss failed (see rememberUnread()), inside the guard window. Past the window a
-	 * miss guards nothing.
+	 * Whether the read of $miss failed (see rememberUnread()). The tag-index stores take no miss older
+	 * than the guard window (see writeMiss()); a versioned store takes it, so there this holds past the
+	 * window too, and the write after it is refused once.
 	 *
-	 * @param array{epoch: string, late?: bool}|null $miss
+	 * @param array{epoch: string}|null $miss
 	 */
 	protected function isUnread(
 		?array $miss,
 	): bool
 	{
 		return $miss !== null
-			&& $miss['epoch'] === static::EPOCH_UNREAD
-			&& ($miss['late'] ?? false) === false;
+			&& $miss['epoch'] === static::EPOCH_UNREAD;
 	}
 	
 	/**
-	 * Used instead of the write that follows a failed read. That write could only be refused. The value the
-	 * read did not see may be the one the caller replaces (a forced refresh, a set() after a read-only
-	 * get()). So the key is deleted, and the next reader computes. Returns false, as for a refused write,
-	 * and releases the lock of $id.
-	 */
-	protected function dropUnread(
-		string $key,
-		string $id,
-	): bool
-	{
-		try
-		{
-			$this->delete($key);
-		}
-		finally
-		{
-			$this->getMemoLock()
-				->releaseActiveLock($id);
-		}
-		
-		return false;
-	}
-	
-	/**
-	 * Handles the key of a write that was not made: after a failed read, or for a value longer than the
-	 * Compressor reads back. The key is deleted, so the value it was meant to replace is not served. A
-	 * versioned store leaves the key after its own computation (see RedisVersioned::dropRefused()).
+	 * Handles the key of a write that was not made: one nothing could check (see refuseUnjudged()), or a
+	 * value longer than the Compressor reads back. The key is deleted, so the value it was meant to replace
+	 * is not served, and the next reader computes. A versioned store leaves the key after its own
+	 * computation (see RedisVersioned::dropRefused()).
 	 *
 	 * @param array{computing?: bool}|null $miss
 	 */
@@ -557,11 +651,10 @@ abstract class Redis extends Tags
 	}
 	
 	/**
-	 * Used instead of the write after a miss whose value nothing could check: no copy of the rules was at
-	 * hand, or, on the versioned stores, the read failed. Nothing is stored. If the store computed the
-	 * value itself after its miss, the key stays as it is, because it may hold a valid item. After a read
-	 * whose caller replaces the value (a forced refresh, a set() after peek() or after a read-only get()),
-	 * the key is deleted, so the value it would have replaced is not served. Returns false, as for a
+	 * Used instead of the write after a miss whose value nothing could check: the read failed, or, on a
+	 * versioned store, no copy of the rules was at hand. That write could only be refused, so nothing is
+	 * stored. The value the read did not see may be the one the caller replaces (a forced refresh, a set()
+	 * after peek() or after a read-only get()), so dropRefused() handles the key. Returns false, as for a
 	 * refused write, and releases the lock of $id.
 	 */
 	protected function refuseUnjudged(
@@ -572,11 +665,7 @@ abstract class Redis extends Tags
 	{
 		try
 		{
-			// only a write that replaces a value deletes the key
-			if(($miss['computing'] ?? false) === false)
-			{
-				$this->delete($key);
-			}
+			$this->dropRefused($key, $miss);
 		}
 		// the lock is released whatever happened
 		finally
@@ -640,14 +729,6 @@ abstract class Redis extends Tags
 			foreach($entries as $id => [$key, $value, $ttl, $tags])
 			{
 				$miss = $this->writeMiss($id);
-				// no write after a failed read; dropRefused() handles the key
-				if($this->isUnread($miss))
-				{
-					$this->dropRefused($key, $miss);
-					$stored[$key] = false;
-					
-					continue;
-				}
 				// a negative TTL or a null value: a delete it is (see set())
 				if($ttl < 0 || $value === null)
 				{
@@ -655,14 +736,11 @@ abstract class Redis extends Tags
 					
 					continue;
 				}
-				// Nothing could check the value, so it is not stored, and a value the caller replaces is
-				// deleted (see refuseUnjudged()).
-				if($this->isUnjudged($miss))
+				// nothing could check the value, so it is not stored (see refuseUnjudged())
+				if($this->isUnread($miss)
+					|| $this->isUnjudged($miss))
 				{
-					if(($miss['computing'] ?? false) === false)
-					{
-						$this->delete($key);
-					}
+					$this->dropRefused($key, $miss);
 					$stored[$key] = false;
 					
 					continue;

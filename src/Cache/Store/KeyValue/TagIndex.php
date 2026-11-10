@@ -45,44 +45,9 @@ abstract class TagIndex extends Redis
 	 */
 	public const string TYPE_INVALIDATED = 'invalidated';
 	
-	protected function fetch(
-		string $id,
-	): mixed
-	{
-		if(($client = $this->getClient()) === null)
-		{
-			return null;
-		}
-		
-		try
-		{
-			// The data, the guard's epoch and the "invalidated" field a soft invalidation sets, in the one
-			// round trip a read makes.
-			$item = $client->hMGet($id, $this->fetchedFields());
-		}
-		// RedisClusterException does not extend RedisException, catch both. Redis did not answer: a miss,
-		// and no write may follow it (see rememberUnread()).
-		catch(RedisException|RedisClusterException $exception)
-		{
-			$this->log($exception);
-			$this->rememberUnread($id);
-			
-			return null;
-		}
-		
-		// an error reply (BUSY, LOADING) is a failed read too (see failedReply())
-		if(is_array($item) === false)
-		{
-			$this->failedReply($id);
-			
-			return null;
-		}
-		
-		return $this->judge($id, $item);
-	}
-	
 	/**
-	 * The fields fetch() reads with its HMGET
+	 * The fields fetch() reads with its HMGET: the data, the guard's epoch and the "invalidated" field a
+	 * soft invalidation sets
 	 *
 	 * @return list<string>
 	 */

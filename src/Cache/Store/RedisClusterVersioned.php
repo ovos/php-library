@@ -15,10 +15,10 @@ use RedisException;
  *
  * The versioned (rule based) store on a Redis Cluster. The read path is
  * inherited unchanged - both stores fetch the item with one HMGET and
- * evaluate the cached rules in PHP - and so is the write: one single-key
- * stamped set, the watermark taken from the cached rules. Invalidation is
- * inherited untouched (a single-slot FCALL on the rules key); clearing runs
- * per master.
+ * check it in PHP against their copy of the rules - and so is the write:
+ * one single-key Lua call, with the rule id taken from the copy.
+ * Invalidation is inherited untouched (a single-slot FCALL on the rules
+ * key); clearing runs per master.
  *
  * No RediSearch module is required - the tags live in the item hash.
  *
@@ -65,8 +65,9 @@ class RedisClusterVersioned extends RedisVersioned
 			->prefix('*', $this->getGroup());
 		$count = 0;
 		
-		// the rules stream is wiped too - drop the locally cached rules so a
-		// write that follows is not evaluated against rules that no longer exist
+		// the rules stream is wiped too - drop the copy of the rules, here and in
+		// APCu, so a write that follows is not checked against rules that no
+		// longer exist
 		$this->resetRulesCache();
 		
 		try

@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Store;
 
-use LengthException;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
 use Ovos\Cache\Stale;
@@ -176,80 +175,6 @@ class Redis extends TagIndex
 		catch(RedisException $exception)
 		{
 			$this->log($exception);
-		}
-		
-		return false;
-	}
-	
-	#[Override]
-	public function set(
-		string $key,
-		mixed $value,
-		int $ttl = 0,
-		array $tags = [],
-	): bool
-	{
-		if(($client = $this->getClient()) === null)
-		{
-			return false;
-		}
-		
-		$id = $this->prefixer
-			->prefix($key, $this->getType());
-		// the miss this write follows, if any: it is guarded against an
-		// invalidation since (see KeyValue::rememberMiss())
-		$miss = $this->writeMiss($id);
-		
-		// A write after a failed read could only be refused, so the key is deleted instead (see
-		// dropUnread()).
-		if($this->isUnread($miss))
-		{
-			return $this->dropUnread($key, $id);
-		}
-		
-		// a negative TTL expired the item at once (EXPIRE with a negative
-		// value deletes the key) - a delete it is; so is a null value (see
-		// KeyValue::set())
-		if($ttl < 0 || $value === null)
-		{
-			try
-			{
-				return $this->delete($key);
-			}
-			finally
-			{
-				$this->getMemoLock()
-					->releaseActiveLock($id);
-			}
-		}
-		
-		try
-		{
-			$client->clearLastError();
-			$result = $this->writeWithRelease($id, ...$this->writeCall($id, $key, $value, $ttl, $tags, $miss));
-			if($result === false && ($error = $client->getLastError()))
-			{
-				$this->log($error);
-			}
-			
-			return (int)$result === 1;
-		}
-		catch(RedisException $exception)
-		{
-			$this->log($exception);
-		}
-		// The value is longer than the Compressor reads back, so it is not cached. An older value under the
-		// key is deleted, because it is not what the caller wrote.
-		catch(LengthException $exception)
-		{
-			$this->log($exception->getMessage());
-			$this->delete($key);
-		}
-		finally
-		{
-			$this->getMemoLock()
-				->debug('save: ' . $id)
-				->releaseActiveLock($id);
 		}
 		
 		return false;

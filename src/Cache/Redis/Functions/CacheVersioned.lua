@@ -5,22 +5,22 @@
 	rule to a stream instead of deleting the matched items - O(1)
 	regardless of the match count; items physically expire by their TTL.
 	
-	Ordering is causal, not clock based: every item stores the rules
-	stream's last entry id at write time (its "watermark"), and a read
-	only evaluates the rules the item has not seen (id > watermark).
-	Stream ids are generated monotonically by the node owning the rules
-	stream, so no clock comparison happens anywhere - cluster nodes do
-	not need synchronized clocks for correctness.
+	Ordering is causal, not clock based: every item stores a rule id (its
+	"mark"), the newest one in its writer's copy of the rules, and a read
+	only checks the rules newer than that id. Stream ids are generated
+	monotonically by the node owning the rules stream, so no clock
+	comparison happens anywhere - cluster nodes do not need synchronized
+	clocks for correctness.
 	
 	Cluster compatibility: every function declares its keys, and they hash
-	to one slot - a write is stamped with the watermark its writer holds
-	(the held rule set's last id, see RedisVersioned::watermark()), never
-	one read from the rules stream in the same call.
+	to one slot - a write is stamped with the rule id its writer holds
+	(its copy's newest id, see RedisVersioned::missStamp()), never one
+	read from the rules stream in the same call.
 	
 	@author Marcin Gil <mg@ovos.at>
 ]]
 
--- shared write: stamp the item with the rules watermark it has seen; a
+-- shared write: stamp the item with the rule id its writer has seen; a
 -- write-through (new_epoch given) also sets the fresh epoch it brings, so a
 -- recomputation that missed before it is refused (see Cache.lua's
 -- invalidation guard)
@@ -72,14 +72,14 @@ local function cache_versioned_write(item_key, mark, data, tags, ttl_ms, retenti
 	return 1
 end
 
--- Store an item stamped with the watermark its writer holds - the held rule
--- set's last id for a write-through, the one a miss past the guard's window
+-- Store an item stamped with the rule id its writer holds - its copy's
+-- newest id for a write-through, the one a miss past the guard's window
 -- took for its late write: every versioned write that follows no miss
 -- cluster-safe: one declared key
 local function cache_versioned_set_stamped(keys, args)
 	return cache_versioned_write(
 		keys[1],
-		args[5], -- watermark
+		args[5], -- the rule id
 		args[1], -- data
 		args[2], -- tags
 		tonumber(args[3]), -- ttl ms
@@ -94,7 +94,7 @@ redis.register_function('[prefix]cache_versioned_set_stamped', cache_versioned_s
 -- Store an item a recomputation produced - the write that follows a miss:
 -- refused (0) when the key was invalidated since that miss (delete() left
 -- its tombstone, whose "epoch" the item keeps - see Cache.lua), and stamped
--- with the watermark the MISS saw, so a rule appended between the miss and
+-- with the rule id the MISS saw, so a rule appended between the miss and
 -- this write makes the item stale on its next read
 -- cluster-safe: one declared key
 local function cache_versioned_set_guarded(keys, args)
@@ -105,7 +105,7 @@ local function cache_versioned_set_guarded(keys, args)
 	
 	return cache_versioned_write(
 		keys[1],
-		args[5], -- the watermark the miss saw
+		args[5], -- the rule id the miss saw
 		args[1], -- data
 		args[2], -- tags
 		tonumber(args[3]), -- ttl ms
@@ -160,7 +160,7 @@ redis.register_function('[prefix]cache_versioned_drop_stale', cache_versioned_dr
 -- refuses to create one, so a nil reply says there was none, and the rule
 -- is appended again as the first entry of a new stream. A reader holding
 -- an item stamped older than an opening rule knows the stream has lost
--- what the item once saw (see RedisVersioned::isStale()).
+-- what the item once saw (see Rules::isStale()).
 --
 -- The stream is the only record that an invalidation happened, so it
 -- carries no TTL: under a volatile-* policy that keeps it out of the
