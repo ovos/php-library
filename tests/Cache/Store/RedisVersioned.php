@@ -2105,12 +2105,18 @@ class RedisVersioned extends Test
 	/**
 	 * RULE: while the rules cannot be read, one worker tries the stream again once RETRY_MS has passed since
 	 * the last attempt ended (not since it began). Meanwhile the others use their copy, without a fetch.
+	 *
+	 * The failing attempt is real and is recorded with its end. The windows after that end are set on the
+	 * record rather than slept through: a worker slept to 0.8 s after the end crossed into the retry window
+	 * whenever the scheduler stalled the test for 200 ms (once in two runs of the suite in a container).
 	 */
 	public function anOutageIsRetriedASecondAfterTheLastAttemptEnded(): bool
 	{
 		$this->requireSharedRules();
 		
 		[$first, $group] = $this->copyAged(10000);
+		/** @var SharedRulesProbe $shared */
+		$shared = $first->sharedRules();
 		$attempts = [];
 		$reads = [];
 		// the first attempt takes 300 ms, and fails
@@ -2122,16 +2128,19 @@ class RedisVersioned extends Test
 			
 			throw new RedisException('the rules node does not answer');
 		};
+		$beganAtMs = microtime(true) * 1000;
 		$reads[] = $failing->get('item1', queue: false);
-		$endedAt = microtime(true);
+		// what the outage is recorded with: the moment the attempt ended, not the one it began
+		[$outage, $endedAtMs] = $shared->lastAttempt();
 		
-		// 1.1 s after that attempt began, 0.8 s after it ended
-		usleep((int)max(0, ($endedAt + 0.8 - microtime(true)) * 1000000));
+		// half the window after the end: no worker tries again yet
+		$shared->outageSince(microtime(true) * 1000 - Store::RETRY_MS / 2);
 		$early = $this->reloadProbe($group);
 		$early->beforeRuleFetch = $this->recordAttempt($attempts, 'early');
 		$reads[] = $early->get('item1', queue: false);
 		
-		usleep((int)max(0, ($endedAt + (Store::RETRY_MS + 50) / 1000 - microtime(true)) * 1000000));
+		// the window over: one worker tries again (and fails, the node still down), the next one does not
+		$shared->outageSince(microtime(true) * 1000 - Store::RETRY_MS - 50);
 		$retrier = $this->reloadProbe($group);
 		$retrier->beforeRuleFetch = $this->recordAttempt($attempts, 'retrier');
 		$reads[] = $retrier->get('item1', queue: false);
@@ -2141,9 +2150,12 @@ class RedisVersioned extends Test
 		
 		try
 		{
-			return $attempts === ['first', 'retrier']
+			return $outage === true
+				&& $endedAtMs !== null
+				&& $endedAtMs >= $beganAtMs + 300
+				&& $attempts === ['first', 'retrier']
 				&& $reads === ['test', 'test', 'test', 'test']
-				&& $first->sharedRules()->lastAttempt()[0];
+				&& $shared->lastAttempt()[0];
 		}
 		finally
 		{
