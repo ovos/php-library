@@ -5,15 +5,25 @@ namespace Ovos\Service\Cache;
 
 use Ovos\ArrayObject;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
-use Ovos\Cache\Store\KeyValue\Redis as Store;
+use Ovos\Cache\Store\KeyValue as Store;
 use Ovos\Connections;
 use Ovos\Connection\RedisCommon as Connection;
 use Ovos\Container;
 use Ovos\Container\Inject;
+use Ovos\Exception\InvalidException\InvalidConfigException;
 use Ovos\Exception\MissingException\MissingConfigException;
+use ReflectionClass;
+
+use function is_a;
+use function ltrim;
+use function str_contains;
 
 /**
  * Persistent
+ *
+ * The tier's store is any KeyValue store: one of the library's, named bare
+ * (`store: RedisVersioned`), or a project's own, named by its class
+ * (`store: \App\Cache\Store\Mine`). See storeClass().
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -89,14 +99,20 @@ class Persistent
 		return $this->queueConnection;
 	}
 	
+	/**
+	 * The configured store, built once. A store named by its class is built
+	 * with the arguments every Redis store takes - the connection, the queue
+	 * connection, the prefix and the tier's configuration - whether it uses
+	 * the connections or not.
+	 *
+	 * @throws InvalidConfigException the configuration names no store (see storeClass())
+	 */
 	public function getStore(
 	): Store
 	{
 		if($this->store === null)
 		{
-			/** @var Store $storeClass */
-			$storeClass = 'Ovos\Cache\Store\\'
-				. ($this->config->persistent->store ?? 'Redis');
+			$storeClass = static::storeClass((string)($this->config->persistent->store ?? 'Redis'));
 			$store = new $storeClass(
 				$this->getConnection(),
 				$this->getQueueConnection(),
@@ -108,6 +124,38 @@ class Persistent
 		}
 		
 		return $this->store;
+	}
+	
+	/**
+	 * The class `cache.persistent.store` stands for. A bare name is one of the
+	 * library's stores, as it always was: "Redis" is Ovos\Cache\Store\Redis,
+	 * never phpredis' own \Redis, which class_exists() would find as well. A
+	 * name with a namespace separator is a class, as it is written, with or
+	 * without the leading backslash.
+	 *
+	 * @return class-string<Store>
+	 * @throws InvalidConfigException a class that does not exist, is abstract or is no KeyValue store
+	 */
+	public static function storeClass(
+		string $name,
+	): string
+	{
+		$class = str_contains($name, '\\')
+			? ltrim($name, '\\')
+			: 'Ovos\Cache\Store\\' . $name;
+		
+		if(is_a($class, Store::class, true) === false
+			|| (new ReflectionClass($class))->isAbstract())
+		{
+			throw new InvalidConfigException(
+				'cache.persistent.store "%s" names %s, which is not a store: a store is a class that extends %s and is not abstract.',
+				$name,
+				$class,
+				Store::class,
+			);
+		}
+		
+		return $class;
 	}
 	
 	public function getQueue(

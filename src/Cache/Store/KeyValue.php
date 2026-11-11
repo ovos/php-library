@@ -1588,6 +1588,22 @@ abstract class KeyValue
 	}
 	
 	/**
+	 * Reclaims what a store keeps that nothing needs any more, ahead of its
+	 * expiry. The default is a no-op: items carry a TTL and there is no side
+	 * index to sweep. The tag-hash store overrides this to prune dangling tag
+	 * -> id references; the versioned stores drop the items their rules made
+	 * outdated that no read has removed (see RedisVersioned::collectGarbage()).
+	 * Defined on every store, not only the Redis ones, so the cache
+	 * maintenance cron can call collectGarbage() on whatever store the
+	 * persistent tier is configured to: the number of items removed, true
+	 * when there is nothing to collect, false on an error.
+	 */
+	public function collectGarbage(): bool|int
+	{
+		return true;
+	}
+	
+	/**
 	 * Stores $value under $key. set() with a null value removes the item, as
 	 * delete() does, and answers what the delete answers (true when an item
 	 * was there): null is what a reader gets for a miss, so a stored null

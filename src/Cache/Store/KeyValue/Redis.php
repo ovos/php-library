@@ -252,21 +252,6 @@ abstract class Redis extends Tags
 	}
 	
 	/**
-	 * Reclaims what a store keeps that nothing needs any more, ahead of its
-	 * expiry. The default is a no-op: items carry a TTL and there is no side
-	 * index to sweep. The tag-hash store overrides this to prune dangling tag
-	 * -> id references; the versioned stores drop the items their rules made
-	 * outdated that no read has removed (see RedisVersioned::collectGarbage()).
-	 * Defined here so the cache maintenance cron can call collectGarbage() on
-	 * any persistent store: the number of items removed, true when there is
-	 * nothing to collect, false on an error.
-	 */
-	public function collectGarbage(): bool|int
-	{
-		return true;
-	}
-	
-	/**
 	 * Replaces an item with its tombstone for the window - the key holds only
 	 * "epoch" (see KeyValue::rememberMiss()), no data, so every reader takes
 	 * it for a miss; the number of items that existed (0 or 1)
