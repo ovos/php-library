@@ -481,6 +481,23 @@ cache:
     store: Redisearch   # Redis, Redisearch, RedisVersioned or RedisClusterVersioned
 ```
 
+A project's own store is named by its class instead: a name with a namespace
+separator is a class, as it is written; a bare name is one of the stores
+above (`Redis` is `Ovos\Cache\Store\Redis`, never phpredis' `\Redis`).
+
+```yaml
+cache:
+  persistent:
+    store: \App\Cache\Store\Files   # any class that extends Ovos\Cache\Store\KeyValue
+```
+
+It is built with the arguments every Redis store takes - the connection, the
+queue connection, the prefix and the tier's configuration - whether it uses the
+connections or not, and the tier hands it out typed as `KeyValue`. A name that
+is no store (a missing class, an abstract one, one that does not extend
+`KeyValue`) fails with an `InvalidConfigException` naming it. Every store
+answers `collectGarbage()`; the default answers `true`, nothing to collect.
+
 ## Real-world usage patterns
 
 ### Pattern 1: Cache in a Store with CacheService trait (recommended)
@@ -1111,7 +1128,7 @@ cache:
       backoff_max_ms: 25              # Max backoff between retries
   persistent:
     connection: redis                  # Which Redis connection to use
-    store: Redisearch                  # Redis, Redisearch, RedisVersioned or RedisClusterVersioned
+    store: Redisearch                  # Redis, Redisearch, RedisVersioned or RedisClusterVersioned, or a class name (\App\Cache\Store\Mine)
     store_options:
       clean_tags: no                   # Redis store: remove ids from tags on invalidation
       rules_retention_s: 2592000       # Versioned stores: rules + maximum item lifetime (s)
