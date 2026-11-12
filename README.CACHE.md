@@ -977,23 +977,28 @@ writer that invalidates.
 
 How it works:
 
-- an invalidation leaves a trace for a window (`invalidation_window_ms`,
-  default 60 000): `delete()` replaces the item with a *tombstone* (the key
+- an invalidation leaves a trace: `delete()` replaces the item with a
+  *tombstone* for a window (`invalidation_window_ms`, default 60 000; the key
   holds only an `epoch` token, no data - every reader takes it for a miss);
-  tag invalidation and `clear()` record their time on the tags (Redis,
-  Redisearch) or append a rule (the versioned stores); APCu keeps a token
-  beside the item
+  tag invalidation and `clear()` record their time on the tags for a day
+  (Redis, Redisearch) or append a rule (the versioned stores); APCu keeps a
+  token beside the item. The window is how long a delete is remembered. On
+  the Redis and Redisearch stores each invalidated tag keeps one small key
+  for a day, about 100 to 150 bytes (more for a long tag), so invalidating
+  very many distinct tags (one per user, one per entity) costs memory
 - a miss remembers what it saw, and the write that follows it compares
   atomically (Lua; APCu checks, stores, re-checks and takes its value back) -
   a write that lost the race is refused: `set()` returns `false`, nothing is
   stored, the MemoLock lock is released, and the next reader recomputes
-- on the versioned stores the write is refused when the key holds a token
-  other than the one its read saw (a delete or somebody's write since the
-  read); the same token or none is taken. Every delete and every plain write
-  leaves its token for a full window, so a key without one had neither within
-  the window - a token that merely ran out refuses nothing. The write always
-  carries the rule id its read saw, so a tag invalidation or a `clear()` made
-  meanwhile makes it outdated on the next read
+- on every Redis store the write is refused when the key holds a token other
+  than the one its read saw (a delete or somebody's write since the read); the
+  same token or none is taken. Every delete and every plain write leaves its
+  token for a full window, so a key without one had neither within the window
+  - a token that merely ran out refuses nothing. On the versioned stores the
+  write always carries the rule id its read saw, so a tag invalidation or a
+  `clear()` made meanwhile makes it outdated on the next read; on the Redis and
+  Redisearch stores the write is refused when one of its tags was invalidated,
+  or the store cleared, after its read
 - a `set()` with no miss of its own before it is a write-through: written as
   before, and it gives the key a new epoch, so an older recomputation still
   in flight is refused in turn
@@ -1015,11 +1020,17 @@ What callers may notice:
   counter kept under the prefix) is removed as before - never tombstoned.
 - The tag invalidation times of the Redis and Redisearch stores come from the
   Redis server clock (`TIME`): a clock stepped backwards can let a raced
-  write through. A tag invalidation removes the items it reaches (no
-  tombstone each - the tags' invalidation times refuse a raced write), so a
-  miss whose time could not be read (`peek()` without `startComputing()`, a
-  failed `TIME`) is refused while any invalidation time of its write's tags
-  lives: the next reader recomputes.
+  write through (an invalidation made after the step looks older than a miss
+  made before it). If the server's clock steps back, or a failover lands on a
+  replica whose clock is behind, the times recorded before lie in the future:
+  writes carrying a recently invalidated tag are refused for up to that step.
+  Those are refusals only, never a stale value. A tag invalidation removes
+  the items it reaches (no tombstone each - the tags' invalidation times
+  refuse a raced write), so a miss whose time could not be read (`peek()`
+  without `startComputing()`, a failed `TIME`) is refused by an invalidation
+  of its write's tags, or a `clear()`, made within the window before the
+  write: the next reader recomputes. The store's own computation whose time
+  could not be read is refused outright once it is older than the window.
 - During a rolling deploy, old and new code reload each other's Lua library
   (the source-hash check); correctness holds, the reloads stop once one
   version runs. A host checks a library it confirmed on a server at most once
@@ -1039,8 +1050,10 @@ What callers may notice:
   takes the lock without reading the key again), and a `set()` after
   `peek()` or after a read-only `get()`/`getMany()`. On the versioned stores
   the store's own computation after its miss leaves the key instead (it may
-  hold a valid item, which the rules still check), and the write is refused
-  past the window too, once.
+  hold a valid item, which the rules still check). On every Redis store the
+  write after the store's own computation or refresh is refused past the
+  window too, once; on the versioned stores any write after the failed read
+  is.
 - On the versioned stores, when no copy of the invalidation rules was at hand
   for a read (see *The rule set while it reloads*: an outage, or another
   worker reloading, with no copy), nothing can check the value computed after
@@ -1057,18 +1070,21 @@ What callers may notice:
   written with, so it answers `false` and deletes the key. The same goes for
   a value longer than the Compressor reads back: the store's own computation
   leaves the key, any other write deletes it.
-- Bounds: a delete is seen by every write made within the guard window after
-  it. If a value can take longer than the guard window to compute, raise the
-  window above it. On the versioned stores tag invalidations and `clear()` are
-  always seen (the rule id travels with the write), whatever the computation
-  takes, and the store's own computation compares the token at any age:
-  `get()`/`getMany()` with a resolver, the `set()` after a manual
-  `lockAndQueue()`, a forced refresh, a stale value's refresh, and the write
-  after `peek()` + `startComputing()`. A deliberate `set()` after a read older
-  than the window (a read-only `get()`, `peek()` alone) is not checked against
-  the token: take a fresh read first when that matters. On the tag-index
-  stores a recomputation longer than the window is not covered (the trace is
-  gone). `invalidation_window_ms: 0` switches the guard off.
+- Bounds: a tag invalidation or a `clear()` made while the store computes a
+  value is seen whatever the computation takes (on the Redis and Redisearch
+  stores up to a day, the life of their stamps): `get()`/`getMany()` with a
+  resolver, the `set()` after a manual `lockAndQueue()`, a forced refresh, a
+  stale value's refresh, and the write after `peek()` + `startComputing()`.
+  That day holds only while the stamp is not evicted: under an eviction
+  policy that may take keys with a TTL (`volatile-*`, `allkeys-*`), an
+  evicted stamp no longer refuses a computation that read before the
+  invalidation. A delete is seen by every write made within the guard window
+  after it: where keys are deleted while a value can take longer than the
+  window to compute, raise the window above it. A deliberate `set()` after a
+  read older than the window (a read-only `get()`, `peek()` alone) is not
+  checked against the token, nor on the Redis and Redisearch stores against
+  their stamps: take a fresh read first when that matters.
+  `invalidation_window_ms: 0` switches the guard off.
 
 ## Stampede protection (MemoLock)
 
@@ -1135,7 +1151,7 @@ cache:
       rules_cache_ms: 1000             # Versioned stores: how long a held rule set is reused (ms)
       rules_shared_cache: yes          # Versioned stores: share the rule set across the server's workers (APCu; default: on when available)
       rules_max_tags: 15000            # Versioned stores: rules held before a floor replaces the oldest (default 15000, 0: no bound)
-      invalidation_window_ms: 60000    # Invalidation guard: how long an invalidation is remembered; 0 = off (see above)
+      invalidation_window_ms: 60000    # Invalidation guard: how long a delete is remembered; 0 = off (see above)
       invalidate_page: 2500            # Redisearch store: matches an invalidation reads per cursor page
     compression:
       enabled: yes
@@ -1215,8 +1231,7 @@ cache:
   atomic compare-and-store): a delete between the check and the store takes
   the value back at once, and a reader can see it for that instant. Beyond
   both, a delete is seen for `invalidation_window_ms` after it, no longer: a
-  computation that outlasts the window misses an older delete on the
-  versioned stores, and writes through on the tag-index stores (see the
+  computation that outlasts the window misses an older delete (see the
   invalidation guard).
 - **Tag-hash items without a TTL.** On the `Redis` store a tag's field follows
   its item's TTL; an item stored without one leaves its field in the tag hash

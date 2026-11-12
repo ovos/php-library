@@ -75,10 +75,10 @@ class Redisearch extends TagIndex
 	/**
 	 * The write set() sends (see KeyValue\Redis::writeCall()): one step (Lua
 	 * cache_guarded_hset) - refused when the key was invalidated, one of its
-	 * tags stamped or the store cleared since the miss (an unstamped miss:
-	 * when any of them carries a stamp); a write-through marks the key with a
-	 * fresh epoch; a key that held no data (a tombstone) gets no expiry but
-	 * the item's
+	 * tags stamped or the store cleared since the miss (a miss without its
+	 * time: when any of them was stamped within the window); a write-through
+	 * marks the key with a fresh epoch; a key that held no data (a tombstone)
+	 * gets no expiry but the item's
 	 */
 	#[Override]
 	protected function writeCall(

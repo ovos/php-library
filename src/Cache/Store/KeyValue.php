@@ -61,14 +61,17 @@ abstract class KeyValue
 	public const int MISSES_MAX = 1000;
 	
 	/**
-	 * The invalidation guard's window: how long an invalidation is remembered
-	 * (a tombstone, a stamp, an epoch). On the tag-index stores it is also the
-	 * longest recomputation the guard covers: a write that follows its own
-	 * miss by more is stored without any check. The versioned stores compare
-	 * the store's own computation (its refreshes too) at any age, so a delete
-	 * made within the window before its write is seen (see
-	 * RedisVersioned::writeCall()). 0 switches the guard off. Store option
-	 * "invalidation_window_ms" (the tier's store_options)
+	 * The invalidation guard's window: how long a delete is remembered (a
+	 * tombstone, the epoch a write leaves). A tag invalidation and a clear
+	 * last longer: the versioned stores keep their rules, the tag-index stores
+	 * their stamps for a day (see TagIndex::STAMP_TTL_MS). The Redis stores
+	 * compare the store's own computation (its refreshes too) at any age, so a
+	 * delete made within the window before its write is seen, and a tag
+	 * invalidation or a clear made while it computed (see
+	 * RedisVersioned::writeCall(), TagIndex::writeMiss()). A caller's own set()
+	 * after a read older than the window is not checked against the epoch.
+	 * 0 switches the guard off. Store option "invalidation_window_ms" (the
+	 * tier's store_options)
 	 * Unit: milliseconds
 	 */
 	protected int $invalidationWindowMs = 60000;
@@ -106,11 +109,11 @@ abstract class KeyValue
 	 * The ids whose next write the store computes itself: true for get() and getMany() with a resolver and
 	 * the set() after lockAndQueue(), false for a refresh (refresh: true, a stale value's, or one started
 	 * with startComputing()). The write takes the id together with the miss; a release drops it, and so
-	 * does the next read of the id (get(), getMany(), peek()). A versioned store guards every one of them
-	 * at any age (see RedisVersioned::writeCall()). If nothing could check the value, a true one leaves the
-	 * key as it is, because it may hold a valid item. Any other unchecked write (a refresh, which replaces
-	 * a value, a caller's set() after its own read) deletes the key, so the value it would have replaced is
-	 * not served (see KeyValue\Redis::refuseUnjudged()).
+	 * does the next read of the id (get(), getMany(), peek()). The Redis stores guard every one of them at
+	 * any age (see RedisVersioned::writeCall(), TagIndex::writeMiss()). If nothing could check the value, a
+	 * true one leaves the key as it is on a versioned store, because it may hold a valid item. Any other
+	 * unchecked write (a refresh, which replaces a value, a caller's set() after its own read) deletes the
+	 * key, so the value it would have replaced is not served (see KeyValue\Redis::refuseUnjudged()).
 	 *
 	 * @var array<string, bool>
 	 */
@@ -278,7 +281,7 @@ abstract class KeyValue
 	 * rules; the tag-index stores record the Redis server time, to compare with their tags' invalidation
 	 * times. '' when the store needs nothing. Null when it could not be read and the store's write refuses
 	 * such a miss by itself (on the tag-index stores, any invalidation of its tags within the guard window
-	 * refuses it).
+	 * refuses it, and past the window it is refused outright, see TagIndex::isUnjudged()).
 	 */
 	protected function missStamp(): ?string
 	{
@@ -287,9 +290,10 @@ abstract class KeyValue
 	
 	/**
 	 * The miss a write follows. It is taken out, so it guards one write only. A miss older than the guard
-	 * window is not returned, unless $late: then it comes back flagged 'late'. A versioned store still
-	 * stamps the write with its rule id then, and compares its epoch when the store computed or refreshed
-	 * the value itself (see RedisVersioned::writeCall()). "own" says whether the store computed or
+	 * window is not returned, unless $late: then it comes back flagged 'late'. The Redis stores ask for it:
+	 * a versioned store still stamps the write with its rule id then, and every Redis store compares the
+	 * epoch, and the tag-index stores the stamps, when the store computed or refreshed the value itself
+	 * (see RedisVersioned::writeCall(), TagIndex::writeMiss()). "own" says whether the store computed or
 	 * refreshed the value itself, "computing" whether it computed it for a miss, not as a refresh (see
 	 * computingMisses).
 	 *

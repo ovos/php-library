@@ -7,10 +7,13 @@ use Ovos\Cache\Compressor;
 use Ovos\Cache\MemoLock\Redis as MemoLock;
 use Ovos\Cache\Serializer;
 use Ovos\Cache\Stale;
+use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\KeyValue\Redis as KeyValueRedis;
+use Ovos\Cache\Store\KeyValue\TagIndex;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
 use Closure;
+use ReflectionProperty;
 use RuntimeException;
 
 use function array_keys;
@@ -27,9 +30,8 @@ use function usleep;
  * invalidated it is never served after it - whatever the store's way to make
  * sure (a refused write, an item read stale) - while a write-through, the
  * store's own invalidation and a deliberate set() after a read older than the
- * window write as they did before the guard (on a tag-index store, a
- * recomputation older than the window too). Two store instances stand for two
- * processes: one misses and recomputes, the other invalidates in between.
+ * window write as they did before the guard. Two store instances stand for
+ * two processes: one misses and recomputes, the other invalidates in between.
  *
  * The using class provides guardStore()
  *
@@ -198,13 +200,15 @@ trait TraitInvalidationGuard
 		$reader = $this->guardStore();
 		$writer = $this->guardStore();
 		$key = $this->guardKey('all');
-		$tags = [self::GUARD_TAG . '-a', self::GUARD_TAG . '-b'];
+		$tags = [$this->guardTag(), $this->guardTag()];
 		
 		$reader->get($key, queue: false);
 		$writer->invalidateTags($tags, KeyValueRedis::MATCHING_ALL);
 		$reader->set($key, 'stale', 60, $tags);
 		$read = $this->guardStore()->get($key, queue: false);
 		$writer->delete($key);
+		$this->dropStamp($writer, $tags[0]);
+		$this->dropStamp($writer, $tags[1]);
 		
 		return $read === null;
 	}
@@ -402,8 +406,8 @@ trait TraitInvalidationGuard
 	
 	/**
 	 * RULE (probe): a set() after a failed read of a key that holds no token is refused, and nothing is
-	 * stored. A versioned store's guarded write takes a key without a token whatever token the miss
-	 * names, so the failed read's marker is refused in PHP, before any call.
+	 * stored. Every store's guarded write takes a key without a token whatever token the miss names, so
+	 * the failed read's marker is refused in PHP, before any call.
 	 */
 	public function aSetAfterAFailedReadOfAKeyWithoutATokenIsRefused(): bool
 	{
@@ -451,10 +455,8 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (probe): a failed read whose write comes after the guard window. On a tag-index store it is a miss
-	 * like any other: past the window a miss guards nothing, and the write is stored. On a versioned store
-	 * the write is still refused, once (the store's own computation leaves the key), and the next write is
-	 * stored.
+	 * RULE (probe): the store's own computation after a failed read, written after the guard window. The
+	 * write is still refused, once, on every store, and the next write is stored.
 	 */
 	public function aWriteAfterAFailedReadPastTheWindow(): bool
 	{
@@ -475,7 +477,7 @@ trait TraitInvalidationGuard
 		$reader->delete($key);
 		
 		return $value === 'late'
-			&& $read === ($reader instanceof RedisVersioned ? null : 'late')
+			&& $read === null
 			&& $written
 			&& $next === 'next';
 	}
@@ -622,8 +624,7 @@ trait TraitInvalidationGuard
 	
 	/**
 	 * RULE: the store's own computation older than the window, with another
-	 * process's tombstone still there at the write. A tag-index store guards
-	 * the window only, so the write is stored. A versioned store compares the
+	 * process's tombstone still there at the write. Every store compares the
 	 * token at any age: the write is refused, and the next read does not get
 	 * the value computed before the delete.
 	 */
@@ -646,7 +647,7 @@ trait TraitInvalidationGuard
 		$writer->delete($key);
 		
 		return $value === 'computed before the delete'
-			&& $read === ($reader instanceof RedisVersioned ? null : 'computed before the delete');
+			&& $read === null;
 	}
 	
 	/**
@@ -680,9 +681,8 @@ trait TraitInvalidationGuard
 	
 	/**
 	 * RULE: a read younger than the window whose token ran out before the write
-	 * (a tombstone near its end). A versioned store takes the write: a delete
-	 * or a write since the read would have left a token that lives a full
-	 * window. A tag-index store compares the token as it is and refuses it.
+	 * (a tombstone near its end). Every store takes the write: a delete or a
+	 * write since the read would have left a token that lives a full window.
 	 */
 	public function aYoungReadWhoseTokenRanOut(): bool
 	{
@@ -708,7 +708,7 @@ trait TraitInvalidationGuard
 		
 		return $tombstoned
 			&& $value === 'computed'
-			&& $read === ($reader instanceof RedisVersioned ? 'computed' : null);
+			&& $read === 'computed';
 	}
 	
 	/**
@@ -815,13 +815,13 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): somebody's plain set() during the store's own
+	 * RULE: somebody's plain set() during the store's own
 	 * computation, its token still there at the write, the read older than the
 	 * window: the computation is refused, and the set() value stays
 	 */
 	public function aPlainSetDuringAnOldComputationRefusesIt(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		$writer = $this->guardStore();
 		$key = $this->guardKey('set-outlasted');
 		
@@ -840,13 +840,13 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): after a read older than the window, with another
+	 * RULE: after a read older than the window, with another
 	 * process's token alive on the key, a deliberate set() is written while the
 	 * store's own computation is refused
 	 */
 	public function anOldReadWritesADeliberateSetAndRefusesTheOwnComputation(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		$writer = $this->guardStore();
 		$deliberate = $this->guardKey('deliberate-old');
 		$own = $this->guardKey('own-old');
@@ -877,14 +877,14 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): a plain set() with a TTL shorter than the window, onto a
+	 * RULE: a plain set() with a TTL shorter than the window, onto a
 	 * key with little life left (a tombstone), keeps its new token a full
 	 * window. A computation whose read came before that set() is refused after
 	 * the short value expired.
 	 */
 	public function aShortLivedSetKeepsItsTokenAFullWindow(): bool
 	{
-		$deleter = $this->versionedGuardStore(['invalidation_window_ms' => 300]);
+		$deleter = $this->guardStore(['invalidation_window_ms' => 300]);
 		$reader = $this->guardStore(['invalidation_window_ms' => 10000]);
 		$writer = $this->guardStore(['invalidation_window_ms' => 10000]);
 		$client = $writer->getClient();
@@ -911,12 +911,46 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): a forced refresh is the store's own computation. Past the window it still sees a
+	 * RULE (tag-index): a plain set() without a TTL, onto an item with little
+	 * life left, keeps its new token a full window, while its value keeps the
+	 * item's remaining life. A refresh whose read came before that set() is
+	 * refused after the value expired, and the next read misses.
+	 */
+	public function aSetWithoutATtlKeepsItsTokenAFullWindow(): bool
+	{
+		$owner = $this->guardStore(['invalidation_window_ms' => 300]);
+		$reader = $this->tagIndexGuardStore(['invalidation_window_ms' => 10000]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 10000]);
+		$client = $writer->getClient();
+		$key = $this->guardKey('untimed-set');
+		$id = $writer->itemId($key);
+		// an item and its token that live 1 s
+		$owner->set($key, 'old', 1);
+		$kept = 0;
+		
+		$value = $reader->get($key, function() use ($writer, $key, $client, $id, &$kept): string
+		{
+			$writer->set($key, 'new', 0);
+			$kept = (int)$client->pTtl($id);
+			$this->awaitServer(fn(): bool => $this->dataExpired($writer, [$key]));
+			
+			return 'refreshed before the set';
+		}, 60, refresh: true);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $value === 'refreshed before the set'
+			&& $kept > 9000
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE: a forced refresh is the store's own computation. Past the window it still sees a
 	 * delete made within the window before its write: refused, and the next read misses.
 	 */
 	public function aForcedRefreshPastTheWindowSeesADelete(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		// the tombstone outlives the refresh
 		$writer = $this->guardStore(['invalidation_window_ms' => 10000]);
 		$key = $this->guardKey('forced-late');
@@ -937,12 +971,12 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): a forced refresh past the window whose token ran out meanwhile (the item it
+	 * RULE: a forced refresh past the window whose token ran out meanwhile (the item it
 	 * replaces expired, its token with it) is stored
 	 */
 	public function aForcedRefreshPastTheWindowWhoseTokenRanOutIsStored(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
 		$client = $writer->getClient();
 		$key = $this->guardKey('forced-ran-out');
@@ -964,13 +998,13 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): a stale value's refresh is the store's own computation, alone (get()) and in a
+	 * RULE: a stale value's refresh is the store's own computation, alone (get()) and in a
 	 * batch (getMany()). Past the window it still sees another process's write made within the window
 	 * before its own: refused, and that write's value stays.
 	 */
 	public function aStaleRefreshPastTheWindowSeesAWrite(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		$writer = $this->guardStore();
 		$alone = $this->guardKey('stale-late');
 		$batched = $this->guardKey('stale-late-batch');
@@ -1001,12 +1035,12 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): a stale value's refresh past the window whose token ran out meanwhile (the stale
+	 * RULE: a stale value's refresh past the window whose token ran out meanwhile (the stale
 	 * item expired, its token with it) is stored
 	 */
 	public function aStaleRefreshPastTheWindowWhoseTokenRanOutIsStored(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
 		$client = $writer->getClient();
 		$key = $this->guardKey('stale-ran-out');
@@ -1027,13 +1061,13 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): the page cache's refresh (peek(), then startComputing()) is the store's own
+	 * RULE: the page cache's refresh (peek(), then startComputing()) is the store's own
 	 * computation. Past the window it still sees a delete made within the window before its write:
 	 * refused, and the next read misses.
 	 */
 	public function aPageRefreshPastTheWindowSeesADelete(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		// the tombstone outlives the refresh
 		$writer = $this->guardStore(['invalidation_window_ms' => 10000]);
 		$key = $this->guardKey('page-late');
@@ -1052,12 +1086,12 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): the page cache's refresh past the window whose token ran out meanwhile (the page it
+	 * RULE: the page cache's refresh past the window whose token ran out meanwhile (the page it
 	 * replaces expired, its token with it) is stored
 	 */
 	public function aPageRefreshPastTheWindowWhoseTokenRanOutIsStored(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
 		$client = $writer->getClient();
 		$key = $this->guardKey('page-ran-out');
@@ -1077,13 +1111,13 @@ trait TraitInvalidationGuard
 	}
 	
 	/**
-	 * RULE (versioned): a manual lockAndQueue() whose resolver throws leaves nothing behind that makes a
+	 * RULE: a manual lockAndQueue() whose resolver throws leaves nothing behind that makes a
 	 * later write the store's own. The caller reads again (peek()); its deliberate set() after that read,
 	 * older than the window, is written over another process's newer value.
 	 */
 	public function aThrownComputationLeavesADeliberateSetUnguarded(): bool
 	{
-		$reader = $this->versionedGuardStore(['invalidation_window_ms' => 100]);
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
 		$writer = $this->guardStore();
 		$key = $this->guardKey('thrown');
 		
@@ -1121,40 +1155,242 @@ trait TraitInvalidationGuard
 		$store = $this->guardStore($storeOptions);
 		if($store instanceof RedisVersioned === false)
 		{
-			throw new SkipException('only the versioned stores compare the token of a computation at any age');
+			throw new SkipException('only the versioned stores keep the rule id a read saw with the value');
 		}
 		
 		return $store;
 	}
 	
 	/**
-	 * RULE: a versioned recomputation that outlives the window keeps the
-	 * rules stamp its miss took - an invalidation made while it computed
-	 * reaches its write (the epoch is the window's, the stamp holds for the
-	 * rules' retention)
+	 * A fresh tag-index store - another process; skips a rule on a versioned
+	 * store
+	 */
+	protected function tagIndexGuardStore(
+		array $storeOptions = [],
+	): TagIndex
+	{
+		$store = $this->guardStore($storeOptions);
+		if($store instanceof TagIndex === false)
+		{
+			throw new SkipException('only the tag-index stores stamp tags with the server time');
+		}
+		
+		return $store;
+	}
+	
+	/**
+	 * A tag of its own for one rule - no stamp of an earlier run on it
+	 */
+	protected function guardTag(): string
+	{
+		return self::GUARD_TAG . '-' . bin2hex(random_bytes(4));
+	}
+	
+	/**
+	 * What is left of a stamp's life in ms on a tag-index store: a tag's, or
+	 * (no tag) the store's "cleared" stamp; null on a versioned store, which
+	 * stamps nothing
+	 */
+	protected function stampTtl(
+		KeyValueRedis $store,
+		?string $tag = null,
+	): ?int
+	{
+		return $store instanceof TagIndex
+			? (int)$store->getClient()->pTtl($store->stampKey($tag))
+			: null;
+	}
+	
+	/**
+	 * Removes a rule's own tag stamp, or (no tag) the store's "cleared" stamp,
+	 * which would otherwise stay for a day
+	 */
+	protected function dropStamp(
+		KeyValueRedis $store,
+		?string $tag = null,
+	): void
+	{
+		if($store instanceof TagIndex)
+		{
+			$store->getClient()->del($store->stampKey($tag));
+		}
+	}
+	
+	/**
+	 * RULE: the store's own computation that outlives the window still sees a
+	 * tag invalidation made while it computed: a versioned store's write
+	 * carries the rule id its miss took, a tag-index store compares its miss's
+	 * time with the tag's stamp at any age
 	 */
 	public function aRecomputationPastTheWindowSeesTheRulesItMissed(): bool
 	{
 		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
-		if($reader instanceof RedisVersioned === false)
-		{
-			throw new SkipException('only the versioned stores stamp a miss with their rules');
-		}
 		$writer = $this->guardStore();
+		$tag = $this->guardTag();
 		$writer->delete(self::GUARD_KEY);
 		
-		$computed = $reader->get(self::GUARD_KEY, function() use ($writer): string
+		$computed = $reader->get(self::GUARD_KEY, function() use ($writer, $tag): string
 		{
-			$writer->invalidateTags([self::GUARD_TAG]);
+			$writer->invalidateTags([$tag]);
 			usleep(250000);
 			
 			return 'computed before the invalidation';
-		}, 60, [self::GUARD_TAG]);
+		}, 60, [$tag]);
 		$read = $writer->get(self::GUARD_KEY, queue: false);
 		$writer->delete(self::GUARD_KEY);
+		$this->dropStamp($writer, $tag);
 		
 		return $computed === 'computed before the invalidation'
 			&& $read === null;
+	}
+	
+	/**
+	 * RULE: a tag invalidation made early in the store's own computation, which
+	 * then outlasts the window of both processes, is seen on every store: the
+	 * write is refused or read outdated, and the next read misses. A tag-index
+	 * store's stamp outlives the window for that
+	 */
+	public function aTagInvalidationEarlyInALongComputationIsSeen(): bool
+	{
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$key = $this->guardKey('tag-early');
+		$tag = $this->guardTag();
+		
+		$value = $reader->get($key, function() use ($writer, $tag): string
+		{
+			$writer->invalidateTags([$tag]);
+			usleep(250000);
+			
+			return 'computed before the invalidation';
+		}, 60, [$tag]);
+		$read = $this->guardStore()->get($key, queue: false);
+		$stampTtl = $this->stampTtl($writer, $tag);
+		$writer->delete($key);
+		$this->dropStamp($writer, $tag);
+		
+		return $value === 'computed before the invalidation'
+			&& $read === null
+			&& ($stampTtl === null || $stampTtl > 100);
+	}
+	
+	/**
+	 * RULE: a clear made early in the store's own computation, which then
+	 * outlasts the window of both processes, is seen on every store, also for
+	 * a key no process wrote: the write is refused or read outdated, and the
+	 * next read misses. A tag-index store's "cleared" stamp outlives the
+	 * window for that
+	 */
+	public function aClearEarlyInALongComputationIsSeen(): bool
+	{
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$key = $this->guardKey('clear-early');
+		
+		$value = $reader->get($key, function() use ($writer): string
+		{
+			$writer->clear();
+			usleep(250000);
+			
+			return 'computed before the clear';
+		}, 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$stampTtl = $this->stampTtl($writer);
+		$writer->delete($key);
+		$this->dropStamp($writer);
+		
+		return $value === 'computed before the clear'
+			&& $read === null
+			&& ($stampTtl === null || $stampTtl > 100);
+	}
+	
+	/**
+	 * RULE (tag-index): a stamp's life is never shortened. Stamped again with a
+	 * shorter life (what an older release sends: its window), a tag's stamp
+	 * keeps the day it was given
+	 */
+	public function aStampIsNeverShortened(): bool
+	{
+		$store = $this->tagIndexGuardStore();
+		$tag = $this->guardTag();
+		
+		$store->invalidateTags([$tag]);
+		$store->getFunctions()
+			->call('cache_stamp', [$store->stampKey($tag)], [50]);
+		usleep(100000);
+		$stampTtl = $this->stampTtl($store, $tag);
+		$this->dropStamp($store, $tag);
+		
+		return $stampTtl > TagIndex::STAMP_TTL_MS - 60000;
+	}
+	
+	/**
+	 * RULE (tag-index): the store's own computation older than the window whose
+	 * miss has no server time (TIME could not be read) is refused, and the
+	 * next read misses. A tag invalidation made early in it is older than the
+	 * window by the write, so the write could not tell it from one made before
+	 * the read
+	 */
+	public function aLateOwnMissWithoutItsTimeIsRefused(): bool
+	{
+		$reader = $this->tagIndexGuardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$key = $this->guardKey('untimed-late');
+		$tag = $this->guardTag();
+		$id = $reader->itemId($key);
+		$misses = new ReflectionProperty(KeyValue::class, 'misses');
+		$untimed = false;
+		
+		$value = $reader->get($key, function() use ($reader, $writer, $misses, $id, $tag, &$untimed): string
+		{
+			// the server time of this miss could not be read
+			$taken = $misses->getValue($reader);
+			if(isset($taken[$id]))
+			{
+				$taken[$id]['stamp'] = null;
+				$misses->setValue($reader, $taken);
+				$untimed = true;
+			}
+			$writer->invalidateTags([$tag]);
+			usleep(250000);
+			
+			return 'computed before the invalidation';
+		}, 60, [$tag]);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		$this->dropStamp($reader, $tag);
+		
+		return $untimed
+			&& $value === 'computed before the invalidation'
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE: a tag invalidation older than the window does not refuse a write
+	 * whose miss has no time (peek() and set(), no startComputing()), though a
+	 * tag-index store keeps the tag's stamp longer: only one made within the
+	 * window does
+	 */
+	public function anUntimedWriteAfterAnOldTagInvalidationIsStored(): bool
+	{
+		$reader = $this->guardStore(['invalidation_window_ms' => 100]);
+		$writer = $this->guardStore(['invalidation_window_ms' => 100]);
+		$key = $this->guardKey('untimed-old');
+		$tag = $this->guardTag();
+		
+		$writer->invalidateTags([$tag]);
+		usleep(250000);
+		$missed = $reader->peek($key) === null;
+		$written = $reader->set($key, 'written', 60, [$tag]);
+		$read = $this->guardStore()->get($key, queue: false);
+		$stampTtl = $this->stampTtl($writer, $tag);
+		$writer->delete($key);
+		$this->dropStamp($writer, $tag);
+		
+		return $missed
+			&& $written
+			&& $read === 'written'
+			&& ($stampTtl === null || $stampTtl > 0);
 	}
 	
 	/**
@@ -1166,18 +1402,20 @@ trait TraitInvalidationGuard
 	{
 		$reader = $this->guardStore();
 		$writer = $this->guardStore();
+		$tag = $this->guardTag();
 		$writer->delete(self::GUARD_KEY);
 		
 		$reader->get(self::GUARD_KEY, queue: false);
-		$writer->invalidateTags([self::GUARD_TAG]);
-		$reader->set(self::GUARD_KEY, 'stale', 60, [self::GUARD_TAG]);
+		$writer->invalidateTags([$tag]);
+		$reader->set(self::GUARD_KEY, 'stale', 60, [$tag]);
 		$read = $this->guardStore()->get(self::GUARD_KEY, queue: false);
 		
 		$next = $this->guardStore();
 		$next->get(self::GUARD_KEY, queue: false);
-		$next->set(self::GUARD_KEY, 'fresh', 60, [self::GUARD_TAG]);
+		$next->set(self::GUARD_KEY, 'fresh', 60, [$tag]);
 		$after = $this->guardStore()->get(self::GUARD_KEY, queue: false);
 		$writer->delete(self::GUARD_KEY);
+		$this->dropStamp($writer, $tag);
 		
 		return $read === null && $after === 'fresh';
 	}
@@ -1191,15 +1429,17 @@ trait TraitInvalidationGuard
 		$reader = $this->guardStore();
 		$writer = $this->guardStore();
 		$key = $this->guardKey('locked');
+		$tag = $this->guardTag();
 		
-		$value = $reader->get($key, function() use ($writer): string
+		$value = $reader->get($key, function() use ($writer, $tag): string
 		{
-			$writer->invalidateTags([self::GUARD_TAG]);
+			$writer->invalidateTags([$tag]);
 			
 			return 'computed before the invalidation';
-		}, 60, [self::GUARD_TAG]);
+		}, 60, [$tag]);
 		$read = $this->guardStore()->get($key, queue: false);
 		$writer->delete($key);
+		$this->dropStamp($writer, $tag);
 		
 		return $value === 'computed before the invalidation'
 			&& $read === null;
@@ -1224,6 +1464,7 @@ trait TraitInvalidationGuard
 		}, 60);
 		$read = $this->guardStore()->get($key, queue: false);
 		$writer->delete($key);
+		$this->dropStamp($writer);
 		
 		return $value === 'computed before the clear'
 			&& $read === null;
@@ -1240,13 +1481,15 @@ trait TraitInvalidationGuard
 		$reader = $this->guardStore();
 		$writer = $this->guardStore();
 		$key = $this->guardKey('manual');
+		$tag = $this->guardTag();
 		$writer->delete($key);
 		
 		$locked = $reader->lockAndQueue($key) === null;
-		$writer->invalidateTags([self::GUARD_TAG]);
-		$reader->set($key, 'stale', 60, [self::GUARD_TAG]);
+		$writer->invalidateTags([$tag]);
+		$reader->set($key, 'stale', 60, [$tag]);
 		$read = $this->guardStore()->get($key, queue: false);
 		$writer->delete($key);
+		$this->dropStamp($writer, $tag);
 		
 		return $locked && $read === null;
 	}
@@ -1272,6 +1515,7 @@ trait TraitInvalidationGuard
 		$readNever = $this->guardStore()->get($never, queue: false);
 		$writer->delete(self::GUARD_KEY);
 		$writer->delete($never);
+		$this->dropStamp($writer);
 		
 		return $read === null
 			&& $readNever === null;
