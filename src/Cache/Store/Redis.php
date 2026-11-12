@@ -186,10 +186,10 @@ class Redis extends TagIndex
 	 * there, an item written without tags drops the field, every tag field's
 	 * HEXPIRE follows the item's TTL, the tags it no longer has release it; a
 	 * guarded write is refused when the key was invalidated, a tag of it
-	 * stamped or the store cleared since its miss (an unstamped miss: when
-	 * any of them carries a stamp), and a write-through marks the key with a
-	 * fresh epoch; a soft value goes through cache_set_soft - the same write,
-	 * its stale time first
+	 * stamped or the store cleared since its miss (a miss without its time:
+	 * when any of them was stamped within the window), and a write-through
+	 * marks the key with a fresh epoch; a soft value goes through
+	 * cache_set_soft - the same write, its stale time first
 	 */
 	#[Override]
 	protected function writeCall(

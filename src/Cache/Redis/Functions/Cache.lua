@@ -204,21 +204,36 @@ local function cache_now_us()
 	return string.format('%.0f', tonumber(now[1]) * 1000000 + tonumber(now[2]))
 end
 
--- Whether a write may land: the key's epoch is still the one its miss saw
--- ('' = none), and no stamp key given was set after the miss (a tag
--- invalidated, or the store cleared, meanwhile) - a miss without its time
--- cannot be ordered against a stamp: any stamp within the window refuses it
--- (a tag invalidation leaves no tombstone that would)
-local function cache_write_allowed(item_key, epoch, since_us, stamp_keys)
-	local current = redis.call('HGET', item_key, CACHE_EPOCH) or ''
-	if current ~= epoch then
+-- Whether a write may land: the key holds the epoch its miss saw ('' =
+-- none) or none at all, and no stamp key given was set after the miss (a tag
+-- invalidated, or the store cleared, meanwhile). Another epoch is a delete or
+-- somebody's write since the miss. A key without one had neither within the
+-- window: every delete and plain write leaves its epoch for a full window, so
+-- an epoch that merely ran out refuses nothing. A miss without its time
+-- cannot be ordered against a stamp: one made within the window refuses it
+-- (a tag invalidation leaves no tombstone that would); an older one does not,
+-- or a stamp that lives a day would refuse such a write for a day after
+-- every invalidation of its tags
+local function cache_write_allowed(item_key, epoch, since_us, stamp_keys, window_ms)
+	local current = redis.call('HGET', item_key, CACHE_EPOCH)
+	if current and current ~= epoch then
 		return false
 	end
 	local since = since_us ~= '' and tonumber(since_us) or nil
+	local now = nil
 	for _, stamp_key in ipairs(stamp_keys) do
-		local stamp = redis.call('GET', stamp_key)
-		if stamp and (since == nil or tonumber(stamp) > since) then
-			return false
+		local stamp = tonumber(redis.call('GET', stamp_key) or '')
+		if stamp then
+			if since then
+				if stamp > since then
+					return false
+				end
+			else
+				now = now or tonumber(cache_now_us())
+				if now - stamp <= window_ms * 1000 then
+					return false
+				end
+			end
 		end
 	end
 	
@@ -239,18 +254,23 @@ end
 
 -- An item's expiry after a write. Its TTL when one is asked - unless the key
 -- carries an epoch whose window outlives it: then the data fields expire at
--- the TTL, the key (and its epoch) at the window's end - a full window when
--- the key had no expiry of its own - so a short-lived item cannot take the
--- invalidation mark with it. No TTL: none for a key that held no data (fresh,
+-- the TTL, the key (and its epoch) at the window's end - so a short-lived item
+-- cannot take the invalidation mark with it. A write that brings a new epoch
+-- (fresh_epoch) keeps it a full window, so every guarded write within the
+-- window after it sees it, also on a key that had only moments left; any
+-- other write keeps what was left of the key's life, a full window when it
+-- had no expiry of its own. No TTL: none for a key that held no data (fresh,
 -- a tombstone whose window must not become the item's, or a soft mark's);
--- an overwrite without a TTL keeps the one it had
-local function cache_write_expiry(item_key, ttl_s, had_data, rem_ms, window_ms, fields)
+-- an overwrite without a TTL keeps the one it had - its data fields do, and
+-- a new epoch on a key with less than a window left keeps the key a full
+-- window, as above
+local function cache_write_expiry(item_key, ttl_s, had_data, rem_ms, window_ms, fields, fresh_epoch)
 	if ttl_s > 0 then
 		local ttl_ms = ttl_s * 1000
 		local keep_ms = 0
 		if window_ms > 0 and redis.call('HEXISTS', item_key, CACHE_EPOCH) == 1 then
 			keep_ms = window_ms
-			if rem_ms > 0 and rem_ms < window_ms then
+			if rem_ms > 0 and rem_ms < window_ms and not fresh_epoch then
 				keep_ms = rem_ms
 			end
 		end
@@ -262,6 +282,9 @@ local function cache_write_expiry(item_key, ttl_s, had_data, rem_ms, window_ms, 
 		end
 	elseif had_data == 0 then
 		redis.call('PERSIST', item_key)
+	elseif fresh_epoch and window_ms > 0 and rem_ms > 0 and rem_ms < window_ms then
+		redis.call('PEXPIRE', item_key, window_ms)
+		redis.call('HPEXPIRE', item_key, rem_ms, 'FIELDS', #fields, unpack(fields))
 	end
 end
 
@@ -273,12 +296,18 @@ end
 redis.register_function('[prefix]cache_tombstone', cache_tombstone)
 
 -- Stamp the given keys with the server time (an invalidated tag, a cleared
--- store), for the window: a guarded write whose miss came earlier refuses
+-- store), for the life given (ms): a guarded write whose miss came earlier
+-- refuses. A stamp's life is never shortened: a caller that sends a shorter
+-- one (an older release, another configuration on the same keys) would
+-- otherwise cut the stamp a long computation still needs
+-- keys: the stamp keys; args: [1] life (ms)
 -- standalone-only: the stamp keys are of any slot
 local function cache_stamp(keys, args)
 	local now_us = cache_now_us()
+	local life_ms = tonumber(args[1])
 	for _, key in ipairs(keys) do
-		redis.call('SET', key, now_us, 'PX', tonumber(args[1]))
+		-- PTTL answers -2 for no key and -1 for no expiry: the life given wins
+		redis.call('SET', key, now_us, 'PX', math.max(life_ms, redis.call('PTTL', key)))
 	end
 	
 	return now_us
@@ -304,7 +333,7 @@ local function cache_guarded_hset(keys, args)
 		for i = 2, #keys do
 			table.insert(stamp_keys, keys[i])
 		end
-		if cache_write_allowed(item_key, args[1], args[2], stamp_keys) == false then
+		if cache_write_allowed(item_key, args[1], args[2], stamp_keys, tonumber(args[5])) == false then
 			return 0
 		end
 	end
@@ -332,7 +361,8 @@ local function cache_guarded_hset(keys, args)
 	if soft == false then
 		redis.call('HDEL', item_key, CACHE_SOFT)
 	end
-	cache_write_expiry(item_key, tonumber(args[3]), had_data, rem_ms, tonumber(args[5]), names)
+	cache_write_expiry(item_key, tonumber(args[3]), had_data, rem_ms, tonumber(args[5]), names,
+		args[1] == '*' and args[4] ~= '')
 	
 	return 1
 end
@@ -366,7 +396,7 @@ local function cache_set_item(keys, args, soft_ms)
 		for _, tag in ipairs(tags) do
 			table.insert(stamp_keys, args[6] .. tag)
 		end
-		if cache_write_allowed(item_key, args[1], args[2], stamp_keys) == false then
+		if cache_write_allowed(item_key, args[1], args[2], stamp_keys, tonumber(args[8])) == false then
 			return 0
 		end
 	end
@@ -403,7 +433,8 @@ local function cache_set_item(keys, args, soft_ms)
 	else
 		redis.call('HDEL', item_key, CACHE_SOFT)
 	end
-	cache_write_expiry(item_key, ttl, had_data, rem_ms, tonumber(args[8]), fields)
+	cache_write_expiry(item_key, ttl, had_data, rem_ms, tonumber(args[8]), fields,
+		args[1] == '*' and args[7] ~= '')
 	
 	-- the tag index: the key joins its new tags; on a write with a TTL every
 	-- tag field's HEXPIRE follows it (re-saving with the same tags would

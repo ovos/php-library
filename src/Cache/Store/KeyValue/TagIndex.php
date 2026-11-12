@@ -13,6 +13,7 @@ use RedisException;
 
 use function count;
 use function is_array;
+use function max;
 use function str_pad;
 
 use const STR_PAD_LEFT;
@@ -40,10 +41,20 @@ abstract class TagIndex extends Redis
 	public const string KEY_INVALIDATED = 'invalidated';
 	
 	/**
-	 * The stamps the tag-index stores leave for the window: one per
-	 * invalidated tag, and the type key itself for a clear
+	 * The stamps the tag-index stores leave for a day (see STAMP_TTL_MS): one
+	 * per invalidated tag, and the type key itself for a clear
 	 */
 	public const string TYPE_INVALIDATED = 'invalidated';
+	
+	/**
+	 * How long the stamp of a tag invalidation or a clear lives. The store's
+	 * own computation compares its miss with the stamps at any age (see
+	 * writeMiss()), so an invalidation made while it computes is seen however
+	 * long that takes, up to this. A constant, not an option: a short one
+	 * would silently let a long computation through
+	 * Unit: milliseconds
+	 */
+	public const int STAMP_TTL_MS = 86_400_000;
 	
 	/**
 	 * The fields fetch() reads with its HMGET: the data, the guard's epoch and the "invalidated" field a
@@ -219,15 +230,66 @@ abstract class TagIndex extends Redis
 	}
 	
 	/**
-	 * The physical wipe stamps "cleared" in the same step: a value computed
-	 * before the wipe and written after it is refused (its miss came first)
+	 * The physical wipe stamps "cleared" in the same step, for the stamp's
+	 * life (see stampLifeMs()): a value computed before the wipe and written
+	 * after it is refused (its miss came first)
 	 */
 	#[Override]
 	protected function clearedStamp(): array
 	{
 		return $this->isGuarded()
-			? [$this->stampKey(), $this->invalidationWindowMs]
+			? [$this->stampKey(), $this->stampLifeMs()]
 			: [];
+	}
+	
+	/**
+	 * How long a stamp lives: a day, or the window where that is longer
+	 */
+	protected function stampLifeMs(): int
+	{
+		return max(static::STAMP_TTL_MS, $this->invalidationWindowMs);
+	}
+	
+	/**
+	 * The miss a write of $id follows. The store's own computation, and its
+	 * refresh of a value, keep their miss at any age: a delete made within the
+	 * window before the write is seen, and so is a tag invalidation or a clear
+	 * made while it computed, however long that took. A caller's own set()
+	 * after a read older than the window gets no miss: it is a plain write,
+	 * and a fresh read first is the way to have it checked
+	 */
+	#[Override]
+	protected function writeMiss(
+		string $id,
+	): ?array
+	{
+		$miss = $this->takeMiss($id, late: true);
+		
+		return $miss !== null
+			&& $miss['late'] === true
+			&& $miss['own'] === false
+			? null
+			: $miss;
+	}
+	
+	/**
+	 * Whether the value written after $miss cannot be checked: a miss older
+	 * than the window whose server time could not be read. Without its time a
+	 * miss is refused by a stamp made within the window only (see the write's
+	 * Lua), and past the window a stamp made after the miss may already be
+	 * older than that. So set() refuses it before any call, and the key is
+	 * deleted, as after a failed read
+	 *
+	 * @param array{late: bool, stamp: ?string}|null $miss
+	 */
+	#[Override]
+	protected function isUnjudged(
+		?array $miss,
+	): bool
+	{
+		return $miss !== null
+			&& $miss['late'] === true
+			&& $miss['stamp'] === null;
 	}
 	
 	/**
@@ -296,8 +358,8 @@ abstract class TagIndex extends Redis
 	
 	/**
 	 * Stamps the given tags (none: the store's "cleared" stamp) with the
-	 * server time, for the window - a guarded write whose miss came before
-	 * refuses
+	 * server time, for the stamp's life (see stampLifeMs()) - a guarded write
+	 * whose miss came before refuses
 	 */
 	protected function stamp(
 		array $tags = [],
@@ -320,7 +382,7 @@ abstract class TagIndex extends Redis
 		
 		if($this->functions
 			->call('cache_stamp', $keys, [
-				$this->invalidationWindowMs,
+				$this->stampLifeMs(),
 			]) === false)
 		{
 			$this->logRefused('cache_stamp');

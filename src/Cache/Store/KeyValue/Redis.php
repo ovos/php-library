@@ -59,8 +59,8 @@ abstract class Redis extends Tags
 	/**
 	 * Recorded as a miss's epoch when reading the item failed, so we do not know which epoch is stored. The
 	 * key may have been invalidated without this process seeing it. No key ever has this value (an epoch is
-	 * hex, see newEpoch()), but that alone does not refuse the write: the versioned stores' guarded write
-	 * takes a key that holds no epoch at all. So set() refuses it itself, before any call (see isUnread()).
+	 * hex, see newEpoch()), but that alone does not refuse the write: every guarded write takes a key that
+	 * holds no epoch at all. So set() and storeMany() refuse it themselves, before any call (see isUnread()).
 	 */
 	public const string EPOCH_UNREAD = '-';
 	
@@ -327,8 +327,9 @@ abstract class Redis extends Tags
 			}
 		}
 		
-		// The read failed, or on a versioned store no copy of the rules was at hand for it. The write could
-		// only be refused, so it is not sent (see refuseUnjudged()).
+		// The read failed, or on a versioned store no copy of the rules was at hand for it, or on a tag-index
+		// store a miss older than the window has no server time. The write could only be refused, so it is
+		// not sent (see refuseUnjudged()).
 		if($this->isUnread($miss)
 			|| $this->isUnjudged($miss))
 		{
@@ -595,10 +596,11 @@ abstract class Redis extends Tags
 	}
 	
 	/**
-	 * Whether the read of $miss failed (see rememberUnread()). Checked in PHP, before any call: a versioned
-	 * store's guarded write would take the marker on a key without an epoch (see EPOCH_UNREAD). The
-	 * tag-index stores take no miss older than the guard window (see writeMiss()); a versioned store takes
-	 * it, so there this holds past the window too, and the write after it is refused once.
+	 * Whether the read of $miss failed (see rememberUnread()). Checked in PHP, before any call: a guarded
+	 * write would take the marker on a key without an epoch (see EPOCH_UNREAD). The store's own computation
+	 * and refresh keep their miss past the guard window, on every Redis store, and a versioned store keeps
+	 * every miss (see writeMiss()): for those this holds past the window too, and the write after it is
+	 * refused once.
 	 *
 	 * @param array{epoch: string}|null $miss
 	 */
@@ -627,8 +629,9 @@ abstract class Redis extends Tags
 	}
 	
 	/**
-	 * Whether the value written after $miss cannot be checked. Never here: only the versioned stores need
-	 * a copy of their rules to check an item (see RedisVersioned::isUnjudged()).
+	 * Whether the value written after $miss cannot be checked. Never here: a versioned store needs a copy
+	 * of its rules, a tag-index store the server time of a miss older than the window (see
+	 * RedisVersioned::isUnjudged(), TagIndex::isUnjudged()).
 	 *
 	 * @param array{epoch: string, stamp: ?string}|null $miss
 	 */
@@ -641,7 +644,8 @@ abstract class Redis extends Tags
 	
 	/**
 	 * Used instead of the write after a miss whose value nothing could check: the read failed, or, on a
-	 * versioned store, no copy of the rules was at hand. That write could only be refused, so nothing is
+	 * versioned store, no copy of the rules was at hand, or, on a tag-index store, a miss older than the
+	 * window has no server time. That write could only be refused, so nothing is
 	 * stored. The value the read did not see may be the one the caller replaces (a forced refresh, a set()
 	 * after peek() or after a read-only get()), so dropRefused() handles the key. Returns false, as for a
 	 * refused write, and releases the lock of $id.
