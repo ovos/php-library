@@ -38,7 +38,9 @@ use function array_fill;
 use function array_fill_keys;
 use function array_intersect;
 use function array_key_first;
+use function array_key_last;
 use function array_keys;
+use function array_slice;
 use function bin2hex;
 use function count;
 use function defined;
@@ -325,9 +327,9 @@ class RedisVersioned extends Test
 		
 		$this->store->set(self::KEY_ITEM, 'test', tags: ['tag1']);
 		$this->store->invalidateTags(['unrelated']);
-		
+
 		$result = $this->store->get(self::KEY_ITEM, queue: false);
-		
+
 		try
 		{
 			return $result === 'test';
@@ -337,7 +339,51 @@ class RedisVersioned extends Test
 			$this->store->delete(self::KEY_ITEM);
 		}
 	}
-	
+
+	/**
+	 * A failover to a replica that never got the newest rule, where another server's invalidation reached the
+	 * new master before this copy was refreshed: the stream still holds every older rule, so the copy must be
+	 * read again from the start. Rebuilt from the answer alone (the new rule) it dropped the older rules, and an
+	 * item one of them outdated was served as fresh.
+	 */
+	public function aFailoverThatLosesTheNewestRuleKeepsTheOlderRules(): bool
+	{
+		$probe = $this->probe(['rules_cache_ms' => 0, 'rules_shared_cache' => false]);
+		$client = $probe->getClient();
+		$rulesKey = $probe->getRulesKey();
+		$key = 'failover_' . bin2hex(random_bytes(4));
+		$tag = 'failover-' . bin2hex(random_bytes(4));
+
+		try
+		{
+			// a rule before the item, so the item carries a real stamp; then the rule that outdates it
+			$probe->invalidateTags([$tag . '-earlier']);
+			$probe->set($key, 'outdated', 60, [$tag]);
+			$probe->invalidateTags([$tag]);
+			// the newest rule, which this copy holds
+			$probe->invalidateTags([$tag . '-newest']);
+			$newest = (string)array_key_last($client->xRange($rulesKey, '-', '+'));
+			$heldNewest = $probe->rules()?->last() === $newest;
+
+			// the failover: the new master never got the newest rule, and another server's invalidation
+			// reached it first (written by hand, so this copy does not take it in)
+			$client->xDel($rulesKey, [$newest]);
+			$client->xAdd($rulesKey, '*', ['mode' => 'any', 'tags' => $tag . '-after', 'first' => '0']);
+
+			$before = count($probe->fetchedFrom);
+			$read = $probe->get($key, queue: false);
+
+			// the refresh asked from the lost id, found it gone, and read again from the start
+			return $heldNewest
+				&& $read === null
+				&& array_slice($probe->fetchedFrom, $before) === [$newest, Rules::NONE];
+		}
+		finally
+		{
+			$probe->delete($key);
+		}
+	}
+
 	/**
 	 * An invalidation the server refused (an error reply, not an exception)
 	 * is logged - never lost quietly - and reported false
@@ -1014,8 +1060,10 @@ class RedisVersioned extends Test
 	
 	/**
 	 * A range that does not start at the last id held means the stream no
-	 * longer holds it: what came back is the whole truth, and an item stamped
-	 * on a rule the stream has lost is stale whatever its tags
+	 * longer holds it: the set is emptied, nothing is taken from the range (it
+	 * is only the stream from that id on), and the stream read again from the
+	 * beginning replaces what was held. An item stamped on a rule the stream
+	 * has lost is stale whatever its tags
 	 */
 	public function rulesReplaceWhatTheStreamNoLongerHolds(): bool
 	{
@@ -1032,14 +1080,21 @@ class RedisVersioned extends Test
 		]);
 		$incremental = $rules->toArray();
 		
-		// then a rebuilt stream: nothing of what was held is in it
+		// then a rebuilt stream: nothing of what was held is in it. The range
+		// from the id held is not taken in, the set starts over empty...
+		$rules->absorb([
+			'5000-0' => ['mode' => 'any', 'tags' => 'tag4', 'first' => '1'],
+		]);
+		$emptied = $rules->isEmpty() && $rules->wasReset();
+		// ...and the read from the beginning fills it
 		$rules->absorb([
 			'5000-0' => ['mode' => 'any', 'tags' => 'tag4', 'first' => '1'],
 		]);
 		$rebuilt = $rules->toArray();
-		
+
 		return count($incremental['tags']) === 3
 			&& $incremental['last'] === '3000-0'
+			&& $emptied
 			&& $rebuilt['tags'] === ['tag4' => [5000, 0]]
 			&& $rebuilt['last'] === '5000-0'
 			&& $rules->isStale(['unrelated'], '2000-0') === true

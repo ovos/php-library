@@ -32,10 +32,14 @@ use function usort;
  *
  * The set follows the server's stream incrementally. Each refresh asks for
  * the entries from the last id it holds, inclusively. If that id comes back
- * first, everything after it is new. If it does not, the server no longer
- * holds it - the stream was trimmed past it, cleared to a newer rule, or
- * deleted - and what came back is the whole current stream, which replaces
- * what was held. Either way one round trip, sized by what changed.
+ * first, everything after it is new: one round trip, sized by what changed.
+ * If it does not, the server no longer holds it - the stream was trimmed past
+ * it, cleared to a newer rule, deleted, or failed over to a replica that never
+ * got it - and what came back is only the stream from that id on. After a
+ * failover the older rules are still there, and an invalidation that reached
+ * the new master first is all the answer holds, so the answer cannot replace
+ * the set: the set is emptied, and the caller reads the stream again from the
+ * beginning (see absorb()).
  *
  * It also notices when the stream has lost rules. Every entry says whether
  * it opened the stream (cache_versioned_invalidate records it). An item
@@ -150,8 +154,10 @@ class Rules
 	
 	/**
 	 * Whether the last absorb() found the stream moved from under the set (lost,
-	 * rebuilt): what it holds then replaces any set held elsewhere, even one
-	 * with a newer last id (see SharedRules::store())
+	 * rebuilt, or short of the set's newest rule after a failover): the set was
+	 * emptied, and is read again from the beginning; what it then holds replaces
+	 * any set held elsewhere, even one with a newer last id (see
+	 * SharedRules::store())
 	 */
 	public function wasReset(): bool
 	{
@@ -165,7 +171,10 @@ class Rules
 	
 	/**
 	 * Merges the entries of an XRANGE that started at last(), inclusively -
-	 * or at the beginning, when nothing was held yet
+	 * or at the beginning, when nothing was held yet. When last() does not come
+	 * back first, the stream no longer holds it: the set is emptied, nothing is
+	 * taken from $entries (they are only the stream from that id on), and
+	 * wasReset() says that the stream has to be read again from the beginning.
 	 *
 	 * @param array $entries id => fields, oldest first, as the client hands them back
 	 */
@@ -185,8 +194,13 @@ class Rules
 			}
 			else
 			{
-				// the stream moved from under us: whatever it holds now is
-				// the whole truth, and what we held is not part of it
+				// The stream moved from under us: what we held is not part of
+				// it any more, and what came back is only the stream from our
+				// last id on. After a failover to a replica that never got that
+				// rule, the older rules are still there, and a newer rule may be
+				// all the answer holds: rebuilt from it, the set would forget
+				// them. So it starts over empty, and the caller reads the stream
+				// from the beginning.
 				$this->reset = true;
 				$this->tags = [];
 				$this->hard = [];
@@ -194,6 +208,8 @@ class Rules
 				$this->last = self::NONE;
 				$this->first = self::NONE;
 				$this->firstOpened = null;
+				
+				return $this;
 			}
 		}
 		

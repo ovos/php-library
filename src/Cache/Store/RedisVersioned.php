@@ -1444,9 +1444,11 @@ class RedisVersioned extends Store
 	/**
 	 * Brings $rules up to date with the stream, batch by batch. Each batch starts at the copy's newest id
 	 * (inclusive), so a load from the start never holds more than one batch beside the copy. A batch that
-	 * is not full, or brings nothing new, ends the loop. $reset says whether the stream no longer held the
-	 * copy's newest id, so the copy was rebuilt from what the stream holds now. False when the stream could
-	 * not be read (a connection error, or an error reply).
+	 * is not full, or brings nothing new, ends the loop. When the stream no longer holds the copy's newest
+	 * id (trimmed past it, cleared, deleted, or failed over to a replica that never got it), the copy is
+	 * emptied and read again from the start: the answer was only the stream from that id on, and after a
+	 * failover the older rules are still there. $reset says it happened, so the copy was rebuilt from what
+	 * the stream holds now. False when the stream could not be read (a connection error, or an error reply).
 	 */
 	protected function fetchRules(
 		Rules $rules,
@@ -1462,8 +1464,11 @@ class RedisVersioned extends Store
 				$rules->absorb($entries);
 				$reset = $reset || $rules->wasReset();
 			}
-			while(count($entries) >= max(2, $this->rulesBatch)
-				&& $rules->last() !== $before);
+			// a copy that held an id the stream no longer has was emptied: read again from the start (only a
+			// fetch from an id can find it gone, so this happens once); a full batch may have more behind it
+			while(($rules->wasReset() && $before !== Rules::NONE)
+				|| (count($entries) >= max(2, $this->rulesBatch)
+					&& $rules->last() !== $before));
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{
