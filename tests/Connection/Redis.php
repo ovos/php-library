@@ -10,8 +10,10 @@ use Ovos\Test;
 use Redis as RedisClient;
 use RedisException;
 
+use function bin2hex;
 use function microtime;
 use function preg_match;
+use function random_bytes;
 
 /**
  * Redis
@@ -25,50 +27,88 @@ use function preg_match;
 class Redis extends Test
 {
 	/**
-	 * The server kills this very connection: the call that finds out fails,
-	 * and the next getClient() hands out a new, working client
+	 * The server kills this very connection: with phpredis' retries (MAX_RETRIES)
+	 * the call that finds out reconnects inside itself, on the same database
+	 * and with the same options, and answers
 	 */
-	public function aClientTheServerDroppedIsReplacedByANewOne(): bool
+	public function aConnectionTheServerDroppedIsBridgedInsideTheCall(): bool
 	{
-		/** @var Subject $connection */
-		$connection = $this->container
+		$config = clone $this->container
 			->getClass(Connections::class)
-			->get('redis');
+			->get('redis')
+			->getConfig();
+		$config->database = 2;
+		$connection = new Subject($config);
 		$client = $connection->getClient();
-
-		if($client instanceof RedisClient === false
-			|| preg_match('/id=(\d+)/', (string)$client->rawCommand('CLIENT', 'INFO'), $matches) !== 1)
+		$key = 'reconnect_' . bin2hex(random_bytes(4));
+		
+		if($client instanceof RedisClient === false)
 		{
 			return false;
 		}
-
-		// another client has the server kill this one
-		$killer = new RedisClient();
-		$killer->connect(
-			(string)$connection->getConfig()->host,
-			(int)($connection->getConfig()->port ?? 6379),
-		);
-		$killer->rawCommand('CLIENT', 'KILL', 'ID', $matches[1]);
-		$killer->close();
-
+		
+		$timeout = $client->getOption(RedisClient::OPT_READ_TIMEOUT);
+		$client->set($key, 'kept', ['ex' => 60]);
+		static::killConnectionOf($client, $connection);
+		
+		try
+		{
+			$read = $client->get($key);
+			
+			return $read === 'kept'
+				&& $client->getDbNum() === 2
+				&& $client->getOption(RedisClient::OPT_READ_TIMEOUT) === $timeout
+				&& $connection->getClient() === $client;
+		}
+		finally
+		{
+			$client->del($key);
+		}
+	}
+	
+	/**
+	 * Without retries the call that finds the connection gone fails, and the
+	 * socket stays failed: the next getClient() hands out a new, working client
+	 * instead of the dead one
+	 */
+	public function aClientTheServerDroppedIsReplacedByANewOne(): bool
+	{
+		$connection = new class(
+			$this->container
+				->getClass(Connections::class)
+				->get('redis')
+				->getConfig(),
+		) extends Subject
+		{
+			protected const int MAX_RETRIES = 0;
+		};
+		$client = $connection->getClient();
+		
+		if($client instanceof RedisClient === false)
+		{
+			return false;
+		}
+		
+		static::killConnectionOf($client, $connection);
+		
 		try
 		{
 			$client->ping();
-
+			
 			return false;
 		}
 		catch(RedisException)
 		{
 			// the call that finds the connection gone fails, as it must
 		}
-
+		
 		$next = $connection->getClient();
-
+		
 		return $next instanceof RedisClient
 			&& $next !== $client
 			&& $next->ping() !== false;
 	}
-
+	
 	/**
 	 * A server that does not answer costs one connect timeout, not one per
 	 * call: the calls inside `retry_after` return at once
@@ -83,18 +123,18 @@ class Redis extends Test
 			'connect_timeout' => 0.2,
 			'retry_after' => 5,
 		]));
-
+		
 		$first = $connection->getClient();
 		$started = microtime(true);
 		$second = $connection->getClient();
 		$third = $connection->getClient();
-
+		
 		return $first === null
 			&& $second === null
 			&& $third === null
 			&& microtime(true) - $started < 0.1;
 	}
-
+	
 	/**
 	 * disconnect() drops the client: the next getClient() connects anew
 	 */
@@ -107,11 +147,30 @@ class Redis extends Test
 		$client = $connection->getClient();
 		$closed = $connection->disconnect();
 		$next = $connection->getClient();
-
+		
 		return $client instanceof RedisClient
 			&& $closed
 			&& $next instanceof RedisClient
 			&& $next !== $client
 			&& $next->ping() !== false;
+	}
+	
+	/**
+	 * Has the server kill $client's connection, through a client of its own
+	 */
+	protected static function killConnectionOf(
+		RedisClient $client,
+		Subject $connection,
+	): void
+	{
+		preg_match('/id=(\d+)/', (string)$client->rawCommand('CLIENT', 'INFO'), $matches);
+		
+		$killer = new RedisClient();
+		$killer->connect(
+			(string)$connection->getConfig()->host,
+			(int)($connection->getConfig()->port ?? 6379),
+		);
+		$killer->rawCommand('CLIENT', 'KILL', 'ID', $matches[1]);
+		$killer->close();
 	}
 }

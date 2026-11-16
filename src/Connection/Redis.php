@@ -29,11 +29,14 @@ class Redis extends RedisCommon
 	protected const bool REPLY_LITERAL = true;
 	
 	/**
-	 * How often ext-redis reconnects within one command when the socket was
-	 * lost. 0 is no retry: the command fails at once, and the socket stays
-	 * failed until the client is dropped (see getClient())
+	 * How often phpredis reconnects within one command when the socket was
+	 * lost, waiting BACKOFF_BASE to BACKOFF_CAP between tries (0 is no retry;
+	 * phpredis' own default is 10). 3 bridges a short failover inside the call
+	 * and keeps what an unreachable server costs a request to a few seconds,
+	 * once per connection: after the last try the socket stays failed, every
+	 * later command fails at once, and getClient() connects anew
 	 */
-	protected const int MAX_RETRIES = 0;
+	protected const int MAX_RETRIES = 3;
 	
 	/**
 	 * The minimum delay between retries when backing off
@@ -127,7 +130,7 @@ class Redis extends RedisCommon
 			RedisClient::OPT_REPLY_LITERAL
 				=> self::REPLY_LITERAL,
 			RedisClient::OPT_MAX_RETRIES
-				=> self::MAX_RETRIES,
+				=> static::MAX_RETRIES,
 			RedisClient::OPT_BACKOFF_ALGORITHM
 				=> RedisClient::BACKOFF_ALGORITHM_DECORRELATED_JITTER, // https://github.com/phpredis/phpredis/pull/1993/files
 			RedisClient::OPT_BACKOFF_BASE
