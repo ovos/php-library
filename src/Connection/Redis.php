@@ -29,7 +29,9 @@ class Redis extends RedisCommon
 	protected const bool REPLY_LITERAL = true;
 	
 	/**
-	 * Do not cap the automatic retries - let the timeout bound them
+	 * How often ext-redis reconnects within one command when the socket was
+	 * lost. 0 is no retry: the command fails at once, and the socket stays
+	 * failed until the client is dropped (see getClient())
 	 */
 	protected const int MAX_RETRIES = 0;
 	
@@ -51,9 +53,28 @@ class Redis extends RedisCommon
 	 */
 	protected ?RedisClient $client = null;
 	
+	/**
+	 * The client, or null when the server cannot be reached. ext-redis marks a
+	 * socket it lost a command on as failed and never opens it again by
+	 * itself: every later command fails at once with "went away". A
+	 * long-running process (a queue consumer, a daemon) that kept the client
+	 * would run with the cache off until restarted, after a failover as after
+	 * a restart of the server. So a client that is no longer connected is
+	 * dropped, and the parent connects anew - at once, the server may be back
+	 * already - and remembers a failed connect for `retry_after` seconds: a
+	 * server that stays down costs one connect timeout per window, not one per
+	 * call
+	 */
 	#[Override]
 	public function getClient(): ?RedisClient
 	{
+		if($this->client !== null
+			&& $this->client->isConnected() === false)
+		{
+			$this->client = null;
+			$this->failedAt = null;
+		}
+		
 		return parent::getClient();
 	}
 	
@@ -152,14 +173,21 @@ class Redis extends RedisCommon
 		return true;
 	}
 	
+	/**
+	 * Closes the connection and drops the client: the next getClient()
+	 * connects anew
+	 */
 	public function disconnect(): bool
 	{
-		if(($client = $this->getClient()) === null)
+		if($this->client === null)
 		{
 			return false;
 		}
 		
-		return $client->close();
+		$closed = $this->client->close();
+		$this->client = null;
+		
+		return $closed;
 	}
 	
 	#[Override]
