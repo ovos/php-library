@@ -727,6 +727,10 @@ CLI:  php cli.php controller action param1 value1
 - The default action is `index` if no action segment is present
 - Remaining URL segments become named parameters (`/key/value` pairs)
 - Action method parameters are auto-filled from URL parameters by name
+- On the web, a path whose first segment is neither a controller nor an action of the default
+  controller answers 404 (`NotFoundException`, `No controller for "…"`): `/proc/self/environ` never
+  renders `Index::index()`. A number as the first segment stays the default action's argument, and on
+  the command line an unknown word still runs the default action
 
 ### Automatic Type Casting
 

@@ -286,6 +286,9 @@ class Router
 		
 		$controllers = $this->getControllers($modules);
 		
+		// whether a segment named the controller; false while the default one stands in
+		$controllerNamed = false;
+		
 		// after checking for locale, check for controller (with an optional namespace path), and action
 		foreach($params as $key => $param)
 		{
@@ -313,6 +316,7 @@ class Router
 			// all possible namespaces added, add the controller
 			if(in_array($param, $controllers, true)) // do not set non-existing controllers, use default instead
 			{
+				$controllerNamed = true;
 				$controller.= $param;
 				$request->setController($controller);
 				$controllerClass.= Strings::studlyCase($param);
@@ -353,6 +357,14 @@ class Router
 			$method = Controller::resolveActionMethod($controllerClassNs, $method);
 			if($method === null)
 			{
+				// a web path whose first segment is no controller and no action of the
+				// default one is a page the application does not have: the default
+				// action would answer it with 200 and drop the segments it never takes
+				if($controllerNamed === false && $request->isCli() === false)
+				{
+					throw new NotFoundException('No controller for "%s"', $request->getUrl());
+				}
+				
 				return $params;
 			}
 			
