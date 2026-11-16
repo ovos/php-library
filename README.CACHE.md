@@ -138,7 +138,7 @@ is constant no matter how many items match.
   WITHCURSOR`), 2500 per page (store option `invalidate_page`), and removes
   each page in calls of 1000 items before it reads the next: no single
   command holds the server for every match. An item is served until its
-  page is removed, as in the tag-hash store's batches of 7500; a value
+  page is removed, as in the tag-hash store's batches of 1000; a value
   computed before the invalidation is refused from the start (the stamps
   come first). A soft value's mark re-indexes its item, so the cursor
   delivers it once more; that delivery finds the invalidation's own token
@@ -467,7 +467,7 @@ keys).
 | Symfony `get()` loop, `TagAwareAdapter` | 200 | 200 | 400 | 400 |
 | Symfony `getItems()`, `RedisAdapter` / `TagAwareAdapter` / `RedisTagAwareAdapter` | 1 / 2 / 1 | 100 / 200 / 100 | 2 / 4 / 3 | 200 / 400 / 300 |
 
-`invalidateTags()` of one tag over N items: tag-hash one stamp + ⌈N/7 500⌉
+`invalidateTags()` of one tag over N items: tag-hash one stamp + ⌈N/1 000⌉
 calls; Redisearch one stamp + ⌈N/2 500⌉ reads + ⌈N/1 000⌉ removals; versioned
 one call (one rule). `clear()` is one call (one rule on the versioned stores;
 `clearPhysical()` one per master). A cluster gains nothing from `getMany()`

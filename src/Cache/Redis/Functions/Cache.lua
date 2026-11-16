@@ -710,11 +710,12 @@ local function cache_unlink_by_tag(keys, args)
 	
 	-- unlink every id matching input ids for the given tag
 	local rems = {}
-	-- loop the tag in batches to prevent locking redis for too long
+	-- loop the tag in batches to prevent locking redis for too long: bites of 1 000
+	-- (one tag on a million 1 KB pages: others wait at most ~11 ms; 7 500: ~55 ms)
 	local cursor_new = cache_hscan_keys_batch(
 		prefix_tag_ids .. tag,
 		cursor,
-		7500,
+		1000,
 		function(id)
 			-- the item itself goes, and the id leaves the tag after the loop
 			-- (within this batch) - or it gets its soft mark, and the id stays
@@ -797,7 +798,7 @@ local function cache_clean_tag(keys, args)
 	local cursor_new = cache_hscan_keys_batch(
 		prefix_tag_ids .. tag,
 		cursor,
-		7500,
+		1000,
 		function(id)
 			-- check if the ID still exists in the main items hash
 			if redis.call('EXISTS', prefix_ids .. id) == 0 then
