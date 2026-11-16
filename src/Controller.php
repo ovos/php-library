@@ -10,6 +10,9 @@ use Ovos\Exception\RuntimeException;
 use Ovos\Logger\Traits\LogsEvents;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
+use ReflectionNamedType;
+use ReflectionType;
+use ReflectionUnionType;
 use Throwable;
 
 use function array_column;
@@ -18,17 +21,23 @@ use function array_key_exists;
 use function array_keys;
 use function array_merge;
 use function array_shift;
+use function array_values;
 use function class_exists;
 use function count;
 use function implode;
 use function in_array;
+use function is_float;
 use function is_int;
+use function is_numeric;
 use function is_scalar;
 use function is_string;
 use function method_exists;
 use function str_starts_with;
 use function strpos;
 use function substr;
+
+use const PHP_INT_MAX;
+use const PHP_INT_MIN;
 
 /**
  * Controller
@@ -96,6 +105,16 @@ class Controller
 			throw new NotFoundException(
 				'%s::%s() requires $%s, which the request does not supply',
 				static::class, $action, implode(', $', $missing));
+		}
+		
+		// invokeArgs() coerces weakly, so any word given to a bool parameter
+		// would read as true: `purge-events yse` must not confirm
+		$loose = static::looseBoolParams($method, $actionParams);
+		if($loose !== [])
+		{
+			throw new NotFoundException(
+				'%s::%s() takes yes or no for $%s',
+				static::class, $action, implode(', $', $loose));
 		}
 		
 		$response = $method->invokeArgs($this, $actionParams);
@@ -176,6 +195,95 @@ class Controller
 		}
 		
 		return $missing;
+	}
+	
+	/**
+	 * @return string[] Parameters a string argument would reach only by
+	 * PHP's string-to-bool coercion, which makes every word but '' and '0'
+	 * true. '', '0' and '1' are PHP's own spellings of a bool (a form's
+	 * checkbox) and pass; a numeric string goes to a float, or to an int it
+	 * fits, the type also admits; a type that admits a string or anything
+	 * takes the word as it is.
+	 */
+	public static function looseBoolParams(
+		ReflectionFunctionAbstract $function,
+		array $actionParams,
+	): array
+	{
+		$parameters = $function->getParameters();
+		$byName = [];
+		foreach($parameters as $parameter)
+		{
+			$byName[$parameter->getName()] = $parameter;
+		}
+		$variadic = $function->isVariadic() ? $parameters[count($parameters) - 1] : null;
+		
+		$loose = [];
+		foreach($actionParams as $key => $value)
+		{
+			if(is_string($value) === false
+				|| in_array($value, ['', '0', '1'], true))
+			{
+				continue;
+			}
+			
+			// placed as PHP places it: a position, a name, else the variadic's rest
+			$parameter = is_int($key) ? ($parameters[$key] ?? $variadic) : ($byName[$key] ?? $variadic);
+			if($parameter === null
+				|| static::coercesToBool($parameter->getType(), $value) === false)
+			{
+				continue;
+			}
+			
+			$loose[$parameter->getName()] = $parameter->getName();
+		}
+		
+		return array_values($loose);
+	}
+	
+	/** Whether PHP's weak mode turns this string into a bool for this type. */
+	protected static function coercesToBool(
+		?ReflectionType $type,
+		string $value,
+	): bool
+	{
+		// a union lists its members; a DNF member (A&B) never takes a string
+		$names = [];
+		foreach($type instanceof ReflectionUnionType ? $type->getTypes() : [$type] as $member)
+		{
+			if($member instanceof ReflectionNamedType)
+			{
+				$names[] = $member->getName();
+			}
+		}
+		
+		// mixed and no type never coerce; the literal types true and false
+		// refuse a string themselves
+		if(in_array('bool', $names, true) === false
+			|| in_array('string', $names, true))
+		{
+			return false;
+		}
+		
+		if(is_numeric($value) === false)
+		{
+			return true;
+		}
+		if(in_array('float', $names, true))
+		{
+			return false;
+		}
+		if(in_array('int', $names, true) === false)
+		{
+			return true;
+		}
+		
+		// an int takes a numeric string only within its range: PHP's own parse
+		// gives an int, or a float that must fit (ZEND_DOUBLE_FITS_LONG)
+		$number = $value + 0;
+		
+		return is_float($number)
+			&& ($number >= (float)PHP_INT_MIN && $number < (float)PHP_INT_MAX) === false;
 	}
 	
 	public function setDispatchedAction(

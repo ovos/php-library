@@ -5,8 +5,13 @@ declare(strict_types=0);
 namespace Tests\Controller;
 
 use Ovos\Controller;
+use Ovos\Exception\NotFoundException;
 use Ovos\Test;
 use Throwable;
+
+use function in_array;
+use function is_bool;
+use function is_string;
 
 class ActionParams extends Test
 {
@@ -23,6 +28,16 @@ class ActionParams extends Test
 				catch(Throwable $error) { $expectedError = $error::class; }
 				try { $dispatched->dispatch($action, [$value]); }
 				catch(Throwable $error) { $actualError = $error::class; }
+				// a word PHP would turn into a bool is refused before the action runs
+				if($expectedError === null && is_string($value) && in_array($value, ['', '0', '1'], true) === false
+					&& is_bool($native->received[0] ?? null))
+				{
+					if($actualError !== NotFoundException::class || $dispatched->received !== [])
+					{
+						return false;
+					}
+					continue;
+				}
 				if($expectedError !== $actualError || $native->received !== $dispatched->received)
 				{
 					return false;
