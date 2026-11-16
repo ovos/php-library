@@ -20,10 +20,8 @@ use function strncmp;
  * gives 4 bytes for v4 and 16 for v6; the lengths differing is what keeps a v4
  * address from ever matching a v6 range.
  *
- * Two callers rely on this and both are security decisions — Client::getIp()
- * deciding whether the peer is a trusted proxy, and the uptime probe deciding
- * whether a destination is inside the network. One implementation, one set of
- * tests.
+ * A security decision relies on it: the uptime probe deciding whether a
+ * destination is inside the network. One implementation, one set of tests.
  *
  * @author Marcin Gil <mg@ovos.at>
  */

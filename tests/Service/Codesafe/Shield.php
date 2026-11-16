@@ -392,13 +392,12 @@ class Shield extends Test
 	
 	/**
 	 * RULE: the kernel judges the address Ovos\Client::getIp() names — the
-	 * visitor behind a configured proxy, read right to left — and never a
-	 * forwarded header a peer that is no proxy wrote. Falsify: hand the
-	 * kernel REMOTE_ADDR — behind a load balancer every ip rule and every
-	 * threat address meets the balancer, and an ip-keyed rate rule counts
-	 * the whole site as one visitor.
+	 * connection's own, REMOTE_ADDR — and never a forwarded header, which the
+	 * visitor writes. Falsify: hand the kernel X-Forwarded-For — anyone walks
+	 * away from an ip rule, a threat address or an ip-keyed rate rule by
+	 * naming another address.
 	 */
-	public function theKernelJudgesTheAddressTheTrustedProxiesName(): bool
+	public function theKernelJudgesTheConnectionNeverAForwardedHeader(): bool
 	{
 		$subject = $this->subject(['detect' => true, 'enforce' => true], 'install-proxy-' . uniqid());
 		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p',
@@ -407,12 +406,12 @@ class Shield extends Test
 		$saved = $_SERVER;
 		try
 		{
-			Client::setTrustedProxies(['10.0.0.0/8']);
+			Client::reset();
+			$_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'REMOTE_ADDR' => '198.51.100.7', 'HTTP_X_FORWARDED_FOR' => '203.0.113.9'] + $saved;
+			$connection = $subject->judge($subject->facts());
+			Client::reset();
 			$_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_FOR' => '198.51.100.7'] + $saved;
-			$behind = $subject->judge($subject->facts());
-			Client::setTrustedProxies(['10.0.0.0/8']);
-			$_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'REMOTE_ADDR' => '203.0.113.9', 'HTTP_X_FORWARDED_FOR' => '198.51.100.7'] + $saved;
-			$spoofed = $subject->judge($subject->facts());
+			$forwarded = $subject->judge($subject->facts());
 		}
 		finally
 		{
@@ -420,7 +419,7 @@ class Shield extends Test
 			Client::reset();
 		}
 		
-		return $behind->isBlock() && ($behind->rule['id'] ?? null) === 4 && $spoofed->isPass();
+		return $connection->isBlock() && ($connection->rule['id'] ?? null) === 4 && $forwarded->isPass();
 	}
 	
 	/** a GET to the path as the adapter's own facts() reads it off the superglobals, judged; the superglobals put back after */
