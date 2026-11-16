@@ -16,7 +16,10 @@ use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedisCluster;
 use Override;
 
+use function array_key_last;
 use function array_keys;
+use function bin2hex;
+use function random_bytes;
 
 /**
  * RedisClusterVersioned
@@ -311,6 +314,43 @@ class RedisClusterVersioned extends Test
 		finally
 		{
 			$this->store->delete(self::KEY_ITEM);
+		}
+	}
+	
+	/**
+	 * A failover to a replica that never got the newest rule, where another server's invalidation reached the
+	 * new master before this copy was refreshed: the stream still holds every older rule, so the copy is read
+	 * again from the start, and an item one of them outdated stays a miss (rebuilt from the answer alone, the
+	 * copy dropped the older rules and served it as fresh)
+	 */
+	public function aFailoverThatLosesTheNewestRuleKeepsTheOlderRules(): bool
+	{
+		$store = $this->getClusterStore(['rules_cache_ms' => 0, 'rules_shared_cache' => false]);
+		$client = $store->getClient();
+		$rulesKey = $store->getRulesKey();
+		$key = 'failover_' . bin2hex(random_bytes(4));
+		$tag = 'failover-' . bin2hex(random_bytes(4));
+		
+		try
+		{
+			// a rule before the item, so the item carries a real stamp; then the rule that outdates it, and the
+			// newest rule, which this copy holds
+			$store->invalidateTags([$tag . '-earlier']);
+			$store->set($key, 'outdated', 60, [$tag]);
+			$store->invalidateTags([$tag]);
+			$store->invalidateTags([$tag . '-newest']);
+			$newest = (string)array_key_last($client->xRange($rulesKey, '-', '+'));
+			
+			// the failover: the new master never got the newest rule, and another server's invalidation
+			// reached it first (written by hand, so this copy does not take it in)
+			$client->xDel($rulesKey, [$newest]);
+			$client->xAdd($rulesKey, '*', ['mode' => 'any', 'tags' => $tag . '-after', 'first' => '0']);
+			
+			return $store->get($key, queue: false) === null;
+		}
+		finally
+		{
+			$store->delete($key);
 		}
 	}
 	
