@@ -387,6 +387,102 @@ class RedisVersioned extends Test
 	}
 	
 	/**
+	 * A stream that lost rules this copy had read is logged, once: here a failover that lost the newest rule,
+	 * where another server's rule reached the new master. The next reload finds the stream intact and logs
+	 * nothing more
+	 */
+	public function aFailoverThatLosesRulesIsLoggedOnce(): bool
+	{
+		$probe = $this->probe(['rules_cache_ms' => 0, 'rules_shared_cache' => false]);
+		$client = $probe->getClient();
+		$rulesKey = $probe->getRulesKey();
+		$key = 'lostlog_' . bin2hex(random_bytes(4));
+		$tag = 'lostlog-' . bin2hex(random_bytes(4));
+		
+		try
+		{
+			$probe->invalidateTags([$tag . '-earlier']);
+			$probe->set($key, 'value', 60, [$tag . '-other']);
+			$probe->invalidateTags([$tag . '-newest']);
+			$probe->get($key, queue: false);
+			$newest = (string)array_key_last($client->xRange($rulesKey, '-', '+'));
+			
+			$client->xDel($rulesKey, [$newest]);
+			$client->xAdd($rulesKey, '*', ['mode' => 'any', 'tags' => $tag . '-after', 'first' => '0']);
+			$from = count($probe->logged);
+			$probe->get($key, queue: false);
+			$afterLoss = $this->lostRulesLogged($probe, $from);
+			$probe->get($key, queue: false);
+			
+			return $afterLoss === 1
+				&& $this->lostRulesLogged($probe, $from) === 1;
+		}
+		finally
+		{
+			$probe->delete($key);
+		}
+	}
+	
+	/**
+	 * A stream lost whole (an eviction, a flush, a restart without persistence) is logged too
+	 */
+	public function aLostStreamIsLogged(): bool
+	{
+		$probe = $this->probe(['rules_cache_ms' => 0, 'rules_shared_cache' => false]);
+		$key = 'lostlog_' . bin2hex(random_bytes(4));
+		
+		try
+		{
+			$probe->invalidateTags(['lostlog-' . bin2hex(random_bytes(4))]);
+			$probe->set($key, 'value', 60);
+			$probe->get($key, queue: false);
+			
+			$probe->getClient()
+				->del($probe->getRulesKey());
+			$from = count($probe->logged);
+			$probe->get($key, queue: false);
+			
+			return $this->lostRulesLogged($probe, $from) === 1;
+		}
+		finally
+		{
+			$probe->delete($key);
+		}
+	}
+	
+	/**
+	 * A clear() by another server cuts the stream back to its own rule, past the id this copy holds: the copy
+	 * is read again from the start, but nothing was lost, and nothing is logged
+	 */
+	public function aClearElsewhereIsNotLoggedAsALoss(): bool
+	{
+		$reader = $this->probe(['rules_cache_ms' => 0, 'rules_shared_cache' => false]);
+		$other = $this->probe(['rules_cache_ms' => 0, 'rules_shared_cache' => false]);
+		$key = 'clearlog_' . bin2hex(random_bytes(4));
+		
+		try
+		{
+			$reader->invalidateTags(['clearlog-' . bin2hex(random_bytes(4))]);
+			$reader->set($key, 'value', 60);
+			$reader->get($key, queue: false);
+			$held = $reader->rules()?->last();
+			
+			$other->clear();
+			$from = count($reader->logged);
+			$before = count($reader->fetchedFrom);
+			$reader->get($key, queue: false);
+			
+			return $held !== null
+				&& array_slice($reader->fetchedFrom, $before) === [$held, Rules::NONE]
+				&& $this->lostRulesLogged($reader, $from) === 0;
+		}
+		finally
+		{
+			$reader->delete($key);
+		}
+	}
+	
+	/**
 	 * A reload that finds its newest id gone reads the stream again from the start. If that read fails, the
 	 * copy held before the reload stays as it was and checks the reads of the outage: a valid item stays a
 	 * hit (an emptied copy would call every item outdated and drop it), an outdated one a miss.
@@ -4445,6 +4541,27 @@ class RedisVersioned extends Test
 		$probe = $this->getStore(RedisVersionedProbe::class, $storeOptions);
 		
 		return $probe;
+	}
+	
+	/**
+	 * How many of the probe's log events since the $from-th say that the stream lost rules
+	 */
+	protected function lostRulesLogged(
+		RedisVersionedProbe $probe,
+		int $from,
+	): int
+	{
+		$count = 0;
+		foreach(array_slice($probe->logged, $from) as $event)
+		{
+			if(is_string($event[0] ?? null)
+				&& str_contains($event[0], 'lost rules this server had read'))
+			{
+				$count++;
+			}
+		}
+		
+		return $count;
 	}
 	
 	protected function requireSharedRules(): void

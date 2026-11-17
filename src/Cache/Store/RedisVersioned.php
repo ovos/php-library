@@ -1587,6 +1587,11 @@ class RedisVersioned extends Store
 	}
 	
 	/**
+	 * Logged when the stream turns out to have lost rules a copy had read (see fetchRules())
+	 */
+	protected const string LOST_RULES = 'The stream of invalidation rules lost rules this server had read (it held %s; the stream %s): a failover to a replica that had not received them, an eviction, a flush, or a restart without persistence. The rules were read again from the start.';
+	
+	/**
 	 * Brings $rules up to date with the stream, batch by batch. Each batch starts at the copy's newest id
 	 * (inclusive), so a load from the start never holds more than one batch beside the copy. A batch that
 	 * is not full, or brings nothing new, ends the loop. When the stream no longer holds the copy's newest
@@ -1600,6 +1605,8 @@ class RedisVersioned extends Store
 		bool &$reset,
 	): bool
 	{
+		// the id the copy held when the stream turned out not to hold it any more
+		$held = null;
 		try
 		{
 			do
@@ -1608,6 +1615,11 @@ class RedisVersioned extends Store
 				$entries = $this->fetchRuleEntries($before);
 				$rules->absorb($entries);
 				$reset = $reset || $rules->wasReset();
+				if($rules->wasReset()
+					&& $before !== Rules::NONE)
+				{
+					$held = $before;
+				}
 			}
 			// a copy that held an id the stream no longer has was emptied: read again from the start (only a
 			// fetch from an id can find it gone, so this happens once); a full batch may have more behind it
@@ -1620,6 +1632,18 @@ class RedisVersioned extends Store
 			$this->log($exception);
 			
 			return false;
+		}
+		
+		// a loss, not a trim (see Rules::lost()): one line - only the reloading worker reads the stream, and
+		// the next reload finds it intact
+		if($held !== null
+			&& $rules->lost($held))
+		{
+			$this->log(sprintf(
+				static::LOST_RULES,
+				$held,
+				$rules->isEmpty() ? 'is empty' : 'now ends at ' . $rules->last(),
+			));
 		}
 		
 		return true;

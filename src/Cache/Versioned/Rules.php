@@ -170,6 +170,35 @@ class Rules
 	}
 	
 	/**
+	 * Whether the stream, as this set holds it after a reset (read again from
+	 * the start), lost rules that a set ending at $held had read: it is empty,
+	 * it was reborn (its first rule opened it), or it still holds rules older
+	 * than $held but not $held itself. A trim - the retention, or a clear(),
+	 * which cuts the stream back to its own rule - only ever cuts the oldest
+	 * rules, so after one the stream begins after $held, and nothing was lost.
+	 * Example: a server held up to 1700-0; after a failover the stream holds
+	 * 1000-0, 1500-0 and 1800-0 (another server's rule) - lost. After a clear
+	 * it holds 1900-0 only - trimmed, not lost
+	 */
+	public function lost(
+		string $held,
+	): bool
+	{
+		if($held === self::NONE)
+		{
+			return false;
+		}
+		
+		if($this->last === self::NONE
+			|| $this->firstOpened === true)
+		{
+			return true;
+		}
+		
+		return static::isNewerId($held, $this->first);
+	}
+	
+	/**
 	 * Merges the entries of an XRANGE that started at last(), inclusively -
 	 * or at the beginning, when nothing was held yet. When last() does not come
 	 * back first, the stream no longer holds it: the set is emptied, nothing is
