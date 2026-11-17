@@ -182,10 +182,17 @@ is constant no matter how many items match.
      than `rules_cache_ms` + 1 s old, holding this server's invalidations,
      checks the read - exact reads too.
   5. **Anything else** (an older copy, one that may lack an invalidation
-     made on this server, none at all): every item is a miss, computed
-     without the stampede lock - a worker waiting for the lock would read a
-     miss as well. With a copy the value is stored with the copy's last rule
-     id, which only makes it outdated sooner; with none, nothing is stored.
+     made on this server, none at all): the read waits for that reload. It
+     looks at the flag after 0.1 ms, then after twice as long each time, up
+     to 5 ms, and then takes the first case that applies again: the copy the
+     reloader shared (case 1), a failed reload (case 2), one that has run a
+     second (case 2). Only a read that has waited
+     `RedisVersioned::RELOAD_WAIT_MS` (1 s) in all gives up: every item is
+     then a miss, computed without the stampede lock. Why a second and not
+     less: Redis runs one command at a time, so a long command of anyone
+     sharing it holds the reload up as well, and the requests wait for Redis
+     meanwhile anyway; giving up sooner would bring the stampede back in just
+     those moments.
 
   An example. `rules_cache_ms` is 1 s, and another server invalidates
   `product:7` at 12:00:00.000. A worker here whose copy was fetched at
@@ -193,11 +200,12 @@ is constant no matter how many items match.
   after that takes the flag and reloads (case 3); a millisecond later the
   copy holds the rule, and every worker of the server adopts it. A worker
   reading during that millisecond uses its copy (case 4: less than 2 s old);
-  one whose copy is older - the first request after an idle spell - misses
-  and computes (case 5), but never waits. Had the reload hung on a dead
-  node, the other workers would have gone on using their copies after a
-  second (case 2): only the reloader waits, and a node that stays down costs
-  the server one attempt a second.
+  one whose copy is older - the first request after an idle spell - waits
+  that millisecond for the reload and is then checked like the others. Had
+  the reload hung on a dead node, workers holding a usable copy would have
+  gone on using it (case 4, then case 2); one without would have waited until
+  the reload had run a second, then used what it holds (case 2). A node that
+  stays down costs the server one attempt a second.
 
   The mechanism. The copy, the flag, the record of the last attempt and the
   record of the newest invalidation made here live in APCu, beside each
@@ -220,12 +228,14 @@ is constant no matter how many items match.
   of the copy its read was checked against; a write with no read before it
   (a write-through) takes its copy through the same five cases and stores
   that copy's last id - the stream's newest id is never read for a write.
-  With no copy it is not stored (see *Invalidation guard*). Case 5 costs
-  computations, not waits: a cold server (no copy) at 300 requests a second,
-  20 cache reads each and a reload of 0.3 s computes about 1 800 values it
-  does not store.
+  With no copy it is not stored (see *Invalidation guard*). Case 5 costs a
+  wait, not computations: on a cold server (no copy) at 300 requests a
+  second with a first load of 0.3 s, about 90 requests wait up to 0.3 s once,
+  where they used to compute about 1 800 values they did not store.
 - **An invalidation made on this server.** The process that invalidates
-  usually holds a copy that ends right before its own rule - the reply of the
+  usually holds a copy; if it holds none yet (a request that only
+  invalidates) or an older one than APCu holds, it takes the shared copy
+  first. That copy usually ends right before its own rule - the reply of the
   append names the id it followed. Then the rule goes into that copy, which
   counts as fetched right before the invalidation call (everything appended
   until then is in it), and the first invalidation of a store instance
@@ -253,8 +263,11 @@ is constant no matter how many items match.
   the rules. No value computed after a read without rules, or without its
   epoch, is stored. **Keep the read timeout and the connect timeout of the
   cache's Redis connection short**, well under a second for a node that
-  answers in milliseconds: a hanging node then stalls only the request that
-  reloads, and only for that long. Switched off (`rules_shared_cache: no`),
+  answers in milliseconds: a hanging node then stalls the request that
+  reloads and, until its timeout or one second, the requests whose copy
+  cannot check a read (the first after an idle spell, one behind a local
+  invalidation, a worker with none); a request holding a usable copy is never
+  stalled. Switched off (`rules_shared_cache: no`),
   each process works alone: it loads the rules of the whole retention window
   once, before its first hit.
 - The set is **bounded** (`rules_max_tags`, default 15 000; 0: no bound): a

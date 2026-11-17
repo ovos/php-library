@@ -67,6 +67,14 @@ class RedisVersionedProbe extends RedisVersioned
 	public bool $timeUnreadable = false;
 	
 	/**
+	 * Called once, when a read starts to wait for another worker's reload: what that worker does meanwhile
+	 */
+	public ?Closure $whileAwaitingReload = null;
+	
+	/** How many times a read waited for another worker's reload */
+	public int $awaited = 0;
+	
+	/**
 	 * The function names each sendAll() sent in one round trip
 	 *
 	 * @var list<list<string>>
@@ -191,6 +199,22 @@ class RedisVersionedProbe extends RedisVersioned
 		}
 		
 		return parent::fetchRuleEntries($from);
+	}
+	
+	#[Override]
+	protected function awaitReload(
+		SharedRules $shared,
+		float $untilMs,
+	): bool
+	{
+		$this->awaited++;
+		if(($meanwhile = $this->whileAwaitingReload) !== null)
+		{
+			$this->whileAwaitingReload = null;
+			$meanwhile();
+		}
+		
+		return parent::awaitReload($shared, $untilMs);
 	}
 	
 	#[Override]

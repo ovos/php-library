@@ -30,8 +30,10 @@ use function is_string;
 use function json_encode;
 use function max;
 use function microtime;
+use function min;
 use function preg_match;
 use function sprintf;
+use function usleep;
 
 /**
  * RedisVersioned
@@ -116,11 +118,31 @@ class RedisVersioned extends Store
 	public const int SLOW_RELOAD_MS = 1000;
 	
 	/**
+	 * How long a read whose copy cannot check it waits for another worker's reload before it gives up and
+	 * computes without the stampede lock, as it did before it waited. A healthy reload is one round trip, a
+	 * millisecond or two, but Redis runs one command at a time: a long command of anyone sharing it (a large
+	 * DEL, a slow script, a snapshot's fork) holds the reload up too, and the reading requests wait for Redis
+	 * meanwhile anyway. Giving up sooner would bring the stampede back in just those moments, so the wait
+	 * lasts as long as a reload may run before it counts as hanging (SLOW_RELOAD_MS). Lower it to bound the
+	 * wait when only the reload is stuck (the reloading worker stalled, its connection lost).
+	 * Unit: milliseconds
+	 */
+	public const int RELOAD_WAIT_MS = 1000;
+	
+	/**
 	 * While the rules cannot be read, one worker of the server tries again once this long has passed since
 	 * the last attempt ended.
 	 * Unit: milliseconds
 	 */
 	public const int RETRY_MS = 1000;
+	
+	/**
+	 * In microseconds. A read that waits for another worker's reload looks at the reload flag again after
+	 * this long, then after twice as long each time, up to RELOAD_POLL_MAX_US.
+	 */
+	public const int RELOAD_POLL_US = 100;
+	
+	public const int RELOAD_POLL_MAX_US = 5000;
 	
 	/**
 	 * How many keys one step of the prune's walk asks SCAN for (see collectGarbage())
@@ -1216,6 +1238,17 @@ class RedisVersioned extends Store
 		// Taken after the reply. A copy fetched before this moment may lack the new rule.
 		$atMs = microtime(true) * 1000;
 		
+		// An instance that has read nothing yet holds no copy, and one that read long ago an older one than
+		// the server shares. The shared copy is taken first, with no round trip, so that the rule can go
+		// into it and be shared. Otherwise this invalidation would leave every worker of the server behind
+		// until one of them reloads.
+		if($previous !== $this->rules?->last()
+			&& $this->alone === false
+			&& ($shared = $this->getSharedRules()) !== null)
+		{
+			$this->adoptSharedRules($shared);
+		}
+		
 		// The copy ends with the rule just before the new one, so it holds everything up to the new rule.
 		// The new rule goes into it from the reply.
 		if($this->rules !== null
@@ -1267,10 +1300,11 @@ class RedisVersioned extends Store
 	/**
 	 * Picks the copy of the rules that checks a read, and returns [copy, unlocked]. The copy is null when
 	 * there is none, and unlocked is then true. With unlocked false, the copy checks the read. With
-	 * unlocked true, every item read is a miss. Its value is then stored with the copy's newest rule id
-	 * (see missStamp()), or not stored at all when there is no copy (see isUnjudged()). It is computed
-	 * without the stampede lock: a worker waiting for the lock would read a miss as well, so the lock would
-	 * only make the workers queue.
+	 * unlocked true, every item read is a miss, computed without the stampede lock. That is the case with
+	 * no copy while the rules cannot be read: nothing computed is stored then (see isUnjudged()), a worker
+	 * waiting for the lock would read a miss as well, and the lock would only make the workers queue. (And
+	 * for a read that gave up waiting in case 5, whose value is stored with the copy's newest rule id, see
+	 * missStamp().)
 	 *
 	 * The first case that applies decides:
 	 *
@@ -1286,7 +1320,12 @@ class RedisVersioned extends Store
 	 * 4. Another worker's reload has run for at most SLOW_RELOAD_MS. A copy fetched at most rules_cache_ms
 	 *    + SLOW_RELOAD_MS ago that holds every invalidation made on this server checks the read, exact
 	 *    reads included.
-	 * 5. Otherwise every item is a miss until the reload is done.
+	 * 5. Otherwise (an older copy, one that may lack an invalidation made on this server, none) the read
+	 *    waits for that reload (see awaitReload()) and starts again at case 1: the copy the reloader shared
+	 *    checks it, or the reload failed (case 2), or it has run SLOW_RELOAD_MS (case 2). A reload is one
+	 *    round trip, so that is what the wait costs; computing instead would cost every such worker the
+	 *    computation, and a stampede its lock. Only a read that has waited RELOAD_WAIT_MS in all gives
+	 *    up: every item is then a miss without the lock.
 	 *
 	 * Only the worker holding the reload flag fetches the rules, or a worker whose APCu refuses to record
 	 * the flag (see reload()). This method never answers "no rules" while a copy is held, because an
@@ -1296,50 +1335,104 @@ class RedisVersioned extends Store
 	 */
 	protected function readRules(): array
 	{
-		// case 1: this worker's own copy is fresh
-		if($this->rulesAreFresh())
-		{
-			return [$this->rules, false];
-		}
+		// when this read gives up waiting for other workers' reloads (case 5); set by the first wait
+		$waitUntilMs = null;
 		
-		// case 1 again, after taking the shared copy if another worker stored a newer one
-		$shared = $this->getSharedRules();
-		if($shared !== null
-			&& $this->adoptSharedRules($shared)
-			&& $this->rulesAreFresh())
+		while(true)
 		{
-			return [$this->rules, false];
-		}
-		
-		// What the server knows: whether the last attempt to read the rules failed and when it ended, and
-		// since when another worker has been reloading (null: the reload flag is free).
-		[$outage, $endedAtMs] = $this->lastAttempt();
-		$startedAtMs = $shared?->reloadStartedAt();
-		
-		// case 2: the rules cannot be read, or another worker's reload has run too long
-		if($outage
-			|| ($startedAtMs !== null && microtime(true) * 1000 - $startedAtMs > static::SLOW_RELOAD_MS))
-		{
-			// the flag is free and RETRY_MS has passed: this worker tries again
-			if($startedAtMs === null
-				&& $this->retryDue($endedAtMs))
+			// case 1: this worker's own copy is fresh
+			if($this->rulesAreFresh())
 			{
-				$this->reload();
+				return [$this->rules, false];
 			}
 			
-			// the copy checks the read whatever its age; with none, every item is a miss without the lock
-			return [$this->rules, $this->rules === null];
+			// case 1 again, after taking the shared copy if another worker stored a newer one
+			$shared = $this->getSharedRules();
+			if($shared !== null
+				&& $this->adoptSharedRules($shared)
+				&& $this->rulesAreFresh())
+			{
+				return [$this->rules, false];
+			}
+			
+			// What the server knows: whether the last attempt to read the rules failed and when it ended,
+			// and since when another worker has been reloading (null: the reload flag is free).
+			[$outage, $endedAtMs] = $this->lastAttempt();
+			$startedAtMs = $shared?->reloadStartedAt();
+			$nowMs = microtime(true) * 1000;
+			
+			// case 2: the rules cannot be read, or another worker's reload has run too long
+			if($outage
+				|| ($startedAtMs !== null && $nowMs - $startedAtMs > static::SLOW_RELOAD_MS))
+			{
+				// the flag is free and RETRY_MS has passed: this worker tries again
+				if($startedAtMs === null
+					&& $this->retryDue($endedAtMs))
+				{
+					$this->reload();
+				}
+				
+				// the copy checks the read whatever its age; with none, every item is a miss without the lock
+				return [$this->rules, $this->rules === null];
+			}
+			
+			// case 3: the flag is free, so this worker reloads; a failed fetch goes on as in case 2
+			if($startedAtMs === null
+				&& $this->reload())
+			{
+				return [$this->rules, $this->rules === null];
+			}
+			
+			// case 4: another worker is reloading (it may have taken the flag just now), and this worker's
+			// copy is recent enough to check the read meanwhile
+			if($this->judgesWhileReloading())
+			{
+				return [$this->rules, false];
+			}
+			
+			// case 5: it is not, so this read waits for that reload and looks again. The copy it shares
+			// checks the read (case 1); a reload that failed, or hangs, is case 2. A read that has waited
+			// RELOAD_WAIT_MS in all gives up: a miss without the lock.
+			$waitUntilMs ??= $nowMs + static::RELOAD_WAIT_MS;
+			if($shared === null
+				|| $this->awaitReload($shared, $waitUntilMs) === false)
+			{
+				return [$this->rules, true];
+			}
 		}
+	}
+	
+	/**
+	 * Waits while another worker holds the reload flag: until it lets go, its reload has run longer than
+	 * SLOW_RELOAD_MS, or $untilMs has come. Only the flag is looked at, never the copy, so a turn costs one
+	 * APCu read. It pauses before every look, the first included, so a caller that comes back at once never
+	 * spins. False when $untilMs came first.
+	 */
+	protected function awaitReload(
+		SharedRules $shared,
+		float $untilMs,
+	): bool
+	{
+		$pauseUs = static::RELOAD_POLL_US;
 		
-		// case 3: the flag is free, so this worker reloads; a failed fetch goes on as in case 2
-		if($startedAtMs === null
-			&& $this->reload())
+		while(true)
 		{
-			return [$this->rules, $this->rules === null];
+			usleep($pauseUs);
+			$pauseUs = min(2 * $pauseUs, static::RELOAD_POLL_MAX_US);
+			
+			$startedAtMs = $shared->reloadStartedAt();
+			$nowMs = microtime(true) * 1000;
+			if($startedAtMs === null
+				|| $nowMs - $startedAtMs > static::SLOW_RELOAD_MS)
+			{
+				return true;
+			}
+			
+			if($nowMs >= $untilMs)
+			{
+				return false;
+			}
 		}
-		
-		// cases 4 and 5: another worker is reloading (it may have taken the flag just now)
-		return [$this->rules, $this->judgesWhileReloading() === false];
 	}
 	
 	/**
@@ -1407,8 +1500,12 @@ class RedisVersioned extends Store
 				}
 			}
 			
-			// reload into the copy held, or into a new empty one
-			$rules = $this->rules ?? new Rules($this->rulesRetentionS * 1000, $this->rulesMaxTags);
+			// Reload into a clone of the copy held, or into a new empty one. A fetch that fails halfway (the
+			// stream read again from the start after a reset, or a later batch) then leaves the copy held
+			// as it was.
+			$rules = $this->rules !== null
+				? clone $this->rules
+				: new Rules($this->rulesRetentionS * 1000, $this->rulesMaxTags);
 			// The time is taken before the fetch. So a copy fetched after an invalidation was recorded on
 			// this server holds that invalidation's rule (see behindLocalInvalidation()).
 			$startedAtMs = microtime(true) * 1000;

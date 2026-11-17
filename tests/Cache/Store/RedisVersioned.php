@@ -37,6 +37,7 @@ use function array_column;
 use function array_fill;
 use function array_fill_keys;
 use function array_intersect;
+use function array_key_exists;
 use function array_key_first;
 use function array_key_last;
 use function array_keys;
@@ -381,6 +382,59 @@ class RedisVersioned extends Test
 		finally
 		{
 			$probe->delete($key);
+		}
+	}
+	
+	/**
+	 * A reload that finds its newest id gone reads the stream again from the start. If that read fails, the
+	 * copy held before the reload stays as it was and checks the reads of the outage: a valid item stays a
+	 * hit (an emptied copy would call every item outdated and drop it), an outdated one a miss.
+	 */
+	public function aReloadWhoseReadFromTheStartFailsKeepsTheSetHeld(): bool
+	{
+		$probe = $this->probe(['rules_cache_ms' => 0, 'rules_shared_cache' => false]);
+		$client = $probe->getClient();
+		$rulesKey = $probe->getRulesKey();
+		$key = 'failover_' . bin2hex(random_bytes(4));
+		$tag = 'failover-' . bin2hex(random_bytes(4));
+		
+		try
+		{
+			$probe->invalidateTags([$tag . '-earlier']);
+			$probe->set($key . '_kept', 'kept', 60, [$tag . '-keep']);
+			$probe->set($key, 'outdated', 60, [$tag]);
+			$probe->invalidateTags([$tag]);
+			$probe->invalidateTags([$tag . '-newest']);
+			$newest = (string)array_key_last($client->xRange($rulesKey, '-', '+'));
+			$held = $probe->rules()->last();
+			
+			// the failover that lost the newest rule; then the node stops answering between the read from
+			// the lost id and the read from the start
+			$client->xDel($rulesKey, [$newest]);
+			$client->xAdd($rulesKey, '*', ['mode' => 'any', 'tags' => $tag . '-after', 'first' => '0']);
+			$before = count($probe->fetchedFrom);
+			$probe->beforeRuleFetch = static function() use ($probe, $before): void
+			{
+				if(count($probe->fetchedFrom) > $before + 1)
+				{
+					throw new RedisException('the rules node does not answer');
+				}
+			};
+			$kept = $probe->get($key . '_kept', queue: false);
+			$fetched = array_slice($probe->fetchedFrom, $before);
+			$outdated = $probe->get($key, queue: false);
+			
+			return $held === $newest
+				&& $kept === 'kept'
+				&& $fetched === [$newest, Rules::NONE]
+				&& $outdated === null
+				&& (int)$client->exists($probe->itemId($key . '_kept')) === 1;
+		}
+		finally
+		{
+			$probe->beforeRuleFetch = null;
+			$probe->delete($key);
+			$probe->delete($key . '_kept');
 		}
 	}
 
@@ -884,11 +938,11 @@ class RedisVersioned extends Test
 		{
 			$this->probe($options)->invalidateTags([$tag . '-' . $i]);
 		}
-		// behind this server's invalidations: a delta into the set it took over
+		// each invalidation took the shared set over, added its rule and shared it: taken over again
 		$held = $second->rules()->toArray();
 		
 		return $adopted
-			&& count($second->fetchedFrom) === 1
+			&& $second->fetchedFrom === []
 			&& count($held['tags']) <= 5;
 	}
 	
@@ -1306,34 +1360,38 @@ class RedisVersioned extends Test
 	}
 	
 	/**
-	 * A worker holding a fresh set sees an invalidation another process of
-	 * this server made at once: the held set is behind it, one delta fetch
+	 * A worker holding a fresh set sees an invalidation another process of this server made at once, though
+	 * that process had read nothing: it took the shared set, added its rule and shared it, so the worker,
+	 * behind it, takes that set with no fetch
 	 */
-	public function aHeldSetIsBehindThisServersInvalidation(): bool
+	public function anInvalidationByAnInstanceThatReadNothingSharesItsRule(): bool
 	{
 		$this->requireSharedRules();
 		
-		$worker = $this->probe();
+		$group = 'reload-' . bin2hex(random_bytes(4));
+		$worker = $this->reloadProbe($group);
+		$worker->invalidateTags(['unrelated']);
 		$worker->set('item1', 'test', tags: ['tag1']);
 		$before = $worker->get('item1', queue: false);
-		$last = $worker->rules()
-			->last();
 		$fetches = count($worker->fetchedFrom);
 		
-		$this->probe()
-			->invalidateTags(['tag1']);
+		$invalidator = $this->reloadProbe($group);
+		$invalidator->invalidateTags(['tag1']);
 		$after = $worker->get('item1', queue: false);
+		$head = array_key_first((array)$worker->getClient()->xRevRange($worker->getRulesKey(), '+', '-', 1));
 		
 		try
 		{
 			return $before === 'test'
 				&& $after === null
-				&& count($worker->fetchedFrom) === $fetches + 1
-				&& end($worker->fetchedFrom) === $last;
+				&& $invalidator->fetchedFrom === []
+				&& $invalidator->shares === 1
+				&& count($worker->fetchedFrom) === $fetches
+				&& $worker->rules()->last() === $head;
 		}
 		finally
 		{
-			$worker->delete('item1');
+			$worker->clearPhysical();
 		}
 	}
 	
@@ -2793,8 +2851,8 @@ class RedisVersioned extends Test
 	
 	/**
 	 * RULE: while another worker reloads, exact reads (rules_cache_ms 0) are checked too, by a copy fetched
-	 * up to SLOW_RELOAD_MS ago. An older copy does not check them, so every item is a miss. Neither case
-	 * fetches.
+	 * up to SLOW_RELOAD_MS ago, with no fetch. With an older copy the read waits for that reload, and then
+	 * reloads itself, as an exact read does with the flag free: it sees the rule.
 	 */
 	public function whileAnotherWorkerReloadsExactReadsAreJudgedByASetUpToASecondOld(): bool
 	{
@@ -2808,14 +2866,17 @@ class RedisVersioned extends Test
 		$shared->store($first->rules(), microtime(true) * 1000 - Store::SLOW_RELOAD_MS - 200);
 		$old = $this->probe(['rules_cache_ms' => 0]);
 		$old->setGroup($group);
+		$old->whileAwaitingReload = $this->reloadLands($first, $group);
 		$oldRead = $old->get('item1', queue: false);
 		
 		try
 		{
 			return $youngRead === 'test'
 				&& $young->fetchedFrom === []
+				&& $young->awaited === 0
 				&& $oldRead === null
-				&& $old->fetchedFrom === [];
+				&& $old->awaited === 1
+				&& count($old->fetchedFrom) === 1;
 		}
 		finally
 		{
@@ -2824,17 +2885,53 @@ class RedisVersioned extends Test
 	}
 	
 	/**
-	 * RULE: while another worker reloads, a copy too old to use makes every item a miss, computed without the
-	 * stampede lock, because a worker waiting for the lock would read a miss as well. The value is stored
-	 * with that copy's newest rule id, which only makes the item outdated sooner. Nothing is fetched besides
-	 * the reload.
+	 * RULE: while another worker reloads, a worker whose copy is too old to check a read waits for that
+	 * reload and is checked by the copy it shares, with no fetch of its own. An item no rule reached is a
+	 * hit: nothing is computed.
 	 */
-	public function whileAnotherWorkerReloadsAnOlderSetMissesWithoutTheLockAndStoresStampedFromIt(): bool
+	public function whileAnotherWorkerReloadsAnOlderSetWaitsAndIsJudgedByTheReloadedSet(): bool
+	{
+		$this->requireSharedRules();
+		
+		[$first, $group] = $this->reloadSetUp(Store::SLOW_RELOAD_MS + 500);
+		$this->elsewhere($group)
+			->set('item2', 'kept', 60, ['tag9']);
+		$worker = $this->reloadProbe($group);
+		$worker->whileAwaitingReload = $this->reloadLands($first, $group);
+		$computed = 0;
+		
+		$value = $worker->get('item2', function() use (&$computed): string
+		{
+			$computed++;
+			
+			return 'recomputed';
+		}, 60, ['tag9'], queue: true);
+		
+		try
+		{
+			return $value === 'kept'
+				&& $computed === 0
+				&& $worker->awaited === 1
+				&& $worker->fetchedFrom === [];
+		}
+		finally
+		{
+			$this->reloadTearDown($first);
+		}
+	}
+	
+	/**
+	 * RULE: a miss found after waiting for another worker's reload is an ordinary miss: computed under the
+	 * stampede lock, and stored with the newest rule id of the reloaded copy. So the rule that outdated the
+	 * old value does not reach the new one.
+	 */
+	public function whileAnotherWorkerReloadsAMissIsComputedUnderTheLockAndStampedFromTheReloadedSet(): bool
 	{
 		$this->requireSharedRules();
 		
 		[$first, $group, $last] = $this->reloadSetUp(Store::SLOW_RELOAD_MS + 500);
 		$worker = $this->reloadProbe($group);
+		$worker->whileAwaitingReload = $this->reloadLands($first, $group);
 		$locked = null;
 		
 		$value = $worker->get('item1', function() use ($worker, &$locked): string
@@ -2843,16 +2940,19 @@ class RedisVersioned extends Test
 			
 			return 'recomputed';
 		}, 60, ['tag1'], queue: true);
-		$mark = $first->getClient()
-			->hGet($first->itemId('item1'), Store::KEY_MARK);
+		$client = $first->getClient();
+		$mark = $client->hGet($first->itemId('item1'), Store::KEY_MARK);
+		$head = array_key_first((array)$client->xRevRange($first->getRulesKey(), '+', '-', 1));
 		
 		try
 		{
 			return $value === 'recomputed'
-				&& $locked === false
-				&& $worker->lookedWithLock === 0
+				&& $locked === true
+				&& $worker->awaited === 1
 				&& $worker->fetchedFrom === []
-				&& $mark === $last;
+				&& $mark === $head
+				&& $mark !== $last
+				&& $this->reloadProbe($group)->get('item1', queue: false) === 'recomputed';
 		}
 		finally
 		{
@@ -2861,19 +2961,134 @@ class RedisVersioned extends Test
 	}
 	
 	/**
-	 * RULE: while another worker reloads, a worker with no copy reads every item as a miss, computed without
-	 * the stampede lock, and stores nothing. The item stays as it was.
+	 * RULE: a read waits for another worker's reload only until that reload has run SLOW_RELOAD_MS. From
+	 * then on it hangs, and the copy held checks the read whatever its age, as for every later read.
 	 */
-	public function whileAnotherWorkerReloadsAWorkerHoldingNoSetStoresNothing(): bool
+	public function aReadWaitsForAReloadNoLongerThanUntilItCountsAsHanging(): bool
+	{
+		$this->requireSharedRules();
+		
+		[$first, $group] = $this->reloadSetUp(Store::SLOW_RELOAD_MS + 500);
+		$worker = $this->reloadProbe($group);
+		$began = microtime(true);
+		$read = $worker->get('item1', queue: false);
+		$ms = (microtime(true) - $began) * 1000;
+		
+		try
+		{
+			return $read === 'test'
+				&& $worker->awaited === 1
+				&& $worker->fetchedFrom === []
+				&& $ms > Store::SLOW_RELOAD_MS - 200
+				&& $ms < Store::SLOW_RELOAD_MS + 600;
+		}
+		finally
+		{
+			$this->reloadTearDown($first);
+		}
+	}
+	
+	/**
+	 * RULE (processes): while one worker's reload takes 400 ms, workers whose copy is three seconds old read
+	 * 100 ms into it. They wait for it and fetch nothing; the item the stream's newest rule outdated is a
+	 * miss for each, checked by a copy that holds the rule. (The reloaded copy is past rules_cache_ms when
+	 * it lands, so one of them reloads again, as with the flag free.)
+	 */
+	public function whileAnotherWorkerReloadsWorkersWithAnOlderSetWaitForIt(): bool
+	{
+		$this->requireSharedRules();
+		
+		$directory = $this->rulesDirectory();
+		$startAt = microtime(true) + self::PROCESS_WARM_UP_S;
+		[$group, , $first] = $this->processScene($directory, 3000, $startAt);
+		
+		try
+		{
+			$reports = $this->readInProcesses($group, $directory, $startAt, [
+				'reloader' => [0, 400, false],
+				'a' => [100, 0, false],
+				'b' => [100, 0, false],
+				'c' => [150, 0, false],
+			]);
+			
+			$others = true;
+			$attempts = 0;
+			foreach(['a', 'b', 'c'] as $name)
+			{
+				$attempts+= $reports[$name]['attempts'] ?? 9;
+				$others = $others
+					&& array_key_exists('value', $reports[$name] ?? [])
+					&& $reports[$name]['value'] === null
+					&& ($reports[$name]['ms'] ?? 0) > 150
+					&& ($reports[$name]['ms'] ?? 9999) < 900;
+			}
+			
+			return ($reports['reloader']['attempts'] ?? null) === 1
+				&& $others
+				&& $attempts <= 1;
+		}
+		finally
+		{
+			$first->clearPhysical();
+			$this->removeDirectory($directory);
+		}
+	}
+	
+	/**
+	 * RULE: while another worker loads the server's first copy, a worker with none waits for it and is
+	 * checked by it: a hit, nothing computed, nothing fetched.
+	 */
+	public function whileAnotherWorkerLoadsTheFirstSetAWorkerHoldingNoneWaitsForIt(): bool
 	{
 		$this->requireSharedRules();
 		
 		[$first, $group] = $this->reloadSetUp(0);
+		$this->elsewhere($group)
+			->set('item2', 'kept', 60, ['tag9']);
 		$shared = $first->sharedRules();
 		// a server whose APCu holds no set, its reload in flight
 		$shared->release();
 		$shared->forget();
 		$shared->lead();
+		$cold = $this->reloadProbe($group);
+		$cold->whileAwaitingReload = $this->reloadLands($first, $group);
+		$computed = 0;
+		
+		$value = $cold->get('item2', function() use (&$computed): string
+		{
+			$computed++;
+			
+			return 'computed';
+		}, 60, ['tag9'], queue: true);
+		
+		try
+		{
+			return $value === 'kept'
+				&& $computed === 0
+				&& $cold->awaited === 1
+				&& $cold->fetchedFrom === [];
+		}
+		finally
+		{
+			$this->reloadTearDown($first);
+		}
+	}
+	
+	/**
+	 * RULE: while a reload hangs (it has run longer than SLOW_RELOAD_MS), a worker with no copy reads every
+	 * item as a miss at once, computed without the stampede lock, and stores nothing. The item stays as it
+	 * was.
+	 */
+	public function whileAReloadHangsAWorkerHoldingNoSetStoresNothing(): bool
+	{
+		$this->requireSharedRules();
+		
+		[$first, $group] = $this->reloadSetUp(0);
+		$shared = $first->sharedRules();
+		// a server whose APCu holds no set, its reload hanging
+		$shared->release();
+		$shared->forget();
+		$shared->leaseSince(microtime(true) * 1000 - Store::SLOW_RELOAD_MS - 200);
 		$client = $first->getClient();
 		$id = $first->itemId('item1');
 		$mark = $client->hGet($id, Store::KEY_MARK);
@@ -2891,30 +3106,35 @@ class RedisVersioned extends Test
 		{
 			return $value === 'computed'
 				&& $locked === false
+				&& $cold->awaited === 0
 				&& $cold->fetchedFrom === []
 				&& $client->hGet($id, Store::KEY_MARK) === $mark;
 		}
 		finally
 		{
+			$shared->forget();
 			$this->reloadTearDown($first);
 		}
 	}
 	
 	/**
 	 * RULE: while another worker reloads, a young copy that may lack an invalidation made on this server
-	 * checks nothing. Every item is a miss, computed without the lock, and the value the rule reached is
-	 * never served. Nothing is fetched besides the reload.
+	 * checks nothing. The read waits for that reload, and the copy it shares checks it: the value the rule
+	 * reached is never served, and its miss is computed under the stampede lock. Nothing is fetched besides
+	 * the reload.
 	 */
-	public function whileAnotherWorkerReloadsAYoungSetBehindALocalInvalidationMisses(): bool
+	public function whileAnotherWorkerReloadsAYoungSetBehindALocalInvalidationWaitsAndTakesTheLock(): bool
 	{
 		$this->requireSharedRules();
 		
 		[$first, $group] = $this->reloadSetUp(-self::RELOAD_CACHE_MS / 2);
 		$worker = $this->reloadProbe($group);
 		$before = $worker->get('item1', queue: false);
-		// another worker of this server, holding no set
+		// another worker of this server, holding no set; the shared one ends before the rule added
+		// elsewhere, so its rule goes into none
 		$this->reloadProbe($group)
 			->invalidateTags(['tag1']);
+		$worker->whileAwaitingReload = $this->reloadLands($first, $group);
 		$locked = null;
 		
 		$after = $worker->get('item1', function() use ($worker, &$locked): string
@@ -2928,7 +3148,8 @@ class RedisVersioned extends Test
 		{
 			return $before === 'test'
 				&& $after === 'computed'
-				&& $locked === false
+				&& $locked === true
+				&& $worker->awaited === 1
 				&& $worker->fetchedFrom === [];
 		}
 		finally
@@ -2945,7 +3166,12 @@ class RedisVersioned extends Test
 	{
 		$this->requireSharedRules();
 		
-		[$first, $group] = $this->reloadSetUp(Store::SLOW_RELOAD_MS + 500);
+		[$first, $group] = $this->reloadSetUp(0);
+		// a server whose APCu holds no set, its reload hanging: nothing can check a read
+		$shared = $first->sharedRules();
+		$shared->release();
+		$shared->forget();
+		$shared->leaseSince(microtime(true) * 1000 - Store::SLOW_RELOAD_MS - 200);
 		$worker = $this->reloadProbe($group);
 		$calls = 0;
 		$locked = [];
@@ -3390,6 +3616,8 @@ class RedisVersioned extends Test
 			$this->reloadProbe($group)
 				->invalidateTags(['tag3']);
 		};
+		// the look waits for that reload, which lands with the rule
+		$probe->whileAwaitingReload = $this->reloadLands($first, $group);
 		
 		try
 		{
@@ -3450,10 +3678,11 @@ class RedisVersioned extends Test
 		$read = $between->get('gone', queue: false);
 		$writer->clearPhysical();
 		
+		// a and b each took the shared set, added their rule and shared it: nothing was fetched
 		return $hooked
 			&& $markId === $head
 			&& $read === null
-			&& count($between->fetchedFrom) === 2;
+			&& $between->fetchedFrom === [];
 	}
 	
 	/**
@@ -3612,6 +3841,10 @@ class RedisVersioned extends Test
 		{
 			usleep(2000);
 			$before = $worker->get('item1', queue: false);
+			// a rule from elsewhere lands before the invalidation's own, so that rule goes into no copy and
+			// only the server's record tells the worker
+			$worker->getClient()
+				->xAdd($worker->getRulesKey(), '*', ['mode' => 'any', 'tags' => 'elsewhere', 'first' => '0']);
 		};
 		
 		$invalidator->invalidateTags(['tag1']);
@@ -3958,6 +4191,39 @@ class RedisVersioned extends Test
 	): RedisVersionedProbe
 	{
 		$probe = $this->probe(['rules_cache_ms' => self::RELOAD_CACHE_MS]);
+		$probe->setGroup($group);
+		
+		return $probe;
+	}
+	
+	/**
+	 * What the worker holding the reload flag ($holder) does when its reload lands: the stream as it is now
+	 * shared as a copy fetched now, and the flag let go
+	 */
+	protected function reloadLands(
+		RedisVersionedProbe $holder,
+		string $group,
+	): Closure
+	{
+		return function() use ($holder, $group): void
+		{
+			$shared = $holder->sharedRules();
+			$shared->store($this->elsewhere($group)->rules(), microtime(true) * 1000, true);
+			$shared->release();
+		};
+	}
+	
+	/**
+	 * A worker of another server in $group: it reads the stream itself on every read and shares nothing
+	 */
+	protected function elsewhere(
+		string $group,
+	): RedisVersionedProbe
+	{
+		$probe = $this->probe([
+			'rules_cache_ms' => 0,
+			'rules_shared_cache' => false,
+		]);
 		$probe->setGroup($group);
 		
 		return $probe;

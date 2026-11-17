@@ -15,6 +15,7 @@ use Ovos\Test\Cache\Store\TraitCachePolicy;
 use Ovos\Test\Cache\Store\TraitStoredStrings;
 use Ovos\Test\Cache\Store\TraitRedisCluster;
 use Override;
+use ReflectionProperty;
 
 use function array_key_last;
 use function array_keys;
@@ -340,13 +341,17 @@ class RedisClusterVersioned extends Test
 			$store->invalidateTags([$tag]);
 			$store->invalidateTags([$tag . '-newest']);
 			$newest = (string)array_key_last($client->xRange($rulesKey, '-', '+'));
+			// the copy must hold the newest rule, or the read below would be a miss through plain
+			// continuity and test nothing
+			$heldNewest = (new ReflectionProperty($store, 'rules'))->getValue($store)?->last() === $newest;
 			
 			// the failover: the new master never got the newest rule, and another server's invalidation
 			// reached it first (written by hand, so this copy does not take it in)
 			$client->xDel($rulesKey, [$newest]);
 			$client->xAdd($rulesKey, '*', ['mode' => 'any', 'tags' => $tag . '-after', 'first' => '0']);
 			
-			return $store->get($key, queue: false) === null;
+			return $heldNewest
+				&& $store->get($key, queue: false) === null;
 		}
 		finally
 		{

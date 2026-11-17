@@ -120,11 +120,11 @@ abstract class KeyValue
 	protected array $computingMisses = [];
 	
 	/**
-	 * The ids whose read was a miss only because the store could not check the item: RedisVersioned while
-	 * another worker reloads its rules, or with no copy of the rules while Redis does not answer. get() and
-	 * getMany() compute them without the stampede lock. A worker waiting for the lock would read a miss as
-	 * well, so the lock would only make it queue. A manual lockAndQueue() keeps its lock, because the
-	 * caller asked for it.
+	 * The ids whose read was a miss only because the store could not check the item: RedisVersioned with
+	 * no copy of the rules while Redis does not answer or a reload hangs (and a read that gave up waiting
+	 * for other workers' reloads, see RedisVersioned::readRules()). get() and getMany() compute them
+	 * without the stampede lock. A worker waiting for the lock would read a miss as well, so the lock would
+	 * only make it queue. A manual lockAndQueue() keeps its lock, because the caller asked for it.
 	 *
 	 * @var array<string, true>
 	 */
