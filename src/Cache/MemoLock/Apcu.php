@@ -11,6 +11,7 @@ use Closure;
 use Override;
 
 use function array_key_exists;
+use function array_values;
 use function apcu_add;
 use function apcu_delete;
 use function apcu_entry;
@@ -19,6 +20,7 @@ use function apcu_fetch;
 use function apcu_store;
 use function bin2hex;
 use function ceil;
+use function is_array;
 use function is_float;
 use function max;
 use function microtime;
@@ -377,6 +379,41 @@ class Apcu extends MemoLock
 		return is_float($failedAt)
 			? $failedAt
 			: null;
+	}
+	
+	/**
+	 * When computing each of $ids last failed (see MemoLock::failedAtMany())
+	 * - one apcu_fetch() of all their keys
+	 */
+	#[Override]
+	public function failedAtMany(
+		array $ids,
+	): array
+	{
+		if($ids === [])
+		{
+			return [];
+		}
+		
+		$keys = [];
+		foreach($ids as $id)
+		{
+			$keys[$id] = $this->prefixer
+				->prefix(static::TYPE_FAILED, $id);
+		}
+		$found = apcu_fetch(array_values($keys));
+		$found = is_array($found) ? $found : [];
+		
+		$failed = [];
+		foreach($keys as $id => $key)
+		{
+			if(is_float($found[$key] ?? null))
+			{
+				$failed[$id] = $found[$key];
+			}
+		}
+		
+		return $failed;
 	}
 	
 	/**

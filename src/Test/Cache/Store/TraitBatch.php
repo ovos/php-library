@@ -20,6 +20,7 @@ use function bin2hex;
 use function count;
 use function microtime;
 use function random_bytes;
+use function usleep;
 
 /**
  * TraitBatch
@@ -28,7 +29,11 @@ use function random_bytes;
  * computed by one resolver call, every item is judged and guarded on its
  * own (stale:, soft:, staleIfError:, refresh:, the invalidation guard), one
  * process computes a key and the others wait for it (a lock per key), and on
- * a standalone server a batch costs one round trip warm and three cold.
+ * a standalone server a batch costs one round trip warm and three cold. A
+ * computation that failed is remembered per key, as get() remembers it: the
+ * batches that waited for a key and the batches after serve its kept value
+ * without computing, one process tries again per retry time (with the batch's
+ * refresh), and a healthy batch looks for no failure.
  * Used with TraitStaleWhileRevalidate and TraitCachePolicy (their helpers)
  *
  * @author Marcin Gil <mg@ovos.at>
@@ -655,6 +660,324 @@ trait TraitBatch
 	}
 	
 	/**
+	 * RULE: a batch computation that failed is not repeated by the next
+	 * batch - the values kept for errors are served at once, nothing
+	 * computed, nothing queued, until the retry time has passed
+	 */
+	public function aFailedBatchComputationIsNotRepeatedByTheNextBatch(): bool
+	{
+		$store = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('failed', 2);
+		$this->writeErrorKept($store, $a, 'kept a');
+		$this->writeErrorKept($store, $b, 'kept b');
+		
+		$first = $this->staleStore()->getMany($keys, $this->batchFailing($calls), 60, stale: 1, staleIfError: 60);
+		$reader = $this->staleStore();
+		$this->capture($reader, $deferred);
+		$second = $reader->getMany($keys, $this->batchFailing($again), 60, stale: 1, staleIfError: 60);
+		$reader->setDeferrer(null);
+		$this->batchDelete($keys);
+		
+		return $first === ['kept a', 'kept b'] && $calls === [[$a, $b]]
+			&& $second === ['kept a', 'kept b'] && $again === [] && $deferred === [];
+	}
+	
+	/**
+	 * RULE: a batch that waited for a key whose computation failed serves the
+	 * value kept for errors - it does not take the lock and compute in turn.
+	 * Another process holds the key's lock; while the batch waits, that one
+	 * fails and remembers it (here: at the batch's second read of the value).
+	 * The batch's own miss is computed as ever
+	 */
+	public function aBatchThatWaitedForAFailedComputationServesTheKeptValue(): bool
+	{
+		$store = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('waited', 2);
+		$this->writeRecord($store, $b, new Stale(new ReadSpy('kept b'), microtime(true) - 10, 1, false, errorFor: 60), 70);
+		$id = $this->staleId($store, $b);
+		// the other process: it holds the lock, and its lock goes when it has failed
+		$holder = $this->staleStore()->getMemoLock();
+		$held = $holder->tryLock($id, 300);
+		ReadSpy::watch(function(int $reads) use ($holder, $id): void
+		{
+			// the first read is the batch's own; the second is the look after the wait
+			if($reads === 2)
+			{
+				$holder->rememberFailure($id, 3000);
+			}
+		});
+		
+		try
+		{
+			$values = $this->staleStore()->getMany($keys, $this->batchResolver($calls), 60, stale: 1, staleIfError: 60);
+			
+			return $held
+				&& ($values[0] ?? null) === 'computed ' . $a
+				&& ($values[1] ?? null) instanceof ReadSpy && $values[1]->value === 'kept b'
+				&& $calls === [[$a]];
+		}
+		finally
+		{
+			ReadSpy::watch(null);
+			$holder->releaseActiveLock($id);
+			$this->batchDelete($keys);
+		}
+	}
+	
+	/**
+	 * RULE: once the retry time has passed, one process tries the keys of a
+	 * batch again - by ONE deferred closure and one resolver call, as the
+	 * batch's refresh, and the batch is answered with the kept values at
+	 * once; a failure of that attempt is remembered anew
+	 */
+	public function onceTheRetryTimeHasPassedOneBatchTriesAgain(): bool
+	{
+		$store = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('retry', 2);
+		$this->writeErrorKept($store, $a, 'kept a');
+		$this->writeErrorKept($store, $b, 'kept b');
+		
+		$this->retrying(50)->getMany($keys, $this->batchFailing($first), 60, stale: 1, staleIfError: 60);
+		usleep(60_000);
+		$reader = $this->retrying(50);
+		$this->capture($reader, $deferred);
+		$resolver = $this->batchFailing($calls);
+		$served = $reader->getMany($keys, $resolver, 60, stale: 1, staleIfError: 60);
+		$callsBeforeTheRefresh = $calls;
+		$queued = count($deferred);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$callsAfterTheRefresh = $calls;
+		// right after the attempt failed: not yet again
+		$this->capture($reader, $deferred);
+		$again = $reader->getMany($keys, $resolver, 60, stale: 1, staleIfError: 60);
+		$reader->setDeferrer(null);
+		$this->batchDelete($keys);
+		
+		return $first === [[$a, $b]]
+			&& $served === ['kept a', 'kept b'] && $callsBeforeTheRefresh === [] && $queued === 1
+			&& $callsAfterTheRefresh === [[$a, $b]]
+			&& $again === ['kept a', 'kept b'] && $calls === [[$a, $b]] && $deferred === [];
+	}
+	
+	/**
+	 * RULE: a batch beside that attempt serves the kept value at once - the
+	 * key another process holds the lock of is not computed and not waited
+	 * for; the key whose lock is free is this batch's to try
+	 */
+	public function aBatchBesideTheNextAttemptServesTheKeptValue(): bool
+	{
+		$store = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('retry-lost', 2);
+		$this->writeErrorKept($store, $a, 'kept a');
+		$this->writeErrorKept($store, $b, 'kept b');
+		
+		$this->retrying(50)->getMany($keys, $this->batchFailing($first), 60, stale: 1, staleIfError: 60);
+		usleep(60_000);
+		$id = $this->staleId($store, $b);
+		$holder = $this->staleStore()->getMemoLock();
+		$held = $holder->tryLock($id, 300);
+		
+		try
+		{
+			$started = microtime(true);
+			$served = $this->retrying(50)->getMany($keys, $this->batchFailing($calls), 60, stale: 1, staleIfError: 60);
+			$waited = microtime(true) - $started;
+			
+			return $held && $first === [[$a, $b]]
+				&& $served === ['kept a', 'kept b'] && $calls === [[$a]]
+				&& $waited < 0.25;
+		}
+		finally
+		{
+			$holder->releaseActiveLock($id);
+			$this->batchDelete($keys);
+		}
+	}
+	
+	/**
+	 * RULE: an attempt that succeeds stores the new values - the batch that
+	 * made it is answered with the kept values (the attempt runs after the
+	 * response), and the next batch is a hit
+	 */
+	public function aBatchAttemptThatSucceedsStoresTheNewValues(): bool
+	{
+		$store = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('retry-succeeds', 2);
+		$this->writeErrorKept($store, $a, 'kept a');
+		$this->writeErrorKept($store, $b, 'kept b');
+		
+		$this->retrying(50)->getMany($keys, $this->batchFailing($failed), 60, stale: 1, staleIfError: 60);
+		usleep(60_000);
+		$reader = $this->retrying(50);
+		$this->capture($reader, $deferred);
+		$served = $reader->getMany($keys, $this->batchResolver($calls), 60, stale: 1, staleIfError: 60);
+		$queued = count($deferred);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$reader->setDeferrer(null);
+		$read = $this->staleStore()->getMany($keys);
+		$this->batchDelete($keys);
+		
+		return $failed === [[$a, $b]]
+			&& $served === ['kept a', 'kept b'] && $queued === 1
+			&& $calls === [[$a, $b]]
+			&& $read === ['computed ' . $a, 'computed ' . $b];
+	}
+	
+	/**
+	 * RULE: a failure counts for the values it was about - one remembered
+	 * before a value's fresh time ended belongs to a value replaced since,
+	 * and the batch past the stale time computes, as for any miss
+	 */
+	public function aBatchFailureFromBeforeTheValuesWereFreshDoesNotCount(): bool
+	{
+		$store = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('older-failure', 2);
+		$this->writeErrorKept($store, $a, 'kept a');
+		$this->writeErrorKept($store, $b, 'kept b');
+		
+		$this->staleStore()->getMany($keys, $this->batchFailing($failed), 60, stale: 1, staleIfError: 60);
+		usleep(20_000);
+		// values computed since: their fresh time ended after that failure, and they have no stale time
+		foreach($keys as $key)
+		{
+			$this->writeRecord($store, $key, new Stale('newer', microtime(true) - 0.005, 0, false, errorFor: 60), 70);
+		}
+		$reader = $this->staleStore();
+		$this->capture($reader, $deferred);
+		$served = $reader->getMany($keys, $this->batchResolver($calls), 60, staleIfError: 60);
+		$reader->setDeferrer(null);
+		$this->batchDelete($keys);
+		
+		return $failed === [[$a, $b]]
+			&& $served === ['computed ' . $a, 'computed ' . $b]
+			&& $calls === [[$a, $b]] && $deferred === [];
+	}
+	
+	/**
+	 * RULE: a batch refresh of stale values that fails is remembered for the
+	 * values kept for errors - past their stale time nobody has to compute to
+	 * learn that the origin is down; a value kept for no error remembers
+	 * nothing
+	 */
+	public function aFailedBatchRefreshOfValuesKeptForErrorsIsRemembered(): bool
+	{
+		$store = $this->staleStore();
+		[$kept, $plain] = $keys = $this->batchKeys('refresh-kept', 2);
+		// both inside their stale time; one kept for errors after it
+		foreach([$kept => 60, $plain => 0] as $key => $errorFor)
+		{
+			$this->writeRecord($store, $key, new Stale('last good', microtime(true) - 1, 60, false, $errorFor), 180);
+		}
+		
+		$served = $this->staleStore()->getMany($keys, $this->batchFailing($calls), 60, stale: 60, staleIfError: 60);
+		$memoLock = $this->staleStore()->getMemoLock();
+		$rememberedKept = $memoLock->failedAt($this->staleId($store, $kept));
+		$rememberedPlain = $memoLock->failedAt($this->staleId($store, $plain));
+		$this->batchDelete($keys);
+		
+		return $served === ['last good', 'last good'] && $calls === [[$kept, $plain]]
+			&& $rememberedKept !== null && $rememberedKept > microtime(true) - 5
+			&& $rememberedPlain === null;
+	}
+	
+	/**
+	 * RULE: a batch judges each key on its own - a key kept for errors whose
+	 * computation failed a moment ago is answered with the kept value, a
+	 * fresh one as it is, and a plain miss is computed, alone, and stored
+	 */
+	public function aBatchMixingAFailedAFreshAndAMissingKeyAnswersEach(): bool
+	{
+		$store = $this->staleStore();
+		[$kept, $fresh, $missing] = $keys = $this->batchKeys('mixed-kept', 3);
+		$this->writeErrorKept($store, $kept, 'kept');
+		$store->set($fresh, 'fresh', 60);
+		
+		$this->staleStore()->getMany([$kept], $this->batchFailing($failed), 60, stale: 1, staleIfError: 60);
+		$reader = $this->staleStore();
+		$this->capture($reader, $deferred);
+		$values = $reader->getMany($keys, $this->batchResolver($calls), 60, stale: 1, staleIfError: 60);
+		$reader->setDeferrer(null);
+		$stored = $this->staleStore()->getMany($keys);
+		$this->batchDelete($keys);
+		
+		return $failed === [[$kept]]
+			&& $values === ['kept', 'fresh', 'computed ' . $missing]
+			&& $calls === [[$missing]] && $deferred === []
+			&& $stored === [null, 'fresh', 'computed ' . $missing];
+	}
+	
+	/**
+	 * RULE (probe): a healthy batch looks for no failure - with
+	 * staleIfError: given, a batch of misses, of hits and of stale values
+	 * (refreshed inline) sends no GET and no MGET, and costs the round trips
+	 * it cost before: three cold, one warm
+	 */
+	public function aHealthyBatchLooksForNoFailure(): bool
+	{
+		$probe = $this->requireBatchProbe();
+		$this->batchWarm($probe);
+		$keys = $this->batchKeys('healthy', 20);
+		$resolver = static fn(KeyValue $store, array $keys): array => array_combine($keys, $keys);
+		$counter = $probe->getConnection()->counter();
+		
+		$counter->resetCount();
+		$computed = $probe->getMany($keys, $resolver, 60, stale: 60, staleIfError: 60);
+		$cold = $counter->sent;
+		$counter->resetCount();
+		$hits = $probe->getMany($keys, $resolver, 60, stale: 60, staleIfError: 60);
+		$warm = $counter->sent;
+		// past their fresh time, inside their stale time, kept for errors after it
+		$other = $this->staleStore();
+		foreach($keys as $key)
+		{
+			$this->writeRecord($other, $key, new Stale('old', microtime(true) - 1, 60, false, 60), 180);
+		}
+		$counter->resetCount();
+		$refreshed = $probe->getMany($keys, $resolver, 60, stale: 60, staleIfError: 60);
+		$stale = $counter->sent;
+		$this->batchDelete($keys);
+		
+		return $computed === $keys && $hits === $keys && $refreshed === $keys
+			&& count($cold) === 3 && count($warm) === 1
+			&& $this->failureLooks([...$cold, ...$warm, ...$stale]) === 0;
+	}
+	
+	/**
+	 * RULE (probe): a batch with values past their stale time, kept for
+	 * errors, looks for their failures in ONE round trip - one MGET for them
+	 * all, no GET per key - and, none remembered, computes them as misses:
+	 * the three round trips of a cold batch and that one
+	 */
+	public function aBatchWithValuesKeptForErrorsLooksForTheirFailuresOnce(): bool
+	{
+		$probe = $this->requireBatchProbe();
+		$this->batchWarm($probe);
+		$keys = $this->batchKeys('kept-look', 20);
+		$other = $this->staleStore();
+		foreach($keys as $key)
+		{
+			$this->writeErrorKept($other, $key, 'kept');
+		}
+		$counter = $probe->getConnection()->counter();
+		$counter->resetCount();
+		
+		$values = $probe->getMany($keys, static fn(KeyValue $store, array $keys): array => array_combine($keys, $keys), 60, stale: 1, staleIfError: 60);
+		$sent = $counter->sent;
+		$this->batchDelete($keys);
+		
+		return $values === $keys
+			&& $this->pipelinesOf($sent, 'mGet', 1) === 1
+			&& $this->failureLooks($sent) === 1
+			&& count($sent) === 4;
+	}
+	
+	/**
 	 * Keys of their own for one rule
 	 *
 	 * @return list<string>
@@ -739,6 +1062,63 @@ trait TraitBatch
 		}
 		
 		return $free;
+	}
+	
+	/**
+	 * A batch resolver that throws, recording the keys of each call in $calls
+	 */
+	protected function batchFailing(
+		?array &$calls,
+	): Closure
+	{
+		$calls = [];
+		
+		return function(KeyValue $store, array $keys) use (&$calls): never
+		{
+			$calls[] = $keys;
+			
+			throw new RuntimeException('the origin is down');
+		};
+	}
+	
+	/**
+	 * Writes a record as it is - a value aged by hand
+	 */
+	protected function writeRecord(
+		KeyValue $store,
+		string $key,
+		Stale $record,
+		int $ttl,
+	): void
+	{
+		if($store instanceof Tags)
+		{
+			$store->set($key, $record, $ttl, [static::BATCH_TAG]);
+			
+			return;
+		}
+		
+		$store->set($key, $record, $ttl);
+	}
+	
+	/**
+	 * How many looks for a remembered failure were sent: the GETs and MGETs,
+	 * which a store sends for nothing else in a batch
+	 *
+	 * @param list<list<string>> $sent
+	 */
+	protected function failureLooks(
+		array $sent,
+	): int
+	{
+		$looks = 0;
+		foreach($sent as $commands)
+		{
+			$counts = array_count_values($commands);
+			$looks+= ($counts['get'] ?? 0) + ($counts['mGet'] ?? 0);
+		}
+		
+		return $looks;
 	}
 	
 	/**

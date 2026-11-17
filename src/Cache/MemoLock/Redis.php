@@ -26,6 +26,8 @@ use function max;
 use function min;
 use function random_int;
 use function array_key_exists;
+use function array_values;
+use function is_array;
 use function sprintf;
 
 use const PHP_EOL;
@@ -937,6 +939,106 @@ class Redis extends MemoLock
 		return is_numeric($failedAt)
 			? (float)$failedAt
 			: null;
+	}
+	
+	/**
+	 * Remembers the failure of every id (see MemoLock::rememberFailureMany())
+	 * - their SETs in one pipeline on a standalone client, one by one on a
+	 * cluster (the keys are of different slots)
+	 */
+	#[Override]
+	public function rememberFailureMany(
+		array $ids,
+		int $ttlMs,
+	): void
+	{
+		if($ids === []
+			|| ($client = $this->getClient()) === null)
+		{
+			return;
+		}
+		
+		if($client instanceof RedisClient === false)
+		{
+			parent::rememberFailureMany($ids, $ttlMs);
+			
+			return;
+		}
+		
+		try
+		{
+			$failedAt = sprintf('%.6F', microtime(true));
+			$pipeline = $client->pipeline();
+			foreach($ids as $id)
+			{
+				$pipeline->set(
+					$this->prefixer
+						->prefix(static::TYPE_FAILED, $id),
+					$failedAt,
+					[
+						'PX' => max(1, $ttlMs),
+					],
+				);
+			}
+			$pipeline->exec();
+		}
+		catch(RedisException $exception)
+		{
+			$this->connection->log($exception);
+		}
+	}
+	
+	/**
+	 * When computing each of $ids last failed (see MemoLock::failedAtMany())
+	 * - one MGET on a standalone client, a GET each on a cluster (the keys
+	 * are of different slots, and an MGET may not cross slots)
+	 */
+	#[Override]
+	public function failedAtMany(
+		array $ids,
+	): array
+	{
+		if($ids === []
+			|| ($client = $this->getClient()) === null)
+		{
+			return [];
+		}
+		
+		if($client instanceof RedisClient === false)
+		{
+			return parent::failedAtMany($ids);
+		}
+		
+		$ids = array_values($ids);
+		$keys = [];
+		foreach($ids as $id)
+		{
+			$keys[] = $this->prefixer
+				->prefix(static::TYPE_FAILED, $id);
+		}
+		
+		try
+		{
+			$replies = $client->mGet($keys);
+		}
+		catch(RedisException $exception)
+		{
+			$this->connection->log($exception);
+			
+			return [];
+		}
+		
+		$failed = [];
+		foreach($ids as $index => $id)
+		{
+			$failedAt = is_array($replies) ? ($replies[$index] ?? false) : false;
+			if(is_numeric($failedAt))
+			{
+				$failed[$id] = (float)$failedAt;
+			}
+		}
+		
+		return $failed;
 	}
 	
 	/**

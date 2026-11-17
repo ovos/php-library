@@ -262,6 +262,50 @@ abstract class MemoLock
 	}
 	
 	/**
+	 * Remembers for $ttlMs that computing each of $ids failed just now (see
+	 * rememberFailure()): the keys of a batch whose one computation threw
+	 * (KeyValue::getMany(staleIfError:)) - in one round trip where the store
+	 * can; here one by one
+	 *
+	 * @param list<string> $ids
+	 */
+	public function rememberFailureMany(
+		array $ids,
+		int $ttlMs,
+	): void
+	{
+		foreach($ids as $id)
+		{
+			$this->rememberFailure($id, $ttlMs);
+		}
+	}
+	
+	/**
+	 * When computing each of $ids last failed (see failedAt()), by id - an id
+	 * with nothing remembered is left out. One look for a batch, in one round
+	 * trip where the store can; here one by one, so a MemoLock that remembers
+	 * nothing answers []
+	 *
+	 * @param list<string> $ids
+	 * @return array<string, float>
+	 */
+	public function failedAtMany(
+		array $ids,
+	): array
+	{
+		$failed = [];
+		foreach($ids as $id)
+		{
+			if(($failedAt = $this->failedAt($id)) !== null)
+			{
+				$failed[$id] = $failedAt;
+			}
+		}
+		
+		return $failed;
+	}
+	
+	/**
 	 * The lock is this process's: it computes - unless the value landed
 	 * meanwhile (double-checked locking). A process whose miss came just
 	 * before the holder wrote and released, and whose subscription missed the

@@ -880,8 +880,14 @@ $timetable = $store->get('timetable:' . $day, $this->fetchTimetable(...), ttl: 3
   hit, a miss and a stale read cost what they did. A refresh of a stale value
   that throws is remembered too when the value is kept for errors, so the end
   of the stale time during an outage costs nobody a computation.
-- `getMany()` falls back per key as before; it does not read or write the
-  remembered failure yet.
+- `getMany()` does the same per key: a resolver call that throws is remembered
+  for its keys kept for errors before their locks go, a batch that waited for
+  such a key is answered with its kept value, and so is every batch in the
+  retry time - without computing those keys; the other keys of the batch are
+  judged as ever. After the retry time one process tries the due keys again,
+  together with the batch's stale values (one deferred call). The look is one
+  `MGET` for all keys of a batch past their stale time, none for a batch
+  without one (on a cluster a `GET` each).
 - It needs a TTL (a value without one never ages), and the item lives
   ttl + stale + staleIfError.
 - A read that does not pass `staleIfError:` gets the exception as before; a
@@ -920,15 +926,18 @@ $users = $store->getMany(
 - Every item is judged on its own, with `get()`'s options: `stale:` serves a
   value past its fresh time and refreshes all of them in ONE deferred call,
   `soft:`, `staleIfError:` (when the resolver throws, every key kept for errors
-  gets its kept value; one without rethrows), `refresh:`, `queue:`,
-  `queueLockTtlMs:`. Every write is guarded like a single miss's.
+  gets its kept value; one without rethrows - the failure is remembered per
+  key either way, see [Stale-if-error](#stale-if-error-staleiferror)),
+  `refresh:`, `queue:`, `queueLockTtlMs:`. Every write is guarded like a single
+  miss's.
 - `setMany($values, $ttl, $tags)` stores several values in one round trip
   (`null` removes, as `set()` does).
 
 On a standalone server a batch costs one round trip warm and three cold,
 whatever N (a `get()` loop: N and 3N); the versioned stores add one `XRANGE`
-at most when their rule set is due (one rule set per batch). On a cluster the
-same calls go one by one. Every path is in [Measured](#round-trips-per-request-n-keys).
+at most when their rule set is due (one rule set per batch), and a batch that
+holds values past their stale time, kept for errors, one `MGET` (the look for
+their remembered failures). On a cluster the same calls go one by one. Every path is in [Measured](#round-trips-per-request-n-keys).
 
 ## Cache invalidation
 

@@ -356,6 +356,15 @@ class CountingClient extends BaseRedis
 		return parent::get($key);
 	}
 	
+	public function mGet(
+		array $keys,
+	): BaseRedis|array|false
+	{
+		$this->counted('mGet');
+		
+		return parent::mGet($keys);
+	}
+	
 	public function function(
 		string $operation,
 		mixed ...$args,

@@ -17,6 +17,7 @@ use Throwable;
 
 use function array_diff;
 use function array_diff_key;
+use function array_filter;
 use function array_fill_keys;
 use function array_flip;
 use function array_intersect_key;
@@ -684,6 +685,68 @@ abstract class KeyValue
 	}
 	
 	/**
+	 * rememberFailure() for the keys of a batch whose one computation failed
+	 * (getMany()) - in one round trip where the MemoLock can
+	 *
+	 * @param list<string> $ids
+	 */
+	protected function rememberFailureMany(
+		array $ids,
+		?int $lockTtlMs = null,
+	): void
+	{
+		if($ids === [])
+		{
+			return;
+		}
+		
+		$memoLock = $this->getMemoLock();
+		$memoLock->rememberFailureMany($ids, $this->errorRetryMs + ($lockTtlMs ?? $memoLock->getQueueLockTtlMs()));
+	}
+	
+	/**
+	 * failedAt() for the values of a batch kept for errors ($kept, by id): one
+	 * look for them all (see MemoLock::failedAtMany()), none when there is no
+	 * such value. By id, when computing it last failed - only the failures
+	 * that count for the value, as failedAt() counts them
+	 *
+	 * @param array<string, Stale> $kept
+	 * @return array<string, float>
+	 */
+	protected function failedAtMany(
+		array $kept,
+	): array
+	{
+		if($kept === [])
+		{
+			return [];
+		}
+		
+		$failed = [];
+		foreach($this->getMemoLock()->failedAtMany(array_keys($kept)) as $id => $failedAt)
+		{
+			if(isset($kept[$id])
+				&& ($kept[$id]->invalidated || $failedAt >= $kept[$id]->freshUntil))
+			{
+				$failed[$id] = $failedAt;
+			}
+		}
+		
+		return $failed;
+	}
+	
+	/**
+	 * Whether the retry time has passed since a failure (errorRetryMs): one
+	 * process may try again (see serveKept())
+	 */
+	protected function isRetryDue(
+		float $failedAt,
+	): bool
+	{
+		return (microtime(true) - $failedAt) * 1000 >= $this->errorRetryMs;
+	}
+	
+	/**
 	 * Reads $id for a forced refresh (get(refresh:)): whatever it finds is
 	 * remembered as a miss, so the write that refreshes it is guarded like a
 	 * miss's - a delete or an invalidation while it computes refuses it
@@ -1022,7 +1085,11 @@ abstract class KeyValue
 	 * others wait for it (a lock per key); every write is guarded like a
 	 * miss's; the options are get()'s (stale:, soft:, staleIfError:,
 	 * refresh:, queue:, queueLockTtlMs:) and judge each item on its own. A key
-	 * given twice is computed once and answered at both places
+	 * given twice is computed once and answered at both places. A computation
+	 * that throws is remembered for its keys kept for errors, as get()
+	 * remembers it: those are answered with the kept value - by the batches
+	 * that waited for them and by the reads after - and tried again once per
+	 * retry time, with the batch's refresh (see readMany())
 	 *
 	 * @return list<mixed>
 	 */
@@ -1094,7 +1161,12 @@ abstract class KeyValue
 	
 	/**
 	 * getMany() on a store it reaches: the read, the stale values' refresh,
-	 * the misses' computation, by id
+	 * the misses' computation, by id. A miss kept for errors whose computation
+	 * failed a moment ago, here or in another process, is no miss: the kept
+	 * value at once, as get() serves it (see serveKept()) - one look for all
+	 * such keys of the batch, none for a batch without one. Once the retry time
+	 * has passed since its failure, the key is tried again with the stale
+	 * values, by the one refresh of the batch (see revalidateMany())
 	 *
 	 * @param array<string, string> $keyOf key by id
 	 * @return array<string, mixed>
@@ -1113,6 +1185,8 @@ abstract class KeyValue
 		$misses = [];
 		// by id, the key of a value served while it is refreshed
 		$stale = [];
+		// by id, the key of a value kept for errors that is tried again
+		$retry = [];
 		
 		try
 		{
@@ -1150,11 +1224,26 @@ abstract class KeyValue
 					
 					$misses[$id] = $this->errorFallback($data, $policy->staleIfError);
 				}
+				
+				// kept for errors, and computing them failed a moment ago: the
+				// kept values at once - nobody computes what just failed - and
+				// one process trying again once the retry time has passed
+				foreach($this->failedAtMany(array_filter($misses)) as $id => $failedAt)
+				{
+					$values[$id] = $misses[$id]->value;
+					unset($misses[$id]);
+					if($resolver !== null && $this->isRetryDue($failedAt))
+					{
+						$retry[$id] = $keyOf[$id];
+					}
+				}
 			}
 			
-			if($stale !== [])
+			if($stale !== [] || $retry !== [])
 			{
-				foreach($this->revalidateMany($stale, $values, $resolver, $ttl, $tags, $policy) as $id => $value)
+				// one refresh for both, its keys in the batch's order
+				$refresh = array_intersect_key($keyOf, $stale + $retry);
+				foreach($this->revalidateMany($refresh, $values, $resolver, $ttl, $tags, $policy, $retry) as $id => $value)
 				{
 					$values[$id] = $value;
 				}
@@ -1190,10 +1279,18 @@ abstract class KeyValue
 	 * deferrer, inline otherwise - takes their locks without waiting, reads
 	 * them once more, and computes the ones still stale by one resolver call.
 	 * Inline the caller gets what was computed or what another process
-	 * refreshed meanwhile (as revalidate() answers it), else the stale value
+	 * refreshed meanwhile (as revalidate() answers it), else the stale value.
+	 * The values kept for errors that are tried again after a failure ($retry,
+	 * part of $stale) go the same way, as serveKept() tries one: their
+	 * failures are read once more with the locks (another process may have
+	 * tried and failed meanwhile - those are left out) and remembered anew as
+	 * the attempt starts, so the failure outlives it. A refresh that throws is
+	 * remembered for every value of it kept for errors, so a read past their
+	 * stale time serves them without computing
 	 *
 	 * @param array<string, string> $stale key by id
 	 * @param array<string, mixed> $served the stale values, by id
+	 * @param array<string, string> $retry key by id, the values kept for errors tried again
 	 * @return array<string, mixed>
 	 */
 	protected function revalidateMany(
@@ -1203,6 +1300,7 @@ abstract class KeyValue
 		int $ttl,
 		array $tags,
 		Policy $policy,
+		array $retry = [],
 	): array
 	{
 		// Queued once per id until it runs (see revalidate()). Ids already queued are left out, and if none
@@ -1216,7 +1314,7 @@ abstract class KeyValue
 			}
 		}
 		
-		$run = function() use ($stale, $resolver, $ttl, $tags, $policy): array
+		$run = function() use ($stale, $retry, $resolver, $ttl, $tags, $policy): array
 		{
 			// running: a stale read from now on queues the next refresh
 			foreach($stale as $id => $key)
@@ -1228,21 +1326,46 @@ abstract class KeyValue
 			[$locked] = $memoLock->lockMany(array_keys($stale), $policy->queueLockTtlMs);
 			// by id, what the look found refreshed meanwhile (null: gone)
 			$refreshed = [];
+			// the ids computed whose values are kept for errors
+			$keptForErrors = [];
 			
 			try
 			{
 				$due = [];
+				// by id, the values kept for errors tried again, as the look found them
+				$again = [];
 				foreach($this->fetchMany($locked) as $id => $data)
 				{
 					if($data instanceof Stale && $data->isFresh() === false)
 					{
 						$due[$id] = $stale[$id];
+						if($data->errorFor > 0)
+						{
+							$keptForErrors[$id] = $id;
+						}
+						if(isset($retry[$id]))
+						{
+							$again[$id] = $data;
+						}
 						
 						continue;
 					}
 					
 					// refreshed meanwhile, or gone: nothing to refresh
 					$refreshed[$id] = $this->fresh($data);
+				}
+				if($again !== [])
+				{
+					foreach($this->failedAtMany($again) as $id => $failedAt)
+					{
+						if($this->isRetryDue($failedAt) === false)
+						{
+							// another process tried again and failed since this batch's read
+							unset($due[$id], $again[$id], $keptForErrors[$id]);
+						}
+					}
+					// the attempt remembers itself as it starts (see serveKept())
+					$this->rememberFailureMany(array_keys($again), $policy->queueLockTtlMs);
 				}
 				if($due === [])
 				{
@@ -1257,7 +1380,10 @@ abstract class KeyValue
 			}
 			catch(Throwable $throwable)
 			{
-				// the stale values stay: the next read past their fresh time tries again
+				// the stale values stay: the next read past their fresh time tries again. The values kept
+				// for errors remember the failure, so a read past their stale time serves them without
+				// computing (see readMany())
+				$this->rememberFailureMany(array_values($keptForErrors), $policy->queueLockTtlMs);
 				$this->log($throwable);
 				
 				return $refreshed;
@@ -1299,7 +1425,9 @@ abstract class KeyValue
 	 * key is locked and read a second time with its lock. The keys this process locked are computed by one
 	 * resolver call, together with the misses the store could not check (see unlockedMisses), which take
 	 * no lock. The keys another process holds are waited for, as lockAndQueue() waits (attempts, halving,
-	 * jitter, bounded by the locks' TTL), and read again. What the wait did not bring is computed by a
+	 * jitter, bounded by the locks' TTL), and read again - a key still not fresh but kept for errors is
+	 * answered with the kept value when the computation it waited for failed (its holder remembered that
+	 * before it released the lock, see keptAfterFailure()). What the wait did not bring is computed by a
 	 * second call, locked where its lock is free by then. Without a queue every miss is computed at once,
 	 * without locks. A forced refresh takes the locks without the second read and computes every key,
 	 * after the wait too.
@@ -1349,12 +1477,26 @@ abstract class KeyValue
 			}
 			if($look)
 			{
+				// by id, the values kept for errors the wait did not replace
+				$kept = [];
 				foreach($this->fetchMany($held) as $id => $data)
 				{
 					if(($value = $this->fresh($data)) !== null)
 					{
 						$values[$id] = $value;
+						
+						continue;
 					}
+					
+					if(($fallback = $this->errorFallback($data, $policy->staleIfError)) !== null)
+					{
+						$kept[$id] = $fallback;
+					}
+				}
+				// the computation they waited for failed: the kept values, nothing computed in turn
+				foreach($this->failedAtMany($kept) as $id => $failedAt)
+				{
+					$values[$id] = $kept[$id]->value;
 				}
 				$held = array_values(array_diff($held, array_keys($values)));
 			}
@@ -1434,7 +1576,10 @@ abstract class KeyValue
 	 * Computes $ids by one resolver call (see resolveMany()), their misses
 	 * stamped first. A resolver that throws releases every lock of $ids; with
 	 * a value kept for errors for every one of them (get(staleIfError:)) those
-	 * are answered, else it is rethrown
+	 * are answered, else it is rethrown. Either way the failure is remembered
+	 * for the keys that have such a value, before the locks go (see
+	 * computeOrFallback()): the batches that waited for them wake at the
+	 * release and must find it
 	 *
 	 * @param list<string> $ids
 	 * @param array<string, string> $keyOf
@@ -1469,6 +1614,10 @@ abstract class KeyValue
 		}
 		catch(Throwable $throwable)
 		{
+			$this->rememberFailureMany(
+				array_keys(array_filter(array_intersect_key($fallbacks, array_flip($ids)))),
+				$policy->queueLockTtlMs,
+			);
 			// nothing was written: every lock goes now, not at its TTL
 			$this->getMemoLock()
 				->releaseMany($ids);
