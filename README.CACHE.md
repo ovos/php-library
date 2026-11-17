@@ -271,6 +271,14 @@ is constant no matter how many items match.
   stalled. Switched off (`rules_shared_cache: no`),
   each process works alone: it loads the rules of the whole retention window
   once, before its first hit.
+- **Clocks.** Rule ids come from the Redis server's clock, through the stream
+  (monotonic on one node). A failover that loses the newest rules hands the
+  stream to a node that goes on from its own clock: its first ids are newer
+  than the lost ones only if its clock is not behind the old primary's by
+  more than the failover took. The store assumes synchronised clocks there
+  (NTP keeps them within milliseconds; a failover takes seconds). Otherwise
+  an item written with a lost rule id could miss the rules added right after
+  the failover, until its TTL.
 - The set is **bounded** (`rules_max_tags`, default 15 000; 0: no bound): a
   request copies it out of APCu, about 0.16 ms and 0.45 KB per thousand rules,
   and what grows it is the number of *distinct* tags invalidated within the
