@@ -316,6 +316,30 @@ class Shield extends Test
 	}
 	
 	/**
+	 * RULE: a request two observing rules match reaches the Sender's
+	 * security channel once for each rule, the first served first: the
+	 * kernel's judgement goes on after a match that only observes. Falsify:
+	 * report the verdict alone — the second rule's match is counted on the
+	 * site and never reaches codesafe, which reads its evidence as sampled.
+	 */
+	public function everyObservingRuleReachesTheSender(): bool
+	{
+		$this->reports = [];
+		$rules = [
+			$this->rule(4, 'uri', 'contains', '/xmlrpc.php'),
+			$this->rule(3, 'ua', 'prefix', 'python-requests'),
+		];
+		$payload = ['contract' => Ruleset::CONTRACT, 'dialect' => Ruleset::DIALECT, 'project' => 'p', 'rules' => $rules];
+		$subject = $this->subject(['detect' => true, 'enforce' => true], 'install-observe-' . uniqid());
+		$subject->kernel()->store()->write(Ruleset::fromPayload($payload, time())->toRecord(Kernel::sealKey('test-key')));
+		$verdict = $subject->judge(Facts::fromServer(['REQUEST_URI' => '/xmlrpc.php', 'HTTP_USER_AGENT' => 'python-requests/2.31', 'REMOTE_ADDR' => '203.0.113.9']));
+		
+		return $verdict->outcome === Verdict::OBSERVE && (int)$verdict->rule['id'] === 4
+			&& array_map(static fn(array $report): array => [$report[0], $report[2]['rule']], $this->reports)
+				=== [[Verdict::KIND_OBSERVE, 4], [Verdict::KIND_OBSERVE, 3]];
+	}
+	
+	/**
 	 * RULE: the adapter runs the kernel's core alone unless
 	 * `codesafe.shield.platforms` names a module: with none the kernel and
 	 * the request's Facts carry no module, the pull names `core`, and a
