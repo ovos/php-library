@@ -50,6 +50,7 @@ use function file_get_contents;
 use function floor;
 use function gc_collect_cycles;
 use function glob;
+use function hrtime;
 use function in_array;
 use function is_file;
 use function is_resource;
@@ -2953,6 +2954,162 @@ class RedisVersioned extends Test
 				&& $mark === $head
 				&& $mark !== $last
 				&& $this->reloadProbe($group)->get('item1', queue: false) === 'recomputed';
+		}
+		finally
+		{
+			$this->reloadTearDown($first);
+		}
+	}
+	
+	/**
+	 * RULE: a read that waits for another worker's reload looks again as soon as the flag is in other
+	 * hands. With exact reads a copy is never fresh, so the next worker reloads the moment the first one
+	 * lets go, and the flag is never seen free. The copy the first reload shared checks the read; the
+	 * read does not wait for the reload that followed.
+	 */
+	public function aWaiterLooksAgainWhenTheNextReloadFollowsAtOnce(): bool
+	{
+		$this->requireSharedRules();
+		
+		[$first, $group] = $this->reloadSetUp(Store::SLOW_RELOAD_MS + 500);
+		$this->elsewhere($group)
+			->set('item2', 'kept', 60, ['tag9']);
+		$worker = $this->probe(['rules_cache_ms' => 0]);
+		$worker->setGroup($group);
+		$next = $this->reloadProbe($group)
+			->sharedRules();
+		$lands = $this->reloadLands($first, $group);
+		$worker->whileAwaitingReload = static function() use ($lands, $next): void
+		{
+			$lands();
+			$next->lead();
+		};
+		$began = hrtime(true);
+		$value = $worker->get('item2', queue: false);
+		$ms = (hrtime(true) - $began) / 1e6;
+		
+		try
+		{
+			return $value === 'kept'
+				&& $worker->fetchedFrom === []
+				&& $ms < 500;
+		}
+		finally
+		{
+			$next->release();
+			$this->reloadTearDown($first);
+		}
+	}
+	
+	/**
+	 * RULE: what a reload has to log is logged once the reload flag is let go and the attempt recorded. A
+	 * logger that takes its time keeps no worker of the server waiting for the flag.
+	 */
+	public function aFailedFetchIsLoggedOnceTheFlagIsFreeAndTheOutageRecorded(): bool
+	{
+		$this->requireSharedRules();
+		
+		$group = 'reload-' . bin2hex(random_bytes(4));
+		$worker = $this->reloadProbe($group);
+		$shared = $worker->sharedRules();
+		$seen = [];
+		$worker->onLog = static function() use ($shared, &$seen): void
+		{
+			$seen[] = [$shared->reloadStartedAt(), $shared->lastAttempt()[0]];
+		};
+		$worker->beforeRuleFetch = static function(): void
+		{
+			throw new RedisException('the rules node does not answer');
+		};
+		$read = $worker->get('item1', queue: false);
+		
+		try
+		{
+			return $read === null
+				&& $seen === [[null, true]];
+		}
+		finally
+		{
+			$worker->clearPhysical();
+		}
+	}
+	
+	/**
+	 * RULE: a logger that reads the cache when the rules fetch fails neither waits for the reload it was
+	 * called from, nor starts that reload again - with a shared copy and without one.
+	 */
+	public function aLoggerThatReadsTheStoreNeitherWaitsForItsOwnReloadNorStartsItAgain(): bool
+	{
+		$this->requireSharedRules();
+		
+		$passed = true;
+		foreach([[], ['rules_shared_cache' => false]] as $options)
+		{
+			$worker = $this->probe($options + ['rules_cache_ms' => self::RELOAD_CACHE_MS]);
+			$worker->setGroup('reload-' . bin2hex(random_bytes(4)));
+			$took = [];
+			$depth = 0;
+			$deepest = 0;
+			$worker->onLog = static function() use ($worker, &$took, &$depth, &$deepest): void
+			{
+				$deepest = max($deepest, ++$depth);
+				// a reload that starts again from inside the logger would never end
+				if($depth <= 3)
+				{
+					$began = hrtime(true);
+					$worker->get('throttle', queue: false);
+					$took[] = (hrtime(true) - $began) / 1e6;
+				}
+				
+				$depth--;
+			};
+			$worker->beforeRuleFetch = static function(): void
+			{
+				throw new RedisException('the rules node does not answer');
+			};
+			$read = $worker->get('item1', queue: false);
+			$passed = $passed
+				&& $read === null
+				&& $deepest === 1
+				&& count($took) === 1
+				&& $took[0] < 500
+				&& count($worker->fetchedFrom) === 1;
+			$worker->clearPhysical();
+		}
+		
+		return $passed;
+	}
+	
+	/**
+	 * RULE: a read of the cache made from inside this instance's own fetch of the rules (as an error
+	 * handler that uses the cache would make it) does not wait for that reload: the copy held cannot check
+	 * it, so it is a miss, at once, and no second fetch is made.
+	 */
+	public function aReadFromInsideThisInstancesOwnFetchDoesNotWaitForIt(): bool
+	{
+		$this->requireSharedRules();
+		
+		[$first, $group] = $this->reloadSetUp(Store::SLOW_RELOAD_MS + 500);
+		$first->sharedRules()
+			->release();
+		$worker = $this->reloadProbe($group);
+		$inner = false;
+		$ms = null;
+		$worker->beforeRuleFetch = static function() use ($worker, &$inner, &$ms): void
+		{
+			$worker->beforeRuleFetch = null;
+			$began = hrtime(true);
+			$inner = $worker->get('item1', queue: false);
+			$ms = (hrtime(true) - $began) / 1e6;
+		};
+		$outer = $worker->get('item1', queue: false);
+		
+		try
+		{
+			return $outer === null
+				&& $inner === null
+				&& $ms < 500
+				&& count($worker->fetchedFrom) === 1;
 		}
 		finally
 		{

@@ -237,6 +237,17 @@ class RedisVersioned extends Store
 	protected array $warned = [];
 	
 	/**
+	 * What a reload in progress has to log, logged when it is over; null while this instance is not
+	 * reloading. A logger may take its time (a writer that sends the event somewhere) or read this cache.
+	 * Inside the reload, the first would keep the reload flag, and every worker waiting for it, for as
+	 * long. The second would find the flag held and no outage recorded yet, and wait for its own reload
+	 * or, with no shared copy, start the reload again without end.
+	 *
+	 * @var list<array>|null
+	 */
+	protected ?array $heldBack = null;
+	
+	/**
 	 * Outdated items a read found, by id, each with the "mark" its read saw. They are removed once the read
 	 * is over, unless a write replaced them meanwhile (see afterRead()).
 	 *
@@ -1358,7 +1369,8 @@ class RedisVersioned extends Store
 			// What the server knows: whether the last attempt to read the rules failed and when it ended,
 			// and since when another worker has been reloading (null: the reload flag is free).
 			[$outage, $endedAtMs] = $this->lastAttempt();
-			$startedAtMs = $shared?->reloadStartedAt();
+			$holder = 0;
+			$startedAtMs = $shared?->reloadStartedAt($holder);
 			$nowMs = microtime(true) * 1000;
 			
 			// case 2: the rules cannot be read, or another worker's reload has run too long
@@ -1393,9 +1405,13 @@ class RedisVersioned extends Store
 			// case 5: it is not, so this read waits for that reload and looks again. The copy it shares
 			// checks the read (case 1); a reload that failed, or hangs, is case 2. A read that has waited
 			// RELOAD_WAIT_MS in all gives up: a miss without the lock.
+			// Nor does it wait when this instance holds the flag itself: the read comes from inside its own
+			// reload (an error handler or a logger that uses this cache), which cannot end before this read
+			// returns.
 			$waitUntilMs ??= $nowMs + static::RELOAD_WAIT_MS;
 			if($shared === null
-				|| $this->awaitReload($shared, $waitUntilMs) === false)
+				|| $shared->leads()
+				|| $this->awaitReload($shared, $waitUntilMs, $holder) === false)
 			{
 				return [$this->rules, true];
 			}
@@ -1403,14 +1419,20 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * Waits while another worker holds the reload flag: until it lets go, its reload has run longer than
-	 * SLOW_RELOAD_MS, or $untilMs has come. Only the flag is looked at, never the copy, so a turn costs one
-	 * APCu read. It pauses before every look, the first included, so a caller that comes back at once never
-	 * spins. False when $untilMs came first.
+	 * Waits while the worker the caller saw ($holder, 0 for none) holds the reload flag: until it lets go,
+	 * its reload has run longer than SLOW_RELOAD_MS, or $untilMs has come. The flag in other hands means
+	 * that reload is over and the next one began: the caller looks again, because the copy shared in
+	 * between may check its read. Without that, a waiter that looks at the flag every few milliseconds
+	 * would see it taken again and again while the reloads follow one another (each copy stale, or behind
+	 * an invalidation, as soon as it is shared), and wait out $untilMs beside copies it could have used.
+	 * Only the flag is looked at, never the copy, so a turn costs one APCu read. It pauses before every
+	 * look, the first included, so a caller that comes back at once never spins. False when $untilMs came
+	 * first.
 	 */
 	protected function awaitReload(
 		SharedRules $shared,
 		float $untilMs,
+		int $holder,
 	): bool
 	{
 		$pauseUs = static::RELOAD_POLL_US;
@@ -1420,7 +1442,8 @@ class RedisVersioned extends Store
 			usleep($pauseUs);
 			$pauseUs = min(2 * $pauseUs, static::RELOAD_POLL_MAX_US);
 			
-			$startedAtMs = $shared->reloadStartedAt();
+			$now = 0;
+			$startedAtMs = $shared->reloadStartedAt($now);
 			$nowMs = microtime(true) * 1000;
 			if($startedAtMs === null
 				|| $nowMs - $startedAtMs > static::SLOW_RELOAD_MS)
@@ -1431,6 +1454,12 @@ class RedisVersioned extends Store
 			if($nowMs >= $untilMs)
 			{
 				return false;
+			}
+			
+			// another reload than the one waited for: that one is over
+			if($now !== $holder)
+			{
+				return true;
 			}
 		}
 	}
@@ -1457,6 +1486,13 @@ class RedisVersioned extends Store
 	 */
 	protected function reload(): bool
 	{
+		// a read of this cache made from inside this reload (an error handler or a logger that uses it)
+		// does not start another one
+		if($this->heldBack !== null)
+		{
+			return false;
+		}
+		
 		// Take the reload flag. Without a shared copy there is no flag, and this worker reloads for itself.
 		$shared = $this->getSharedRules();
 		$taken = $shared !== null
@@ -1471,14 +1507,17 @@ class RedisVersioned extends Store
 		// If APCu cannot record the flag, nobody could ever take it, and nobody would reload. So this
 		// worker loads the rules itself, shares nothing, and warns once.
 		$this->alone = $taken === null;
-		if($this->alone)
-		{
-			$shared = null;
-			$this->warnOnce('alone', 'APCu refused the rule set\'s reload flag: this worker loads the invalidation rules on its own and shares nothing until APCu takes it.');
-		}
+		// what this reload has to log waits until the flag is let go and the attempt recorded (see heldBack)
+		$this->heldBack = [];
 		
 		try
 		{
+			if($this->alone)
+			{
+				$shared = null;
+				$this->warnOnce('alone', 'APCu refused the rule set\'s reload flag: this worker loads the invalidation rules on its own and shares nothing until APCu takes it.');
+			}
+			
 			// Look again: another worker may have reloaded, or tried and failed, between this worker's
 			// first look and taking the flag. Then nothing is fetched.
 			if($shared !== null)
@@ -1535,6 +1574,15 @@ class RedisVersioned extends Store
 		finally
 		{
 			$shared?->release();
+			
+			// and only now is it logged: the other workers no longer wait for this reload, and a logger
+			// that reads this cache finds the attempt recorded
+			$heldBack = $this->heldBack ?? [];
+			$this->heldBack = null;
+			foreach($heldBack as $event)
+			{
+				$this->logNow(...$event);
+			}
 		}
 	}
 	
@@ -1656,6 +1704,35 @@ class RedisVersioned extends Store
 		{
 			$this->warnOnce('store', 'APCu refused the rule set: the other workers of this server keep judging by the older one until it can be written.');
 		}
+	}
+	
+	/**
+	 * Logs events (messages/errors/exceptions) - those of a reload in progress once it is over (see
+	 * heldBack)
+	 */
+	#[Override]
+	public function log(
+		...$event,
+	): static
+	{
+		if($this->heldBack !== null)
+		{
+			$this->heldBack[] = $event;
+			
+			return $this;
+		}
+		
+		return $this->logNow(...$event);
+	}
+	
+	/**
+	 * Hands the events to the logger
+	 */
+	protected function logNow(
+		...$event,
+	): static
+	{
+		return parent::log(...$event);
 	}
 	
 	/**

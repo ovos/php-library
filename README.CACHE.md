@@ -187,13 +187,17 @@ is constant no matter how many items match.
      looks at the flag after 0.1 ms, then after twice as long each time, up
      to 5 ms, and then takes the first case that applies again: the copy the
      reloader shared (case 1), a failed reload (case 2), one that has run a
-     second (case 2). Only a read that has waited
+     second (case 2). It also looks again as soon as the flag changes hands,
+     so a reload that follows at once does not keep it waiting while the
+     copy just shared could judge it. Only a read that has waited
      `RedisVersioned::RELOAD_WAIT_MS` (1 s) in all gives up: every item is
      then a miss, computed without the stampede lock. Why a second and not
      less: Redis runs one command at a time, so a long command of anyone
      sharing it holds the reload up as well, and the requests wait for Redis
      meanwhile anyway; giving up sooner would bring the stampede back in just
-     those moments.
+     those moments. What a reload has to log (a failed fetch) reaches the
+     logger once the flag is let go, so a slow logger, or one that reads this
+     store, holds no other worker up and does not wait for itself.
 
   An example. `rules_cache_ms` is 1 s, and another server invalidates
   `product:7` at 12:00:00.000. A worker here whose copy was fetched at
@@ -882,6 +886,10 @@ $timetable = $store->get('timetable:' . $day, $this->fetchTimetable(...), ttl: 3
   hit, a miss and a stale read cost what they did. A refresh of a stale value
   that throws is remembered too when the value is kept for errors, so the end
   of the stale time during an outage costs nobody a computation.
+- The failure's time comes from the clock of the server where it failed and
+  is compared with times other servers wrote: like every fresh or stale
+  decision of the store, that assumes the app servers' clocks are
+  synchronised (NTP).
 - `getMany()` does the same per key: a resolver call that throws is remembered
   for its keys kept for errors before their locks go, a batch that waited for
   such a key is answered with its kept value, and so is every batch in the

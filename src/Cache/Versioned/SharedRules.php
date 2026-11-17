@@ -368,6 +368,15 @@ class SharedRules
 	}
 	
 	/**
+	 * Whether this instance holds the flag itself. Its reload ends only when the code now running returns,
+	 * so nothing is gained by waiting for it.
+	 */
+	public function leads(): bool
+	{
+		return $this->lease !== 0;
+	}
+	
+	/**
 	 * Lets go of the flag if this instance still holds it. If its lease ran out and another worker took
 	 * the flag, the flag stays with that worker.
 	 */
@@ -388,11 +397,15 @@ class SharedRules
 	
 	/**
 	 * When the reload running now began (ms, this server's clock); null when the flag is free or its lease
-	 * ran out
+	 * ran out. $holder tells the reloads apart: it differs for every taking of the flag, and is 0 when
+	 * nobody holds it.
 	 */
-	public function reloadStartedAt(): ?float
+	public function reloadStartedAt(
+		?int &$holder = null,
+	): ?float
 	{
 		$held = $this->fetch($this->leaseKey);
+		$holder = 0;
 		
 		if(is_int($held) === false
 			|| $held === 0
@@ -400,6 +413,8 @@ class SharedRules
 		{
 			return null;
 		}
+		
+		$holder = $held;
 		
 		return (float)intdiv($held, static::LEASE_NONCE);
 	}

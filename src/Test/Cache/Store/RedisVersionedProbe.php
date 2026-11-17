@@ -42,6 +42,9 @@ class RedisVersionedProbe extends RedisVersioned
 	/** what the store logged */
 	public array $logged = [];
 	
+	/** run when the store logs something, as a logger would - a test reads the cache from there */
+	public ?Closure $onLog = null;
+	
 	/** the stale items it dropped */
 	public int $dropped = 0;
 	
@@ -205,6 +208,7 @@ class RedisVersionedProbe extends RedisVersioned
 	protected function awaitReload(
 		SharedRules $shared,
 		float $untilMs,
+		int $holder,
 	): bool
 	{
 		$this->awaited++;
@@ -214,7 +218,7 @@ class RedisVersionedProbe extends RedisVersioned
 			$meanwhile();
 		}
 		
-		return parent::awaitReload($shared, $untilMs);
+		return parent::awaitReload($shared, $untilMs, $holder);
 	}
 	
 	#[Override]
@@ -238,6 +242,22 @@ class RedisVersionedProbe extends RedisVersioned
 		$this->logged[] = $event;
 		
 		return parent::log(...$event);
+	}
+	
+	/**
+	 * The store's own log() with a logger behind it ($onLog): the connection has none in the tests
+	 */
+	#[Override]
+	protected function logNow(
+		...$event,
+	): static
+	{
+		if($this->onLog !== null)
+		{
+			($this->onLog)();
+		}
+		
+		return parent::logNow(...$event);
 	}
 	
 	#[Override]
