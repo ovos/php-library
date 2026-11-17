@@ -29,6 +29,7 @@ use function array_column;
 use function array_filter;
 use function array_key_exists;
 use function array_push;
+use function array_slice;
 use function count;
 use function function_exists;
 use function gc_collect_cycles;
@@ -990,6 +991,55 @@ class Sender extends Test
 			&& $multipart === '' && $read === ''
 			&& CodesafeSender::BODY_MAX === 16384
 			&& in_array('accept-language', CodesafeSender::REQUEST_HEADERS, true);
+	}
+	
+	/**
+	 * The browser's Fetch Metadata travels with the request, first and as
+	 * tokens — lowercase, nothing but `[a-z0-9?-]`, 32 characters, one with
+	 * no token left out — so the cap never pushes it out of a request with
+	 * thirty `x-…` headers, and no secret name of the Logger takes
+	 * `sec-fetch-user`. codesafe reads it to tell a request a page on another
+	 * site made a visitor's browser send from one the visitor sent.
+	 *
+	 * Falsify: take them in the loop as any other header (not on the list,
+	 * dropped), or send the value as it came.
+	 */
+	public function theFetchMetadataTravelsAsTokens(): bool
+	{
+		$sender = $this->makeSender();
+		$server = $_SERVER;
+		foreach($_SERVER as $key => $value)
+		{
+			if(str_starts_with((string)$key, 'HTTP_'))
+			{
+				unset($_SERVER[$key]);
+			}
+		}
+		for($n = 10; $n < 40; $n++)
+		{
+			$_SERVER['HTTP_X_H_' . $n] = 'v';
+		}
+		$_SERVER['HTTP_SEC_FETCH_SITE'] = 'Cross-Site';
+		$_SERVER['HTTP_SEC_FETCH_MODE'] = "no-cors\r\n";
+		$_SERVER['HTTP_SEC_FETCH_DEST'] = str_repeat('image', 10);
+		$_SERVER['HTTP_SEC_FETCH_USER'] = '?1';
+		try
+		{
+			$crowded = $sender->request(new Logger)['headers'] ?? [];
+			$_SERVER['HTTP_SEC_FETCH_SITE'] = '<>';
+			$_SERVER['HTTP_SEC_FETCH_MODE'] = ['cors'];
+			$empty = CodesafeSender::fetchHeaders($_SERVER);
+		}
+		finally
+		{
+			$_SERVER = $server;
+		}
+		
+		return count($crowded) === CodesafeSender::HEADERS_MAX
+			&& array_slice($crowded, 0, 4, true) === ['sec-fetch-site' => 'cross-site', 'sec-fetch-mode' => 'no-cors',
+				'sec-fetch-dest' => str_repeat('image', 6) . 'im', 'sec-fetch-user' => '?1']
+			&& isset($crowded['x-h-29']) && isset($crowded['x-h-30']) === false
+			&& $empty === ['sec-fetch-dest' => str_repeat('image', 6) . 'im', 'sec-fetch-user' => '?1'];
 	}
 	
 	/**

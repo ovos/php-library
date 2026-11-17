@@ -68,6 +68,7 @@ use function mb_strlen;
 use function mb_substr;
 use function min;
 use function preg_match;
+use function preg_replace;
 use function preg_split;
 use function rtrim;
 use function str_ends_with;
@@ -312,6 +313,17 @@ class Sender extends Service
 	/** the standard names worth sending; the project's own `x-…` go too (buildHeaders) */
 	public const array REQUEST_HEADERS = ['accept', 'accept-language', 'accept-charset', 'accept-encoding',
 		'content-type', 'x-requested-with'];
+	
+	/**
+	 * The browser's Fetch Metadata, sent first and as tokens (fetchHeaders()):
+	 * codesafe reads them to tell a request a page on another site made a
+	 * visitor's browser send (an image, a script) from one the visitor or a
+	 * scanner sent. They say how the request was made, nothing about who made it
+	 */
+	public const array FETCH_HEADERS = ['sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest', 'sec-fetch-user'];
+	
+	/** a Fetch Metadata value's characters at most: each is a short token */
+	public const int FETCH_VALUE_MAX = 32;
 	
 	/**
 	 * Never sent: the forwarding family describes the customer's END USER
@@ -1362,7 +1374,8 @@ class Sender extends Service
 	 * The request headers worth sending: the ones that change what the
 	 * application ANSWERS, plus the project's own X- names — never a cookie,
 	 * an authorization or anything else the Logger calls secret by name. The
-	 * codesafe applies the same allow list again on write.
+	 * codesafe applies the same allow list again on write. The browser's
+	 * Fetch Metadata goes first, so the cap never pushes it out.
 	 *
 	 * @return array<string, string>
 	 */
@@ -1370,7 +1383,7 @@ class Sender extends Service
 		Logger $logger,
 	): array
 	{
-		$headers = [];
+		$headers = self::fetchHeaders($_SERVER);
 		foreach($_SERVER as $key => $value)
 		{
 			if(count($headers) >= self::HEADERS_MAX)
@@ -1394,6 +1407,32 @@ class Sender extends Service
 				continue;
 			}
 			$headers[$name] = mb_substr((string)$value, 0, self::HEADER_VALUE_MAX);
+		}
+		
+		return $headers;
+	}
+	
+	/**
+	 * FETCH_HEADERS out of a $_SERVER-shaped array, each value a token:
+	 * lowercase, nothing but `[a-z0-9?-]`, FETCH_VALUE_MAX characters; a
+	 * header without a token is left out
+	 *
+	 * @param array<mixed> $server
+	 * @return array<string, string>
+	 */
+	public static function fetchHeaders(
+		array $server,
+	): array
+	{
+		$headers = [];
+		foreach(self::FETCH_HEADERS as $name)
+		{
+			$value = $server['HTTP_' . strtoupper(str_replace('-', '_', $name))] ?? null;
+			$token = is_scalar($value) ? substr((string)preg_replace('~[^a-z0-9?-]~', '', strtolower((string)$value)), 0, self::FETCH_VALUE_MAX) : '';
+			if($token !== '')
+			{
+				$headers[$name] = $token;
+			}
 		}
 		
 		return $headers;
