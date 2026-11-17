@@ -830,6 +830,51 @@ trait TraitBatch
 	}
 	
 	/**
+	 * RULE: an attempt that succeeds forgets the failures - values the
+	 * resolver does not store (save: false) leave the next batch to compute
+	 * them, as with no failure, instead of the kept values until the next
+	 * attempt
+	 */
+	public function aBatchAttemptWhoseValuesAreNotStoredForgetsTheFailures(): bool
+	{
+		$store = $this->staleStore();
+		[$a, $b] = $keys = $this->batchKeys('retry-unsaved', 2);
+		$this->writeErrorKept($store, $a, 'kept a');
+		$this->writeErrorKept($store, $b, 'kept b');
+		$calls = 0;
+		$unsaved = function(KeyValue $store, array $keys) use (&$calls): array
+		{
+			$calls++;
+			$values = [];
+			foreach($keys as $key)
+			{
+				$values[$key] = new Computed('new ' . $key, save: false);
+			}
+			
+			return $values;
+		};
+		
+		$this->retrying(50)->getMany($keys, $this->batchFailing($failed), 60, stale: 1, staleIfError: 60);
+		usleep(60_000);
+		// the attempt, after the response: computed, not stored
+		$reader = $this->retrying(50);
+		$this->capture($reader, $deferred);
+		$served = $reader->getMany($keys, $unsaved, 60, stale: 1, staleIfError: 60);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$reader->setDeferrer(null);
+		// within the retry time of that attempt: computed, as with no failure
+		$next = $this->retrying(50)->getMany($keys, $unsaved, 60, stale: 1, staleIfError: 60);
+		$this->batchDelete($keys);
+		
+		return $failed === [[$a, $b]]
+			&& $served === ['kept a', 'kept b'] && $calls === 2
+			&& $next === ['new ' . $a, 'new ' . $b];
+	}
+	
+	/**
 	 * RULE: a failure counts for the values it was about - one remembered
 	 * before a value's fresh time ended belongs to a value replaced since,
 	 * and the batch past the stale time computes, as for any miss

@@ -306,6 +306,35 @@ abstract class MemoLock
 	}
 	
 	/**
+	 * Forgets the failure remembered for $id (see rememberFailure()): an
+	 * attempt after it succeeded. A value it stored makes the failure stop
+	 * counting anyway; one it did not store (null, save: false) would
+	 * otherwise leave the kept value served until the next attempt, though the
+	 * origin answers. Nothing to forget it in: a no-op
+	 */
+	public function forgetFailure(
+		string $id,
+	): void
+	{
+	}
+	
+	/**
+	 * forgetFailure() for each of $ids - in one round trip where the store
+	 * can; here one by one
+	 *
+	 * @param list<string> $ids
+	 */
+	public function forgetFailureMany(
+		array $ids,
+	): void
+	{
+		foreach($ids as $id)
+		{
+			$this->forgetFailure($id);
+		}
+	}
+	
+	/**
 	 * The lock is this process's: it computes - unless the value landed
 	 * meanwhile (double-checked locking). A process whose miss came just
 	 * before the holder wrote and released, and whose subscription missed the

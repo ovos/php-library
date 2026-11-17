@@ -382,6 +382,20 @@ class Apcu extends MemoLock
 	}
 	
 	/**
+	 * Forgets the failure of $id (see MemoLock::forgetFailure())
+	 */
+	#[Override]
+	public function forgetFailure(
+		string $id,
+	): void
+	{
+		apcu_delete(
+			$this->prefixer
+				->prefix(static::TYPE_FAILED, $id),
+		);
+	}
+	
+	/**
 	 * When computing each of $ids last failed (see MemoLock::failedAtMany())
 	 * - one apcu_fetch() of all their keys
 	 */

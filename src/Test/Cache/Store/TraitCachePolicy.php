@@ -719,6 +719,35 @@ trait TraitCachePolicy
 	}
 	
 	/**
+	 * RULE: an attempt that succeeds forgets the failure - a value the
+	 * resolver does not store (save: false) leaves the next read to compute, as
+	 * with no failure, instead of the kept value until the next attempt
+	 */
+	public function anAttemptWhoseValueIsNotStoredForgetsTheFailure(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->errorKey('retry-unsaved');
+		$this->writeErrorKept($store, $key, 'last good');
+		$failed = 0;
+		$calls = 0;
+		$unsaved = function() use (&$calls): Computed
+		{
+			$calls++;
+			
+			return new Computed('new', save: false);
+		};
+		
+		$this->retrying(50)->get($key, $this->failing($failed), 60, stale: 1, staleIfError: 60);
+		usleep(60_000);
+		// the attempt: computed, not stored - then a read within the retry time
+		$first = $this->retrying(50)->get($key, $unsaved, 60, stale: 1, staleIfError: 60);
+		$second = $this->retrying(50)->get($key, $unsaved, 60, stale: 1, staleIfError: 60);
+		$store->delete($key);
+		
+		return $failed === 1 && $first === 'new' && $second === 'new' && $calls === 2;
+	}
+	
+	/**
 	 * RULE: a failure counts for the value it was about - one remembered
 	 * before the value's fresh time ended belongs to a value replaced since,
 	 * and the read past the stale time computes, as a miss does

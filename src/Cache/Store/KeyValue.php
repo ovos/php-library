@@ -585,8 +585,9 @@ abstract class KeyValue
 	 * held ($lockTtlMs, the call's queueLockTtlMs; null: the MemoLock's own) -
 	 * the next attempt starts within that time and remembers itself as it
 	 * starts (see serveKept()), so it never ends to find the failure
-	 * forgotten. Nothing deletes it: it stops counting when a new value is
-	 * stored (see failedAt()), and expires
+	 * forgotten. An attempt that succeeds deletes it (see serveKept());
+	 * otherwise it stops counting when a new value is stored (see
+	 * failedAt()), and expires
 	 */
 	protected function rememberFailure(
 		string $id,
@@ -652,7 +653,9 @@ abstract class KeyValue
 	 * value); the others keep serving the kept value. The attempt reads the
 	 * failure once more with the lock (another process may have tried and
 	 * failed meanwhile) and remembers itself as it starts, so the failure
-	 * outlives it. Without a resolver there is nothing to try again with
+	 * outlives it; once it succeeds it forgets the failure, so a value it did
+	 * not store (null, save: false) leaves the next read to compute, as with
+	 * no failure. Without a resolver there is nothing to try again with
 	 */
 	protected function serveKept(
 		string $id,
@@ -679,8 +682,14 @@ abstract class KeyValue
 			}
 			
 			$this->rememberFailure($id, $lockTtlMs);
+			$value = $refresh();
+			// the attempt succeeded, so the failure is over: forgotten, or a value
+			// the resolver did not store (null, save: false) would leave the kept
+			// value served until the next attempt
+			$this->getMemoLock()
+				->forgetFailure($id);
 			
-			return $refresh();
+			return $value;
 		}, $lockTtlMs);
 	}
 	
@@ -1376,7 +1385,11 @@ abstract class KeyValue
 				// the store refreshes these values itself (see computingMisses)
 				$this->computingMisses+= array_fill_keys(array_keys($due), false);
 				
-				return $refreshed + $this->resolveMany($due, $resolver, $ttl, $tags, $policy);
+				$computed = $this->resolveMany($due, $resolver, $ttl, $tags, $policy);
+				// the attempt succeeded: the failures it tried again are over (see serveKept())
+				$memoLock->forgetFailureMany(array_keys($again));
+				
+				return $refreshed + $computed;
 			}
 			catch(Throwable $throwable)
 			{

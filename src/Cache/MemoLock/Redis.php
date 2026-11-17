@@ -989,6 +989,72 @@ class Redis extends MemoLock
 	}
 	
 	/**
+	 * Forgets the failure of $id (see MemoLock::forgetFailure()) - one DEL
+	 */
+	#[Override]
+	public function forgetFailure(
+		string $id,
+	): void
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return;
+		}
+		
+		try
+		{
+			$client->del(
+				$this->prefixer
+					->prefix(static::TYPE_FAILED, $id),
+			);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->connection->log($exception);
+		}
+	}
+	
+	/**
+	 * Forgets the failure of every id (see MemoLock::forgetFailureMany()) -
+	 * one DEL of all their keys on a standalone client, one each on a cluster
+	 * (the keys are of different slots)
+	 */
+	#[Override]
+	public function forgetFailureMany(
+		array $ids,
+	): void
+	{
+		if($ids === []
+			|| ($client = $this->getClient()) === null)
+		{
+			return;
+		}
+		
+		if($client instanceof RedisClient === false)
+		{
+			parent::forgetFailureMany($ids);
+			
+			return;
+		}
+		
+		$keys = [];
+		foreach($ids as $id)
+		{
+			$keys[] = $this->prefixer
+				->prefix(static::TYPE_FAILED, $id);
+		}
+		
+		try
+		{
+			$client->del($keys);
+		}
+		catch(RedisException $exception)
+		{
+			$this->connection->log($exception);
+		}
+	}
+	
+	/**
 	 * When computing each of $ids last failed (see MemoLock::failedAtMany())
 	 * - one MGET on a standalone client, a GET each on a cluster (the keys
 	 * are of different slots, and an MGET may not cross slots)

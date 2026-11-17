@@ -866,7 +866,9 @@ $timetable = $store->get('timetable:' . $day, $this->fetchTimetable(...), ttl: 3
   once. Then one process is elected to try again, the way a stale value is
   refreshed (after the response under PHP-FPM, inline in a CLI), while the
   others keep getting the kept value; a failed attempt is remembered anew, a
-  successful one stores the new value. Measured under PHP-FPM (RedisVersioned,
+  successful one forgets the failure and stores the new value (one it does not
+  store - null, `save: false` - leaves the next read to compute, as with no
+  failure). Measured under PHP-FPM (RedisVersioned,
   a 500 ms computation that throws, 10 concurrent reads): 1 computation and
   0.51 s for all ten, then 6 ms with none - before, 10 computations and 2.0 s.
 - The kept value is never served in place of a computation that would succeed:
