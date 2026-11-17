@@ -79,7 +79,7 @@ $store->invalidateTags(['categories']);
 | no stampede: one computation per miss, not one per request | nothing — `get()` with a resolver | one process computes while the others wait for its result (MemoLock), across every server; `queue: false` skips the lock (a read that never computes) | Stampede protection |
 | nobody to wait when a value expires | `stale: 60` | past its TTL the old value is served for 60 s while **one** process refreshes it, after the response | Pattern 5 |
 | nobody to wait after an edit either | `stale: 60, soft: true` | a tag invalidation ages the value instead of removing it: served for 60 s while one process recomputes it | Soft invalidation |
-| the last good value through an outage | `staleIfError: 3600` | kept 1 h past its stale time — a miss then, but when the computation throws, it is returned | Stale-if-error |
+| the last good value through an outage | `staleIfError: 3600` | kept 1 h past its stale time — a miss then, but when the computation throws, it is returned, at once to everyone until a computation succeeds (one try per second) | Stale-if-error |
 | the TTL or the tags from the computed value | the resolver returns `new Computed($value, ttl: ..., tags: ...)` | the Computed's TTL and tags are what is stored | Pattern 3 |
 | not to keep an incomplete value | the resolver returns `new Computed($value, save: false)` | the value is handed back, nothing is stored, the lock is freed at once | Pattern 3 |
 | a new value now (a warm-up, a "refresh" button) | `refresh: true` | recomputed and stored, whatever is cached | Forced refresh |
@@ -94,7 +94,8 @@ always did. APCu has no tags, so `soft:` and `hard:` mean nothing there.
 Over time a value is fresh for its TTL (a hit), then stale for `stale:` (served
 at once while one process refreshes it), then kept for errors for
 `staleIfError:` (a miss, computed at once - a computation that throws gets the
-kept value), then gone. `delete()` and `clear()` end it at once; so does a tag
+kept value, and so does every read while that failure is remembered), then
+gone. `delete()` and `clear()` end it at once; so does a tag
 invalidation, unless the value was written with `soft: true` - then it is
 stale for its `stale:` window, and `hard: true` overrules that.
 
@@ -846,14 +847,41 @@ $timetable = $store->get('timetable:' . $day, $this->fetchTimetable(...), ttl: 3
 
 - Fresh for the TTL, served stale while one process refreshes it for `stale`,
   then a miss: computed at once, and if the computation throws, the kept value
-  is returned instead (the exception is logged, the lock freed, nothing written).
+  is returned instead (the failure remembered, the lock freed, nothing written,
+  the exception logged).
+- **A failure is remembered**, so a failing origin costs one computation per
+  retry time, not one per request. Ten requests read a timetable past its
+  stale time while the database is down and the query throws after 500 ms: one
+  computes and fails, the nine that waited for it are answered with the kept
+  timetable the moment it has failed - none computes in turn. For the next
+  second (`error_retry_ms`, 1000) every read is answered with the kept value at
+  once. Then one process is elected to try again, the way a stale value is
+  refreshed (after the response under PHP-FPM, inline in a CLI), while the
+  others keep getting the kept value; a failed attempt is remembered anew, a
+  successful one stores the new value. Measured under PHP-FPM (RedisVersioned,
+  a 500 ms computation that throws, 10 concurrent reads): 1 computation and
+  0.51 s for all ten, then 6 ms with none - before, 10 computations and 2.0 s.
+- The kept value is never served in place of a computation that would succeed:
+  with no failure remembered a read past the stale time computes, and the
+  requests beside it wait for that value, as for any miss. A failure counts
+  only for the value it was about - one remembered before the value's fresh
+  time ended (a refresh failed, the next one succeeded) is ignored.
+- The failure lives beside the lock (`<id>:failed`, the time it happened), for
+  the retry time plus the lock's TTL; the MemoLock holds it (Redis: one `SET`
+  on a failure, one `GET` by a read past the stale time; APCu: per server). A
+  hit, a miss and a stale read cost what they did. A refresh of a stale value
+  that throws is remembered too when the value is kept for errors, so the end
+  of the stale time during an outage costs nobody a computation.
+- `getMany()` falls back per key as before; it does not read or write the
+  remembered failure yet.
 - It needs a TTL (a value without one never ages), and the item lives
   ttl + stale + staleIfError.
 - A read that does not pass `staleIfError:` gets the exception as before; a
   `delete()`, `clear()` or tag invalidation removes the kept value with the rest
   (a soft invalidation keeps it for its window).
 - With it or without it, a value stops being served at the end of its stale
-  time - its own times decide, not the store's TTL.
+  time unless its computation has just failed - its own times decide, not the
+  store's TTL.
 
 ### Many keys at once (`getMany()`)
 
@@ -1165,6 +1193,7 @@ cache:
       rules_shared_cache: yes          # Versioned stores: share the rule set across the server's workers (APCu; default: on when available)
       rules_max_tags: 15000            # Versioned stores: rules held before a floor replaces the oldest (default 15000, 0: no bound)
       invalidation_window_ms: 60000    # Invalidation guard: how long a delete is remembered; 0 = off (see above)
+      error_retry_ms: 1000             # Stale-if-error: how soon a computation that failed is tried again (ms)
       invalidate_page: 2500            # Redisearch store: matches an invalidation reads per cursor page
     compression:
       enabled: yes

@@ -161,6 +161,11 @@ abstract class Redis extends Tags
 		{
 			$this->setInvalidationWindowMs((int)$window);
 		}
+		// how soon a computation that failed is tried again (see KeyValue::serveKept())
+		if(($retry = $options->offsetGet('error_retry_ms')) !== null)
+		{
+			$this->setErrorRetryMs((int)$retry);
+		}
 		
 		return $this;
 	}

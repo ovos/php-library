@@ -19,6 +19,8 @@ use function apcu_fetch;
 use function apcu_store;
 use function bin2hex;
 use function ceil;
+use function is_float;
+use function max;
 use function microtime;
 use function random_bytes;
 use function random_int;
@@ -32,6 +34,7 @@ use function usleep;
 class Apcu extends MemoLock
 {
 	public const string TYPE_LOCK = 'lock';
+	public const string TYPE_FAILED = 'failed';
 	
 	protected int $queueLockTtlS = 1;
 	
@@ -338,6 +341,42 @@ class Apcu extends MemoLock
 		}
 		
 		return $lockAcquired;
+	}
+	
+	/**
+	 * Remembers the failure in APCu, for this server's workers (see
+	 * MemoLock::rememberFailure()) - APCu's TTL is in seconds, rounded up
+	 */
+	#[Override]
+	public function rememberFailure(
+		string $id,
+		int $ttlMs,
+	): void
+	{
+		apcu_store(
+			$this->prefixer
+				->prefix(static::TYPE_FAILED, $id),
+			microtime(true),
+			max(1, (int)ceil($ttlMs / 1000)),
+		);
+	}
+	
+	/**
+	 * When computing $id last failed (see MemoLock::failedAt())
+	 */
+	#[Override]
+	public function failedAt(
+		string $id,
+	): ?float
+	{
+		$failedAt = apcu_fetch(
+			$this->prefixer
+				->prefix(static::TYPE_FAILED, $id),
+		);
+		
+		return is_float($failedAt)
+			? $failedAt
+			: null;
 	}
 	
 	/**

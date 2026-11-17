@@ -235,6 +235,33 @@ abstract class MemoLock
 	): bool;
 	
 	/**
+	 * Remembers for $ttlMs that computing $id failed just now, for every
+	 * process to read (failedAt()): the store's note that a value kept for
+	 * errors (KeyValue::get(staleIfError:)) could not be computed, so the
+	 * processes that waited for the computation, and the reads after it, serve
+	 * the kept value without computing again. Written before the lock is
+	 * released, so a waiter that wakes finds it. Nothing to remember it in:
+	 * a no-op, and every read computes as before
+	 */
+	public function rememberFailure(
+		string $id,
+		int $ttlMs,
+	): void
+	{
+	}
+	
+	/**
+	 * When computing $id last failed (microtime), as rememberFailure() left
+	 * it - null: nothing remembered, or it cannot be read
+	 */
+	public function failedAt(
+		string $id,
+	): ?float
+	{
+		return null;
+	}
+	
+	/**
 	 * The lock is this process's: it computes - unless the value landed
 	 * meanwhile (double-checked locking). A process whose miss came just
 	 * before the holder wrote and released, and whose subscription missed the

@@ -11,12 +11,16 @@ use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
 use ArgumentCountError;
+use Closure;
 use InvalidArgumentException;
 use RuntimeException;
 
 use function apcu_exists;
+use function bin2hex;
 use function count;
 use function microtime;
+use function random_bytes;
+use function usleep;
 
 /**
  * TraitCachePolicy
@@ -27,8 +31,10 @@ use function microtime;
  * named arguments, an unknown one throws; get(refresh: true) recomputes
  * whatever is cached;
  * get(staleIfError:) keeps a value past its stale time, served only when the
- * computation fails; invalidateTags(hard: true) is a miss at once, a soft
- * value too. Used with TraitStaleWhileRevalidate (its helpers)
+ * computation fails - a failure is remembered: the processes that waited for
+ * it and the reads after it serve the kept value without computing, and one
+ * process tries again per retry time; invalidateTags(hard: true) is a miss at
+ * once, a soft value too. Used with TraitStaleWhileRevalidate (its helpers)
  *
  * @author Marcin Gil <mg@ovos.at>
  */
@@ -554,6 +560,264 @@ trait TraitCachePolicy
 		$store->setDeferrer(null);
 		
 		return $served === 'v1' && $calls === 0 && count($deferred) === 1;
+	}
+	
+	/**
+	 * RULE: a computation that failed is not repeated by the next read - the
+	 * value kept for errors is served at once, nothing computed, nothing
+	 * queued, until the retry time has passed
+	 */
+	public function aFailedComputationIsNotRepeatedByTheNextRead(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->errorKey('remembered');
+		$this->writeErrorKept($store, $key, 'last good');
+		$calls = 0;
+		
+		$first = $this->staleStore()->get($key, $this->failing($calls), 60, stale: 1, staleIfError: 60);
+		$callsOfFirst = $calls;
+		$reader = $this->staleStore();
+		$this->capture($reader, $deferred);
+		$second = $reader->get($key, $this->failing($calls), 60, stale: 1, staleIfError: 60);
+		$reader->setDeferrer(null);
+		$store->delete($key);
+		
+		return $first === 'last good' && $callsOfFirst === 1
+			&& $second === 'last good' && $calls === 1 && $deferred === [];
+	}
+	
+	/**
+	 * RULE: a process that waited for a computation which failed serves the
+	 * value kept for errors - it does not take the lock and compute in turn.
+	 * Another process holds the lock; while this one waits, that one fails and
+	 * remembers it (here: at this process's second read of the value)
+	 */
+	public function aProcessThatWaitedForAFailedComputationServesTheKeptValue(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->errorKey('waited');
+		$store->delete($key);
+		$kept = new Stale(new ReadSpy('last good'), microtime(true) - 10, 1, false, errorFor: 60);
+		$store instanceof Tags
+			? $store->set($key, $kept, 70, [self::POLICY_TAG])
+			: $store->set($key, $kept, 70);
+		$id = $store->itemId($key);
+		// the other process: it holds the lock, and its lock goes when it has failed
+		$holder = $this->staleStore()->getMemoLock();
+		$held = $holder->tryLock($id, 300);
+		ReadSpy::watch(function(int $reads) use ($holder, $id): void
+		{
+			// the first read is get()'s own; the second is the look after the wait
+			if($reads === 2)
+			{
+				$holder->rememberFailure($id, 3000);
+			}
+		});
+		
+		try
+		{
+			$calls = 0;
+			$served = $this->staleStore()->get($key, $this->failing($calls), 60, stale: 1, staleIfError: 60);
+			
+			return $held
+				&& $served instanceof ReadSpy && $served->value === 'last good'
+				&& $calls === 0;
+		}
+		finally
+		{
+			ReadSpy::watch(null);
+			$holder->releaseActiveLock($id);
+			$store->delete($key);
+		}
+	}
+	
+	/**
+	 * RULE: once the retry time has passed, one process tries again - after
+	 * the response where there is a deferrer, and the read is answered with
+	 * the kept value at once; a failure of that attempt is remembered anew
+	 */
+	public function onceTheRetryTimeHasPassedOneProcessTriesAgain(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->errorKey('retry');
+		$this->writeErrorKept($store, $key, 'last good');
+		$calls = 0;
+		
+		$this->retrying(50)->get($key, $this->failing($calls), 60, stale: 1, staleIfError: 60);
+		usleep(60_000);
+		$reader = $this->retrying(50);
+		$this->capture($reader, $deferred);
+		$served = $reader->get($key, $this->failing($calls), 60, stale: 1, staleIfError: 60);
+		$callsBeforeTheRefresh = $calls;
+		$queued = count($deferred);
+		foreach($deferred as $refresh)
+		{
+			$refresh();
+		}
+		$callsAfterTheRefresh = $calls;
+		// right after the attempt failed: not yet again
+		$this->capture($reader, $deferred);
+		$again = $reader->get($key, $this->failing($calls), 60, stale: 1, staleIfError: 60);
+		$reader->setDeferrer(null);
+		$store->delete($key);
+		
+		return $served === 'last good' && $callsBeforeTheRefresh === 1 && $queued === 1
+			&& $callsAfterTheRefresh === 2
+			&& $again === 'last good' && $calls === 2 && $deferred === [];
+	}
+	
+	/**
+	 * RULE: whoever does not win that attempt serves the kept value at once -
+	 * another process holds the lock, this one computes nothing
+	 */
+	public function aReadBesideTheNextAttemptServesTheKeptValue(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->errorKey('retry-lost');
+		$this->writeErrorKept($store, $key, 'last good');
+		$calls = 0;
+		
+		$this->retrying(50)->get($key, $this->failing($calls), 60, stale: 1, staleIfError: 60);
+		usleep(60_000);
+		$id = $store->itemId($key);
+		$holder = $this->staleStore()->getMemoLock();
+		$held = $holder->tryLock($id, 300);
+		
+		try
+		{
+			$served = $this->retrying(50)->get($key, $this->failing($calls), 60, stale: 1, staleIfError: 60);
+			
+			return $held && $served === 'last good' && $calls === 1;
+		}
+		finally
+		{
+			$holder->releaseActiveLock($id);
+			$store->delete($key);
+		}
+	}
+	
+	/**
+	 * RULE: an attempt that succeeds stores the new value - without a
+	 * deferrer the read that made it is answered with it, and the next read
+	 * is a hit
+	 */
+	public function anAttemptThatSucceedsStoresTheNewValue(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->errorKey('retry-succeeds');
+		$this->writeErrorKept($store, $key, 'last good');
+		$failed = 0;
+		$calls = 0;
+		
+		$this->retrying(50)->get($key, $this->failing($failed), 60, stale: 1, staleIfError: 60);
+		usleep(60_000);
+		$served = $this->retrying(50)->get($key, $this->counting($calls, 'new'), 60, stale: 1, staleIfError: 60);
+		$read = $this->staleStore()->get($key, queue: false);
+		$store->delete($key);
+		
+		return $failed === 1 && $served === 'new' && $calls === 1 && $read === 'new';
+	}
+	
+	/**
+	 * RULE: a failure counts for the value it was about - one remembered
+	 * before the value's fresh time ended belongs to a value replaced since,
+	 * and the read past the stale time computes, as a miss does
+	 */
+	public function aFailureFromBeforeTheValueWasFreshDoesNotCount(): bool
+	{
+		$store = $this->staleStore();
+		$key = $this->errorKey('older-failure');
+		$this->writeErrorKept($store, $key, 'last good');
+		$failed = 0;
+		$calls = 0;
+		
+		$this->staleStore()->get($key, $this->failing($failed), 60, stale: 1, staleIfError: 60);
+		usleep(20_000);
+		// a value computed since: its fresh time ended after that failure, and it has no stale time
+		$newer = new Stale('newer', microtime(true) - 0.005, 0, false, errorFor: 60);
+		$store instanceof Tags
+			? $store->set($key, $newer, 70, [self::POLICY_TAG])
+			: $store->set($key, $newer, 70);
+		$reader = $this->staleStore();
+		$this->capture($reader, $deferred);
+		$served = $reader->get($key, $this->counting($calls, 'new'), 60, staleIfError: 60);
+		$reader->setDeferrer(null);
+		$store->delete($key);
+		
+		return $failed === 1 && $served === 'new' && $calls === 1 && $deferred === [];
+	}
+	
+	/**
+	 * RULE: a refresh of a stale value that fails is remembered when the
+	 * value is kept for errors - past its stale time nobody has to compute to
+	 * learn that the origin is down; a value kept for no error remembers
+	 * nothing
+	 */
+	public function aFailedRefreshOfAValueKeptForErrorsIsRemembered(): bool
+	{
+		$store = $this->staleStore();
+		$kept = $this->errorKey('refresh-kept');
+		$plain = $this->errorKey('refresh-plain');
+		$store->delete($kept);
+		$store->delete($plain);
+		// both inside their stale time; one kept for errors after it
+		foreach([$kept => 60, $plain => 0] as $key => $errorFor)
+		{
+			$stale = new Stale('last good', microtime(true) - 1, 60, false, $errorFor);
+			$store instanceof Tags
+				? $store->set($key, $stale, 180, [self::POLICY_TAG])
+				: $store->set($key, $stale, 180);
+		}
+		$calls = 0;
+		
+		$servedKept = $this->staleStore()->get($kept, $this->failing($calls), 60, stale: 60, staleIfError: 60);
+		$servedPlain = $this->staleStore()->get($plain, $this->failing($calls), 60, stale: 60);
+		$memoLock = $this->staleStore()->getMemoLock();
+		$rememberedKept = $memoLock->failedAt($store->itemId($kept));
+		$rememberedPlain = $memoLock->failedAt($store->itemId($plain));
+		$store->delete($kept);
+		$store->delete($plain);
+		
+		return $servedKept === 'last good' && $servedPlain === 'last good' && $calls === 2
+			&& $rememberedKept !== null && $rememberedKept > microtime(true) - 5
+			&& $rememberedPlain === null;
+	}
+	
+	/**
+	 * A key of its own per run: a failure is remembered for a few seconds, and
+	 * the next run must not find the one this run left
+	 */
+	protected function errorKey(
+		string $name,
+	): string
+	{
+		return $this->staleKey($name . '-' . bin2hex(random_bytes(4)));
+	}
+	
+	/**
+	 * A resolver that counts its calls and throws
+	 */
+	protected function failing(
+		int &$calls,
+	): Closure
+	{
+		return function() use (&$calls): never
+		{
+			$calls++;
+			
+			throw new RuntimeException('the origin is down');
+		};
+	}
+	
+	/**
+	 * The store under test, trying a failed computation again after $retryMs
+	 */
+	protected function retrying(
+		int $retryMs,
+	): KeyValue
+	{
+		return $this->staleStore()
+			->setErrorRetryMs($retryMs);
 	}
 	
 	/**

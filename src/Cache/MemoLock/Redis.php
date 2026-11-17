@@ -19,11 +19,14 @@ use Throwable;
 
 use function bin2hex;
 use function implode;
+use function is_numeric;
+use function microtime;
 use function random_bytes;
 use function max;
 use function min;
 use function random_int;
 use function array_key_exists;
+use function sprintf;
 
 use const PHP_EOL;
 
@@ -36,6 +39,7 @@ class Redis extends MemoLock
 {
 	public const string TYPE_LOCK = 'lock';
 	public const string TYPE_CHANNEL = 'channel';
+	public const string TYPE_FAILED = 'failed';
 	
 	// Libraries
 	/**
@@ -868,6 +872,71 @@ class Redis extends MemoLock
 		}
 		
 		return (bool)$lockAcquired;
+	}
+	
+	/**
+	 * Remembers the failure beside the lock, in a key of its own with $ttlMs
+	 * to live (see MemoLock::rememberFailure()) - one SET; a Redis that does
+	 * not answer remembers nothing
+	 */
+	#[Override]
+	public function rememberFailure(
+		string $id,
+		int $ttlMs,
+	): void
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return;
+		}
+		
+		try
+		{
+			$client->set(
+				$this->prefixer
+					->prefix(static::TYPE_FAILED, $id),
+				sprintf('%.6F', microtime(true)),
+				[
+					'PX' => max(1, $ttlMs),
+				],
+			);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->connection->log($exception);
+		}
+	}
+	
+	/**
+	 * When computing $id last failed (see MemoLock::failedAt()) - one GET
+	 */
+	#[Override]
+	public function failedAt(
+		string $id,
+	): ?float
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$failedAt = $client->get(
+				$this->prefixer
+					->prefix(static::TYPE_FAILED, $id),
+			);
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->connection->log($exception);
+			
+			return null;
+		}
+		
+		return is_numeric($failedAt)
+			? (float)$failedAt
+			: null;
 	}
 	
 	/**

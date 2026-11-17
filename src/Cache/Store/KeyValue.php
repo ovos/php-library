@@ -77,6 +77,16 @@ abstract class KeyValue
 	protected int $invalidationWindowMs = 60000;
 	
 	/**
+	 * How long after a computation failed the next one may start, for a value
+	 * kept for errors (get(staleIfError:)): meanwhile every read is answered
+	 * with the kept value at once and computes nothing (see serveKept()).
+	 * 0: the next read may try again - one process at a time still. Store
+	 * option "error_retry_ms" (the tier's store_options)
+	 * Unit: milliseconds
+	 */
+	protected int $errorRetryMs = 1000;
+	
+	/**
 	 * What each miss of this instance saw, by item id - the write that follows
 	 * it is refused when the key was invalidated since (see rememberMiss()).
 	 * "stamp" is taken right before the computation (stampMiss()), null until
@@ -156,6 +166,13 @@ abstract class KeyValue
 		{
 			$this->setInvalidationWindowMs((int)$window);
 		}
+		
+		// how soon a computation that failed is tried again (see serveKept())
+		$retry = $config?->getPath(['store_options', 'error_retry_ms']);
+		if($retry !== null)
+		{
+			$this->setErrorRetryMs((int)$retry);
+		}
 	}
 	
 	public function setGroup(
@@ -214,6 +231,24 @@ abstract class KeyValue
 	public function isGuarded(): bool
 	{
 		return $this->invalidationWindowMs > 0;
+	}
+	
+	public function getErrorRetryMs(): int
+	{
+		return $this->errorRetryMs;
+	}
+	
+	/**
+	 * How long after a failed computation of a value kept for errors the next
+	 * one may start (see errorRetryMs)
+	 */
+	public function setErrorRetryMs(
+		int $retryMs,
+	): static
+	{
+		$this->errorRetryMs = max(0, $retryMs);
+		
+		return $this;
 	}
 	
 	/**
@@ -510,13 +545,17 @@ abstract class KeyValue
 	
 	/**
 	 * The miss's computation: with a value kept for errors, one that throws
-	 * hands that value back instead - logged, the lock freed (nothing was
-	 * written)
+	 * hands that value back instead - the failure remembered (see
+	 * rememberFailure()), the lock freed (nothing was written), the exception
+	 * logged. Remembered before the lock goes: the processes that waited for
+	 * this computation wake at the release and must find the failure, or each
+	 * would compute in turn (see keptAfterFailure())
 	 */
 	protected function computeOrFallback(
 		string $id,
 		Closure $compute,
 		?Stale $fallback,
+		?int $lockTtlMs = null,
 	): mixed
 	{
 		if($fallback === null)
@@ -530,12 +569,118 @@ abstract class KeyValue
 		}
 		catch(Throwable $throwable)
 		{
-			$this->log($throwable);
+			$this->rememberFailure($id, $lockTtlMs);
 			$this->getMemoLock()
 				->releaseActiveLock($id);
+			$this->log($throwable);
 			
 			return $fallback->value;
 		}
+	}
+	
+	/**
+	 * Remembers that computing $id failed just now, in the MemoLock (every
+	 * process reads it there): for the retry time and as long as a lock may be
+	 * held ($lockTtlMs, the call's queueLockTtlMs; null: the MemoLock's own) -
+	 * the next attempt starts within that time and remembers itself as it
+	 * starts (see serveKept()), so it never ends to find the failure
+	 * forgotten. Nothing deletes it: it stops counting when a new value is
+	 * stored (see failedAt()), and expires
+	 */
+	protected function rememberFailure(
+		string $id,
+		?int $lockTtlMs = null,
+	): void
+	{
+		$memoLock = $this->getMemoLock();
+		$memoLock->rememberFailure($id, $this->errorRetryMs + ($lockTtlMs ?? $memoLock->getQueueLockTtlMs()));
+	}
+	
+	/**
+	 * When computing the value $kept last failed (microtime), null when no
+	 * failure is remembered for it. A failure counts only if it happened
+	 * after $kept stopped being fresh - that is when $kept is computed again
+	 * (a refresh, a read past its stale time); an older one belongs to a value
+	 * replaced since. Example: a refresh fails at 12:00:10, one succeeds at
+	 * 12:00:12 and stores a value fresh until 12:05:12 - the failure of
+	 * 12:00:10, still stored for a moment, never counts for the new value. A
+	 * softly invalidated value keeps its fresh time (the invalidation is the
+	 * read's verdict), so any remembered failure counts for it
+	 */
+	protected function failedAt(
+		string $id,
+		Stale $kept,
+	): ?float
+	{
+		$failedAt = $this->getMemoLock()
+			->failedAt($id);
+		
+		return $failedAt !== null && ($kept->invalidated || $failedAt >= $kept->freshUntil)
+			? $failedAt
+			: null;
+	}
+	
+	/**
+	 * What a process that waited for another's computation is answered when
+	 * the value did not come ($data: what it read after the wait): the value
+	 * kept for errors, if that computation failed (the holder remembered it
+	 * before it released the lock) - null: nothing kept any more (a delete or
+	 * an invalidation while it waited took it), or nothing failed, and the
+	 * waiter takes the lock in turn
+	 */
+	protected function keptAfterFailure(
+		string $id,
+		mixed $data,
+		int $staleIfError,
+	): mixed
+	{
+		$kept = $this->errorFallback($data, $staleIfError);
+		
+		return $kept !== null && $this->failedAt($id, $kept) !== null
+			? $kept->value
+			: null;
+	}
+	
+	/**
+	 * A value kept for errors whose computation failed a moment ago, here or
+	 * in another process: served at once, as a stale one is - nobody computes
+	 * what just failed, nobody waits. Once the retry time has passed since the
+	 * failure (errorRetryMs), one process tries again, elected and run as a
+	 * stale value's refresh is (see revalidate(): after the response where
+	 * there is a deferrer, inline otherwise - the caller then gets the new
+	 * value); the others keep serving the kept value. The attempt reads the
+	 * failure once more with the lock (another process may have tried and
+	 * failed meanwhile) and remembers itself as it starts, so the failure
+	 * outlives it. Without a resolver there is nothing to try again with
+	 */
+	protected function serveKept(
+		string $id,
+		Stale $kept,
+		float $failedAt,
+		?Closure $refresh,
+		?int $lockTtlMs = null,
+	): mixed
+	{
+		if($refresh === null
+			|| (microtime(true) - $failedAt) * 1000 < $this->errorRetryMs)
+		{
+			return $kept->value;
+		}
+		
+		return $this->revalidate($id, $kept->value, function() use ($id, $kept, $refresh, $lockTtlMs): mixed
+		{
+			$failedAt = $this->failedAt($id, $kept);
+			if($failedAt !== null
+				&& (microtime(true) - $failedAt) * 1000 < $this->errorRetryMs)
+			{
+				// another process tried again and failed since this read
+				return null;
+			}
+			
+			$this->rememberFailure($id, $lockTtlMs);
+			
+			return $refresh();
+		}, $lockTtlMs);
 	}
 	
 	/**
@@ -587,6 +732,7 @@ abstract class KeyValue
 				return null;
 			}
 			
+			$keptForErrors = false;
 			try
 			{
 				$data = $this->fetch($id);
@@ -599,12 +745,19 @@ abstract class KeyValue
 				$this->stampMiss($id);
 				// the store refreshes the value itself (see computingMisses)
 				$this->computingMisses[$id] = false;
+				$keptForErrors = $data->errorFor > 0;
 				
 				return $refresh();
 			}
 			catch(Throwable $throwable)
 			{
-				// the stale value stays: the next read past its fresh time tries again
+				// the stale value stays: the next read past its fresh time tries again. A value kept for
+				// errors remembers the failure, so a read past its stale time serves it without computing
+				// (see serveKept())
+				if($keptForErrors)
+				{
+					$this->rememberFailure($id, $lockTtlMs);
+				}
 				$this->log($throwable);
 				
 				return null;
@@ -747,12 +900,35 @@ abstract class KeyValue
 			}
 			
 			$fallback = $this->errorFallback($data, $policy->staleIfError);
+			// kept for errors, and computing it failed a moment ago: the kept
+			// value at once, one process trying again (see serveKept())
+			if($fallback !== null
+				&& ($failedAt = $this->failedAt($id, $fallback)) !== null)
+			{
+				return $this->serveKept(
+					$id,
+					$fallback,
+					$failedAt,
+					$resolver !== null
+						? fn() => $this->setFromResolver($key, $resolver, $ttl, $tags, $policy)
+						: null,
+					$policy->queueLockTtlMs,
+				);
+			}
 			
 			return $this->getMemoLock()
 				->lockAndQueue(
 					$id,
-					fn() => $this->fresh($this->fetch($id)),
-					fn() => $this->computeOrFallback($id, $compute, $fallback),
+					// a process that waited reads the value - or, with a value
+					// kept for errors, that the computation it waited for failed
+					function() use ($id, $policy): mixed
+					{
+						$data = $this->fetch($id);
+						
+						return $this->fresh($data)
+							?? $this->keptAfterFailure($id, $data, $policy->staleIfError);
+					},
+					fn() => $this->computeOrFallback($id, $compute, $fallback, $policy->queueLockTtlMs),
 					$this->lockQueue($id, $policy->queue),
 					$policy->queueLockTtlMs,
 					$this->lockAndLook($id),
