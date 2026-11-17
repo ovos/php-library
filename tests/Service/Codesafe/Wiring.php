@@ -13,6 +13,7 @@ use RecursiveIteratorIterator;
 use ReflectionMethod;
 
 use function file_get_contents;
+use function is_a;
 use function preg_match_all;
 use function str_ends_with;
 use function str_replace;
@@ -40,11 +41,13 @@ class Wiring extends Test
 	}
 	
 	/**
-	 * RULE: a plugin list saying `Codesafe\Shield` resolves to the Shield plugin.
+	 * RULE: a plugin list saying `Codesafe\Shield` resolves to the Shield
+	 * plugin, or to the app's own Plugins\Codesafe\Shield built on it (an app
+	 * whose sign-in is not Ovos\Service\Auth answers authed() there).
 	 */
 	public function aPluginListNamingCodesafeShieldGetsTheShield(): bool
 	{
-		return Controller::resolvePluginClass('Codesafe\\Shield') === 'Ovos\\Plugins\\Codesafe\\Shield';
+		return is_a(Controller::resolvePluginClass('Codesafe\\Shield'), 'Ovos\\Plugins\\Codesafe\\Shield', true);
 	}
 	
 	/**

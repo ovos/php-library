@@ -27,6 +27,8 @@ use function ksort;
 use function str_contains;
 use function str_repeat;
 use function str_starts_with;
+use function strlen;
+use function substr;
 use function sys_get_temp_dir;
 use function time;
 use function uniqid;
@@ -506,5 +508,93 @@ class Shield extends Test
 			&& Plugin::response(7, 429, 0)->getHeaders()['Retry-After']['value'] === '1'
 			&& Subject::identity(null) === ''
 			&& in_array('shield_rate', \Ovos\Service\Codesafe\Sender::SECURITY_KINDS, true);
+	}
+	
+	/**
+	 * RULE: `codesafe.shield.authed` says whether the app tells who is signed
+	 * in, and the pull names it after the kernel's kinds: yes `caller`, no
+	 * `caller-unknown` — codesafe then serves the threat addresses to count,
+	 * never to refuse —, absent or any other value nothing, as before the
+	 * key. Falsify: read absent as no — every php-library site stops
+	 * refusing the threat addresses at the library update; or build the
+	 * kernel without the word — a host's `authed: no` never reaches codesafe
+	 */
+	public function theConfigSaysWhetherTheAppTellsWhoIsSignedIn(): bool
+	{
+		$kinds = function(array $shield): array
+		{
+			$sent = [];
+			$subject = new Subject($this->config($shield + ['detect' => true]), 'install-caller-' . uniqid(),
+				static function(string $url, array $headers) use (&$sent): array
+				{
+					$sent = $headers;
+					
+					return ['status' => 0, 'headers' => [], 'body' => ''];
+				});
+			$this->paths[] = $subject->file();
+			$subject->pull();
+			foreach($sent as $line)
+			{
+				if(str_starts_with((string)$line, Kernel::HEADER_KINDS . ': '))
+				{
+					return [$subject->callerTold(), substr((string)$line, strlen(Kernel::HEADER_KINDS) + 2)];
+				}
+			}
+			
+			return [$subject->callerTold(), ''];
+		};
+		
+		return $kinds(['authed' => true]) === [true, Kernel::KINDS . ',' . Kernel::KIND_CALLER]
+			&& $kinds(['authed' => false]) === [false, Kernel::KINDS . ',' . Kernel::KIND_CALLER_UNKNOWN]
+			&& $kinds([]) === [null, Kernel::KINDS]
+			&& $kinds(['authed' => 'maybe']) === [null, Kernel::KINDS];
+	}
+	
+	/**
+	 * RULE: the plugin hands the request to the kernel signed in as its
+	 * authed() says — the seam an app whose sign-in is not Ovos\Service\Auth
+	 * overrides —, and the service reads an answer given as it is and none
+	 * as the app's Auth does (not signed in without one). Falsify: build the
+	 * plugin's Facts without authed() — an app's own sign-in never reaches
+	 * the kernel, and its signed-in visitors behind a listed address are
+	 * refused
+	 */
+	public function thePluginsAnswerOfWhoIsSignedInReachesTheKernel(): bool
+	{
+		$subject = $this->subject(['detect' => true], 'install-authed-' . uniqid());
+		// the plugin with its answer of who is signed in set by the test
+		$plugin = static function(?bool $answer): Plugin
+		{
+			$plugin = new class extends Plugin
+			{
+				public ?bool $answer = null;
+				
+				protected function authed(): ?bool
+				{
+					return $this->answer;
+				}
+			};
+			$plugin->answer = $answer;
+			
+			return $plugin;
+		};
+		$facts = fn(Plugin $plugin): Facts => (fn(): Facts => $this->facts($subject))->call($plugin);
+		$saved = [$_SERVER, $_GET, $_POST];
+		$_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'HTTP_USER_AGENT' => 'Mozilla/5.0', 'REMOTE_ADDR' => '203.0.113.9'] + $_SERVER;
+		$_GET = [];
+		$_POST = [];
+		try
+		{
+			$signedIn = $facts($plugin(true))->authed;
+			$signedOut = $facts($plugin(false))->authed;
+			$unknown = $facts($plugin(null))->authed;
+			$service = [$subject->facts(null, true)->authed, $subject->facts(null, false)->authed, $subject->facts(null)->authed];
+		}
+		finally
+		{
+			[$_SERVER, $_GET, $_POST] = $saved;
+		}
+		
+		return $signedIn === true && $signedOut === false && $unknown === false && $service === [true, false, false];
 	}
 }

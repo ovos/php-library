@@ -25,6 +25,7 @@ use function explode;
 use function file_get_contents;
 use function hash;
 use function is_array;
+use function is_bool;
 use function is_dir;
 use function is_scalar;
 use function is_string;
@@ -74,6 +75,16 @@ if(class_exists(Kernel::class, false) === false)
  *       dir: ''       # where shield.json (the durable tier) lives; '' = the system temp dir
  *       platforms: [] # the kernel's platform modules (MODULES), e.g. [wordpress]; none = the core alone
  *       rest_prefix: '' # WordPress's REST prefix (rest_get_url_prefix()) for its module; '' = wp-json
+ *       authed: yes   # whether the app tells who is signed in (callerTold()); absent says nothing
+ *
+ * Who is signed in: the request is signed in when the app's Ovos\Service\Auth
+ * holds a user by the time the plugin runs (isAuthed()) — register the
+ * plugin after the one that sets it — or as the plugin's authed() says, an
+ * app's own sign-in overriding it. `authed: yes` says that answer holds (or
+ * nobody signs in), `authed: no` that the app cannot tell: codesafe then
+ * serves the threat addresses to be counted, never refused, since a
+ * signed-in visitor behind a listed address could not be told apart.
+ * Absent, the pull names neither, and codesafe serves them as before.
  *
  * detect and enforce are on unless set to no (codesafe docs/plans/shield-auto-deploy.md
  * D8): a site is protected without anyone opting in, and codesafe — the
@@ -231,7 +242,23 @@ class Shield
 			$this->http ?? $this->transport(...),
 			$this->report,
 			platforms: $this->platforms(),
+			callerTold: $this->callerTold(),
 		);
+	}
+	
+	/**
+	 * Whether the app tells who is signed in, as `codesafe.shield.authed`
+	 * says: yes true, no false, anything else — absent included — null, and
+	 * the pull names neither (Kernel::callerTold()). The config's word, never
+	 * the request's: the Sender's shutdown pull runs in a Service of its own,
+	 * and a word that changed with each request would change what codesafe
+	 * serves
+	 */
+	public function callerTold(): ?bool
+	{
+		$authed = $this->shieldConfig()['authed'] ?? null;
+		
+		return is_bool($authed) ? $authed : null;
 	}
 	
 	/**
@@ -353,9 +380,14 @@ class Shield
 		return $headers;
 	}
 	
-	/** the request as the kernel reads it — the adapter reads the superglobals, the kernel never does */
+	/**
+	 * The request as the kernel reads it — the adapter reads the superglobals,
+	 * the kernel never does; signed in as $authed says (the plugin's authed()),
+	 * or without an answer as the app's Auth does (isAuthed())
+	 */
 	public function facts(
 		?Application $app = null,
+		?bool $authed = null,
 	): Facts
 	{
 		// the parsed bags a virtual patch reads; no `can`: an app's roles are not the
@@ -365,7 +397,7 @@ class Shield
 			$_SERVER,
 			$_POST,
 			static fn(): string => (string)file_get_contents('php://input'),
-			self::isAuthed($app) === true,
+			($authed ?? self::isAuthed($app)) === true,
 			// the visitor's address as the app reads it: behind a configured
 			// proxy the forwarded chain walked right to left, never a header a
 			// peer that is no proxy wrote

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Ovos\Plugins\Codesafe;
 
+use Ovos\Codesafe\Shield\Facts;
 use Ovos\Controller\Plugin;
 use Ovos\Response\Html;
 use Ovos\Service\Codesafe\Sender;
@@ -27,7 +28,8 @@ use function max;
  *         - Codesafe\Shield   # after Csrf, before anything that acts on the request
  *
  * It judges as soon as it is registered: `codesafe.shield` detect and enforce
- * are on unless set to no (see the Service).
+ * are on unless set to no (see the Service). Who is signed in is read when
+ * it runs (authed()): after the plugin that sets the app's user.
  * Inert on the CLI and whenever the Service says it is not enabled; fails
  * open on anything thrown — the shield may never be why a page does not
  * load.
@@ -59,7 +61,7 @@ class Shield extends Plugin
 			{
 				return;
 			}
-			$verdict = $shield->judge($shield->facts($this->app));
+			$verdict = $shield->judge($this->facts($shield));
 			if($verdict->isBlock() && $verdict->rule !== null)
 			{
 				$this->app->setResponse(self::response((int)$verdict->rule['id'], $verdict->status(), $verdict->retryAfter));
@@ -93,6 +95,27 @@ class Shield extends Plugin
 		}
 		
 		return $response;
+	}
+	
+	/** the request as the kernel reads it, signed in as authed() says */
+	protected function facts(
+		Service $shield,
+	): Facts
+	{
+		return $shield->facts($this->app, $this->authed());
+	}
+	
+	/**
+	 * Whether the request is a signed-in one: the app's Ovos\Service\Auth
+	 * holding a user (Service::isAuthed()); null when it cannot say, which
+	 * reads as not signed in. An app whose sign-in is not that service
+	 * overrides it in its own Plugins\Codesafe\Shield, which the plugin list's
+	 * `Codesafe\Shield` resolves to first, and says so with
+	 * `codesafe.shield.authed: yes`
+	 */
+	protected function authed(): ?bool
+	{
+		return Service::isAuthed($this->app);
 	}
 	
 	/** where a match goes: the codesafe Sender's security channel, when the app runs one */
