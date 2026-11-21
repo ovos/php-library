@@ -944,7 +944,8 @@ class Sender extends Test
 	 * verdict is wrong rather than missing.
 	 *
 	 * Prevents, on the sending side: shipping a cookie or an authorization
-	 * header, and shipping the credential inside a body whole.
+	 * header, the project key a sender's call to codesafe carries, and
+	 * shipping the credential inside a body whole.
 	 */
 	public function theRequestCarriesTheBodyAndItsSafeHeaders(): bool
 	{
@@ -968,6 +969,8 @@ class Sender extends Test
 		$_SERVER['HTTP_COOKIE'] = 'session=abc';
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer abc.def';
 		$_SERVER['HTTP_X_API_KEY'] = 'k-1';
+		$_SERVER['HTTP_X_CODESAFE_KEY'] = 'project-key-1';
+		$_SERVER['HTTP_X_CONSOLE_KEY'] = 'project-key-1';
 		$_SERVER['HTTP_VIA'] = '1.1 proxy';
 		try
 		{

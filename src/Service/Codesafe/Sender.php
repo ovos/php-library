@@ -332,7 +332,10 @@ class Sender extends Service
 	 * routinely trust for rate limits, geo and access rules.
 	 */
 	public const array HEADERS_NEVER = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-port',
-		'x-forwarded-proto', 'x-forwarded-server', 'x-real-ip', 'forwarded'];
+		'x-forwarded-proto', 'x-forwarded-server', 'x-real-ip', 'forwarded',
+		// the project key (keyHeaders()) under both names: codesafe reporting its
+		// own error would otherwise send the key of the sender whose call it answered
+		'x-codesafe-key', 'x-console-key'];
 	
 	protected ?ArrayObject $config;
 	
