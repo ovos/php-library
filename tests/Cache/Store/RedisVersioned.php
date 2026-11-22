@@ -4592,6 +4592,9 @@ class RedisVersioned extends Test
 	#[Override]
 	public function finalize(): void
 	{
+		// a store this test left in a cycle shares its rules when it is destroyed (__destruct()): destroyed now, before the
+		// wipe, so its rules never reach a later test whenever the collector would have run
+		gc_collect_cycles();
 		$this->store->clearPhysical();
 		// a fresh store for the next rule: this one remembers its misses
 		// (the invalidation guard - see KeyValue::rememberMiss())
