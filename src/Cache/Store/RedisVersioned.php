@@ -23,6 +23,7 @@ use function array_values;
 use function ceil;
 use function count;
 use function explode;
+use function hrtime;
 use function implode;
 use function intdiv;
 use function is_array;
@@ -135,6 +136,15 @@ class RedisVersioned extends Store
 	 * Unit: milliseconds
 	 */
 	public const int RETRY_MS = 1000;
+	
+	/**
+	 * How long a reading of the Redis server's time is carried on by the local clock before it is read
+	 * again. The two clocks drift apart, the server's clock can be stepped, and a failover hands the rules
+	 * to a node with a clock of its own: a long-running process is wrong about a soft value's stale time by
+	 * at most what builds up in this time.
+	 * Unit: milliseconds
+	 */
+	public const int SERVER_TIME_MS = 60_000;
 	
 	/**
 	 * In microseconds. A read that waits for another worker's reload looks at the reload flag again after
@@ -258,9 +268,14 @@ class RedisVersioned extends Store
 	protected ?SharedRules $sharedRules = null;
 	
 	/**
-	 * The Redis server's clock minus the local clock, in ms (see serverNowMs())
+	 * The Redis server's time in ms as it was last read; null: not read yet (see serverNowMs())
 	 */
-	protected ?float $clockOffsetMs = null;
+	protected ?float $serverTimeMs = null;
+	
+	/**
+	 * The local monotonic clock in ms at that reading
+	 */
+	protected float $serverTimeReadAtMs = 0.0;
 	
 	/**
 	 * The rule id of the writes with no miss before them, taken once per set() or batch (see writeStamp())
@@ -1180,7 +1195,7 @@ class RedisVersioned extends Store
 		$this->attemptEndedAtMs = null;
 		$this->alone = false;
 		$this->sharedRules = null;
-		$this->clockOffsetMs = null;
+		$this->serverTimeMs = null;
 	}
 	
 	/**
@@ -2106,41 +2121,62 @@ class RedisVersioned extends Store
 	
 	/**
 	 * The Redis server's time in ms. That is the clock the rule ids come from (on a cluster, the node of
-	 * the rules stream). It is read once per instance and then kept as an offset to the local clock. A host
-	 * and a container can drift apart by seconds, and a soft value's stale time must not.
+	 * the rules stream). A host and a container can be seconds apart, and a soft value's stale time must
+	 * not be. A reading is carried on by the local monotonic clock, which a step of the local time does not
+	 * move, and read again after SERVER_TIME_MS. Null when it cannot be read: a reading past that age is
+	 * not used.
 	 */
 	protected function serverNowMs(): ?int
 	{
-		if($this->clockOffsetMs === null)
+		$nowMs = hrtime(true) / 1e6;
+		
+		if($this->serverTimeMs === null
+			|| $nowMs - $this->serverTimeReadAtMs >= static::SERVER_TIME_MS)
 		{
-			if(($client = $this->getClient()) === null)
+			if(($serverMs = $this->readServerTimeMs()) === null)
 			{
 				return null;
 			}
 			
-			try
-			{
-				$time = $client instanceof RedisClusterClient
-					? $client->time($this->getRulesKey())
-					: $client->time();
-			}
-			catch(RedisException|RedisClusterException $exception)
-			{
-				$this->log($exception);
-				
-				return null;
-			}
-			
-			if(is_array($time) === false
-				|| isset($time[0], $time[1]) === false)
-			{
-				return null;
-			}
-			
-			$this->clockOffsetMs = (int)$time[0] * 1000 + intdiv((int)$time[1], 1000)
-				- microtime(true) * 1000;
+			// the server answered somewhere between the two local readings
+			$afterMs = hrtime(true) / 1e6;
+			$this->serverTimeMs = (float)$serverMs;
+			$this->serverTimeReadAtMs = ($nowMs + $afterMs) / 2;
+			$nowMs = $afterMs;
 		}
 		
-		return (int)(microtime(true) * 1000 + $this->clockOffsetMs);
+		return (int)($this->serverTimeMs + $nowMs - $this->serverTimeReadAtMs);
+	}
+	
+	/**
+	 * Asks the Redis server for its time (TIME), in ms; null when it cannot be read
+	 */
+	protected function readServerTimeMs(): ?int
+	{
+		if(($client = $this->getClient()) === null)
+		{
+			return null;
+		}
+		
+		try
+		{
+			$time = $client instanceof RedisClusterClient
+				? $client->time($this->getRulesKey())
+				: $client->time();
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			$this->log($exception);
+			
+			return null;
+		}
+		
+		if(is_array($time) === false
+			|| isset($time[0], $time[1]) === false)
+		{
+			return null;
+		}
+		
+		return (int)$time[0] * 1000 + intdiv((int)$time[1], 1000);
 	}
 }

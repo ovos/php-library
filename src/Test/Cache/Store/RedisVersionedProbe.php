@@ -66,8 +66,14 @@ class RedisVersionedProbe extends RedisVersioned
 	/** run before each read of the rules stream - a test makes the read fail */
 	public ?Closure $beforeRuleFetch = null;
 	
-	/** the server's time cannot be read (see serverNowMs()) */
+	/** the server's time cannot be read (see readServerTimeMs()) */
 	public bool $timeUnreadable = false;
+	
+	/** how often the server's time was asked for */
+	public int $serverTimeReads = 0;
+	
+	/** the server's clock reads that much later, as after a step or a failover to a node ahead */
+	public int $serverAheadMs = 0;
 	
 	/**
 	 * Called once, when a read starts to wait for another worker's reload: what that worker does meanwhile
@@ -297,11 +303,27 @@ class RedisVersionedProbe extends RedisVersioned
 	}
 	
 	#[Override]
-	protected function serverNowMs(): ?int
+	protected function readServerTimeMs(): ?int
 	{
-		return $this->timeUnreadable
-			? null
-			: parent::serverNowMs();
+		$this->serverTimeReads++;
+		
+		if($this->timeUnreadable
+			|| ($serverMs = parent::readServerTimeMs()) === null)
+		{
+			return null;
+		}
+		
+		return $serverMs + $this->serverAheadMs;
+	}
+	
+	/**
+	 * Makes the kept reading of the server's time that much older, as if the process had run on meanwhile
+	 */
+	public function ageServerTime(
+		int $ms,
+	): void
+	{
+		$this->serverTimeReadAtMs-= $ms;
 	}
 	
 	public function rules(): Rules

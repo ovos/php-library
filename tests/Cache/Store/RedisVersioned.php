@@ -1959,6 +1959,119 @@ class RedisVersioned extends Test
 	}
 	
 	/**
+	 * A softly invalidated value with a long stale time, and a reader that judges it by the server's time
+	 * on every read
+	 *
+	 * @return array{string, RedisVersionedProbe}
+	 */
+	protected function softValueAndItsReader(
+		string $name,
+	): array
+	{
+		$key = $this->guardKey($name);
+		$writer = $this->guardStore();
+		$writer->get($key, fn(): string => 'old', 3600, [self::GUARD_TAG], stale: 600, soft: true);
+		$writer->invalidateTags([self::GUARD_TAG]);
+		
+		$reader = $this->probe([
+			'rules_cache_ms' => 0,
+			'rules_shared_cache' => false,
+		]);
+		$reader->setDeferrer(static function(Closure $refresh): void
+		{
+		});
+		
+		return [$key, $reader];
+	}
+	
+	/**
+	 * RULE: the Redis server's time is asked for once and carried on by the local clock, and asked for again
+	 * once that reading is older than SERVER_TIME_MS. So a long-running process does not judge stale times
+	 * by a reading made when it started.
+	 */
+	public function theServersTimeIsReadAgainOnceTheReadingIsOld(): bool
+	{
+		[$key, $reader] = $this->softValueAndItsReader('soft-time-again');
+		$recompute = fn(): Computed => new Computed('recomputed', save: false);
+		$read = fn(): mixed => $reader->get($key, $recompute, 3600, [self::GUARD_TAG], stale: 600, soft: true);
+		
+		$first = $read();
+		$second = $read();
+		$young = $reader->serverTimeReads;
+		
+		$reader->ageServerTime(Store::SERVER_TIME_MS - 5000);
+		$third = $read();
+		$younger = $reader->serverTimeReads;
+		
+		$reader->ageServerTime(5000);
+		$fourth = $read();
+		$old = $reader->serverTimeReads;
+		$this->guardStore()->delete($key);
+		
+		return [$first, $second, $third, $fourth] === ['old', 'old', 'old', 'old']
+			&& $young === 1
+			&& $younger === 1
+			&& $old === 2;
+	}
+	
+	/**
+	 * RULE: a Redis server whose clock moved (a step, a failover to a node with another clock) is followed
+	 * once the reading is read again: a soft value that is past its stale time on the server's clock is a
+	 * miss from then on.
+	 */
+	public function aServerClockThatMovedIsFollowed(): bool
+	{
+		[$key, $reader] = $this->softValueAndItsReader('soft-time-moved');
+		$recompute = fn(): Computed => new Computed('recomputed', save: false);
+		$read = fn(): mixed => $reader->get($key, $recompute, 3600, [self::GUARD_TAG], stale: 600, soft: true);
+		
+		$before = $read();
+		
+		// the server's clock is now past the value's stale time; the reading in hand is still young
+		$reader->serverAheadMs = 700_000;
+		$carried = $read();
+		
+		$reader->ageServerTime(Store::SERVER_TIME_MS);
+		$after = $read();
+		$this->guardStore()->delete($key);
+		
+		return $before === 'old'
+			&& $carried === 'old'
+			&& $after === 'recomputed';
+	}
+	
+	/**
+	 * RULE: a reading older than SERVER_TIME_MS is not used when the server's time cannot be read again:
+	 * the read is a miss that leaves the item, as when the time could never be read.
+	 */
+	public function anOldReadingIsNotUsedWhenTheTimeCannotBeReadAgain(): bool
+	{
+		[$key, $reader] = $this->softValueAndItsReader('soft-time-lost');
+		$recompute = fn(): Computed => new Computed('recomputed', save: false);
+		$read = fn(): mixed => $reader->get($key, $recompute, 3600, [self::GUARD_TAG], stale: 600, soft: true);
+		
+		$before = $read();
+		
+		$reader->timeUnreadable = true;
+		$carried = $read();
+		
+		$reader->ageServerTime(Store::SERVER_TIME_MS);
+		$after = $read();
+		$kept = $reader->getClient()
+			->hExists($reader->itemId($key), Store::KEY_DATA);
+		
+		$reader->timeUnreadable = false;
+		$again = $read();
+		$this->guardStore()->delete($key);
+		
+		return $before === 'old'
+			&& $carried === 'old'
+			&& $after === 'recomputed'
+			&& $kept === true
+			&& $again === 'old';
+	}
+	
+	/**
 	 * RULE: a reload that is running is not started again. A worker that reads while the reloader fetches
 	 * uses its own copy. Once that fetch has failed (an outage), the next read uses its copy too. So a slow
 	 * failure costs one fetch, however many reads follow.

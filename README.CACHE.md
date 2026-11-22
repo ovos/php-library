@@ -821,6 +821,13 @@ $store->get('menu:main', fn() => $this->buildMenu(), ttl: 0, tags: ['menu'], sta
   item's epoch and the tag's stamp refuses it too; the versioned stores let it
   land under the watermark it saw, older than the rule, so it can only be
   served stale, as the old value would be.
+- The window of a soft invalidation is counted on the Redis server's clock,
+  the one the rule ids come from. A versioned store asks for it (`TIME`) on
+  the first read that needs it, carries the reading on with the local
+  monotonic clock, and asks again once the reading is a minute old
+  (`RedisVersioned::SERVER_TIME_MS`). So a step of the local time does not
+  move the window, and a long-running worker follows a server clock that was
+  stepped, or a failover to a node with another clock, within that minute.
 - A versioned read that cannot read the server's clock (`TIME`) for the
   window takes a softly invalidated value for a miss and leaves it in place:
   the next read that can tell serves it. Its own computation is a miss's like
