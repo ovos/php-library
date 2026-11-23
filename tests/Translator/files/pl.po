@@ -1,0 +1,38 @@
+# Fixture for Tests\Translator: one entry of each kind the Translator reads.
+msgid ""
+msgstr ""
+"Language: pl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+
+msgid "Open"
+msgstr "Otwarte"
+
+msgid "{0} file"
+msgid_plural "{0} files"
+msgstr[0] "{0} plik"
+msgstr[1] "{0} pliki"
+msgstr[2] "{0} plików"
+
+msgctxt "verb"
+msgid "Open"
+msgstr "Otwórz"
+
+msgctxt "inbox"
+msgid "{0} new message"
+msgid_plural "{0} new messages"
+msgstr[0] "{0} nowa wiadomość"
+msgstr[1] "{0} nowe wiadomości"
+msgstr[2] "{0} nowych wiadomości"
+
+msgid "OK"
+msgstr "OK"
+
+# every form reads the same as the singular msgid
+msgid "Status"
+msgid_plural "Statuses"
+msgstr[0] "Status"
+msgstr[1] "Status"
+msgstr[2] "Status"

@@ -8,6 +8,10 @@ use Closure;
 use IntlException;
 use MessageFormatter;
 
+use function array_key_exists;
+use function chr;
+use function explode;
+
 /**
  * Translator
  *
@@ -47,6 +51,14 @@ class Translator
 	 */
 	protected static ?Closure $overridesProvider = null;
 	
+	/**
+	 * Missing handler: fn(Locale $locale, string $msgid, ?string $plural, ?string $context)
+	 * Called by the translate methods when no loaded translation and no
+	 * override holds the msgid (the test of has()). Its result is ignored:
+	 * the text returned is the same with or without it. Inert when null.
+	 */
+	protected static ?Closure $missingHandler = null;
+	
 	public function __construct(
 		Locale $locale,
 	)
@@ -83,6 +95,18 @@ class Translator
 	public static function getOverridesProvider(): ?Closure
 	{
 		return self::$overridesProvider;
+	}
+	
+	public static function setMissingHandler(
+		?Closure $handler,
+	): void
+	{
+		self::$missingHandler = $handler;
+	}
+	
+	public static function getMissingHandler(): ?Closure
+	{
+		return self::$missingHandler;
 	}
 	
 	protected function getOverrides(): array
@@ -127,25 +151,16 @@ class Translator
 		...$params,
 	): string
 	{
-		$translation = $phrase;
-		
-		foreach($this->translations as $translationAdapter)
-		{
-			$result = $translationAdapter->translate($phrase);
-			if($result !== ''
-				&& $result !== $phrase)
-			{
-				$translation = $result;
-			}
-		}
-		
-		$overrides = $this->getOverrides();
-		if(($overrides[$phrase] ?? '') !== '')
-		{
-			$translation = $overrides[$phrase];
-		}
-		
-		return $this->getTranslation($translation, ...$params);
+		return $this->getTranslation($this->lookUp(null, $phrase), ...$params);
+	}
+	
+	public function translateContext(
+		string $context,
+		string $phrase,
+		...$params,
+	): string
+	{
+		return $this->getTranslation($this->lookUp($context, $phrase), ...$params);
 	}
 	
 	/**
@@ -158,33 +173,176 @@ class Translator
 		...$params,
 	): string
 	{
-		$translation = $this->getPlural($n) === 0 // english
-			? $phraseSingular
-			: $phrasePlural;
+		return $this->getTranslation(
+			$this->lookUpPlural(null, $phraseSingular, $phrasePlural, $n),
+			...$params,
+		);
+	}
+	
+	public function translatePluralContext(
+		string $context,
+		string $singular,
+		string $plural,
+		int $number,
+		...$params,
+	): string
+	{
+		return $this->getTranslation(
+			$this->lookUpPlural($context, $singular, $plural, $number),
+			...$params,
+		);
+	}
+	
+	/**
+	 * Whether a loaded translation or an override holds the msgid, also when
+	 * it is translated to its own text, which translate() cannot tell apart
+	 * from a missing entry
+	 */
+	public function has(
+		string $phrase,
+		?string $plural = null,
+		?string $context = null,
+	): bool
+	{
+		$key = self::getMessageKey($phrase, $plural, $context);
+		
+		// an empty override is never applied, so it holds nothing
+		return $this->isLoaded($key)
+			|| ($this->getOverrides()[$key] ?? '') !== '';
+	}
+	
+	/**
+	 * Whether a loaded translation holds the raw key, whatever its translation
+	 */
+	protected function isLoaded(
+		string $key,
+	): bool
+	{
+		foreach($this->translations as $translation)
+		{
+			if($translation->exists($key))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * The raw gettext key of a msgid, as the .mo files and the overrides use it
+	 */
+	protected static function getMessageKey(
+		string $phrase,
+		?string $plural = null,
+		?string $context = null,
+	): string
+	{
+		$key = $plural === null
+			? $phrase
+			: $phrase . chr(0) . $plural;
+		
+		return $context === null
+			? $key
+			: $context . chr(4) . $key;
+	}
+	
+	/**
+	 * The phrase as the last translation path holding it has it, an override
+	 * over all of them
+	 */
+	protected function lookUp(
+		?string $context,
+		string $phrase,
+	): string
+	{
+		$translation = $phrase;
+		$key = self::getMessageKey($phrase, context: $context);
+		$held = false;
 		
 		foreach($this->translations as $translationAdapter)
 		{
-			$result = $translationAdapter->translatePlural($phraseSingular, $phrasePlural, $n);
+			// a path holding the msgid wins over the paths before it, also
+			// with a translation that reads the same as the msgid
+			if($translationAdapter->exists($key) === false)
+			{
+				continue;
+			}
 			
-			// inheritance of translations (each consecutive translation overwrites the former)
-			if($result !== ''
-				&& ($result !== $translation
-					&& $result !== $phraseSingular
-					&& $result !== $phrasePlural))
+			$held = true;
+			$result = $context === null
+				? $translationAdapter->translate($phrase)
+				: $translationAdapter->translateContext($context, $phrase);
+			if($result !== '')
 			{
 				$translation = $result;
 			}
 		}
 		
 		$overrides = $this->getOverrides();
-		$key = $phraseSingular . chr(0) . $phrasePlural;
+		if(($overrides[$key] ?? '') !== '')
+		{
+			$translation = $overrides[$key];
+		}
+		else if(self::$missingHandler !== null
+			&& $held === false)
+		{
+			(self::$missingHandler)($this->locale, $phrase, null, $context);
+		}
+		
+		return $translation;
+	}
+	
+	/**
+	 * The form for the number, from the last translation path holding the
+	 * msgids, an override over all of them
+	 */
+	protected function lookUpPlural(
+		?string $context,
+		string $phraseSingular,
+		string $phrasePlural,
+		int $n,
+	): string
+	{
+		// untranslated text stays English, so the English rule picks the form
+		$translation = $n === 1
+			? $phraseSingular
+			: $phrasePlural;
+		$key = self::getMessageKey($phraseSingular, $phrasePlural, $context);
+		$held = false;
+		
+		foreach($this->translations as $translationAdapter)
+		{
+			// a path holding the msgids wins over the paths before it, also
+			// with a form that reads the same as a msgid
+			if($translationAdapter->exists($key) === false)
+			{
+				continue;
+			}
+			
+			$held = true;
+			$result = $context === null
+				? $translationAdapter->translatePlural($phraseSingular, $phrasePlural, $n)
+				: $translationAdapter->translatePluralContext($context, $phraseSingular, $phrasePlural, $n);
+			if($result !== '')
+			{
+				$translation = $result;
+			}
+		}
+		
+		$overrides = $this->getOverrides();
 		if(($overrides[$key] ?? '') !== '')
 		{
 			$list = explode(chr(0), $overrides[$key]);
 			$translation = $list[$this->getPlural($n)] ?? $list[0];
 		}
+		else if(self::$missingHandler !== null
+			&& $held === false)
+		{
+			(self::$missingHandler)($this->locale, $phraseSingular, $phrasePlural, $context);
+		}
 		
-		return $this->getTranslation($translation, ...$params);
+		return $translation;
 	}
 	
 	protected function getTranslation(

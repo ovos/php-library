@@ -77,6 +77,42 @@ class Translation
 			);
 	}
 	
+	public function translateContext(
+		string $context,
+		string $phrase,
+	): string
+	{
+		return $this->getAdapter()
+			->pgettext($context, $phrase);
+	}
+	
+	public function translatePluralContext(
+		string $context,
+		string $phraseSingular,
+		string $phrasePlural,
+		int $n,
+	): string
+	{
+		return $this->getAdapter()
+			->npgettext(
+				$context,
+				$phraseSingular,
+				$phrasePlural,
+				$n,
+			);
+	}
+	
+	/**
+	 * Whether this file holds the raw gettext key, whatever its translation
+	 */
+	public function exists(
+		string $messageId,
+	): bool
+	{
+		return $this->getAdapter()
+			->exists($messageId);
+	}
+	
 	public function getAdapter(): CachedAdapter
 	{
 		if($this->adapter === null)

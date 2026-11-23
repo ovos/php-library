@@ -11,6 +11,7 @@ use Ovos\Service\Cache;
 use function Ovos\container;
 
 use function array_key_exists;
+use function chr;
 use function explode;
 use function file_exists;
 use function filemtime;
@@ -49,8 +50,7 @@ class CachedAdapter
 			->getPerishable()->getStore();
 		
 		$mTime = filemtime($filename);
-		$path = substr($filename, strlen(BASE_DIR));
-		$cacheId = Normalizer::fromPath($path); // a static method accessed from the instance
+		$cacheId = self::getCacheId($filename);
 		
 		if(($item = $store->get($cacheId))
 			&& $item->mtime === $mTime)
@@ -70,6 +70,17 @@ class CachedAdapter
 		$item->translations = $this->getTranslations();
 		
 		$store->set($cacheId, $item);
+	}
+	
+	/**
+	 * The perishable store's key for a .mo file's parsed map: its path below
+	 * BASE_DIR. The map is reused while the file's mtime is unchanged
+	 */
+	public static function getCacheId(
+		string $filename,
+	): string
+	{
+		return Normalizer::fromPath(substr($filename, strlen(BASE_DIR)));
 	}
 	
 	/**
@@ -120,20 +131,19 @@ class CachedAdapter
 		int $number, // number of objects
 	): string // translated plural form
 	{
-		// this should contain all strings separated by NULLs
+		// a plural entry is keyed by both msgids, NUL-joined, as in the .mo
 		$key = implode(chr(0), [$messageId, $messageIdPlural]);
-		if($this->exists($key))
+		if($this->exists($key) === false)
 		{
-			return $number !== 1 ? $messageIdPlural : $messageId;
+			// not in this file: the English text, by the English rule
+			return $number === 1 ? $messageId : $messageIdPlural;
 		}
 		
-		$result = $this->gettext($key);
-		
-		// find out the appropriate form
+		// the forms are NUL-joined; the language's rule picks one
 		$select = $this->translation->getTranslator()
 			->getPlural($number);
 		
-		$list = explode(chr(0), $result);
+		$list = explode(chr(0), $this->translations[$key]);
 		if(isset($list[$select]) === false)
 		{
 			return $list[0];
@@ -154,6 +164,7 @@ class CachedAdapter
 	{
 		$key = implode(chr(4), [$messageContext, $messageId]);
 		$translated = $this->ngettext($key, $messageIdPlural, $number);
+		// a missing entry comes back as the singular key for a count of 1
 		if(str_contains($translated, chr(4)))
 		{
 			return $messageId;
