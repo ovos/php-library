@@ -11,12 +11,14 @@ use Ovos\Cache\Prefixer;
 use Ovos\Controller;
 use Ovos\Request;
 use Ovos\Service\Auth;
+use Ovos\Strings;
 use Throwable;
 
 use function apcu_add;
 use function apcu_delete;
 use function apcu_enabled;
 use function apcu_entry;
+use function apcu_exists;
 use function apcu_fetch;
 use function apcu_inc;
 use function apcu_store;
@@ -96,7 +98,10 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  * the DISPATCHED controller/action — resolveActionMethod() re-proves it names
  * real code — and a request nothing was dispatched for increments only
  * __unmatched, which is exactly the probe signal codesafe wants. A raw
- * URI must never reach a field name.
+ * URI must never reach a field name. At most ROUTE_NAMES_MAX distinct route
+ * names count in a minute, the rest under __other: every distinct name costs
+ * up to 16 APCu keys for an hour, APCu is finite, and a full APCu fails
+ * every apcu_inc() silently.
  *
  * Opt-in twice: codesafe.rollups here (default off), rollups_enabled on the
  * codesafe project there. A sender deployed before the server switch is
@@ -174,6 +179,14 @@ class Rollup
 	public const array DURATION_SPLIT = [5, 10];
 	
 	public const int DURATION_FINE_PARTS = 3;
+	
+	/**
+	 * Distinct route names counted in a minute, codesafe's own cap on route
+	 * fields (MAX_ROUTE_FIELDS); past them a request counts under __other,
+	 * the name codesafe folds the rest into. First come: codesafe keeps the
+	 * most counted instead, which a counter cannot know before the minute ends
+	 */
+	public const int ROUTE_NAMES_MAX = 40;
 	
 	/**
 	 * Every APCu key this install owns starts with it:
@@ -375,13 +388,16 @@ class Rollup
 			return '__unmatched';
 		}
 		
-		if(Controller::resolveActionMethod(
-			$instance::class, $request->getActionMethod()) === null)
+		$method = Controller::resolveActionMethod($instance::class, $request->getActionMethod());
+		if($method === null)
 		{
 			return '__unmatched';
 		}
 		
-		return self::routeName($request->getController(), $request->getAction());
+		// the method as declared, in the router's spelling (resetPassword: reset-password), never the URL
+		// segment: the router takes that whatever its dashes, underscores and case, and each variant would
+		// count as a route of its own
+		return self::routeName($request->getController(), Strings::snakeCase($method));
 	}
 	
 	/**
@@ -672,6 +688,9 @@ class Rollup
 		?float $durationMs = null,
 	): void
 	{
+		// before the route's fields and its durations alike: past the minute's cap both count under __other
+		$route = $this->capped($minute, $route);
+		
 		$fields = ['requests'];
 		
 		if(is_int($status) && $status >= 100 && $status <= 599)
@@ -707,6 +726,36 @@ class Rollup
 		{
 			apcu_inc($this->key($minute . ':' . $field), 1, $ok, self::COUNTER_TTL);
 		}
+	}
+	
+	/**
+	 * A route as it may count this minute: __unmatched and __other as they
+	 * are, the probe signal and the overflow never folded; a name already
+	 * counted keeps counting; a new one takes one of the minute's
+	 * ROUTE_NAMES_MAX places (the `rn` field, which assemble() ignores and the
+	 * flush deletes with the minute), and past them it counts under __other.
+	 * Two requests that bring one new name at once may take two places
+	 */
+	protected function capped(
+		int $minute,
+		string $route,
+	): string
+	{
+		if($route === '__unmatched' || $route === '__other')
+		{
+			return $route;
+		}
+		
+		if(apcu_exists($this->key($minute . ':r:' . $route)))
+		{
+			return $route;
+		}
+		
+		$ok = false;
+		
+		return (int)apcu_inc($this->key($minute . ':rn'), 1, $ok, self::COUNTER_TTL) > self::ROUTE_NAMES_MAX
+			? '__other'
+			: $route;
 	}
 	
 	/**

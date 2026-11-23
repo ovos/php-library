@@ -1178,9 +1178,12 @@ class Sender extends Service
 			}
 			
 			// the route that answered (codesafe contract: context.route,
-			// docs/SENDER.md): the rollup's name for this request, from its
-			// closed vocabulary, never the URI. Only once the response ended;
-			// where it cannot be told, no key rather than a default
+			// docs/SENDER.md): the rollup's name for this request, the
+			// dispatched controller and the method its action resolved to
+			// (Rollup::routeOf()), never the URI. Before the rollup's
+			// per-minute cap, so past it the event keeps the name the traffic
+			// row folds into __other. Only once the response ended; where it
+			// cannot be told, no key rather than a default
 			if($this->responseEnded)
 			{
 				try

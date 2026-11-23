@@ -12,6 +12,7 @@ use Ovos\Response;
 use Ovos\Service\Codesafe\Rollup as CodesafeRollup;
 use APCUIterator;
 use Ovos\Test;
+use Ovos\Test\Exception\SkipException;
 
 use function apcu_delete;
 use function apcu_enabled;
@@ -25,6 +26,8 @@ use function intdiv;
 use function preg_quote;
 use function random_bytes;
 use function str_repeat;
+use function strlen;
+use function substr;
 use function time;
 use function uniqid;
 
@@ -346,6 +349,167 @@ class Rollup extends Test
 				$shared->setControllerInstance($running);
 			}
 		}
+	}
+	
+	/**
+	 * RULE: the route is named by the method the action resolved to, in the
+	 * router's own spelling, never by the URL segment the client sent: `item`,
+	 * `ITEM` and `i-t-e-m` reach the same method and count as one route, and
+	 * `resetPassword` counts as `reset-password` however the segment spelled
+	 * it. The segment is the client's string: its dashes, underscores and case
+	 * would make a new name of every variant.
+	 * Falsify: name the action from getAction() — `/news/i-t-e-m`; lowercase
+	 * the method without the router's dashes — `/news/resetpassword`; name the
+	 * method before it is resolved — `/news/r-e-s-e-t-p-a-s-s-w-o-r-d`; append
+	 * the request URI — the query rides the name.
+	 */
+	public function theRouteIsNamedByTheMethodNotTheUrlSegment(): bool
+	{
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+			
+			public function resetPassword(): void
+			{
+			}
+		});
+		$named = static function(string $action, string $method) use ($handler): string
+		{
+			$request = new Request;
+			$request->setController('news');
+			$request->setAction($action);
+			$request->setActionMethod($method);
+			$request->setDispatchedController($handler);
+			
+			return CodesafeRollup::routeFor(200, $request);
+		};
+		$saved = $_SERVER['REQUEST_URI'] ?? null;
+		$_SERVER['REQUEST_URI'] = '/news/i-t-e-m/42?ref=mail';
+		
+		try
+		{
+			$routes = [
+				$named('item', 'item'),
+				$named('ITEM', 'item'),
+				$named('i-t-e-m', 'item'),
+				$named('reset-password', 'resetPassword'),
+				$named('Reset_PASSWORD', 'resetPassword'),
+				// the router's camelCase() of the segment, which method_exists() takes whatever its case
+				$named('r-e-s-e-t-p-a-s-s-w-o-r-d', 'rESETPASSWORD'),
+			];
+		}
+		finally
+		{
+			if($saved === null)
+			{
+				unset($_SERVER['REQUEST_URI']);
+			}
+			else
+			{
+				$_SERVER['REQUEST_URI'] = $saved;
+			}
+		}
+		
+		return $routes === [
+			'/news/item',
+			'/news/item',
+			'/news/item',
+			'/news/reset-password',
+			'/news/reset-password',
+			'/news/reset-password',
+		];
+	}
+	
+	/**
+	 * RULE: at most ROUTE_NAMES_MAX distinct route names count in one minute,
+	 * the rest under __other, codesafe's own overflow name, their durations
+	 * with them; a name already counted keeps counting without taking another
+	 * place; __unmatched and __other never take one, so the probe signal is
+	 * never folded. Every distinct name costs up to 16 APCu keys for an hour,
+	 * and a full APCu fails every apcu_inc() silently. The places are
+	 * first come: a minute with more live routes than places folds the late
+	 * ones, where codesafe folds the least counted.
+	 * Falsify: drop the cap — the 41st name counts; drop the apcu_exists()
+	 * test — a second hit takes a place; write `>=` — the 40th name folds; let
+	 * __unmatched take a place — it folds into __other once the places are
+	 * gone; count the duration under the name before the cap — the folded
+	 * name's vector ships.
+	 */
+	public function distinctRouteNamesAreCappedPerMinute(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			throw new SkipException('APCu is not enabled for this SAPI (apc.enable_cli).');
+		}
+		$rollup = new class(new ArrayObject(['enabled' => true, 'url' => 'https://console.invalid', 'key' => 'k', 'rollups' => true]),
+			'install-cap-' . uniqid()) extends CodesafeRollup
+		{
+			/** one GET answered 200 counted into $minute under $route */
+			public function countNow(
+				int $minute,
+				string $route,
+				?float $durationMs = null,
+			): void
+			{
+				$this->count($minute, 200, 'GET', $route, null, $durationMs);
+			}
+			
+			/**
+			 * A minute's counters by field
+			 *
+			 * @return array<string, int>
+			 */
+			public function fields(
+				int $minute,
+			): array
+			{
+				$prefix = $this->key($minute . ':');
+				$fields = [];
+				foreach(new APCUIterator('~^' . preg_quote($prefix, '~') . '~') as $entry)
+				{
+					$fields[substr((string)$entry['key'], strlen($prefix))] = (int)$entry['value'];
+				}
+				
+				return $fields;
+			}
+		};
+		$minute = 29_000_000;
+		
+		try
+		{
+			for($i = 1; $i <= CodesafeRollup::ROUTE_NAMES_MAX + 1; $i++)
+			{
+				$rollup->countNow($minute, '/news/a' . $i, 7.0);
+			}
+			$names = $rollup->fields($minute);
+			$rollup->countNow($minute, '/news/a1');
+			$rollup->countNow($minute, '__unmatched');
+			$rollup->countNow($minute, '__other');
+			$again = $rollup->fields($minute);
+		}
+		finally
+		{
+			apcu_delete(new APCUIterator('~^' . preg_quote($rollup->getPrefix(), '~') . '~'));
+		}
+		$payload = CodesafeRollup::assemble($minute, $again);
+		
+		return CodesafeRollup::ROUTE_NAMES_MAX === 40
+			&& ($names['r:/news/a1'] ?? 0) === 1
+			&& ($names['r:/news/a40'] ?? 0) === 1
+			&& isset($names['r:/news/a41']) === false
+			&& ($names['r:__other'] ?? 0) === 1
+			&& ($names['d:__other:0'] ?? 0) === 1
+			&& isset($names['d:/news/a41:0']) === false
+			&& ($names['rn'] ?? 0) === 41
+			&& ($again['r:/news/a1'] ?? 0) === 2
+			&& ($again['r:__unmatched'] ?? 0) === 1
+			&& ($again['r:__other'] ?? 0) === 2
+			&& ($again['rn'] ?? 0) === 41
+			&& isset($payload['rn']) === false
+			&& isset($payload['routes']['rn']) === false
+			&& $payload['routes']['__unmatched'] === 1;
 	}
 	
 	/**

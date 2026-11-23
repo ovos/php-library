@@ -1584,7 +1584,7 @@ class Sender extends Test
 			&& $failed !== null && array_key_exists('route', $failed) === false
 			&& ($missed['route'] ?? null) === '__unmatched'
 			&& ($file['route'] ?? null) === '__unmatched'
-			// the rollup counts all of them as before
+			// the rollup counts every one of them under __unmatched
 			&& CodesafeRollup::routeFor(200, $undispatched) === '__unmatched';
 	}
 	
