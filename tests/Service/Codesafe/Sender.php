@@ -3,18 +3,25 @@ declare(strict_types=1);
 
 namespace Tests\Service\Codesafe;
 
+use APCUIterator;
 use ErrorException;
 use Exception;
 use Ovos\Application;
 use Ovos\ArrayObject;
 use Ovos\Cache\Prefixer;
+use Ovos\Container;
+use Ovos\Controller;
+use Ovos\Controller\Plugin;
 use Ovos\Exception\ForbiddenException;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\NotFoundException\FileNotFoundException;
 use Ovos\Exception\Priority;
+use Ovos\Request;
 use Ovos\Service\Codesafe\Otlp;
+use Ovos\Service\Codesafe\Rollup as CodesafeRollup;
 use Ovos\Service\Codesafe\Sender as CodesafeSender;
 use Ovos\Service\Codesafe\Untracked;
+use Ovos\Service\Events;
 use Ovos\Service\Logger;
 use Ovos\Services;
 use Ovos\Test;
@@ -28,8 +35,10 @@ use function apcu_enabled;
 use function array_column;
 use function array_filter;
 use function array_key_exists;
+use function array_keys;
 use function array_push;
 use function array_slice;
+use function bin2hex;
 use function count;
 use function function_exists;
 use function gc_collect_cycles;
@@ -38,6 +47,9 @@ use function json_decode;
 use function json_encode;
 use function mb_strlen;
 use function Ovos\container;
+use function preg_match;
+use function preg_quote;
+use function random_bytes;
 use function str_contains;
 use function str_repeat;
 use function str_starts_with;
@@ -1476,6 +1488,725 @@ class Sender extends Test
 			&& ($context['referer'] ?? '')
 				=== 'https://shop.example/reset/[redacted]?user=annab&key=[redacted]'
 			&& ($context['request']['get'] ?? null) === ['email' => 'anna@example.at'];
+	}
+	
+	/**
+	 * RULE: an event sent at the shutdown flush carries the route that
+	 * answered as context.route, the rollup's name for it: the dispatched
+	 * handler's route on a 200 and on its 500, __unmatched on a 404 and
+	 * where nothing was dispatched, whatever the error page answers (on a
+	 * 2xx with the miss among the collected events).
+	 * Falsify: leave the route out of buildContext(), or read the controller
+	 * instance (the error page's) in Rollup::routeOf() — the 500 sends
+	 * __unmatched and the undispatched probe `/wp-admin/index`.
+	 */
+	public function theShutdownFlushSendsTheRouteThatAnswered(): bool
+	{
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+		});
+		$errorPage = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function index(): void
+			{
+			}
+		});
+		
+		$dispatched = new Request;
+		$dispatched->setController('news');
+		$dispatched->setAction('item');
+		$dispatched->setActionMethod('item');
+		$dispatched->setDispatchedController($handler);
+		// the shutdown's error page claims the instance after the handler threw
+		$dispatched->setControllerInstance($errorPage);
+		
+		$undispatched = new Request;
+		$undispatched->setController('wp-admin');
+		$undispatched->setAction('index');
+		$undispatched->setControllerInstance($errorPage);
+		
+		$route = function(Request $request, int $status, Throwable ...$collected): mixed
+		{
+			$sender = $this->makeRouteSender($this->webApp($request, null, self::collected(...$collected)), $status);
+			$sender->captureException(new Exception('route probe'));
+			$sender->terminate();
+			
+			return self::sentContext($sender, 'route probe')['route'] ?? null;
+		};
+		
+		return $route($dispatched, 200) === '/news/item'
+			&& $route($dispatched, 500) === '/news/item'
+			&& $route($dispatched, 404) === '__unmatched'
+			&& $route($undispatched, 200, new NotFoundException('No controller')) === '__unmatched'
+			&& $route($undispatched, 500) === '__unmatched';
+	}
+	
+	/**
+	 * RULE: on a 2xx, __unmatched tells codesafe no handler took the request
+	 * and the error page answered it, so a request nothing was dispatched
+	 * for names it only with the miss on record: a NotFoundException among
+	 * the collected events (the router's static-file miss is one). Without
+	 * it, or with another failure only, code before the dispatcher answered,
+	 * and the event names no route.
+	 * Falsify: send __unmatched on a 2xx whatever was collected — the 200
+	 * and the 204 without events send it; take any collected throwable for
+	 * the miss — the RuntimeException sends it; ask for the miss on a 200
+	 * alone — the 204 sends it; never accept the miss — the
+	 * NotFoundException sends none.
+	 */
+	public function anUndispatchedSuccessNamesTheMissOnlyOnRecord(): bool
+	{
+		$undispatched = new Request;
+		$undispatched->setController('wp-admin');
+		$undispatched->setAction('index');
+		
+		$route = function(int $status, Throwable ...$collected) use ($undispatched): ?array
+		{
+			$sender = $this->makeRouteSender($this->webApp($undispatched, null, self::collected(...$collected)), $status);
+			$sender->captureException(new Exception('soft miss'));
+			$sender->terminate();
+			
+			return self::sentContext($sender, 'soft miss');
+		};
+		
+		$answered = $route(200);
+		$empty = $route(204);
+		$failed = $route(200, new RuntimeException('resolver failed'));
+		$missed = $route(200, new NotFoundException('No controller'));
+		$file = $route(200, new FileNotFoundException('File not found'));
+		
+		return $answered !== null && array_key_exists('route', $answered) === false
+			&& ($answered['status'] ?? null) === 200
+			&& $empty !== null && array_key_exists('route', $empty) === false
+			&& $failed !== null && array_key_exists('route', $failed) === false
+			&& ($missed['route'] ?? null) === '__unmatched'
+			&& ($file['route'] ?? null) === '__unmatched'
+			// the rollup counts all of them as before
+			&& CodesafeRollup::routeFor(200, $undispatched) === '__unmatched';
+	}
+	
+	/**
+	 * RULE: a dispatched handler whose action does not resolve (renamed
+	 * after the dispatch to one its class lacks) answered the request
+	 * itself: on a 2xx no route, a collected NotFoundException or not; on a
+	 * 404 or a 500 __unmatched, as the rollup counts it.
+	 * Falsify: let a collected NotFoundException stand for the miss without
+	 * asking whether a handler was dispatched — the 200 with one sends
+	 * __unmatched; send __unmatched on a 2xx whatever was collected — both
+	 * 200s send it; ask for the miss on every status — the 404 and the 500
+	 * send none.
+	 */
+	public function aHandlerWhoseActionIsGoneNamesNoRouteOnSuccess(): bool
+	{
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+		});
+		
+		$renamed = new Request;
+		$renamed->setController('news');
+		$renamed->setAction('item');
+		$renamed->setActionMethod('item');
+		$renamed->setDispatchedController($handler);
+		// after the dispatch, to an action the handler's class lacks
+		$renamed->setAction('gone');
+		$renamed->setActionMethod('gone');
+		
+		$route = function(int $status, Throwable ...$collected) use ($renamed): ?array
+		{
+			$sender = $this->makeRouteSender($this->webApp($renamed, null, self::collected(...$collected)), $status);
+			$sender->captureException(new Exception('gone action'));
+			$sender->terminate();
+			
+			return self::sentContext($sender, 'gone action');
+		};
+		
+		$answered = $route(200);
+		$missed = $route(200, new NotFoundException('No action'));
+		
+		return $answered !== null && array_key_exists('route', $answered) === false
+			&& $missed !== null && array_key_exists('route', $missed) === false
+			&& ($route(404)['route'] ?? null) === '__unmatched'
+			&& ($route(500)['route'] ?? null) === '__unmatched'
+			&& CodesafeRollup::routeFor(200, $renamed) === '__unmatched';
+	}
+	
+	/**
+	 * RULE: a request nothing was dispatched for keeps __unmatched on every
+	 * status but a 2xx, nothing collected: a 404, a 500, a redirect, and a
+	 * web request whose status cannot be read.
+	 * Falsify: ask for the miss on every status — the 404, the 500 and the
+	 * redirect send no route; on a 3xx too — the redirect sends none.
+	 */
+	public function anUndispatchedFailureStaysUnmatched(): bool
+	{
+		$undispatched = new Request;
+		$undispatched->setController('wp-admin');
+		$undispatched->setAction('index');
+		
+		$route = function(?int $status) use ($undispatched): mixed
+		{
+			$sender = $this->makeRouteSender($this->webApp($undispatched), $status);
+			$sender->captureException(new Exception('hard miss'));
+			$sender->terminate();
+			
+			return self::sentContext($sender, 'hard miss')['route'] ?? null;
+		};
+		
+		return $route(404) === '__unmatched'
+			&& $route(500) === '__unmatched'
+			&& $route(302) === '__unmatched'
+			&& $route(null) === '__unmatched';
+	}
+	
+	/**
+	 * RULE: only the shutdown flush names the route. A flush in the middle of
+	 * a request, where the error page may still take the request over, a CLI
+	 * run and an application that cannot tell its request send no
+	 * context.route at all, never a default; the same request at the
+	 * shutdown does.
+	 * Falsify: leave the route out of buildContext() (the shutdown sends none
+	 * either), set it on every web flush (drop the terminate() flag — the
+	 * mid-request flush sends `/news/item`), outside the web branch (the CLI
+	 * sends the runner's own route), or send __unmatched where the request
+	 * cannot be read.
+	 */
+	public function onlyTheShutdownFlushSendsARoute(): bool
+	{
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+		});
+		
+		$request = new Request;
+		$request->setController('news');
+		$request->setAction('item');
+		$request->setActionMethod('item');
+		$request->setDispatchedController($handler);
+		
+		$midRequest = $this->makeRouteSender($this->webApp($request), 200);
+		$midRequest->captureException(new Exception('mid-request flush'));
+		$midRequest->flush();
+		
+		$shutdown = $this->makeRouteSender($this->webApp($request), 200);
+		$shutdown->captureException(new Exception('shutdown flush'));
+		$shutdown->terminate();
+		
+		$blind = $this->makeRouteSender($this->webApp(null), 200);
+		$blind->captureException(new Exception('blind flush'));
+		$blind->terminate();
+		
+		// the runner's own application: a CLI run
+		$cli = $this->makeRouteSender(null, null);
+		$cli->captureException(new Exception('cli flush'));
+		$cli->terminate();
+		
+		$mid = self::sentContext($midRequest, 'mid-request flush');
+		$ended = self::sentContext($shutdown, 'shutdown flush');
+		$run = self::sentContext($cli, 'cli flush');
+		$unknown = self::sentContext($blind, 'blind flush');
+		
+		return $mid !== null && array_key_exists('route', $mid) === false
+			&& ($mid['status'] ?? null) === 200
+			&& ($ended['route'] ?? null) === '/news/item'
+			&& $run !== null && array_key_exists('route', $run) === false
+			&& array_key_exists('args', $run)
+			&& $unknown !== null && array_key_exists('route', $unknown) === false
+			&& ($unknown['status'] ?? null) === 200;
+	}
+	
+	/**
+	 * RULE: a request a plugin answered before the action (a CSRF refusal, a
+	 * Shield block, a page served from the cache) sends no context.route:
+	 * the handler it was dispatched to never ran, and its name on a 2xx would
+	 * say it answered. The rollup still counts the request under that route.
+	 * An action that ran behind the same plugin is named. Both requests go
+	 * through Controller::dispatch(), so the flag is the one it sets.
+	 * Falsify: send the route whatever the plugins did — the refusal and the
+	 * cached page carry `/news/item`; read the flag the wrong way round —
+	 * the action that ran sends none.
+	 */
+	public function aRequestAPluginAnsweredSendsNoRoute(): bool
+	{
+		[$stopped, $stoppedRequest] = self::dispatchedBehindAPlugin('pre');
+		[$handled, $handledRequest] = self::dispatchedBehindAPlugin(null);
+		
+		$context = function(Request $request, int $status): ?array
+		{
+			$sender = $this->makeRouteSender($this->webApp($request), $status);
+			$sender->captureException(new Exception('plugin probe'));
+			$sender->terminate();
+			
+			return self::sentContext($sender, 'plugin probe');
+		};
+		
+		$refused = $context($stoppedRequest, 403);
+		$cached = $context($stoppedRequest, 200);
+		$served = $context($handledRequest, 200);
+		
+		return $stopped->ran === false && $stopped->isDispatched() === true
+			&& $handled->ran === true && $handled->isDispatched() === false
+			&& $refused !== null && array_key_exists('route', $refused) === false
+			&& ($refused['status'] ?? null) === 403
+			&& $cached !== null && array_key_exists('route', $cached) === false
+			&& CodesafeRollup::routeFor(403, $stoppedRequest) === '/news/item'
+			&& CodesafeRollup::routeFor(200, $stoppedRequest) === '/news/item'
+			&& ($served['route'] ?? null) === '/news/item';
+	}
+	
+	/**
+	 * RULE: the dispatched flag is read at the shutdown flush, whoever set
+	 * it: a plugin's postDispatch() after the action ran, or the action
+	 * itself, leaves the route out the same way. The rollup still counts the
+	 * request under the handler's route.
+	 * Falsify: send the route whatever the plugins did — both carry
+	 * `/news/item`; read the flag the wrong way round — both carry it too.
+	 */
+	public function aFlagSetAfterTheActionAlsoSendsNoRoute(): bool
+	{
+		[$post, $postRequest] = self::dispatchedBehindAPlugin('post');
+		[$action, $actionRequest] = self::dispatchedBehindAPlugin('action');
+		
+		$context = function(Request $request): ?array
+		{
+			$sender = $this->makeRouteSender($this->webApp($request), 200);
+			$sender->captureException(new Exception('late flag'));
+			$sender->terminate();
+			
+			return self::sentContext($sender, 'late flag');
+		};
+		
+		$afterPlugin = $context($postRequest);
+		$byAction = $context($actionRequest);
+		
+		return $post->ran === true && $post->isDispatched() === true
+			&& $action->ran === true && $action->isDispatched() === true
+			&& $afterPlugin !== null && array_key_exists('route', $afterPlugin) === false
+			&& ($afterPlugin['status'] ?? null) === 200
+			&& $byAction !== null && array_key_exists('route', $byAction) === false
+			&& CodesafeRollup::routeFor(200, $postRequest) === '/news/item'
+			&& CodesafeRollup::routeFor(200, $actionRequest) === '/news/item';
+	}
+	
+	/**
+	 * RULE: the route belongs to the shutdown flush alone: once terminate()
+	 * returned, a later flush on the same sender (a service a later
+	 * application reuses) is mid-request again and sends no route.
+	 * Falsify: keep the shutdown mark after terminate() (drop the reset in
+	 * its finally) — the later flush sends `/news/item`.
+	 */
+	public function aFlushAfterTheShutdownSendsNoRoute(): bool
+	{
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+		});
+		
+		$request = new Request;
+		$request->setController('news');
+		$request->setAction('item');
+		$request->setActionMethod('item');
+		$request->setDispatchedController($handler);
+		
+		$sender = $this->makeRouteSender($this->webApp($request), 200);
+		$sender->captureException(new Exception('at the shutdown'));
+		$sender->terminate();
+		$sender->captureException(new Exception('after the shutdown'));
+		$sender->flush();
+		
+		$ended = self::sentContext($sender, 'at the shutdown');
+		$after = self::sentContext($sender, 'after the shutdown');
+		
+		return ($ended['route'] ?? null) === '/news/item'
+			&& $after !== null && array_key_exists('route', $after) === false;
+	}
+	
+	/**
+	 * RULE: a web request whose status cannot be read still names its
+	 * dispatched route: no status is not a 404, so the event carries no
+	 * status and the handler's route, never __unmatched.
+	 * Falsify: read a missing status as a 404 — the route is __unmatched;
+	 * send the route only beside a status — none is sent.
+	 */
+	public function aWebRequestWithoutAStatusNamesItsRoute(): bool
+	{
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+		});
+		
+		$request = new Request;
+		$request->setController('news');
+		$request->setAction('item');
+		$request->setActionMethod('item');
+		$request->setDispatchedController($handler);
+		
+		$sender = $this->makeRouteSender($this->webApp($request), null);
+		$sender->captureException(new Exception('no status'));
+		$sender->terminate();
+		
+		$context = self::sentContext($sender, 'no status');
+		
+		return $context !== null
+			&& array_key_exists('status', $context) === false
+			&& ($context['route'] ?? null) === '/news/item';
+	}
+	
+	/**
+	 * RULE: one name per request: within one flush the rollup counts the
+	 * request under the route its event carries, a handler's and __unmatched
+	 * alike. A probe answered 200 without the miss on record sends no route
+	 * and is still counted __unmatched. Each flush counts under a cache
+	 * prefix of its own, removed afterwards. Skipped without APCu.
+	 * Falsify: let the rollup's observe() name the route from the request's
+	 * own strings — it counts the probe as `/wp-admin/index` while the event
+	 * says __unmatched; let the Sender do so — the event says it; send
+	 * __unmatched on a 2xx whatever was collected — the unrecorded probe
+	 * carries it.
+	 */
+	public function theRollupCountsTheRouteTheEventCarries(): bool
+	{
+		if(function_exists('apcu_enabled') === false || apcu_enabled() === false)
+		{
+			return true;
+		}
+		
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+		});
+		
+		$dispatched = new Request;
+		$dispatched->setController('news');
+		$dispatched->setAction('item');
+		$dispatched->setActionMethod('item');
+		$dispatched->setDispatchedController($handler);
+		
+		$undispatched = new Request;
+		$undispatched->setController('wp-admin');
+		$undispatched->setAction('index');
+		
+		$flush = function(Request $request, Throwable ...$collected): array
+		{
+			$prefix = 'route-test-' . bin2hex(random_bytes(4));
+			$sender = $this->makeRouteSender($this->webApp($request, $prefix, self::collected(...$collected)), 200, true);
+			$sender->captureException(new Exception('counted probe'));
+			$sender->terminate();
+			
+			$context = self::sentContext($sender, 'counted probe');
+			
+			return [$context, $context['route'] ?? null, self::countedRoutes($prefix)];
+		};
+		
+		[, $handlerRoute, $handlerCounted] = $flush($dispatched);
+		[, $probeRoute, $probeCounted] = $flush($undispatched, new NotFoundException('No controller'));
+		[$unrecorded, , $unrecordedCounted] = $flush($undispatched);
+		
+		return $handlerRoute === '/news/item' && $handlerCounted === [$handlerRoute]
+			&& $probeRoute === '__unmatched' && $probeCounted === [$probeRoute]
+			&& $unrecorded !== null && array_key_exists('route', $unrecorded) === false
+			&& $unrecordedCounted === ['__unmatched'];
+	}
+	
+	/**
+	 * A sender that keeps the batches it would post, its response status
+	 * scripted, running in $app; null, the runner's own (a CLI run). With
+	 * $rollups its flush counts the request in the traffic rollup too
+	 *
+	 * @return CodesafeSender&object{sent: list<array>}
+	 */
+	protected function makeRouteSender(
+		?Application $app,
+		?int $status,
+		bool $rollups = false,
+	): CodesafeSender
+	{
+		$config = new ArrayObject([
+			'enabled' => true,
+			'url' => 'https://console.invalid',
+			'key' => 'test-key',
+			'rollups' => $rollups,
+			// no Shield pull from a test
+			'shield' => ['kill' => true],
+		]);
+		
+		$sender = container()->injectMissing(new class($config, $status) extends CodesafeSender
+		{
+			/** @var list<array> */
+			public array $sent = [];
+			
+			public function __construct(
+				ArrayObject $config,
+				protected ?int $status,
+			)
+			{
+				parent::__construct($config);
+			}
+			
+			public function useApp(
+				Application $app,
+			): void
+			{
+				$this->app = $app;
+			}
+			
+			protected function responseStatus(): ?int
+			{
+				return $this->status;
+			}
+			
+			protected function send(
+				string $json,
+			): void
+			{
+				$this->sent[] = (array)json_decode($json, true);
+			}
+			
+			// the daily hello and the inventory post on a web flush: never from a test
+			protected function maybeHello(): void
+			{
+			}
+			
+			protected function maybeInventory(): void
+			{
+			}
+		});
+		
+		if($app !== null)
+		{
+			$sender->useApp($app);
+		}
+		
+		return $sender;
+	}
+	
+	/**
+	 * A web application answering $request, without booting a second one;
+	 * given null, one that cannot tell its request. $cachePrefix replaces the
+	 * runner's cache prefix, so its rollup keys are its own. Its Events
+	 * service holds what $events collected, nothing without it: the runner's
+	 * holds the runner's own
+	 */
+	protected function webApp(
+		?Request $request,
+		?string $cachePrefix = null,
+		?Events $events = null,
+	): Application
+	{
+		return new class($request, $cachePrefix, $events ?? self::collected()) extends Application
+		{
+			protected Services $scriptedServices;
+			
+			public function __construct(
+				protected ?Request $answering,
+				?string $cachePrefix,
+				Events $events,
+			)
+			{
+				$this->config = Application::$instance->getConfig();
+				if($cachePrefix !== null)
+				{
+					// a copy: the runner's own config keeps its prefix
+					$this->config = new ArrayObject(['cache' => ['prefix' => $cachePrefix]] + $this->config->getArrayCopy());
+				}
+				
+				$container = new Container;
+				$container->registerValue(Events::SYMBOL, $events);
+				$this->scriptedServices = new Services($container);
+			}
+			
+			public function getRequest(): Request
+			{
+				return $this->answering ?? throw new RuntimeException('no request');
+			}
+			
+			public function getServices(): Services
+			{
+				return $this->scriptedServices;
+			}
+			
+			public function getEnv(): string
+			{
+				return Application::$instance->getEnv();
+			}
+		};
+	}
+	
+	/**
+	 * An Events service that collected $collected; constructed without the
+	 * error and exception handlers a real one installs over the runner's
+	 */
+	protected static function collected(
+		Throwable ...$collected,
+	): Events
+	{
+		$events = new class extends Events
+		{
+			public function __construct()
+			{
+			}
+		};
+		foreach($collected as $event)
+		{
+			$events->add($event);
+		}
+		
+		return $events;
+	}
+	
+	/**
+	 * The context of the sent event with $message, null when none was sent
+	 */
+	protected static function sentContext(
+		CodesafeSender $sender,
+		string $message,
+	): ?array
+	{
+		foreach($sender->sent as $batch)
+		{
+			foreach($batch as $payload)
+			{
+				if(($payload['message'] ?? null) === $message)
+				{
+					return (array)($payload['context'] ?? []);
+				}
+			}
+		}
+		
+		return null;
+	}
+	
+	/**
+	 * What $run returns: constructing a controller points the SHARED request
+	 * at it, so the runner's own controller is put back before anything else
+	 * can notice
+	 */
+	protected function sharedRequestKept(
+		callable $run,
+	): mixed
+	{
+		$shared = $this->app->getRequest();
+		$running = $shared->getControllerInstance();
+		try
+		{
+			return $run();
+		}
+		finally
+		{
+			if($running !== null)
+			{
+				$shared->setControllerInstance($running);
+			}
+		}
+	}
+	
+	/**
+	 * A handler run through Controller::dispatch() behind one plugin, and the
+	 * request dispatched to it. $marks says who sets the dispatched flag:
+	 * 'pre' the plugin before the action, as the Csrf and Shield plugins and
+	 * a page-cache hit do; 'post' the plugin after it; 'action' the action
+	 * itself; null nobody
+	 *
+	 * @return array{0: Controller&object{ran: bool}, 1: Request}
+	 */
+	protected static function dispatchedBehindAPlugin(
+		?string $marks,
+	): array
+	{
+		$plugin = new class($marks) extends Plugin
+		{
+			// no container: the controller is handed over below
+			public function __construct(
+				protected ?string $marks,
+			)
+			{
+			}
+			
+			public function preDispatch(): void
+			{
+				if($this->marks === 'pre')
+				{
+					$this->getController()->setDispatched(true);
+				}
+			}
+			
+			public function postDispatch(): void
+			{
+				if($this->marks === 'post')
+				{
+					$this->getController()->setDispatched(true);
+				}
+			}
+		};
+		
+		$controller = new class($plugin, $marks) extends Controller
+		{
+			public bool $ran = false;
+			
+			// no container and none of the configured plugins, only the one given
+			public function __construct(
+				Plugin $plugin,
+				protected ?string $marks,
+			)
+			{
+				$this->addPlugin($plugin->setController($this), 'probe');
+			}
+			
+			public function item(): void
+			{
+				$this->ran = true;
+				if($this->marks === 'action')
+				{
+					$this->setDispatched(true);
+				}
+			}
+		};
+		$controller->dispatch('item');
+		
+		$request = new Request;
+		$request->setController('news');
+		$request->setAction('item');
+		$request->setActionMethod('item');
+		$request->setDispatchedController($controller);
+		
+		return [$controller, $request];
+	}
+	
+	/**
+	 * The routes the rollup counted under $cachePrefix; every key under it is
+	 * removed after
+	 *
+	 * @return list<string>
+	 */
+	protected static function countedRoutes(
+		string $cachePrefix,
+	): array
+	{
+		$keys = '~^' . preg_quote(CodesafeRollup::keyPrefix($cachePrefix), '~') . '\d+:r:(.+)$~';
+		$routes = [];
+		foreach(new APCUIterator($keys) as $entry)
+		{
+			if(preg_match($keys, (string)$entry['key'], $match) === 1)
+			{
+				$routes[] = $match[1];
+			}
+		}
+		apcu_delete(new APCUIterator('~^' . preg_quote($cachePrefix, '~') . '~'));
+		
+		return $routes;
 	}
 	
 	/**

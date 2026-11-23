@@ -14,6 +14,7 @@ use Ovos\Exception\ForbiddenException;
 use Ovos\Exception\NotFoundException;
 use Ovos\Exception\Priority;
 use Ovos\Http\Trace;
+use Ovos\Request;
 use Ovos\Service;
 use Ovos\Service\Auth;
 use Ovos\Service\Events;
@@ -64,7 +65,6 @@ use function json_encode;
 use function ksort;
 use function max;
 use function md5;
-use function mb_strlen;
 use function mb_substr;
 use function min;
 use function preg_match;
@@ -355,6 +355,13 @@ class Sender extends Service
 	
 	protected static bool $flushing = false;
 	
+	/**
+	 * Set while terminate() flushes: the response has ended, so the route
+	 * that answered it is known. A flush in the middle of a request sends no
+	 * route: the error page may still take the request over
+	 */
+	protected bool $responseEnded = false;
+	
 	public function boot(Application $app): void
 	{
 		parent::boot($app);
@@ -363,7 +370,16 @@ class Sender extends Service
 	
 	public function terminate(): void
 	{
-		$this->flush();
+		$this->responseEnded = true;
+		try
+		{
+			$this->flush();
+		}
+		finally
+		{
+			// a service reused by a later application starts mid-request again
+			$this->responseEnded = false;
+		}
 	}
 	
 	public function __construct(
@@ -1161,6 +1177,41 @@ class Sender extends Service
 				$context['status'] = $status;
 			}
 			
+			// the route that answered (codesafe contract: context.route,
+			// docs/SENDER.md): the rollup's name for this request, from its
+			// closed vocabulary, never the URI. Only once the response ended;
+			// where it cannot be told, no key rather than a default
+			if($this->responseEnded)
+			{
+				try
+				{
+					$request = $this->app->getRequest();
+					// a plugin that answered before the action (a CSRF refusal, a
+					// Shield block, a page from the cache) leaves the handler's
+					// route on the request, though the handler never ran; the
+					// rollup still counts the request under it. The flag is read
+					// here, whoever set it: one set after the action leaves the
+					// route out too
+					if($request->getDispatchedController()?->isDispatched() !== true)
+					{
+						// routeFor() only asks whether the status is 404, so the status
+						// above (false where there is none) answers as
+						// http_response_code() would, and a test can script it
+						$route = Rollup::routeFor($status ?? false, $request);
+						// the rollup counts __unmatched as it is; the event says it
+						// only where codesafe would read it right
+						if($route !== '__unmatched' || $this->sendsUnmatched($status, $request))
+						{
+							$context['route'] = $route;
+						}
+					}
+				}
+				catch(Throwable)
+				{
+					// no route rather than a guessed one
+				}
+			}
+			
 			// where the EDGE says the visitor is (codesafe contract:
 			// context.country, docs/SENDER.md). A CDN in front of the
 			// application resolved the client's country to route the request at
@@ -1206,6 +1257,52 @@ class Sender extends Service
 			'entry' => $isCli ? 'cli' : 'web',
 			'context' => $context,
 		];
+	}
+	
+	/**
+	 * Whether context.route may say __unmatched. On a 2xx codesafe reads it
+	 * as a request no handler took that the error page answered, and marks
+	 * no served exploit attempt for it, so there it needs the miss itself:
+	 * nothing dispatched, and the router's or the dispatcher's
+	 * NotFoundException among the collected events. Project route resolvers
+	 * run before a miss, so this says the dispatcher found no handler, not
+	 * that no project code saw the request.
+	 */
+	protected function sendsUnmatched(
+		?int $status,
+		Request $request,
+	): bool
+	{
+		// any other status, or none, is not read as an error page's answer
+		if($status === null || $status < 200 || $status > 299)
+		{
+			return true;
+		}
+		
+		// a handler was dispatched and answered; only its action does not resolve
+		if($request->getDispatchedController() !== null)
+		{
+			return false;
+		}
+		
+		// still collected: the application clears them only after every
+		// service's terminate(), this flush included
+		$events = $this->app->getServices()->events;
+		if($events instanceof Events === false)
+		{
+			return false;
+		}
+		
+		// without the miss on record, code before the dispatcher answered
+		foreach($events->toArray() as $event)
+		{
+			if($event instanceof NotFoundException)
+			{
+				return true;
+			}
+		}
+		
+		return false;
 	}
 	
 	/**

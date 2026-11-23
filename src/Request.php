@@ -6,6 +6,9 @@ namespace Ovos;
 use function filter_var;
 use function strtoupper;
 
+use const FILTER_NULL_ON_FAILURE;
+use const PHP_SAPI;
+
 /**
  * Response
  *
@@ -47,6 +50,11 @@ class Request
 	protected string $controllerClass = 'Index';
 	
 	protected ?Controller $controllerInstance = null;
+	
+	/**
+	 * The controller the dispatcher handed this request to
+	 */
+	protected ?Controller $dispatchedController = null;
 	
 	/**
 	 * The action
@@ -131,16 +139,42 @@ class Request
 	}
 	
 	/**
-	 * The dispatched controller, or NULL when nothing was dispatched: a CLI
-	 * process that booted the application and ran its own code, a request the
-	 * router matched nothing for, a fatal before the dispatch. The property
-	 * has always been nullable — the getter promised otherwise, so those paths
-	 * answered with a TypeError instead of a null, and the shutdown handler's
-	 * profiled response (View → Helper\Redis) hit it every time.
+	 * The last controller constructed for this request: every controller
+	 * claims it in its constructor, so the error page built after a failure
+	 * replaces the handler. NULL while none was constructed: a CLI process
+	 * that ran its own code, a request that failed before any controller
+	 * existed. The controller the request was dispatched to is
+	 * getDispatchedController()
 	 */
 	public function getControllerInstance(): ?Controller
 	{
 		return $this->controllerInstance;
+	}
+	
+	/**
+	 * Marks the controller the dispatcher hands this request to, once its
+	 * action resolved. Every constructed controller claims the controller
+	 * instance, the error page built at shutdown included; only a dispatch
+	 * sets this one
+	 */
+	public function setDispatchedController(
+		Controller $controller,
+	): static
+	{
+		$this->dispatchedController = $controller;
+		
+		return $this;
+	}
+	
+	/**
+	 * The controller the dispatcher handed this request to, or NULL when no
+	 * dispatch got that far: a router miss, a missing controller or action, a
+	 * failure before the dispatch, a CLI process that ran its own code. Its
+	 * isDispatched() says whether a plugin answered before the action ran
+	 */
+	public function getDispatchedController(): ?Controller
+	{
+		return $this->dispatchedController;
 	}
 	
 	public function setAction(

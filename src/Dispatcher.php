@@ -6,7 +6,6 @@ namespace Ovos;
 use Ovos\Exception\NotFoundException;
 
 use function class_exists;
-use function method_exists;
 use function preg_match;
 
 /**
@@ -63,6 +62,10 @@ class Dispatcher
 				'No action "%s" on controller "%s"',
 				$request->getActionMethod(), $controllerClass);
 		}
+		
+		// set here and nowhere else: the codesafe rollup reads it as the route
+		// that answered, which an error page built later must not take over
+		$request->setDispatchedController($controller);
 		
 		return $controller->dispatch($action, $request->getParams());
 	}

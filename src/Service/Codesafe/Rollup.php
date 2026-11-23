@@ -93,8 +93,8 @@ use const JSON_PARTIAL_OUTPUT_ON_ERROR;
  *
  * THE CLOSED-VOCABULARY RULE (codesafe refuses violations wholesale):
  * every dimension comes from the app, never from the request. The route is
- * the RESOLVED controller/action — resolveActionMethod() re-proves it names
- * real code — and a request the router did not match increments only
+ * the DISPATCHED controller/action — resolveActionMethod() re-proves it names
+ * real code — and a request nothing was dispatched for increments only
  * __unmatched, which is exactly the probe signal codesafe wants. A raw
  * URI must never reach a field name.
  *
@@ -332,11 +332,15 @@ class Rollup
 	}
 	
 	/**
-	 * A request answered 404 matched nothing this app serves, whatever the
-	 * request object claims: the error-page forward that RENDERS the 404
-	 * marks the request with the error route's own controller/action, which
-	 * would disguise every router miss — the exact traffic __unmatched
-	 * exists to count — as a legitimate route.
+	 * A request answered 404 is __unmatched whatever was dispatched: a
+	 * handler that answers 404 says nothing lives at that address, the same
+	 * answer a router miss gets, and both are the probe traffic __unmatched
+	 * exists to count. Any other status names the dispatched route
+	 * (routeOf()), so a request nothing was dispatched for stays __unmatched
+	 * whatever its error page answers, and a handler that failed keeps its
+	 * own route. The Sender puts the same name on an event as context.route,
+	 * except an __unmatched on a 2xx it has no miss on record for
+	 * (Sender::sendsUnmatched()).
 	 */
 	public static function routeFor(
 		int|false $status,
@@ -347,19 +351,25 @@ class Rollup
 	}
 	
 	/**
-	 * The matched route pattern, or __unmatched. The controller/action
-	 * strings on the Request are ROUTER INPUT — on a 404 they carry whatever
-	 * the client asked for — so they only become a field name once both
-	 * halves demonstrably name real code: a constructed controller instance,
-	 * and an action resolveActionMethod() accepts on it. That is the same
-	 * test the dispatcher applies, re-run.
+	 * The dispatched route, or __unmatched. The controller/action strings on
+	 * the Request are ROUTER INPUT — on a miss they carry whatever the client
+	 * asked for — so they only become a field name once both halves
+	 * demonstrably name real code: the controller the dispatcher handed the
+	 * request to, and an action resolveActionMethod() accepts on it. That is
+	 * the same test the dispatcher applies, re-run.
+	 *
+	 * Not the controller instance: every constructed controller claims it,
+	 * the error page the shutdown builds after a failure included, so a
+	 * request nothing was dispatched for could count under a route made of
+	 * the client's own strings, and a handler that threw as __unmatched.
 	 */
 	public static function routeOf(
 		Request $request,
 	): string
 	{
-		// no constructed controller means the router matched nothing
-		$instance = $request->getControllerInstance();
+		// a router miss, a missing controller or action and a failure before
+		// the dispatch leave it unset
+		$instance = $request->getDispatchedController();
 		if($instance === null)
 		{
 			return '__unmatched';

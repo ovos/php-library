@@ -5,7 +5,10 @@ namespace Tests\Service\Codesafe;
 
 use Ovos\ArrayObject;
 use Ovos\Controller;
+use Ovos\Dispatcher;
+use Ovos\Exception\NotFoundException;
 use Ovos\Request;
+use Ovos\Response;
 use Ovos\Service\Codesafe\Rollup as CodesafeRollup;
 use APCUIterator;
 use Ovos\Test;
@@ -14,10 +17,13 @@ use function apcu_delete;
 use function apcu_enabled;
 use function apcu_store;
 use function array_fill;
+use function bin2hex;
+use function class_alias;
 use function count;
 use function function_exists;
 use function intdiv;
 use function preg_quote;
+use function random_bytes;
 use function str_repeat;
 use function time;
 use function uniqid;
@@ -100,9 +106,9 @@ class Rollup extends Test
 	
 	/**
 	 * The controller/action strings on a Request are ROUTER INPUT — on a
-	 * 404 they carry whatever the client asked for. Without a constructed
-	 * controller instance the route is __unmatched, whatever the strings
-	 * say; that counter IS the probe signal the console reads.
+	 * 404 they carry whatever the client asked for. Without a dispatched
+	 * controller the route is __unmatched, whatever the strings say; that
+	 * counter IS the probe signal the console reads.
 	 */
 	public function anUnresolvedRequestIsUnmatchedWhateverItClaims(): bool
 	{
@@ -114,31 +120,22 @@ class Rollup extends Test
 	}
 	
 	/**
-	 * A 404 answer forces __unmatched even when the route LOOKS resolved:
-	 * the error-page forward that renders the 404 marks the request with
-	 * the error route's own controller/action, so without the status
-	 * override every router miss — the exact traffic __unmatched exists to
-	 * count — would report as a legitimate route. Any other status trusts
-	 * the resolved route.
+	 * A 404 answer forces __unmatched even when a handler was dispatched: a
+	 * handler that answers 404 says nothing lives at that address, the same
+	 * answer a router miss gets, and both are the probe traffic __unmatched
+	 * exists to count. Any other status trusts the dispatched route.
 	 */
 	public function aFourOhFourIsUnmatchedWhateverTheRouteClaims(): bool
 	{
-		// constructing a controller points the SHARED request at it — put
-		// the runner's own controller back before anything else can notice
-		$shared = $this->app->getRequest();
-		$running = $shared->getControllerInstance();
-		
-		$controller = new class extends Controller
+		$controller = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
 		{
 			public function index(): void
 			{
 			}
-		};
-		
-		$shared->setControllerInstance($running);
+		});
 		
 		$request = new Request;
-		$request->setControllerInstance($controller);
+		$request->setDispatchedController($controller);
 		$request->setController('index');
 		$request->setAction('index');
 		
@@ -147,6 +144,208 @@ class Rollup extends Test
 			&& CodesafeRollup::routeFor(200, $request) === '/index/index'
 			// a CLI-ish false status trusts the route too — only 404 overrides
 			&& CodesafeRollup::routeFor(false, $request) === '/index/index';
+	}
+	
+	/**
+	 * RULE: a request nothing was dispatched for is __unmatched whatever its
+	 * error page answers. The error page built at shutdown claims the
+	 * request's controller instance, and router input that names one of its
+	 * actions (`index`) must not turn a probe into a route — not on the 200
+	 * of a custom error page either.
+	 * Falsify: read getControllerInstance() in routeOf() — the probe counts
+	 * as `/wp-admin/index`.
+	 */
+	public function anUndispatchedRequestIsUnmatchedWhateverItsErrorPageAnswers(): bool
+	{
+		$errorPage = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function index(): void
+			{
+			}
+		});
+		
+		$request = new Request;
+		$request->setController('wp-admin');
+		$request->setAction('index');
+		// what the error page's constructor does to the request it renders
+		$request->setControllerInstance($errorPage);
+		
+		return CodesafeRollup::routeFor(200, $request) === '__unmatched'
+			&& CodesafeRollup::routeFor(500, $request) === '__unmatched'
+			&& CodesafeRollup::routeFor(404, $request) === '__unmatched';
+	}
+	
+	/**
+	 * RULE: a handler that threw keeps its route when the error page answers
+	 * for it: the dispatcher handed the request to the handler, and the error
+	 * page built afterwards claims only the controller instance. Its 404
+	 * stays __unmatched, and the action is re-proved on the dispatched
+	 * controller as the dispatcher proved it.
+	 * Falsify: read getControllerInstance() in routeOf() — the 500 counts as
+	 * __unmatched, the error page has no `item` action; drop the action check
+	 * — the renamed action counts as `/news/item`.
+	 */
+	public function aHandlerThatFailedKeepsItsRouteUnderTheErrorPage(): bool
+	{
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+		});
+		$errorPage = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function index(): void
+			{
+			}
+		});
+		
+		$request = new Request;
+		$request->setController('news');
+		$request->setAction('item');
+		$request->setActionMethod('item');
+		$request->setControllerInstance($handler);
+		// the dispatcher hands it over, the handler throws, the shutdown builds the error page
+		$request->setDispatchedController($handler);
+		$request->setControllerInstance($errorPage);
+		
+		$renamed = clone $request;
+		$renamed->setActionMethod('setup-config.php');
+		
+		return CodesafeRollup::routeFor(500, $request) === '/news/item'
+			&& CodesafeRollup::routeFor(200, $request) === '/news/item'
+			&& CodesafeRollup::routeFor(404, $request) === '__unmatched'
+			&& CodesafeRollup::routeFor(500, $renamed) === '__unmatched';
+	}
+	
+	/**
+	 * RULE: of the error page's answers only a 404 hides a dispatched route.
+	 * A handler that refused (403) or was unavailable (503) still answered
+	 * the request, so it counts under the handler's route, not __unmatched.
+	 * Falsify: count every 4xx as __unmatched — the 403 does; count the
+	 * statuses past 500 so — the 503 does.
+	 */
+	public function aHandlerThatRefusedOrWasUnavailableKeepsItsRoute(): bool
+	{
+		$handler = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function item(): void
+			{
+			}
+		});
+		$errorPage = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			public function index(): void
+			{
+			}
+		});
+		
+		$request = new Request;
+		$request->setController('news');
+		$request->setAction('item');
+		$request->setActionMethod('item');
+		$request->setDispatchedController($handler);
+		// the handler threw, the error page built at shutdown sends its 403 or 503
+		$request->setControllerInstance($errorPage);
+		
+		return CodesafeRollup::routeFor(403, $request) === '/news/item'
+			&& CodesafeRollup::routeFor(503, $request) === '/news/item';
+	}
+	
+	/**
+	 * RULE: the dispatcher marks the request dispatched once the action
+	 * resolved, before the controller runs it, and the rollup then names its
+	 * route; an action the controller does not have is refused before the
+	 * mark, so that request stays undispatched and __unmatched.
+	 * Falsify: drop setDispatchedController() from Dispatcher::dispatch() — the
+	 * dispatched request counts as __unmatched; mark it before the action
+	 * check — the refused request carries a dispatched controller.
+	 */
+	public function theDispatcherMarksTheRequestItDispatched(): bool
+	{
+		$probe = $this->sharedRequestKept(static fn(): Controller => new class extends Controller
+		{
+			/** the request the dispatcher was given */
+			public ?Request $dispatching = null;
+			
+			/** what that request said it was dispatched to when the controller took over */
+			public ?Controller $seen = null;
+			
+			public function item(): void
+			{
+			}
+			
+			// only the mark is under test: no plugins, no action
+			public function dispatch(
+				string $action,
+				array $requestParams = [],
+			): ?Response
+			{
+				$this->seen = $this->dispatching?->getDispatchedController();
+				
+				return null;
+			}
+		});
+		// a controller class the dispatcher can find; the container builds and keeps one
+		$name = 'RouteProbe' . bin2hex(random_bytes(4));
+		class_alias($probe::class, Controller::NAMESPACE . $name);
+		$container = $this->container;
+		$dispatched = $this->sharedRequestKept(static fn(): Controller
+			=> $container->getClass(Controller::NAMESPACE . $name));
+		$dispatcher = new Dispatcher($container);
+		
+		$request = new Request;
+		$request->setControllerClass($name);
+		$request->setController('news');
+		$request->setAction('item');
+		$request->setActionMethod('item');
+		
+		$refused = clone $request;
+		$refused->setActionMethod('missing');
+		
+		$dispatched->dispatching = $request;
+		$dispatcher->dispatch($request);
+		
+		$thrown = false;
+		try
+		{
+			$dispatcher->dispatch($refused);
+		}
+		catch(NotFoundException)
+		{
+			$thrown = true;
+		}
+		
+		return $request->getDispatchedController() === $dispatched
+			&& $dispatched->seen === $dispatched
+			&& CodesafeRollup::routeFor(200, $request) === '/news/item'
+			&& $thrown
+			&& $refused->getDispatchedController() === null
+			&& CodesafeRollup::routeFor(200, $refused) === '__unmatched';
+	}
+	
+	/**
+	 * What $run returns: constructing a controller points the SHARED request
+	 * at it, so the runner's own controller is put back before anything else
+	 * can notice
+	 */
+	protected function sharedRequestKept(
+		callable $run,
+	): mixed
+	{
+		$shared = $this->app->getRequest();
+		$running = $shared->getControllerInstance();
+		try
+		{
+			return $run();
+		}
+		finally
+		{
+			if($running !== null)
+			{
+				$shared->setControllerInstance($running);
+			}
+		}
 	}
 	
 	/**
