@@ -2307,6 +2307,8 @@ msgstr "Zeige {0} bis {1} von {2}"
 
 4. Use [Poedit](https://poedit.net/) to edit `.po` files. Poedit can scan your application's source code directly to discover new translatable phrases and detect changes, and compiles `.mo` files automatically on save.
 
+5. Or update the files without gettext tools: `Ovos\Translator\Catalog::update()` reads the `.po` header as Poedit does (`X-Poedit-Basepath`, `X-Poedit-SearchPath-N`, `X-Poedit-SearchPathExcluded-N`, `X-Poedit-KeywordsList`, plus xgettext's own `_`, `gettext`, `ngettext` and the `d…` ones), finds the msgids and the `translators:` comments in `.php` and `.phtml` files exactly as xgettext 0.26 does for Poedit (`Translator\Extractor`), merges them as msgmerge does without fuzzy matching (`Translator\Po`) and compiles the `.mo` as msgfmt does (`Translator\MoWriter`). The `.po` is written as Poedit saves it, so either tool can follow the other. `Catalog::check()` lists what is out of line: a msgid the `.po` misses, an untranslated or fuzzy entry, a wrong number of plural forms, an entry the code no longer uses, a `.mo` whose content is not the `.po`'s; a `.po` that cannot be read without loss (a msgid twice, a broken line) or whose search paths are missing or hold no file is refused, and `update()` writes nothing then. php-module-system runs both as `php cli.php translations update` and `translations check`.
+
 ### Using Translations
 
 In **controllers** (via `Translatable` trait):
