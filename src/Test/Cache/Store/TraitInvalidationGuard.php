@@ -13,11 +13,14 @@ use Ovos\Cache\Store\KeyValue\TagIndex;
 use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
 use Closure;
+use Exception;
 use ReflectionProperty;
 use RuntimeException;
 
+use function array_fill_keys;
 use function array_keys;
 use function bin2hex;
+use function count;
 use function microtime;
 use function random_bytes;
 use function usleep;
@@ -76,6 +79,17 @@ trait TraitInvalidationGuard
 	abstract protected function batchProbe(): ?KeyValueRedis;
 	
 	/**
+	 * Ages what $store remembers of its read of $key, and of the first write refused after it, without
+	 * waiting (TraitStoredTime)
+	 */
+	abstract protected function ageMiss(
+		KeyValue $store,
+		string $key,
+		float $readSeconds,
+		float $refusedSeconds,
+	): void;
+	
+	/**
 	 * RULE: a value computed before another process deleted its key is never
 	 * served after it - the write that follows the miss is refused - and the
 	 * next reader's recomputation lands as before
@@ -99,6 +113,412 @@ trait TraitInvalidationGuard
 		
 		return $missed && $written === false && $read === null
 			&& $landed && $after === 'fresh';
+	}
+	
+	/**
+	 * RULE: a write the guard refused leaves its miss behind (see KeyValue::keepRefused()). The same value
+	 * saved again by the same instance, alone (set()) and in a batch (setMany()), is refused again, also once
+	 * its read is older than the window, and is never served. A new read of the key forgets the refused
+	 * miss: the write after it lands
+	 */
+	public function aRefusedWriteStaysRefused(): bool
+	{
+		$reader = $this->guardStore();
+		$writer = $this->guardStore();
+		$window = $reader->getInvalidationWindowMs() / 1000;
+		$alone = $this->guardKey('refused');
+		$batched = $this->guardKey('refused-batch');
+		
+		$reader->get($alone, queue: false);
+		$reader->getMany([$batched], queue: false);
+		$writer->delete($alone);
+		$writer->delete($batched);
+		$refused = [
+			$reader->set($alone, 'stale', 60),
+			$reader->setMany([$batched => 'stale'], 60),
+		];
+		$again = [
+			$reader->set($alone, 'stale', 60),
+			$reader->setMany([$batched => 'stale'], 60),
+		];
+		// the read older than its window: a read this old guards no write of the caller's, unless one was refused
+		$this->ageMiss($reader, $alone, 1.5 * $window, 0.0);
+		$this->ageMiss($reader, $batched, 1.5 * $window, 0.0);
+		$late = [
+			$reader->set($alone, 'stale', 60),
+			$reader->setMany([$batched => 'stale'], 60),
+		];
+		$read = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		
+		// a new read, with the time of its miss (a read-only getMany() takes none on a tag-index store)
+		$reader->get($alone, queue: false);
+		$reader->get($batched, queue: false);
+		$landed = [
+			$reader->set($alone, 'fresh', 60),
+			$reader->setMany([$batched => 'fresh'], 60),
+		];
+		$after = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$writer->delete($alone);
+		$writer->delete($batched);
+		
+		$no = [false, [$batched => false]];
+		
+		return $refused === $no
+			&& $again === $no
+			&& $late === $no
+			&& $read === [null, null]
+			&& $landed === [true, [$batched => true]]
+			&& $after === ['fresh', 'fresh'];
+	}
+	
+	/**
+	 * RULE: the miss of a refused write lasts one guard window from that first refusal (see
+	 * KeyValue::takeMiss()). Inside it the write tried again is refused, alone and in a batch, also once the
+	 * read is older than the window, and a write refused in between does not make it last longer. After it
+	 * the next write is a plain write again and lands, though the other process's tombstone is still there.
+	 */
+	public function aRefusedWriteIsRememberedOneWindow(): bool
+	{
+		$reader = $this->guardStore();
+		$writer = $this->guardStore();
+		$window = $reader->getInvalidationWindowMs() / 1000;
+		$alone = $this->guardKey('refused-window');
+		$batched = $this->guardKey('refused-window-batch');
+		
+		$reader->get($alone, queue: false);
+		$reader->getMany([$batched], queue: false);
+		$writer->delete($alone);
+		$writer->delete($batched);
+		$refused = [
+			$reader->set($alone, 'stale', 60),
+			$reader->setMany([$batched => 'stale'], 60),
+		];
+		// the read older than its window, the first refusal 0.6 of one old
+		$this->ageMiss($reader, $alone, 1.5 * $window, 0.6 * $window);
+		$this->ageMiss($reader, $batched, 1.5 * $window, 0.6 * $window);
+		$inside = [
+			$reader->set($alone, 'stale', 60),
+			$reader->setMany([$batched => 'stale'], 60),
+		];
+		// 1.2 windows since the first refusal, 0.6 of one since the refusal just made
+		$this->ageMiss($reader, $alone, 0.0, 0.6 * $window);
+		$this->ageMiss($reader, $batched, 0.0, 0.6 * $window);
+		$after = [
+			$reader->set($alone, 'plain', 60),
+			$reader->setMany([$batched => 'plain'], 60),
+		];
+		$read = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$writer->delete($alone);
+		$writer->delete($batched);
+		
+		$no = [false, [$batched => false]];
+		
+		return $refused === $no
+			&& $inside === $no
+			&& $after === [true, [$batched => true]]
+			&& $read === ['plain', 'plain'];
+	}
+	
+	/**
+	 * RULE (probe): a guarded write that failed keeps its miss as a refused one does (see
+	 * KeyValue\Redis::keepUnlanded()): an error reply and a connection that fails at the write, alone and in
+	 * a batch. Another process's delete after it refuses the write tried again, and the value computed
+	 * before that delete is never served
+	 */
+	public function aFailedWriteKeepsItsMiss(): bool
+	{
+		$reader = $this->unreadProbe();
+		$writer = $this->guardStore();
+		$client = $reader->getConnection()->counter();
+		$erring = $this->guardKey('write-erring');
+		$erringBatch = $this->guardKey('write-erring-batch');
+		$failing = $this->guardKey('write-failing');
+		$failingBatch = $this->guardKey('write-failing-batch');
+		$keys = [$erring, $erringBatch, $failing, $failingBatch];
+		foreach($keys as $key)
+		{
+			$reader->get($key, queue: false);
+		}
+		
+		// an error reply: a write alone is sent once, one in a batch once more through call()
+		$client->erringCalls = 1;
+		$first = [$reader->set($erring, 'computed', 60)];
+		$client->erringCalls = 2;
+		$first[] = $reader->setMany([$erringBatch => 'computed'], 60)[$erringBatch] ?? null;
+		// the connection fails at the write
+		$client->failingCalls = 1;
+		$first[] = $reader->set($failing, 'computed', 60);
+		// a batch that threw answers without its keys
+		$client->failingCalls = 1;
+		$first[] = $reader->setMany([$failingBatch => 'computed'], 60)[$failingBatch] ?? false;
+		$unspent = $client->erringCalls + $client->failingCalls;
+		foreach($keys as $key)
+		{
+			$writer->delete($key);
+		}
+		$again = [
+			$reader->set($erring, 'computed', 60),
+			$reader->setMany([$erringBatch => 'computed'], 60)[$erringBatch] ?? null,
+			$reader->set($failing, 'computed', 60),
+			$reader->setMany([$failingBatch => 'computed'], 60)[$failingBatch] ?? null,
+		];
+		$read = [];
+		foreach($keys as $key)
+		{
+			$read[] = $this->guardStore()->get($key, queue: false);
+			$writer->delete($key);
+		}
+		
+		$no = [false, false, false, false];
+		
+		return $unspent === 0
+			&& $first === $no
+			&& $again === $no
+			&& $read === [null, null, null, null];
+	}
+	
+	/**
+	 * RULE (probe): a write that lands after a failed one uses up the miss, as any write that lands does.
+	 * Another process's delete after it does not refuse the next set(), a write-through, which lands
+	 */
+	public function aWriteThatLandsAfterAFailedOneLeavesNoMiss(): bool
+	{
+		$reader = $this->unreadProbe();
+		$writer = $this->guardStore();
+		$client = $reader->getConnection()->counter();
+		$key = $this->guardKey('landed-after-failed');
+		
+		$reader->get($key, queue: false);
+		// the first write answers an error reply
+		$client->erringCalls = 1;
+		$failed = $reader->set($key, 'computed', 60);
+		$landed = $reader->set($key, 'computed', 60);
+		$writer->delete($key);
+		$through = $reader->set($key, 'through', 60);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $client->erringCalls === 0
+			&& $failed === false
+			&& $landed
+			&& $through
+			&& $read === 'through';
+	}
+	
+	/**
+	 * RULE (probe): the replies a batch brought count before any write of it is sent again. One write of
+	 * the batch answers an error reply, and sending it again through call() throws: the other writes
+	 * landed and keep no miss, so a set() of their keys after another process's delete is a write-through
+	 * and lands. The failed one keeps its miss and is refused
+	 */
+	public function aBatchWriteThatLandedBeforeAFailedRetryKeepsNoMiss(): bool
+	{
+		$reader = $this->unreadProbe();
+		$writer = $this->guardStore();
+		$client = $reader->getConnection()->counter();
+		$failed = $this->guardKey('batch-retry-failed');
+		$first = $this->guardKey('batch-retry-landed');
+		$second = $this->guardKey('batch-retry-landed-too');
+		$keys = [$failed, $first, $second];
+		foreach($keys as $key)
+		{
+			$reader->get($key, queue: false);
+		}
+		
+		// the batch's first write answers an error reply in the pipeline, and its call alone fails
+		$client->erringCalls = 1;
+		$client->failingSingleCalls = 1;
+		$reader->setMany(array_fill_keys($keys, 'computed'), 60);
+		$unspent = $client->erringCalls + $client->failingSingleCalls;
+		$landed = [
+			$this->guardStore()->get($first, queue: false),
+			$this->guardStore()->get($second, queue: false),
+		];
+		foreach($keys as $key)
+		{
+			$writer->delete($key);
+		}
+		$written = [
+			$reader->set($first, 'through', 60),
+			$reader->set($second, 'through', 60),
+			$reader->set($failed, 'through', 60),
+		];
+		$read = [];
+		foreach([$first, $second, $failed] as $key)
+		{
+			$read[] = $this->guardStore()->get($key, queue: false);
+			$writer->delete($key);
+		}
+		
+		return $unspent === 0
+			&& $landed === ['computed', 'computed']
+			&& $written === [true, true, false]
+			&& $read === ['through', 'through', null];
+	}
+	
+	/**
+	 * RULE: a write that throws before it is sent (a value the serializer cannot take, a closure) keeps its
+	 * miss, alone (set()) and in a batch (setMany()), as a failed write does: another process's delete after
+	 * it refuses the write tried again, and the value computed before that delete is never served
+	 */
+	public function aWriteThatThrowsBeforeItIsSentKeepsItsMiss(): bool
+	{
+		$reader = $this->guardStore();
+		$writer = $this->guardStore();
+		$alone = $this->guardKey('unserializable');
+		$batched = $this->guardKey('unserializable-batch');
+		$reader->get($alone, queue: false);
+		$reader->get($batched, queue: false);
+		
+		$thrown = 0;
+		$unserializable = static fn(): null => null;
+		foreach([
+			fn(): bool => $reader->set($alone, $unserializable, 60),
+			fn(): array => $reader->setMany([$batched => $unserializable], 60),
+		] as $write)
+		{
+			try
+			{
+				$write();
+			}
+			catch(Exception)
+			{
+				$thrown++;
+			}
+		}
+		$writer->delete($alone);
+		$writer->delete($batched);
+		$again = [
+			$reader->set($alone, 'computed', 60),
+			$reader->setMany([$batched => 'computed'], 60),
+		];
+		$read = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$writer->delete($alone);
+		$writer->delete($batched);
+		
+		return $thrown === 2
+			&& $again === [false, [$batched => false]]
+			&& $read === [null, null];
+	}
+	
+	/**
+	 * RULE: a stale value's refresh run later (the deferrer: after the response) forgets the miss of its
+	 * refused write when it ends, alone (get()) and in a batch (getMany()), as get() does with a resolver. A
+	 * set() of the key after it is a write-through again, and lands
+	 */
+	public function aDeferredRefreshForgetsTheMissOfItsRefusedWrite(): bool
+	{
+		$reader = $this->guardStore();
+		$writer = $this->guardStore();
+		$alone = $this->guardKey('deferred-refused');
+		$batched = $this->guardKey('deferred-refused-batch');
+		$writer->set($alone, new Stale('old', microtime(true) - 1, 60), 60);
+		$writer->set($batched, new Stale('old', microtime(true) - 1, 60), 60);
+		$deferred = [];
+		$reader->setDeferrer(function(Closure $run) use (&$deferred): void
+		{
+			$deferred[] = $run;
+		});
+		
+		$served = [
+			$reader->get($alone, function() use ($writer, $alone): string
+			{
+				// another process writes while the value is refreshed
+				$writer->set($alone, 'other', 60);
+				
+				return 'refreshed before the write';
+			}, 60, stale: 60),
+			...$reader->getMany([$batched], function(KeyValue $store, array $keys) use ($writer, $batched): array
+			{
+				$writer->set($batched, 'other', 60);
+				
+				return [$batched => 'refreshed before the write'];
+			}, 60, stale: 60),
+		];
+		$queued = count($deferred);
+		foreach($deferred as $run)
+		{
+			$run();
+		}
+		$reader->setDeferrer(null);
+		$refused = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$written = [
+			$reader->set($alone, 'through', 60),
+			$reader->set($batched, 'through', 60),
+		];
+		$read = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$writer->delete($alone);
+		$writer->delete($batched);
+		
+		return $served === ['old', 'old']
+			&& $queued === 2
+			&& $refused === ['other', 'other']
+			&& $written === [true, true]
+			&& $read === ['through', 'through'];
+	}
+	
+	/**
+	 * RULE: get() and getMany() with a resolver forget the miss of a write refused in them when they end, as
+	 * if it had landed: a set() of the key after that is a write-through again, and lands
+	 */
+	public function aResolverForgetsTheMissOfItsRefusedWrite(): bool
+	{
+		$reader = $this->guardStore();
+		$writer = $this->guardStore();
+		$alone = $this->guardKey('resolver-refused');
+		$batched = $this->guardKey('resolver-refused-batch');
+		
+		$value = $reader->get($alone, function() use ($writer, $alone): string
+		{
+			// the source changes while the value is computed
+			$writer->delete($alone);
+			
+			return 'computed before the delete';
+		}, 60, queue: false);
+		$values = $reader->getMany([$batched], function(KeyValue $store, array $keys) use ($writer, $batched): array
+		{
+			$writer->delete($batched);
+			
+			return [$batched => 'computed before the delete'];
+		}, 60, queue: false);
+		$refused = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$written = [
+			$reader->set($alone, 'through', 60),
+			$reader->set($batched, 'through', 60),
+		];
+		$read = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$writer->delete($alone);
+		$writer->delete($batched);
+		
+		return $value === 'computed before the delete'
+			&& $values === ['computed before the delete']
+			&& $refused === [null, null]
+			&& $written === [true, true]
+			&& $read === ['through', 'through'];
 	}
 	
 	/**
@@ -402,6 +822,63 @@ trait TraitInvalidationGuard
 		return $missed === null
 			&& $written === false
 			&& $read === null;
+	}
+	
+	/**
+	 * RULE (probe): a set() after a failed read stays refused (see KeyValue::keepRefused()), alone (set())
+	 * and in a batch (setMany()). The same value saved again, with the reads working again, answers false
+	 * too and deletes the key again, a value another process stored meanwhile with it: the next reader
+	 * misses, and never gets the value computed after the failed read. A new read of the key forgets the
+	 * refused miss, and the write after it lands.
+	 */
+	public function aSetAfterAFailedReadStaysRefused(): bool
+	{
+		$reader = $this->unreadProbe();
+		$other = $this->guardStore();
+		$alone = $this->guardKey('set-unread-again');
+		$batched = $this->guardKey('set-unread-again-batch');
+		$other->set($alone, 'old', 60);
+		$other->set($batched, 'old', 60);
+		// the read alone and the batch's pipeline
+		$reader->getConnection()->counter()->failingReads = 2;
+		
+		$reader->get($alone, queue: false);
+		$reader->getMany([$batched], queue: false);
+		$refused = [
+			$reader->set($alone, 'computed', 60),
+			$reader->setMany([$batched => 'computed'], 60),
+		];
+		$other->set($alone, 'other', 60);
+		$other->set($batched, 'other', 60);
+		$again = [
+			$reader->set($alone, 'computed', 60),
+			$reader->setMany([$batched => 'computed'], 60),
+		];
+		$read = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		// a new read, with the time of its miss (a read-only getMany() takes none on a tag-index store)
+		$reader->get($alone, queue: false);
+		$reader->get($batched, queue: false);
+		$written = [
+			$reader->set($alone, 'next', 60),
+			$reader->setMany([$batched => 'next'], 60),
+		];
+		$next = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$other->delete($alone);
+		$other->delete($batched);
+		
+		$no = [false, [$batched => false]];
+		
+		return $refused === $no
+			&& $again === $no
+			&& $read === [null, null]
+			&& $written === [true, [$batched => true]]
+			&& $next === ['next', 'next'];
 	}
 	
 	/**

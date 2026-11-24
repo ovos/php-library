@@ -83,10 +83,12 @@ jobs:
           # driven from the host so it can wait for readiness and retry (a fixed
           # in-container sleep raced the daemons on slow runners and the one-shot
           # create then failed, leaving the cluster unformed — the old flake)
+          # Redis 8.12 starts a cluster node without TLS only when told that
+          # its bus port is reachable by trusted hosts alone
           docker run -d --name redis-cluster -p 7000-7002:7000-7002 -p 17000-17002:17000-17002 redis:latest \
             sh -c 'for port in 7000 7001 7002; do
                 redis-server --port $port --loadmodule /usr/local/lib/redis/modules/redisearch.so \
-                  --cluster-enabled yes --cluster-config-file /tmp/nodes-$port.conf \
+                  --cluster-enabled yes --cluster-bus-port-protected-mode no                   --cluster-config-file /tmp/nodes-$port.conf \
                   --cluster-announce-ip 127.0.0.1 --cluster-announce-port $port --cluster-announce-bus-port 1$port \
                   --appendonly no --save "" --daemonize yes;
               done;

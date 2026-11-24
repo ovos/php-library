@@ -1086,6 +1086,43 @@ What callers may notice:
 
 - `set()` returns `false` more often - after an invalidation that raced it.
   Treat `false` as "not cached", never as an error to retry in a loop.
+- A write that was refused or failed - refused by the guard, an error reply,
+  a connection error; not a value too long for the Compressor, which deletes
+  the key - is remembered for one guard window from that first refusal.
+  Within it every further `set()` or `setMany()` of that key by the same
+  instance follows the same read, however old the read is, and is judged
+  against that read by the rules above: the value saved again may be the
+  same one, computed before the invalidation. Writes refused meanwhile do not
+  make it last longer, and after the window the next write is a plain write
+  again. So within the window the write is refused while the key holds a
+  token other than the one the read saw: a delete's, which lasts the window,
+  or a write-through's, which lasts at least the window and as long as its
+  value (on APCu the window). On the Redis and Redisearch stores it is also
+  refused while one of its tags carries a stamp newer than the read; on the
+  versioned stores a write that lands carries the rule id the read saw. A key
+  that holds no token takes it (on APCu only when the read saw none): a
+  delete is remembered for its window, no longer. That includes a newer value
+  another process recomputed onto the key after the delete's tombstone ran
+  out: it carries no token, so the write tried again can overwrite it. After
+  a read that failed, one that no rules could check, and on the Redis and
+  Redisearch stores one whose time could not be read (a read-only
+  `getMany()`, `peek()` without `startComputing()`, a failed `TIME`) once it
+  is older than the window, the write is refused every time, before any
+  call, and each refusal deletes the key and leaves a tombstone with a new
+  token: a value another process stored in between is dropped, and that
+  process's writes computed before the tombstone are refused too - misses,
+  never a stale value. The read is forgotten sooner when the instance reads
+  the key again (`get()`, `getMany()`, `peek()`), deletes it itself, or
+  1 000 newer misses push it out, and when the `get()`
+  or `getMany()` with a resolver, or the stale value's refresh, whose write
+  was refused or failed ends: a `set()` after those is a write-through, as
+  after a write that landed. A resolver that threw or saved nothing wrote
+  nothing: its read stays, as any read's does, and a `set()` after it is
+  judged against it. After `lockAndQueue()`, or `peek()` and
+  `startComputing()`, the refused read stays for its window. A caller that
+  saves a key again without reading it - a long-running worker, a
+  write-through after a refused write - has those writes judged against the
+  old read for that window: read the key first.
 - A store's own `clear()` or `invalidateTags()` refuses its own earlier
   miss's write too (only its own `delete($key)` releases that key's miss).
   A long-lived instance reused across unrelated steps - a test class, a worker
@@ -1101,11 +1138,14 @@ What callers may notice:
   writes carrying a recently invalidated tag are refused for up to that step.
   Those are refusals only, never a stale value. A tag invalidation removes
   the items it reaches (no tombstone each - the tags' invalidation times
-  refuse a raced write), so a miss whose time could not be read (`peek()`
-  without `startComputing()`, a failed `TIME`) is refused by an invalidation
-  of its write's tags, or a `clear()`, made within the window before the
-  write: the next reader recomputes. The store's own computation whose time
-  could not be read is refused outright once it is older than the window.
+  refuse a raced write), so a miss whose time could not be read (a read-only
+  `getMany()`, `peek()` without `startComputing()`, a failed `TIME`) is
+  refused by an invalidation of its write's tags, or a `clear()`, made
+  within the window before the write: the next reader recomputes. The
+  store's own computation whose time could not be read is refused outright
+  once it is older than the window, and so is a write tried again after a
+  refused one whose read had no time, which also deletes the key (see the
+  refused write above).
 - During a rolling deploy, old and new code reload each other's Lua library
   (the source-hash check); correctness holds, the reloads stop once one
   version runs. A host checks a library it confirmed on a server at most once
@@ -1127,24 +1167,38 @@ What callers may notice:
   the store's own computation after its miss leaves the key instead (it may
   hold a valid item, which the rules still check). On every Redis store the
   write after the store's own computation or refresh is refused past the
-  window too, once; on the versioned stores any write after the failed read
-  is.
+  window too; on the versioned stores any write after the failed read is.
+  Every `set()` of the key after the refused one, for one window from that
+  refusal, is refused too and deletes the key again, unless the key is read
+  first. A `get()` or `getMany()` with a resolver whose write was refused
+  forgets the failed read when it ends, so a `set()` after it is a plain
+  write; one whose resolver threw or saved nothing made no write, and a
+  `set()` after it is refused as after any failed read (see the refused write
+  above).
 - On the versioned stores, when no copy of the invalidation rules was at hand
   for a read (see *The rule set while it reloads*: an outage, or another
   worker reloading, with no copy), nothing can check the value computed after
   it: it is returned and not stored, and the lock is released; past the window
-  too, once. After the store's own computation of a miss (`get()`/`getMany()`
-  with a resolver, and the `set()` after a manual `lockAndQueue()`, which
-  behaves like `get()`) what the key holds stays - a valid item is not evicted
-  by a worker that could not check it. After a read whose caller replaces the
-  value - a forced refresh, a `set()` after `peek()` or after a read-only
-  `get()`/`getMany()`, or after `lockAndQueue()` and `releaseActiveLock()` -
-  the key is deleted, so the value it was meant to replace is not served. So
-  is a plain write - a `set()` or `setMany()` with no miss before it - by a
-  worker that holds no copy and may not load one: it has no rule id to be
-  written with, so it answers `false` and deletes the key. The same goes for
-  a value longer than the Compressor reads back: the store's own computation
-  leaves the key, any other write deletes it.
+  too. A `get()` or `getMany()` with a resolver whose write was refused
+  forgets that read when it ends, so a `set()` after it is a plain write;
+  when its resolver threw or saved nothing, no write was refused and the read
+  stays, as any read's does. After any other read, every `set()` of the key
+  within one window from the first refused one is refused, also once a copy
+  is at hand, unless the key is read first (see the refused write above).
+  After the store's own computation of a miss (`get()`/`getMany()` with a
+  resolver, and the `set()` after a manual `lockAndQueue()`, which behaves
+  like `get()`) what the key holds stays - a valid item is not evicted by a
+  worker that could not check it; a `set()` tried again after that is the
+  caller's own, and deletes it. After a read
+  whose caller replaces the value - a forced refresh, a `set()` after
+  `peek()` or after a read-only `get()`/`getMany()`, or after
+  `lockAndQueue()` and `releaseActiveLock()` - the key is deleted, so the
+  value it was meant to replace is not served. So is a plain write - a
+  `set()` or `setMany()` with no miss before it - by a worker that holds no
+  copy and may not load one: it has no rule id to be written with, so it
+  answers `false` and deletes the key. The same goes for a value longer than
+  the Compressor reads back: the store's own computation leaves the key, any
+  other write deletes it.
 - Bounds: a tag invalidation or a `clear()` made while the store computes a
   value is seen whatever the computation takes (on the Redis and Redisearch
   stores up to a day, the life of their stamps): `get()`/`getMany()` with a

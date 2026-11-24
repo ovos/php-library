@@ -3715,6 +3715,69 @@ class RedisVersioned extends Test
 	}
 	
 	/**
+	 * RULE: a set() after a read-only get() made with no copy of the rules at hand is refused, alone (set())
+	 * and in a batch (setMany()), and so is every set() of the key after it, also once a copy is at hand: a
+	 * copy taken after the read cannot tell what the value computed from it missed. Each refused set()
+	 * deletes the key, a value another process stored meanwhile with it. A new read of the key is checked
+	 * against the copy, and the set() after it is stored.
+	 */
+	public function aSetAfterAReadNoRuleSetJudgedStaysRefused(): bool
+	{
+		$other = $this->guardStore();
+		$alone = $this->guardKey('unjudged-again');
+		$batched = $this->guardKey('unjudged-again-batch');
+		$other->invalidateTags(['unrelated']);
+		$other->set($alone, 'old', 60, [self::GUARD_TAG]);
+		$other->set($batched, 'old', 60, [self::GUARD_TAG]);
+		$failing = true;
+		$probe = $this->rulesFailingProbe($failing);
+		
+		$missed = [
+			$probe->get($alone, queue: false),
+			...$probe->getMany([$batched], queue: false),
+		];
+		$refused = [
+			$probe->set($alone, 'computed', 60, [self::GUARD_TAG]),
+			$probe->setMany([$batched => 'computed'], 60, [self::GUARD_TAG]),
+		];
+		// past the retry: a copy of the rules is at hand again
+		$failing = false;
+		usleep((Store::RETRY_MS + 50) * 1000);
+		$probe->rules();
+		$other->set($alone, 'other', 60, [self::GUARD_TAG]);
+		$other->set($batched, 'other', 60, [self::GUARD_TAG]);
+		$again = [
+			$probe->set($alone, 'computed', 60, [self::GUARD_TAG]),
+			$probe->setMany([$batched => 'computed'], 60, [self::GUARD_TAG]),
+		];
+		$read = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$probe->get($alone, queue: false);
+		$probe->getMany([$batched], queue: false);
+		$written = [
+			$probe->set($alone, 'next', 60, [self::GUARD_TAG]),
+			$probe->setMany([$batched => 'next'], 60, [self::GUARD_TAG]),
+		];
+		$next = [
+			$this->guardStore()->get($alone, queue: false),
+			$this->guardStore()->get($batched, queue: false),
+		];
+		$other->delete($alone);
+		$other->delete($batched);
+		
+		$no = [false, [$batched => false]];
+		
+		return $missed === [null, null]
+			&& $refused === $no
+			&& $again === $no
+			&& $read === [null, null]
+			&& $written === [true, [$batched => true]]
+			&& $next === ['next', 'next'];
+	}
+	
+	/**
 	 * RULE: when the new rule comes right after the copy the invalidating process holds, it goes into that
 	 * copy from Redis's reply, and the copy is shared at once. Another worker takes it and fetches nothing:
 	 * the item the rule reaches is a miss, an item it does not reach a hit.

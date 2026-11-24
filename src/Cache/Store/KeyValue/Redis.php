@@ -341,6 +341,9 @@ abstract class Redis extends Tags
 			return $this->refuseUnjudged($key, $id, $miss);
 		}
 		
+		// Whether the write landed, and whether the value was too long to be sent at all
+		$landed = false;
+		$tooLong = false;
 		try
 		{
 			$client->clearLastError();
@@ -350,8 +353,9 @@ abstract class Redis extends Tags
 			{
 				$this->log($error);
 			}
+			$landed = (int)$result === 1;
 			
-			return (int)$result === 1;
+			return $landed;
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{
@@ -360,12 +364,20 @@ abstract class Redis extends Tags
 		// The value is longer than the Compressor reads back, so it is not cached (see dropRefused()).
 		catch(LengthException $exception)
 		{
+			$tooLong = true;
 			$this->log($exception->getMessage());
 			$this->dropRefused($key, $miss);
 		}
 		// the lock is released whatever happened; a second release does nothing
 		finally
 		{
+			// Refused, an error reply or an exception: the miss stays, so the same value saved again is judged
+			// against the same read (see keepUnlanded()). A value too long deleted the key instead.
+			if($landed === false
+				&& $tooLong === false)
+			{
+				$this->keepUnlanded($id, $miss);
+			}
 			$this->getMemoLock()
 				->debug('save: ' . $id)
 				->releaseActiveLock($id);
@@ -604,8 +616,10 @@ abstract class Redis extends Tags
 	 * Whether the read of $miss failed (see rememberUnread()). Checked in PHP, before any call: a guarded
 	 * write would take the marker on a key without an epoch (see EPOCH_UNREAD). The store's own computation
 	 * and refresh keep their miss past the guard window, on every Redis store, and a versioned store keeps
-	 * every miss (see writeMiss()): for those this holds past the window too, and the write after it is
-	 * refused once.
+	 * every miss (see writeMiss()): for those this holds past the window too. The refused write leaves the
+	 * miss behind (see refuseUnjudged()), so every later write of the key by this instance is refused too,
+	 * for one window from the first refusal, unless the key is read again first or the store's own
+	 * computation of it ends (see KeyValue::keepRefused()).
 	 *
 	 * @param array{epoch: string}|null $miss
 	 */
@@ -653,7 +667,8 @@ abstract class Redis extends Tags
 	 * window has no server time. That write could only be refused, so nothing is
 	 * stored. The value the read did not see may be the one the caller replaces (a forced refresh, a set()
 	 * after peek() or after a read-only get()), so dropRefused() handles the key. Returns false, as for a
-	 * refused write, and releases the lock of $id.
+	 * refused write, and releases the lock of $id. The miss stays, so the next write within a window is
+	 * refused the same way, and deletes the key again (see KeyValue::keepRefused()).
 	 */
 	protected function refuseUnjudged(
 		string $key,
@@ -668,11 +683,43 @@ abstract class Redis extends Tags
 		// the lock is released whatever happened
 		finally
 		{
+			// after dropRefused(): the delete it makes forgets the miss
+			$this->keepRefused($id, $miss);
 			$this->getMemoLock()
 				->releaseActiveLock($id);
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * Whether the write after $miss is guarded: compared with what the miss saw. Every write after a miss
+	 * here: the tag-index stores take only the misses they guard (see TagIndex::writeMiss()), and a
+	 * versioned store guards fewer (see RedisVersioned::guardsWrite())
+	 *
+	 * @param array{late: bool, own: bool, refused: bool}|null $miss
+	 */
+	protected function guardsWrite(
+		?array $miss,
+	): bool
+	{
+		return $miss !== null;
+	}
+	
+	/**
+	 * After a guarded write of $id that did not land - refused, an error reply, an exception: its miss stays
+	 * (see KeyValue::keepRefused()), so the write tried again follows the same read and not as a plain
+	 * write, which would store a value computed before a delete. A plain write leaves no miss
+	 */
+	protected function keepUnlanded(
+		string $id,
+		?array $miss,
+	): void
+	{
+		if($this->guardsWrite($miss))
+		{
+			$this->keepRefused($id, $miss);
+		}
 	}
 	
 	/**
@@ -719,7 +766,7 @@ abstract class Redis extends Tags
 			: null;
 		$stored = [];
 		$calls = [];
-		// by id: the write's call, its place in $calls, its release's
+		// by id: the write's key, its call, its place in $calls, its release's, the miss it follows
 		$writes = [];
 		
 		try
@@ -734,16 +781,27 @@ abstract class Redis extends Tags
 					
 					continue;
 				}
-				// nothing could check the value, so it is not stored (see refuseUnjudged())
+				// nothing could check the value, so it is not stored, and the miss stays (see refuseUnjudged())
 				if($this->isUnread($miss)
 					|| $this->isUnjudged($miss))
 				{
-					$this->dropRefused($key, $miss);
+					try
+					{
+						$this->dropRefused($key, $miss);
+					}
+					// kept whatever happened, as set() keeps it (see refuseUnjudged())
+					finally
+					{
+						$this->keepRefused($id, $miss);
+					}
 					$stored[$key] = false;
 					
 					continue;
 				}
 				
+				// Registered before its call is built: whatever throws from here on (the serializer, say), the
+				// finally keeps the miss, as set() does.
+				$writes[$id] = [$key, null, null, null, $miss];
 				// a value longer than the Compressor reads back is not cached (see dropRefused())
 				try
 				{
@@ -751,13 +809,15 @@ abstract class Redis extends Tags
 				}
 				catch(LengthException $exception)
 				{
+					// the key is deleted instead, and no miss kept, as in set()
+					unset($writes[$id]);
 					$this->log($exception->getMessage());
 					$this->dropRefused($key, $miss);
 					$stored[$key] = false;
 					
 					continue;
 				}
-				$writes[$id] = [$key, $call, count($calls), null];
+				$writes[$id] = [$key, $call, count($calls), null, $miss];
 				$calls[] = [$this->functions->functionsPrefix($call[0]), $call[1], $call[2]];
 				if(($release = $memoLock?->releaseCall($id)) !== null)
 				{
@@ -769,7 +829,10 @@ abstract class Redis extends Tags
 			$replies = $calls === []
 				? []
 				: $this->sendAll($calls);
-			foreach($writes as $id => [$key, [$function, $keys, $args], $at, $releaseAt])
+			// Every reply the batch brought counts first: a write sent again below may throw, and a write that
+			// landed must not look unanswered then (the finally would keep its miss).
+			$again = [];
+			foreach($writes as $id => [$key, $call, $at, $releaseAt])
 			{
 				if($replies !== null
 					&& $releaseAt !== null
@@ -778,10 +841,19 @@ abstract class Redis extends Tags
 					$memoLock->released($id);
 				}
 				
-				$result = $replies === null || ($replies[$at] ?? false) === false
-					? $this->functions->call($function, $keys, $args)
-					: $replies[$at];
-				$stored[$key] = (int)$result === 1;
+				if($replies === null
+					|| ($replies[$at] ?? false) === false)
+				{
+					$again[$key] = $call;
+					
+					continue;
+				}
+				$stored[$key] = (int)$replies[$at] === 1;
+			}
+			// an error reply, or no pipeline: one call each
+			foreach($again as $key => [$function, $keys, $args])
+			{
+				$stored[$key] = (int)$this->functions->call($function, $keys, $args) === 1;
 			}
 		}
 		catch(RedisException $exception)
@@ -790,6 +862,15 @@ abstract class Redis extends Tags
 		}
 		finally
 		{
+			// a write that did not land - refused, an error reply, or never answered because the batch threw -
+			// keeps its miss (see set())
+			foreach($writes as $id => [$key, , , , $miss])
+			{
+				if(($stored[$key] ?? false) === false)
+				{
+					$this->keepUnlanded($id, $miss);
+				}
+			}
 			// a lock no write released goes now - a refused write's too
 			$memoLock?->releaseMany(array_keys($entries));
 		}

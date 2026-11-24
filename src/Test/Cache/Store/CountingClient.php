@@ -76,6 +76,27 @@ class CountingClient extends BaseRedis
 	 */
 	public int $erringRanges = 0;
 	
+	/**
+	 * How many FCALLs fail from now on, as on a connection that timed out: an
+	 * FCALL sent on its own throws, and so does the exec() of a pipeline that
+	 * holds one (the pipeline discarded)
+	 */
+	public int $failingCalls = 0;
+	
+	/**
+	 * How many FCALLs sent on their own fail from now on, as failingCalls makes
+	 * them fail, while a pipeline's go through: a write a batch sends again
+	 * after its reply in the pipeline was an error
+	 */
+	public int $failingSingleCalls = 0;
+	
+	/**
+	 * How many FCALLs answer false from now on, as an error reply (OOM,
+	 * WRONGTYPE, a read-only replica) makes them, without throwing: an FCALL
+	 * sent on its own, or each FCALL of a pipeline
+	 */
+	public int $erringCalls = 0;
+	
 	public function resetCount(): void
 	{
 		$this->roundTrips = 0;
@@ -132,6 +153,16 @@ class CountingClient extends BaseRedis
 			throw new RedisException('read error on connection');
 		}
 		
+		if($this->failingCalls > 0
+			&& in_array('fcall', $this->queued, true))
+		{
+			$this->failingCalls--;
+			$this->queued = [];
+			$this->discard();
+			
+			throw new RedisException('write error on connection');
+		}
+		
 		$this->roundTrips++;
 		$this->sent[] = $this->queued;
 		$queued = $this->queued;
@@ -145,6 +176,11 @@ class CountingClient extends BaseRedis
 				if($command === 'hMget' && $this->erringReads > 0)
 				{
 					$this->erringReads--;
+					$replies[$index] = false;
+				}
+				if($command === 'fcall' && $this->erringCalls > 0)
+				{
+					$this->erringCalls--;
 					$replies[$index] = false;
 				}
 			}
@@ -237,6 +273,29 @@ class CountingClient extends BaseRedis
 			$beforeCall = $this->beforeCall;
 			$this->beforeCall = null;
 			$beforeCall();
+		}
+		if($this->failingCalls > 0
+			&& $this->getMode() === BaseRedis::ATOMIC)
+		{
+			$this->failingCalls--;
+			
+			throw new RedisException('write error on connection');
+		}
+		if($this->failingSingleCalls > 0
+			&& $this->getMode() === BaseRedis::ATOMIC)
+		{
+			$this->failingSingleCalls--;
+			
+			throw new RedisException('write error on connection');
+		}
+		if($this->erringCalls > 0
+			&& $this->getMode() === BaseRedis::ATOMIC)
+		{
+			$this->erringCalls--;
+			$this->roundTrips++;
+			$this->sent[] = ['fcall'];
+			
+			return false;
 		}
 		$this->counted('fcall');
 		

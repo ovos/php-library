@@ -254,7 +254,9 @@ abstract class TagIndex extends Redis
 	 * The miss a write of $id follows. The store's own computation, and its
 	 * refresh of a value, keep their miss at any age: a delete made within the
 	 * window before the write is seen, and so is a tag invalidation or a clear
-	 * made while it computed, however long that took. A caller's own set()
+	 * made while it computed, however long that took. So does a miss whose
+	 * write was refused or failed, for one window from the first one (see
+	 * KeyValue::keepRefused()). A caller's own set()
 	 * after a read older than the window gets no miss: it is a plain write,
 	 * and a fresh read first is the way to have it checked
 	 */
@@ -268,6 +270,7 @@ abstract class TagIndex extends Redis
 		return $miss !== null
 			&& $miss['late'] === true
 			&& $miss['own'] === false
+			&& $miss['refused'] === false
 			? null
 			: $miss;
 	}

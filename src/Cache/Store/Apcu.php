@@ -102,24 +102,36 @@ class Apcu extends KeyValue
 				return $this->storeValue($id, $value, $ttl);
 			}
 			
+			// refused: the miss stays, so the same value saved again is
+			// refused again (see KeyValue::keepRefused())
 			if($this->epoch($id) !== $miss['epoch'])
 			{
-				return false;
-			}
-			
-			$stored = $this->storeValue($id, $value, $ttl);
-			
-			// APCu has no atomic compare-and-store for this: a delete between
-			// the check and the store takes the value back here - nothing
-			// stale stays, a reader can see it for that instant
-			if($stored && $this->epoch($id) !== $miss['epoch'])
-			{
-				apcu_delete($id);
+				$this->keepRefused($id, $miss);
 				
 				return false;
 			}
 			
-			return $stored;
+			$stored = $this->storeValue($id, $value, $ttl);
+			// APCu did not store it (full, or the key busy): the miss stays, as for a refusal
+			if($stored === false)
+			{
+				$this->keepRefused($id, $miss);
+				
+				return false;
+			}
+			
+			// APCu has no atomic compare-and-store for this: a delete between
+			// the check and the store takes the value back here - nothing
+			// stale stays, a reader can see it for that instant
+			if($this->epoch($id) !== $miss['epoch'])
+			{
+				apcu_delete($id);
+				$this->keepRefused($id, $miss);
+				
+				return false;
+			}
+			
+			return true;
 		}
 		finally
 		{

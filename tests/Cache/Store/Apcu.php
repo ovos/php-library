@@ -279,8 +279,8 @@ class Apcu extends Test
 	/**
 	 * RULE: the invalidation guard (see KeyValue::rememberMiss()) - a value
 	 * computed before another instance deleted its key is never served after
-	 * it; a write-through is written; an instance's own delete after its miss
-	 * does not refuse its own write
+	 * it; a write-through (an instance with no miss of the key) is written; an
+	 * instance's own delete after its miss does not refuse its own write
 	 */
 	public function theInvalidationGuardHolds(): bool
 	{
@@ -294,7 +294,7 @@ class Apcu extends Test
 		$refused = $reader->set($key, 'stale', 60) === false
 			&& $this->newStore()->get($key, queue: false) === null;
 		
-		$through = $reader->set($key, 'through', 60)
+		$through = $writer->set($key, 'through', 60)
 			&& $this->newStore()->get($key, queue: false) === 'through';
 		$writer->delete($key);
 		
@@ -306,6 +306,209 @@ class Apcu extends Test
 		$writer->delete($key);
 		
 		return $refused && $through && $ownWritten;
+	}
+	
+	/**
+	 * RULE: a write the guard refused leaves its miss behind (see
+	 * KeyValue::keepRefused()) - the same value saved again by the same
+	 * instance is refused again, also once its read is older than the window,
+	 * and is never served; a new read of the key forgets the refused miss, and
+	 * the write after it lands
+	 */
+	public function aRefusedWriteStaysRefused(): bool
+	{
+		$key = 'guard-refused';
+		$reader = $this->newStore();
+		$writer = $this->newStore();
+		$window = $reader->getInvalidationWindowMs() / 1000;
+		$writer->delete($key);
+		
+		$reader->get($key, queue: false);
+		$writer->delete($key);
+		$refused = $reader->set($key, 'stale', 60);
+		$again = $reader->set($key, 'stale', 60);
+		// the read older than its window: a read this old guards no write, unless one was refused
+		$this->ageMiss($reader, $key, 1.5 * $window, 0.0);
+		$late = $reader->set($key, 'stale', 60);
+		$read = $this->newStore()->get($key, queue: false);
+		
+		$reader->get($key, queue: false);
+		$landed = $reader->set($key, 'fresh', 60);
+		$after = $this->newStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $refused === false
+			&& $again === false
+			&& $late === false
+			&& $read === null
+			&& $landed
+			&& $after === 'fresh';
+	}
+	
+	/**
+	 * RULE: the miss of a refused write lasts one guard window from that first
+	 * refusal (see KeyValue::takeMiss()) - inside it the write tried again is
+	 * refused, also once the read is older than the window, and a write refused
+	 * in between does not make it last longer; after it the next write is a
+	 * plain write again and lands, though the other instance's mark is still
+	 * there
+	 */
+	public function aRefusedWriteIsRememberedOneWindow(): bool
+	{
+		$key = 'guard-refused-window';
+		$reader = $this->newStore();
+		$writer = $this->newStore();
+		$window = $reader->getInvalidationWindowMs() / 1000;
+		$writer->delete($key);
+		
+		$reader->get($key, queue: false);
+		$writer->delete($key);
+		$refused = $reader->set($key, 'stale', 60);
+		// the read older than its window, the first refusal 0.6 of one old
+		$this->ageMiss($reader, $key, 1.5 * $window, 0.6 * $window);
+		$inside = $reader->set($key, 'stale', 60);
+		// 1.2 windows since the first refusal, 0.6 of one since the refusal just made
+		$this->ageMiss($reader, $key, 0.0, 0.6 * $window);
+		$after = $reader->set($key, 'plain', 60);
+		$read = $this->newStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $refused === false
+			&& $inside === false
+			&& $after
+			&& $read === 'plain';
+	}
+	
+	/**
+	 * RULE: a write taken back after a delete landed between the guard's check
+	 * and the store keeps its miss, as a refused one does - the same value
+	 * saved again is refused, and is never served
+	 */
+	public function aTakenBackWriteStaysRefused(): bool
+	{
+		$key = 'guard-taken-back';
+		$writer = $this->newStore();
+		$reader = new class($this->config->prefix, $this->config->perishable, KeyValue::GROUP_TESTS) extends Store
+		{
+			public ?Store $other = null;
+			
+			protected function storeValue(
+				string $id,
+				mixed $value,
+				int $ttl,
+			): bool
+			{
+				// the race, landed exactly here, once
+				$other = $this->other;
+				$this->other = null;
+				$other?->delete('guard-taken-back');
+				
+				return parent::storeValue($id, $value, $ttl);
+			}
+		};
+		$reader->other = $writer;
+		$writer->delete($key);
+		
+		$reader->get($key, queue: false);
+		$taken = $reader->set($key, 'stale', 60);
+		$again = $reader->set($key, 'stale', 60);
+		$read = $this->newStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $taken === false
+			&& $again === false
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE: a write APCu did not store (apcu_store() answered false: full, or
+	 * the key busy) keeps its miss, as a refused one does - another instance's
+	 * delete after it refuses the write tried again, and the value computed
+	 * before that delete is never served
+	 */
+	public function aFailedStoreKeepsTheMiss(): bool
+	{
+		$key = 'guard-store-failed';
+		$writer = $this->newStore();
+		$reader = new class($this->config->prefix, $this->config->perishable, KeyValue::GROUP_TESTS) extends Store
+		{
+			public bool $full = true;
+			
+			protected function storeValue(
+				string $id,
+				mixed $value,
+				int $ttl,
+			): bool
+			{
+				// APCu refuses the first store
+				if($this->full)
+				{
+					$this->full = false;
+					
+					return false;
+				}
+				
+				return parent::storeValue($id, $value, $ttl);
+			}
+		};
+		$writer->delete($key);
+		
+		$reader->get($key, queue: false);
+		$failed = $reader->set($key, 'computed', 60);
+		$writer->delete($key);
+		$again = $reader->set($key, 'computed', 60);
+		$read = $this->newStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $failed === false
+			&& $again === false
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE: a store that lands after a failed one uses up the miss, as any
+	 * write that lands does - another instance's delete after it does not
+	 * refuse the next set(), a write-through, which lands
+	 */
+	public function aStoreThatLandsAfterAFailedOneLeavesNoMiss(): bool
+	{
+		$key = 'guard-store-landed';
+		$writer = $this->newStore();
+		$reader = new class($this->config->prefix, $this->config->perishable, KeyValue::GROUP_TESTS) extends Store
+		{
+			public bool $full = true;
+			
+			protected function storeValue(
+				string $id,
+				mixed $value,
+				int $ttl,
+			): bool
+			{
+				// APCu refuses the first store
+				if($this->full)
+				{
+					$this->full = false;
+					
+					return false;
+				}
+				
+				return parent::storeValue($id, $value, $ttl);
+			}
+		};
+		$writer->delete($key);
+		
+		$reader->get($key, queue: false);
+		$failed = $reader->set($key, 'computed', 60);
+		$landed = $reader->set($key, 'computed', 60);
+		$writer->delete($key);
+		$through = $reader->set($key, 'through', 60);
+		$read = $this->newStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $failed === false
+			&& $landed
+			&& $through
+			&& $read === 'through';
 	}
 	
 	/**

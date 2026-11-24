@@ -596,11 +596,11 @@ class RedisVersioned extends Store
 	}
 	
 	/**
-	 * The write set() sends (see KeyValue\Redis::writeCall()). After a miss inside the guard window, and
-	 * after the store's own computation or refresh at any age, it is cache_versioned_set_guarded: refused
-	 * when the key holds an epoch other than the one the miss saw, and stored with the rule id the miss
-	 * saw. Any other write is cache_versioned_set_stamped, with a new epoch for the key. One key, so it
-	 * works on a cluster.
+	 * The write set() sends (see KeyValue\Redis::writeCall()). After a miss inside the guard window, after
+	 * the store's own computation or refresh at any age, and after a write that was refused or failed (see
+	 * guardsWrite()), it is cache_versioned_set_guarded: refused when the key holds an epoch other than the
+	 * one the miss saw, and stored with the rule id the miss saw. Any other write is
+	 * cache_versioned_set_stamped, with a new epoch for the key. One key, so it works on a cluster.
 	 */
 	#[Override]
 	protected function writeCall(
@@ -631,14 +631,10 @@ class RedisVersioned extends Store
 		$value = $this->compressor
 			->compress($value);
 		
-		// The write after a miss compares the key's epoch. A deliberate set() after a read older than the
-		// window does not: the caller chose to write, and a fresh read first is the way to have it checked.
-		// The store's own computation, and its refresh of a value, compares at any age, so a delete or a
-		// write made within the window before it is seen however long it computed. Either way the rule id
-		// the miss saw stays valid for the rules' retention, so a rule added while the value was computed
-		// still reaches it.
-		$guarded = $miss !== null
-			&& ($miss['late'] === false || $miss['own']);
+		// The write after a miss compares the key's epoch (see guardsWrite()). Either way the rule id the
+		// miss saw stays valid for the rules' retention, so a rule added while the value was computed still
+		// reaches it.
+		$guarded = $this->guardsWrite($miss);
 		
 		return [$guarded ? 'cache_versioned_set_guarded' : 'cache_versioned_set_stamped', [$id], [
 			$value,
@@ -652,6 +648,23 @@ class RedisVersioned extends Store
 			$this->invalidationWindowMs,
 			$soft,
 		]];
+	}
+	
+	/**
+	 * Whether the write after $miss compares the key's epoch (cache_versioned_set_guarded, see writeCall()).
+	 * A deliberate set() after a read older than the window does not: the caller chose to write, and a
+	 * fresh read first is the way to have it checked. The store's own computation, and its refresh of a
+	 * value, compares at any age, so a delete or a write made within the window before it is seen however
+	 * long it computed. So does a write after one that was refused or failed, within its window (see
+	 * KeyValue::keepRefused()): it may be the same value again.
+	 */
+	#[Override]
+	protected function guardsWrite(
+		?array $miss,
+	): bool
+	{
+		return $miss !== null
+			&& ($miss['late'] === false || $miss['own'] || $miss['refused']);
 	}
 	
 	public function delete(

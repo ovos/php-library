@@ -70,7 +70,9 @@ abstract class KeyValue
 	 * delete made within the window before its write is seen, and a tag
 	 * invalidation or a clear made while it computed (see
 	 * RedisVersioned::writeCall(), TagIndex::writeMiss()). A caller's own set()
-	 * after a read older than the window is not checked against the epoch.
+	 * after a read older than the window is not checked against the epoch,
+	 * unless a write after that read was refused or failed less than a window
+	 * ago (see keepRefused()).
 	 * 0 switches the guard off. Store option "invalidation_window_ms" (the
 	 * tier's store_options)
 	 * Unit: milliseconds
@@ -91,9 +93,11 @@ abstract class KeyValue
 	 * What each miss of this instance saw, by item id - the write that follows
 	 * it is refused when the key was invalidated since (see rememberMiss()).
 	 * "stamp" is taken right before the computation (stampMiss()), null until
-	 * then or when it could not be read
+	 * then or when it could not be read. "refusedAt": when the first write after
+	 * it was refused or failed (microtime), null until then; it stays for the
+	 * writes after that, for one window (see keepRefused())
 	 *
-	 * @var array<string, array{epoch: string, stamp: ?string, at: float}>
+	 * @var array<string, array{epoch: string, stamp: ?string, at: float, refusedAt: ?float}>
 	 */
 	protected array $misses = [];
 	
@@ -288,6 +292,7 @@ abstract class KeyValue
 			'epoch' => is_scalar($epoch) && is_bool($epoch) === false ? (string)$epoch : '',
 			'stamp' => null,
 			'at' => microtime(true),
+			'refusedAt' => null,
 		];
 		if(count($this->misses) > static::MISSES_MAX)
 		{
@@ -325,15 +330,17 @@ abstract class KeyValue
 	}
 	
 	/**
-	 * The miss a write follows. It is taken out, so it guards one write only. A miss older than the guard
-	 * window is not returned, unless $late: then it comes back flagged 'late'. The Redis stores ask for it:
-	 * a versioned store still stamps the write with its rule id then, and every Redis store compares the
-	 * epoch, and the tag-index stores the stamps, when the store computed or refreshed the value itself
-	 * (see RedisVersioned::writeCall(), TagIndex::writeMiss()). "own" says whether the store computed or
-	 * refreshed the value itself, "computing" whether it computed it for a miss, not as a refresh (see
-	 * computingMisses).
+	 * The miss a write follows. It is taken out, so it guards one write only, unless that write is refused
+	 * or fails: then the store puts it back (see keepRefused()). A miss older than the guard window is not
+	 * returned, unless $late or a write after it was refused: then it comes back flagged 'late'. The Redis
+	 * stores ask for it: a versioned store still stamps the write with its rule id then, and every Redis
+	 * store compares the epoch, and the tag-index stores the stamps, when the store computed or refreshed
+	 * the value itself (see RedisVersioned::writeCall(), TagIndex::writeMiss()). A refused miss comes back
+	 * for one window from its first refusal and is gone after that. "own" says whether the store computed
+	 * or refreshed the value itself, "computing" whether it computed it for a miss, not as a refresh (see
+	 * computingMisses), "refused" whether a write after it was refused or failed.
 	 *
-	 * @return array{epoch: string, stamp: ?string, at: float, late: bool, computing: bool, own: bool}|null
+	 * @return array{epoch: string, stamp: ?string, at: float, refusedAt: ?float, refused: bool, late: bool, computing: bool, own: bool}|null
 	 */
 	protected function takeMiss(
 		string $id,
@@ -350,13 +357,80 @@ abstract class KeyValue
 			return null;
 		}
 		
-		$miss['late'] = (microtime(true) - $miss['at']) * 1000 > $this->invalidationWindowMs;
+		$now = microtime(true);
+		$miss['refused'] = $miss['refusedAt'] !== null;
+		// a refused miss lasts one window from its first refusal: after that the write is a plain one again
+		if($miss['refused']
+			&& ($now - $miss['refusedAt']) * 1000 > $this->invalidationWindowMs)
+		{
+			return null;
+		}
+		
+		$miss['late'] = ($now - $miss['at']) * 1000 > $this->invalidationWindowMs;
 		$miss['computing'] = $computing === true;
 		$miss['own'] = $computing !== null;
 		
-		return $miss['late'] === true && $late === false
+		// a refused miss guards every write after it within its window, however old its read is
+		return $miss['late'] === true && $late === false && $miss['refused'] === false
 			? null
 			: $miss;
+	}
+	
+	/**
+	 * Puts back the miss a write took that did not land ($miss, see takeMiss()): refused, or failed (an
+	 * error reply, an exception). A value computed before an invalidation and saved again is then refused
+	 * again: every later write of $id by this instance follows the same read, judged as the first one was.
+	 * For one window from the first such write: its time is kept, so writes refused after it do not make the
+	 * miss last longer. The miss goes sooner with the next read of the key, this instance's own delete of
+	 * it, MISSES_MAX newer misses, a versioned store's setGroup(), and the end of the store's own
+	 * computation of it (see forgetRefused())
+	 *
+	 * @param array{epoch: string, stamp: ?string, at: float, refusedAt: ?float}|null $miss
+	 */
+	protected function keepRefused(
+		string $id,
+		?array $miss,
+	): void
+	{
+		if($miss === null
+			|| $this->isGuarded() === false)
+		{
+			return;
+		}
+		
+		unset($this->misses[$id]);
+		$this->misses[$id] = [
+			'epoch' => $miss['epoch'],
+			'stamp' => $miss['stamp'],
+			'at' => $miss['at'],
+			'refusedAt' => $miss['refusedAt'] ?? microtime(true),
+		];
+		if(count($this->misses) > static::MISSES_MAX)
+		{
+			unset($this->misses[array_key_first($this->misses)]);
+		}
+	}
+	
+	/**
+	 * Forgets the refused misses of $ids (see keepRefused()) once the store's own computation of them is
+	 * over: get() and getMany() with a resolver, and a stale value's refresh. The write they made is done,
+	 * so a set() of such a key after that is a plain write, as after a write that landed. A miss whose
+	 * computation wrote nothing (the resolver threw, or saved nothing) is no refused one: it stays, as any
+	 * read's does
+	 *
+	 * @param list<string> $ids
+	 */
+	protected function forgetRefused(
+		array $ids,
+	): void
+	{
+		foreach($ids as $id)
+		{
+			if(($this->misses[$id]['refusedAt'] ?? null) !== null)
+			{
+				unset($this->misses[$id]);
+			}
+		}
 	}
 	
 	/**
@@ -839,6 +913,7 @@ abstract class KeyValue
 				unset($this->unlockedMisses[$id]);
 				// dropped once the value is written, or the refresh failed
 				unset($this->computingMisses[$id]);
+				$this->forgetRefused([$id]);
 				// set() releases it when it writes, a refused write too; twice is a no-op
 				$memoLock->releaseActiveLock($id);
 			}
@@ -1009,6 +1084,12 @@ abstract class KeyValue
 		finally
 		{
 			unset($this->unlockedMisses[$id]);
+			// a resolver computed the value here: a write of it that was refused or failed is over (see
+			// forgetRefused())
+			if($resolver !== null)
+			{
+				$this->forgetRefused([$id]);
+			}
 			// what the read left to do (see afterRead())
 			$this->afterRead($id);
 		}
@@ -1277,6 +1358,12 @@ abstract class KeyValue
 			{
 				unset($this->unlockedMisses[$id]);
 			}
+			// a resolver computed the values here: the writes of them that were refused or failed are over
+			// (see forgetRefused())
+			if($resolver !== null)
+			{
+				$this->forgetRefused($ids);
+			}
 			// what the reads left to do (see afterRead())
 			$this->afterReadMany($ids);
 		}
@@ -1409,6 +1496,7 @@ abstract class KeyValue
 					// dropped once the value is written, or the refresh failed
 					unset($this->computingMisses[$id]);
 				}
+				$this->forgetRefused($locked);
 				// a write releases its lock, a refused one too; the rest go here
 				$memoLock->releaseMany($locked);
 			}

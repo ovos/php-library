@@ -8,6 +8,7 @@ use Ovos\Cache\Store\KeyValue;
 use Ovos\Cache\Store\KeyValue\Redis;
 use Ovos\Cache\Store\KeyValue\Tags;
 use RedisCluster;
+use ReflectionProperty;
 use RuntimeException;
 
 use function apcu_key_info;
@@ -71,5 +72,34 @@ trait TraitStoredTime
 		{
 			throw new RuntimeException('Could not age the stored test value.');
 		}
+	}
+	
+	/**
+	 * Ages what $store remembers of its read of $key (the invalidation guard's miss, see
+	 * KeyValue::rememberMiss()): the read by $readSeconds, and the first write refused after it, if any,
+	 * by $refusedSeconds - as if that time had passed, without waiting. Nothing on the server changes. A
+	 * key with no miss is left as it is
+	 */
+	protected function ageMiss(
+		KeyValue $store,
+		string $key,
+		float $readSeconds,
+		float $refusedSeconds,
+	): void
+	{
+		$property = new ReflectionProperty(KeyValue::class, 'misses');
+		$misses = $property->getValue($store);
+		$id = $store->itemId($key);
+		if(isset($misses[$id]) === false)
+		{
+			return;
+		}
+		
+		$misses[$id]['at']-= $readSeconds;
+		if(($misses[$id]['refusedAt'] ?? null) !== null)
+		{
+			$misses[$id]['refusedAt']-= $refusedSeconds;
+		}
+		$property->setValue($store, $misses);
 	}
 }
