@@ -34,6 +34,7 @@ use function session_name;
 use function session_regenerate_id;
 use function session_set_cookie_params;
 use function session_start;
+use function sprintf;
 use function time;
 
 /**
@@ -134,9 +135,38 @@ class Session extends Service
 		{
 			foreach($this->sessionConfig->ini as $ini => $value)
 			{
-				ini_set('session.' . $ini, (string)$value);
+				ini_set($this->iniDirective((string)$ini), (string)$value);
 			}
 		}
+	}
+	
+	/**
+	 * The php.ini directive a key of the "session.ini" block sets: PHP's
+	 * own session.<key>, else the phpredis save handler's
+	 * redis.session.<key> (locking_enabled, lock_expire, compression, ...)
+	 *
+	 * @throws Exception for a key that is neither, because ini_set() would
+	 *         ignore it without a word
+	 */
+	protected function iniDirective(
+		string $key,
+	): string
+	{
+		foreach(['session.', 'redis.session.'] as $prefix)
+		{
+			// ini_get() answers false only for a directive that does not exist
+			if(ini_get($prefix . $key) !== false)
+			{
+				return $prefix . $key;
+			}
+		}
+		
+		throw new Exception(sprintf(
+			'Unknown session ini key "%s": neither session.%s nor redis.session.%s exists (the redis.session.* ones need ext-redis).',
+			$key,
+			$key,
+			$key,
+		));
 	}
 	
 	public function getHandler(): string

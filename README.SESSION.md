@@ -86,11 +86,21 @@ session:
   ini:                        # used by the php handler only
     save_handler: redis
     save_path: !ENV SESSION[SAVE_PATH]
+    locking_enabled: 1        # phpredis: redis.session.locking_enabled
   connection:                 # json handler storage (+ flush() for both)
     host: !ENV SESSION[HOST]
     port: !ENV SESSION[PORT]
     database: !ENV SESSION[DATABASE]
 ```
+
+The `ini` keys are php.ini directive names without their prefix. A key
+PHP's session module has becomes `session.<key>` (`save_handler`,
+`save_path`, `gc_maxlifetime` ...); any other key is a setting of the
+phpredis save handler and becomes `redis.session.<key>`
+(`locking_enabled`, `lock_expire`, `lock_wait_time`, `lock_retries`,
+`compression`, `compression_level` ...). A key that is neither throws
+when the service is built, so a typo never goes unnoticed. phpredis's
+session locking is off unless `locking_enabled: 1` is set.
 
 Requirements: the RedisJSON module (bundled with Redis 8) on the session
 Redis; the Lua write functions pass multiple keys (the document and the
