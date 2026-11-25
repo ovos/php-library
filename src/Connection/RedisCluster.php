@@ -89,7 +89,12 @@ class RedisCluster extends RedisCommon
 			RedisClient::OPT_REPLY_LITERAL
 				=> true, // https://github.com/phpredis/phpredis/issues/1550
 			// read from master nodes only, keeping the read-after-write
-			// behaviour of the standalone connection
+			// behaviour of the standalone connection; the typed read after a
+			// redirect relies on it (see Functions::sendByKey()). It is the only
+			// mode: a call that took the read timeout closes the client
+			// (Functions::sendOrClose()), and phpredis 6.3 sends no READONLY to
+			// a replica it connects to again, so every read from a replica would
+			// fail after it
 			RedisClusterClient::OPT_SLAVE_FAILOVER
 				=> RedisClusterClient::FAILOVER_NONE,
 		];

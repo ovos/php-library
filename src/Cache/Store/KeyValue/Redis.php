@@ -14,11 +14,16 @@ use RedisCluster as RedisClusterClient;
 use RedisClusterException;
 use RedisException;
 
+use function array_diff;
 use function array_key_exists;
 use function array_keys;
+use function array_unique;
 use function array_values;
 use function bin2hex;
+use function ceil;
 use function count;
+use function hrtime;
+use function in_array;
 use function is_array;
 use function is_int;
 use function random_bytes;
@@ -63,6 +68,14 @@ abstract class Redis extends Tags
 	 * holds no epoch at all. So set() and storeMany() refuse it themselves, before any call (see isUnread()).
 	 */
 	public const string EPOCH_UNREAD = '-';
+	
+	/**
+	 * The Lua functions of this store that are safe to run twice with the same arguments, also when the
+	 * first run took effect: on a cluster such a call is sent again after a failure (see
+	 * Functions::sendByKey()). A tombstone run twice writes the same token, and only removes again what was
+	 * written between the runs (its second answer may say that no item was there, see tombstone())
+	 */
+	public const array REPEATABLE = ['cache_tombstone'];
 	
 	/**
 	 * Statuses
@@ -273,14 +286,40 @@ abstract class Redis extends Tags
 		
 		$client = $this->getClient();
 		$client?->clearLastError();
-		$existed = $this->functions
-			->call('cache_tombstone', [$id], [
-				$this->newEpoch(),
+		$token = $this->newEpoch();
+		$startedAt = hrtime(true);
+		try
+		{
+			$existed = $this->callFunction('cache_tombstone', [$id], [
+				$token,
 				$this->invalidationWindowMs,
 			]);
+		}
+		// Redis did not take the call. On a cluster, when the call was sent a second time after a typed read of
+		// the key got through and that failed too, it is a key the old master does not hold while its slot
+		// migrates (the call follows no ASK, see Functions::sendByKey()): the same tombstone is written by typed
+		// calls, which follow the redirect. Not after the client's read timeout, where the call may still run.
+		// Any other failure fails the delete (the caller logs): a connection that failed, a master down.
+		catch(RedisException|RedisClusterException $exception)
+		{
+			if($client === null
+				|| $this->functions->wasSentAgain() === false
+				|| $this->functions->tookReadTimeout($client, hrtime(true) - $startedAt))
+			{
+				throw $exception;
+			}
+			$this->log($exception);
+			
+			return $this->typedTombstone($id, $token);
+		}
 		if(is_int($existed))
 		{
-			return $existed;
+			// sent twice: the first run may have removed the item, and the second found none. The key is a
+			// tombstone either way, so the delete is answered as one that found an item - also for a key that
+			// held none before (a delete of a missing key answers true then)
+			return $existed === 0 && $this->functions->wasSentAgain()
+				? 1
+				: $existed;
 		}
 		
 		// the call failed (a library that would not load, a writing script
@@ -293,6 +332,120 @@ abstract class Redis extends Tags
 		));
 		
 		return $this->unlink($id);
+	}
+	
+	/**
+	 * The tombstone cache_tombstone writes, by typed calls, for a key the Lua call cannot reach on a cluster
+	 * (see tombstone()). Several commands, so the token goes first and its expiry right after: a guarded write
+	 * that lands before the token goes with the item's fields, one after it is refused, and a failure on the
+	 * way leaves a key that expires, never later than the item would have. A raw value is removed, as the Lua
+	 * call removes it. The window is set in whole seconds (phpredis 6.3 on Windows passes a typed integer
+	 * through 32 bits). A failure throws. The number of items that existed (0 or 1; a raw value counts)
+	 */
+	protected function typedTombstone(
+		string $id,
+		string $token,
+	): int
+	{
+		$client = $this->getClient();
+		if($client === null)
+		{
+			return 0;
+		}
+		
+		return $this->functions->sendOrClose($client, function() use ($client, $id, $token): int
+		{
+			$type = $client->type($id);
+			if($type !== RedisClient::REDIS_NOT_FOUND
+				&& $type !== RedisClient::REDIS_HASH)
+			{
+				return (int)$client->del($id);
+			}
+			
+			$existed = $type === RedisClient::REDIS_HASH
+				? (int)$client->hExists($id, static::KEY_DATA)
+				: 0;
+			if($this->invalidationWindowMs <= 0)
+			{
+				// no window, no tombstone: the key goes, as the Lua call removes it
+				$client->del($id);
+				
+				return $existed;
+			}
+			
+			$windowS = (int)ceil($this->invalidationWindowMs / 1000);
+			$this->writeTombstoneToken($client, $id, $token);
+			// an item's sooner expiry stays (LT): should the fields' removal fail, it lives no longer than it would
+			// have. Answered 0: that kept it, or the key expired between the two - then the token goes once more
+			if((bool)$client->expire($id, $windowS, $existed === 1 ? 'LT' : null) === false
+				&& (int)$client->exists($id) === 0)
+			{
+				$this->writeTombstoneToken($client, $id, $token);
+				$client->expire($id, $windowS);
+			}
+			$client->hDel($id, ...$this->itemFields());
+			
+			return $existed;
+		});
+	}
+	
+	/**
+	 * Writes $token as $id's epoch for typedTombstone(). An error reply (OOM) throws before anything else is
+	 * sent: the item's fields must not go while its old epoch stays
+	 */
+	protected function writeTombstoneToken(
+		RedisClient|RedisClusterClient $client,
+		string $id,
+		string $token,
+	): void
+	{
+		if($client->hSet($id, static::KEY_EPOCH, $token) === false)
+		{
+			throw new RedisException((string)($client->getLastError() ?? 'HSET answered an error'));
+		}
+	}
+	
+	/**
+	 * The fields an item of this store holds besides its epoch: what a tombstone removes (see
+	 * typedTombstone())
+	 *
+	 * @return non-empty-list<string>
+	 */
+	protected function itemFields(): array
+	{
+		return array_values(array_diff(
+			array_unique([...$this->fetchedFields(), static::KEY_DATA, static::KEY_TAGS, static::KEY_SOFT]),
+			[static::KEY_EPOCH],
+		));
+	}
+	
+	/**
+	 * Calls the Lua function $function: by Functions::callRepeatable() where it is safe to run twice (see
+	 * REPEATABLE), else by Functions::call()
+	 *
+	 * @param list<string> $keys
+	 * @param list<mixed> $args
+	 */
+	protected function callFunction(
+		string $function,
+		array $keys,
+		array $args,
+	): mixed
+	{
+		return $this->repeatable($function)
+			? $this->functions->callRepeatable($function, $keys, $args)
+			: $this->functions->call($function, $keys, $args);
+	}
+	
+	/**
+	 * Whether the Lua function $function is safe to run twice with the same arguments, also when the first
+	 * run took effect: such a call is sent again after a failure on a cluster (see REPEATABLE)
+	 */
+	protected function repeatable(
+		string $function,
+	): bool
+	{
+		return in_array($function, static::REPEATABLE, true);
 	}
 	
 	/**
@@ -418,8 +571,7 @@ abstract class Redis extends Tags
 			]);
 		if($replies === null)
 		{
-			return $this->functions
-				->call($function, $keys, $args);
+			return $this->callFunction($function, $keys, $args);
 		}
 		
 		if(($replies[1] ?? false) !== false)
@@ -428,7 +580,7 @@ abstract class Redis extends Tags
 		}
 		
 		return ($replies[0] ?? false) === false
-			? $this->functions->call($function, $keys, $args)
+			? $this->callFunction($function, $keys, $args)
 			: $replies[0];
 	}
 	
@@ -853,7 +1005,7 @@ abstract class Redis extends Tags
 			// an error reply, or no pipeline: one call each
 			foreach($again as $key => [$function, $keys, $args])
 			{
-				$stored[$key] = (int)$this->functions->call($function, $keys, $args) === 1;
+				$stored[$key] = (int)$this->callFunction($function, $keys, $args) === 1;
 			}
 		}
 		catch(RedisException $exception)

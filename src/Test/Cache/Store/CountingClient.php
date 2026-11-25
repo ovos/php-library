@@ -97,6 +97,19 @@ class CountingClient extends BaseRedis
 	 */
 	public int $erringCalls = 0;
 	
+	/**
+	 * Each runs once right before the next command of its name (hSet, expire, hDel) is sent: another process
+	 * acts between two commands of a sequence, or the connection fails there
+	 *
+	 * @var array<string, Closure>
+	 */
+	public array $beforeCommand = [];
+	
+	/**
+	 * How many HSETs answer false from now on, as an error reply (OOM) makes them, without throwing
+	 */
+	public int $erringHashWrites = 0;
+	
 	public function resetCount(): void
 	{
 		$this->roundTrips = 0;
@@ -120,6 +133,21 @@ class CountingClient extends BaseRedis
 		}
 		
 		return $singles;
+	}
+	
+	/**
+	 * Runs the hook set for $command, once (see $beforeCommand)
+	 */
+	protected function runBefore(
+		string $command,
+	): void
+	{
+		if(isset($this->beforeCommand[$command]))
+		{
+			$before = $this->beforeCommand[$command];
+			unset($this->beforeCommand[$command]);
+			$before();
+		}
 	}
 	
 	/**
@@ -395,6 +423,44 @@ class CountingClient extends BaseRedis
 		$this->counted('hExists');
 		
 		return parent::hExists($key, $field);
+	}
+	
+	public function hSet(
+		string $key,
+		mixed ...$fields_and_vals,
+	): BaseRedis|int|false
+	{
+		$this->runBefore('hSet');
+		if($this->erringHashWrites > 0)
+		{
+			$this->erringHashWrites--;
+			
+			return false;
+		}
+		
+		return parent::hSet($key, ...$fields_and_vals);
+	}
+	
+	public function expire(
+		string $key,
+		int $timeout,
+		?string $mode = null,
+	): BaseRedis|bool
+	{
+		$this->runBefore('expire');
+		
+		return parent::expire($key, $timeout, $mode);
+	}
+	
+	public function hDel(
+		string $key,
+		string $field,
+		string ...$other_fields,
+	): BaseRedis|int|false
+	{
+		$this->runBefore('hDel');
+		
+		return parent::hDel($key, $field, ...$other_fields);
 	}
 	
 	public function hGetAll(

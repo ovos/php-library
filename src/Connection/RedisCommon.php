@@ -97,6 +97,14 @@ abstract class RedisCommon extends Connection
 		return $this;
 	}
 	
+	/**
+	 * The read timeout of light operations the connection was configured with (seconds)
+	 */
+	public function getReadTimeout(): float
+	{
+		return $this->readTimeout;
+	}
+	
 	public function setSlowLog(
 		ArrayObject $config,
 	): static

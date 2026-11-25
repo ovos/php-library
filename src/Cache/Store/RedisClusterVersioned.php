@@ -84,24 +84,27 @@ class RedisClusterVersioned extends RedisVersioned
 				return false;
 			}
 			
-			$client->clearLastError();
-			
+			// the first error a master answers; the masters after it are cleared all the same
+			$failed = null;
 			foreach($this->getConnection()->getMasters() as $master)
 			{
-				$result = $client->rawCommand($master,
+				// closed when a failure may leave a late reply (see Functions::sendOrClose()), which clears the last
+				// error first: each master's is read after its call
+				$result = $this->functions->sendOrClose($client, fn(): mixed => $client->rawCommand($master,
 					'FCALL',
 					$this->functions->functionsPrefix('cache_clear'),
 					'0',
 					$prefix,
-				);
+				));
 				
+				// rawCommand reports failures via the last error, not by throwing
+				$failed ??= $client->getLastError();
 				$count+= (int)$result;
 			}
 			
-			// rawCommand reports failures via the last error, not by throwing
-			if($error = $client->getLastError())
+			if($failed !== null)
 			{
-				$this->log($error);
+				$this->log($failed);
 				
 				return false;
 			}

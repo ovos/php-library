@@ -30,8 +30,11 @@ use Ovos\Test\Cache\Store\TraitRedis;
 use Ovos\Test\Exception\SkipException;
 use Override;
 use Closure;
+use Redis as RedisClient;
 use RedisException;
 use ReflectionMethod;
+
+use function Ovos\config;
 
 use function array_column;
 use function array_fill;
@@ -4817,6 +4820,133 @@ class RedisVersioned extends Test
 			'rules_cache_ms' => 0,
 			'rules_shared_cache' => false,
 		]);
+	}
+	
+	/**
+	 * RULE: on one server too, a Lua call (FCALL) that failed after the client's read timeout leaves no late
+	 * reply behind (see Functions::sendOrClose()): the next read answers its own value, and the failure costs
+	 * one new connection at most (the next command's). The server holds writes back past the timeout; the
+	 * held call goes with the dropped connection. Holds the server's writes: only where
+	 * TESTS[EXCLUSIVE_SERVERS] allows it
+	 */
+	public function aTimedOutCallLeavesNoLateReplyForTheNextRead(): bool
+	{
+		$store = $this->guardStore();
+		$client = $store->getClient();
+		$admin = $this->exclusiveAdmin($store);
+		$timeoutMs = (float)$client->getOption(RedisClient::OPT_READ_TIMEOUT) * 1000;
+		if($timeoutMs <= 0
+			|| $timeoutMs > 3000)
+		{
+			throw new SkipException('the client\'s read timeout is not between 0 and 3 s');
+		}
+		
+		$plain = 'late-reply-plain:' . bin2hex(random_bytes(4));
+		$admin->set($plain, 'own value');
+		$key = $this->guardKey('late-reply');
+		$client->get($plain);
+		$connections = static fn(): int => (int)$admin->info('stats')['total_connections_received'];
+		
+		try
+		{
+			$admin->rawCommand('CLIENT', 'PAUSE', (string)(int)($timeoutMs + 1500), 'WRITE');
+			$startedAt = microtime(true);
+			$before = $connections();
+			$written = $store->set($key, 'new', 60);
+			// the server takes writes again, and a late reply would be sent
+			$left = $startedAt + ($timeoutMs + 1800) / 1000 - microtime(true);
+			if($left > 0)
+			{
+				usleep((int)($left * 1000000));
+			}
+			$read = $client->get($plain);
+			$made = $connections() - $before;
+		}
+		finally
+		{
+			$admin->rawCommand('CLIENT', 'UNPAUSE');
+			$admin->del($plain, $store->itemId($key));
+			$admin->close();
+		}
+		
+		return $written === false
+			&& $read === 'own value'
+			&& $made <= 1;
+	}
+	
+	/**
+	 * RULE: an error reply - OOM here, the server's memory full - closes no connection: the server answered,
+	 * and nothing is left on the connection (see Functions::sendOrClose()). The write answers false, and the
+	 * store keeps its connection. Fills the server's memory limit: only where TESTS[EXCLUSIVE_SERVERS] allows
+	 * it
+	 */
+	public function anErrorReplyKeepsTheConnection(): bool
+	{
+		$store = $this->guardStore();
+		$admin = $this->exclusiveAdmin($store);
+		$key = $this->guardKey('error-reply');
+		// the libraries are loaded before the memory is full
+		$store->set($key, 'old', 60);
+		$id = $store->getClient()->rawCommand('CLIENT', 'ID');
+		$limit = (array)$admin->config('GET', 'maxmemory');
+		$policy = (array)$admin->config('GET', 'maxmemory-policy');
+		
+		try
+		{
+			$admin->config('SET', 'maxmemory-policy', 'noeviction');
+			$admin->config('SET', 'maxmemory', '1');
+			$written = $store->set($key, 'new', 60);
+			$same = $store->getClient()->rawCommand('CLIENT', 'ID') === $id;
+		}
+		// each step is restored also when the one before it threw
+		finally
+		{
+			try
+			{
+				$admin->config('SET', 'maxmemory', (string)($limit['maxmemory'] ?? '0'));
+			}
+			finally
+			{
+				try
+				{
+					$admin->config('SET', 'maxmemory-policy', (string)($policy['maxmemory-policy'] ?? 'noeviction'));
+				}
+				finally
+				{
+					$admin->del($store->itemId($key));
+					$admin->close();
+				}
+			}
+		}
+		
+		return $written === false
+			&& $same;
+	}
+	
+	/**
+	 * A connection of its own to $store's server and database, for a rule that holds the server's writes or
+	 * fills its memory: skips the rule unless TESTS[EXCLUSIVE_SERVERS] allows it
+	 */
+	protected function exclusiveAdmin(
+		KeyValueRedis $store,
+	): RedisClient
+	{
+		if(config()->getPath(['tests_options', 'exclusive_servers']) !== true)
+		{
+			throw new SkipException('holds the server\'s writes or fills its memory: set TESTS[EXCLUSIVE_SERVERS] = yes'
+				. ' in ci/.env, only for a server nobody else uses');
+		}
+		
+		$client = $store->getClient();
+		$admin = new RedisClient();
+		$admin->connect($client->getHost(), $client->getPort(), 2.0, null, 0, 5.0);
+		if(($auth = $store->getConnection()->getConfig()->auth) !== null)
+		{
+			$admin->auth($auth);
+		}
+		$admin->select($client->getDbNum());
+		
+		return $admin;
 	}
 	
 	/**

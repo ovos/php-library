@@ -32,9 +32,12 @@ trait TraitRedisCluster
 	
 	/**
 	 * @param array $storeOptions overrides of single "store_options" entries (see TraitRedis::storeConfig())
+	 * @param ?string $connection a name for a cluster connection of its own (a client with its own slot
+	 * map); null shares the one connection
 	 */
 	protected function getClusterStore(
 		array $storeOptions = [],
+		?string $connection = null,
 	): ?RedisClusterVersioned
 	{
 		$connections = $this->container
@@ -55,9 +58,9 @@ trait TraitRedisCluster
 			}
 		}
 		
-		$connection = $connections->get('redis_cluster');
+		$cluster = $connections->get('redis_cluster', $connection);
 		
-		if($connection->getClient() === null)
+		if($cluster->getClient() === null)
 		{
 			$this->clusterUnavailableReason =
 				'the redis cluster is not reachable';
@@ -66,7 +69,7 @@ trait TraitRedisCluster
 		}
 		
 		return new RedisClusterVersioned(
-			$connection,
+			$cluster,
 			$connections->get('redis_cluster_queue', 'queue'),
 			$this->cacheConfig->prefix,
 			$this->storeConfig($storeOptions),

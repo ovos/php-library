@@ -67,6 +67,11 @@ jobs:
       - name: Copy .env
         run: |
           php -r "file_exists('.env') || copy('.env.tests', '.env');"
+          # the Redis server and the cluster started below are CI's own: the rules
+          # that move cluster slots, hold a server's writes or fill its memory may
+          # run (off by default, see ci/environments.yml); this step runs in ci/,
+          # whose .env the tests read
+          printf '\n[TESTS]\nEXCLUSIVE_SERVERS = yes\n' >> .env
       
       - name: Install dependencies
         #env:

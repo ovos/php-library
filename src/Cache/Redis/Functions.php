@@ -3,12 +3,16 @@ declare(strict_types=1);
 
 namespace Ovos\Cache\Redis;
 
+use Closure;
 use Ovos\Cache\Prefixer;
 use Ovos\Connection\RedisCommon as Connection;
 use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
+use RedisClusterException;
 use RedisException;
 
+use function apcu_add;
+use function apcu_delete;
 use function apcu_enabled;
 use function apcu_fetch;
 use function apcu_store;
@@ -20,8 +24,12 @@ use function file_get_contents;
 use function filemtime;
 use function function_exists;
 use function hash;
+use function hrtime;
 use function is_array;
 use function is_int;
+use function is_numeric;
+use function microtime;
+use function min;
 use function str_contains;
 use function str_replace;
 
@@ -44,6 +52,20 @@ class Functions
 	public const int CONFIRMED_TTL_S = 60;
 	
 	/**
+	 * How long after a typed read that failed (see sendByKey()) a failed call sends none: with a master down
+	 * phpredis keeps trying such a read for about two seconds (measured, connect and read timeout 1 s), and
+	 * every call of that master would pay it
+	 * Unit: milliseconds
+	 */
+	public const int TYPED_READ_PAUSE_MS = 5000;
+	
+	/**
+	 * The APCu prefix of a connection's typed read after a failed call, under way or failed lately: every
+	 * process of this host sees it (see claimTypedRead())
+	 */
+	public const string KEY_TYPED_READ_FAILED = 'ovos:cache:functions:typed-read-failed:';
+	
+	/**
 	 * The confirmations' APCu prefix (see isConfirmed())
 	 */
 	public const string KEY_CONFIRMED = 'ovos:cache:functions:';
@@ -60,6 +82,23 @@ class Functions
 	protected Connection $connection;
 	
 	protected ?string $functionsPrefix = null;
+	
+	/**
+	 * Whether the last call() was sent a second time (see wasSentAgain())
+	 */
+	protected bool $sentAgain = false;
+	
+	/**
+	 * Whether the next call() is safe to run twice (see callRepeatable())
+	 */
+	protected bool $repeatNext = false;
+	
+	/**
+	 * When a typed read after a failed call last failed (hrtime, ns), by connection (see claimTypedRead())
+	 *
+	 * @var array<string, int>
+	 */
+	protected static array $typedReadFailedAt = [];
 	
 	public function __construct(
 		array $libraries,
@@ -175,8 +214,8 @@ class Functions
 		// if we force a replacement, no need to detect if a library is loaded
 		if($replace === false)
 		{
-			$list = $client
-				->function('list', 'libraryname', $libraryName);
+			$list = $this->sendOrClose($client,
+				static fn(): mixed => $client->function('list', 'libraryname', $libraryName));
 			
 			if($list !== false
 				&& isset($list[0])
@@ -207,8 +246,8 @@ class Functions
 		// always REPLACE: on a missing library it loads, and a process that
 		// loaded the same library since this one looked is no error ("already
 		// exists" would fail this call - and a lock release riding on it)
-		$libraryLoaded = $client
-			->function('load', 'replace', $library);
+		$libraryLoaded = $this->sendOrClose($client,
+			static fn(): mixed => $client->function('load', 'replace', $library));
 		
 		if($error = $client->getLastError())
 		{
@@ -280,8 +319,8 @@ class Functions
 			// node is missing the library or holds a stale build (present
 			// by name, no source-hash marker) - a plain LOAD would throw
 			// "Library already exists" on the stale case
-			$libraryLoaded = $client->rawCommand($master,
-				'FUNCTION', 'LOAD', 'REPLACE', $library);
+			$libraryLoaded = $this->sendOrClose($client,
+				static fn(): mixed => $client->rawCommand($master, 'FUNCTION', 'LOAD', 'REPLACE', $library));
 			
 			if($error = $client->getLastError())
 			{
@@ -326,8 +365,8 @@ class Functions
 		string $markerName, // the expected source-hash marker function
 	): bool
 	{
-		$list = $client->rawCommand($master,
-			'FUNCTION', 'LIST', 'LIBRARYNAME', $libraryName);
+		$list = $this->sendOrClose($client,
+			static fn(): mixed => $client->rawCommand($master, 'FUNCTION', 'LIST', 'LIBRARYNAME', $libraryName));
 		
 		if(is_array($list) === false)
 		{
@@ -598,7 +637,8 @@ class Functions
 		}
 		
 		$replies = $this->connection
-			->slowLog(static fn(): mixed => $pipeline->exec(), 'fcall pipeline', [], []);
+			->slowLog(fn(): mixed => $this->sendOrClose($client, static fn(): mixed => $pipeline->exec()),
+				'fcall pipeline', [], []);
 		
 		return is_array($replies)
 			? $replies
@@ -613,6 +653,11 @@ class Functions
 		bool $long = false,
 	): mixed
 	{
+		// set by callRepeatable() for this call alone
+		$repeatable = $this->repeatNext;
+		$this->repeatNext = false;
+		$this->sentAgain = false;
+		
 		if(($client = $this->getClient()) === null)
 		{
 			return false;
@@ -652,24 +697,29 @@ class Functions
 			if($client instanceof RedisClusterClient)
 			{
 				$call = function(string $function, array $keys, array $args)
-					use ($client, $readOnly): mixed
+					use ($client, $readOnly, $repeatable): mixed
 				{
-					return $client->rawCommand(
-						$keys[0] ?? $client->_masters()[0],
+					$command = [
 						$readOnly ? 'FCALL_RO' : 'FCALL',
 						$function,
 						(string)count($keys),
 						...$keys,
 						...$args,
-					);
+					];
+					
+					// a call without keys goes to a master as it is: there is no slot to follow
+					return isset($keys[0])
+						? $this->sendByKey($client, (string)$keys[0], $command, $repeatable)
+						: $this->sendOrClose($client,
+							static fn(): mixed => $client->rawCommand($client->_masters()[0], ...$command));
 				};
 			}
 			else
 			{
-				$call = [$client, $readOnly
-					? 'fcall_ro'
-					: 'fcall'
-				];
+				$call = fn(string $function, array $keys, array $args): mixed => $this->sendOrClose($client,
+					static fn(): mixed => $readOnly
+						? $client->fcall_ro($function, $keys, $args)
+						: $client->fcall($function, $keys, $args));
 			}
 			
 			// clear any stale error so getLastError() after the call reflects only this
@@ -716,6 +766,270 @@ class Functions
 					->toggleReadTimeout();
 			}
 		}
+	}
+	
+	/**
+	 * Whether the last call() was sent a second time after a failure (see sendByKey()): its first run may have
+	 * taken effect, and the answer is the second run's
+	 */
+	public function wasSentAgain(): bool
+	{
+		return $this->sentAgain;
+	}
+	
+	/**
+	 * Calls $function as call() does, for a function that is safe to run twice with the same arguments, also
+	 * when the first run took effect: on a cluster it is sent again after a failure (see sendByKey()). It goes
+	 * through call(), so a subclass that overrides call() sees it too
+	 */
+	public function callRepeatable(
+		string $function,
+		array $keys = [],
+		array $args = [],
+		bool $long = false,
+	): mixed
+	{
+		$this->repeatNext = true;
+		// a call() overridden without the parent's must not answer with an earlier call's value
+		$this->sentAgain = false;
+		try
+		{
+			return $this->call($function, $keys, $args, long: $long);
+		}
+		finally
+		{
+			// a call() overridden without the parent's still leaves the next call plain
+			$this->repeatNext = false;
+		}
+	}
+	
+	/**
+	 * Sends a raw command routed by $key on a cluster. phpredis follows neither MOVED nor ASK for a raw command,
+	 * so after a failure one typed read of the key (EXISTS) brings the slot map up to date, and a repeatable
+	 * command (see callRepeatable()) is sent once more. Any other is not: phpredis throws the same for a
+	 * redirect as for a connection that broke after the command ran. Nothing follows a failure that took the
+	 * read timeout (the command may still run), nor one while another typed read is under way or failed lately
+	 * (see claimTypedRead()). A key the old master does not hold while its slot migrates fails twice: ASK
+	 * changes no map.
+	 *
+	 * @param list<string> $command
+	 */
+	protected function sendByKey(
+		RedisClusterClient $client,
+		string $key,
+		array $command,
+		bool $repeatable,
+	): mixed
+	{
+		$startedAt = hrtime(true);
+		try
+		{
+			return $this->sendOrClose($client, static fn(): mixed => $client->rawCommand($key, ...$command));
+		}
+		// a reply cut off midway throws RedisException on a cluster too
+		catch(RedisException|RedisClusterException $exception)
+		{
+			if($this->tookReadTimeout($client, hrtime(true) - $startedAt)
+				|| $this->claimTypedRead() === false)
+			{
+				throw $exception;
+			}
+			
+			try
+			{
+				$this->sendOrClose($client, static fn(): mixed => $client->exists($key));
+			}
+			// the typed read did not get through either: the call fails as it did
+			catch(RedisException|RedisClusterException)
+			{
+				$this->endTypedRead(true);
+				
+				throw $exception;
+			}
+			$this->endTypedRead(false);
+			
+			if($repeatable === false)
+			{
+				throw $exception;
+			}
+		}
+		
+		$this->sentAgain = true;
+		
+		return $this->sendOrClose($client, static fn(): mixed => $client->rawCommand($key, ...$command));
+	}
+	
+	/**
+	 * Claims the typed read after a failed call on this connection. False while another one is under way in a
+	 * process of this host, or one failed within TYPED_READ_PAUSE_MS: the master is likely down, and against
+	 * refused connections such a read waits about two seconds, which every FPM worker would pay. With APCu the
+	 * claim and the pause hold for every process of the host, without it for every Functions of the connection
+	 * in this process (a store and its MemoLock hold one each)
+	 */
+	protected function claimTypedRead(): bool
+	{
+		$connection = $this->connectionId();
+		if(isset(static::$typedReadFailedAt[$connection])
+			&& hrtime(true) - static::$typedReadFailedAt[$connection] < static::TYPED_READ_PAUSE_MS * 1000000)
+		{
+			return false;
+		}
+		
+		$key = $this->typedReadKey();
+		
+		return $key === null
+			|| apcu_add($key, microtime(true), (int)ceil(static::TYPED_READ_PAUSE_MS / 1000));
+	}
+	
+	/**
+	 * Ends the typed read claimTypedRead() claimed: one that $failed starts the pause, else the claim goes
+	 */
+	protected function endTypedRead(
+		bool $failed,
+	): void
+	{
+		if($failed)
+		{
+			static::$typedReadFailedAt[$this->connectionId()] = hrtime(true);
+		}
+		if(($key = $this->typedReadKey()) === null)
+		{
+			return;
+		}
+		
+		if($failed)
+		{
+			apcu_store($key, microtime(true), (int)ceil(static::TYPED_READ_PAUSE_MS / 1000));
+			
+			return;
+		}
+		
+		apcu_delete($key);
+	}
+	
+	/**
+	 * The connection's identity (its seeds on a cluster), hashed
+	 */
+	protected function connectionId(): string
+	{
+		return hash('xxh64', $this->connection::getId($this->connection->getConfig()));
+	}
+	
+	/**
+	 * The APCu key of the typed read's claim and pause, one per connection; null without APCu
+	 */
+	protected function typedReadKey(): ?string
+	{
+		if(function_exists('apcu_enabled') === false
+			|| apcu_enabled() === false)
+		{
+			return null;
+		}
+		
+		return static::KEY_TYPED_READ_FAILED . $this->connectionId();
+	}
+	
+	/**
+	 * Runs $send, a command of $client, and closes $client when the failure may have left a reply on its
+	 * connection: phpredis 6.3 leaves a timed-out call's late reply there for the next command to read as its
+	 * own. Not closed: an error reply (the server answered; phpredis keeps it as the last error), a cluster's
+	 * failure that came at once (a redirect: closing would drop the connection to every master), a client no
+	 * longer connected (closing would connect it first). The client connects again at its next command.
+	 *
+	 * @template T
+	 * @param Closure(): T $send
+	 * @return T
+	 */
+	public function sendOrClose(
+		RedisClient|RedisClusterClient $client,
+		Closure $send,
+	): mixed
+	{
+		// the last error tells an error reply: one an earlier command left must not pass for it
+		$client->clearLastError();
+		$startedAt = hrtime(true);
+		try
+		{
+			return $send();
+		}
+		catch(RedisException|RedisClusterException $exception)
+		{
+			if($this->mayHoldAReply($client, $exception, hrtime(true) - $startedAt))
+			{
+				try
+				{
+					$client->close();
+				}
+				catch(RedisException|RedisClusterException)
+				{
+					// a client that cannot close has no connection left to close
+				}
+			}
+			
+			throw $exception;
+		}
+	}
+	
+	/**
+	 * Whether a call of $client that threw $exception after $elapsedNs may have left a reply on the
+	 * connection (see sendOrClose())
+	 */
+	protected function mayHoldAReply(
+		RedisClient|RedisClusterClient $client,
+		RedisException|RedisClusterException $exception,
+		int|float $elapsedNs,
+	): bool
+	{
+		if($client->getLastError() === $exception->getMessage()
+			|| ($client instanceof RedisClient && $client->isConnected() === false))
+		{
+			return false;
+		}
+		
+		return $exception instanceof RedisException
+			|| $this->shortestReadTimeout($client) === null
+			|| $this->tookReadTimeout($client, $elapsedNs);
+	}
+	
+	/**
+	 * Whether a call of $client that failed after $elapsedNs took the client's read timeout, so that it may
+	 * have run on the server, its reply still to come. A failure from nine tenths of the timeout on counts, as
+	 * timers and the socket do not measure alike (see shortestReadTimeout()). Without any timeout no call is
+	 * taken for a timed-out one
+	 */
+	public function tookReadTimeout(
+		RedisClient|RedisClusterClient $client,
+		int|float $elapsedNs,
+	): bool
+	{
+		$timeout = $this->shortestReadTimeout($client);
+		
+		return $timeout !== null
+			&& $elapsedNs >= $timeout * 0.9 * 1e9;
+	}
+	
+	/**
+	 * The shorter of the connection's read timeout and $client's current option (seconds); null where neither
+	 * is set. On a cluster phpredis 6.3 applies a changed option (the long timeout, see
+	 * Connection\RedisCommon::toggleReadTimeout()) to new connections only, the open ones keep the first
+	 */
+	protected function shortestReadTimeout(
+		RedisClient|RedisClusterClient $client,
+	): ?float
+	{
+		$option = $client->getOption(RedisClient::OPT_READ_TIMEOUT);
+		$timeouts = [];
+		foreach([$this->connection->getReadTimeout(), is_numeric($option) ? (float)$option : 0.0] as $timeout)
+		{
+			if($timeout > 0)
+			{
+				$timeouts[] = $timeout;
+			}
+		}
+		
+		return $timeouts === []
+			? null
+			: min($timeouts);
 	}
 	
 	public function batchCall(

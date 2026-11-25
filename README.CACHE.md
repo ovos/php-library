@@ -329,6 +329,78 @@ lazily unlinks a stale item:
   queue connection **pointed at a node of the same cluster** for MemoLock
   pub/sub (see the configuration reference below).
 - No RediSearch module required on the cluster nodes.
+- While slots move (a resharding, a slot handed over to another master): the
+  store's writes, deletes and invalidations are Lua calls (`FCALL`), which
+  phpredis sends as raw commands by key, and those follow neither `MOVED`
+  nor `ASK` - they fail. Then one typed read of the key (`EXISTS`) brings
+  the slot map up to date; it is answered by a primary, which
+  `OPT_SLAVE_FAILOVER` at `FAILOVER_NONE` ensures. A call that is safe to
+  run twice (`Functions::callRepeatable()`: a write after a read (guarded),
+  a delete, a stale item's removal, an invalidation, a lock's release or
+  renewal) is then sent once more, so after a hand-over it works at once.
+  Any other - a plain write-through, a session write - fails once, and the
+  next call of that slot works: phpredis throws the same for a redirect as
+  for a connection that broke after the server ran the call, and run twice
+  it could put a value back over a delete or count twice. A delete or a lock
+  release sent twice answers `true` even when there was nothing to remove:
+  its second run finds nothing, and the first may have removed it (a release
+  whose second run answers an error answers `false`). A delete that ends in
+  the typed tombstone (below) answers what that found.
+- A failed call closes the client only where a reply may be left on its
+  connection (phpredis 6.3 leaves a timed-out call's late reply there, and
+  the next command would read it as its own; the client connects again at
+  its next command): on a cluster after a call that took the read timeout,
+  or with no timeout set, and after a reply cut off midway, whatever it
+  took; on one server after a failure that is no error reply. An error reply
+  (`OOM`, `READONLY`, `BUSY`) keeps the connection, and so does a redirect:
+  closing a cluster client drops its connection to every master.
+- A call that failed after the client's read timeout gets no typed read, no
+  second send and no typed tombstone: the master is slow or held, each
+  would wait as long, and the call may still run (one the master is
+  running does; one it holds back, as under `CLIENT PAUSE`, goes with the
+  closed connection and never runs). The timeout is the shorter of the
+  connection's `read_timeout` and the client's current option (phpredis 6.3
+  gives a cluster's open connections no new timeout, such as the long one),
+  and a failure from nine tenths of it on counts.
+- With a master that refuses connections, the typed read fails too, after
+  about two seconds (connect and read timeout 1 s): the call fails, and a
+  delete answers `false` without a typed tombstone. Such a read is claimed
+  before it is sent, so one is under way at a time, and for five seconds
+  after one failed (`Functions::TYPED_READ_PAUSE_MS`) every failed call on
+  the same connection fails at once, without a typed read: in every process
+  of the host when APCu is on (so one FPM worker waits, not each), in every
+  store of the process when it is off. The pause belongs to the connection
+  (the cluster's seeds), not to the master: a call of another master that
+  fails in that time gets no typed read either. A master that does not
+  answer at all (packets dropped) makes the call wait out its connect or
+  read timeout; with `connect_timeout` at least nine tenths of
+  `read_timeout` (both 1 s by default) it is taken for a timed-out call, and
+  no typed read is sent.
+- While a slot migrates, every key the old master does not hold - moved
+  already, or not there yet - is out of a Lua call's reach (`ASK`): its
+  `set()` answers `false`, nothing stored and the value there kept, as every
+  first write into a migrating slot does. Its `delete()`, sent twice after
+  its typed read got through, writes the tombstone by typed calls instead
+  (no Lua write reaches the key before the hand-over). That takes several
+  commands, the token and its expiry first (`HSET`, `EXPIRE`, then `HDEL` of
+  the item's fields): a guarded write that lands before the token is removed
+  with the fields, one after it is refused, and a failure on the way leaves
+  a key that expires, never later than the item would have (`EXPIRE` with
+  `LT`). A token answered with an error (`OOM`) fails the delete before
+  anything else is sent. The window is set in whole seconds, rounded up. A
+  raw value (no hash) under the key is removed, as the Lua call removes it.
+  Any other failure of a delete - on one server, or a call that never
+  reached the slot - answers `false`.
+- An invalidation whose rules stream already moved answers `false` and adds
+  no rule until the slot is handed over (a rule has no typed form). A lock
+  taken in a migrating slot (a typed `SET`, which follows `ASK`) cannot be
+  released by its Lua call: whoever waits for it waits out its TTL, until
+  the slot is handed over. Reads (`HMGET`, the rules' `XRANGE`) are typed
+  and follow both.
+- The tests that move slots, hold a server's writes or fill its memory run
+  only with `TESTS[EXCLUSIVE_SERVERS] = yes` in `ci/.env` (CI sets it):
+  they need a cluster and a server nobody else uses, and no other test
+  class using them at the same time.
 
 ![RedisClusterVersioned store - write, read and invalidate flow](docs/cache/redis-cluster.png)
 

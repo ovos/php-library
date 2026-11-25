@@ -753,11 +753,17 @@ class Redis extends MemoLock
 		// and works on Redis Cluster (see memolock_release_lock_and_publish)
 		try
 		{
+			// repeatable: it deletes the lock only while it still holds this process's token
 			$released = (bool)$this->functions
-				->call('memolock_release_lock_and_publish',
+				->callRepeatable('memolock_release_lock_and_publish',
 					[$lockKey],
 					[$lockValue, $channelName],
 			);
+			// sent twice: the first run may have released the lock, and the second found it gone. Gone either
+			// way (also when it had expired before), so the release is not reported as failed - unless the second
+			// run answered an error, whose last error call() leaves as it is
+			$released = $released
+				|| ($this->functions->wasSentAgain() && $this->functions->getClient()?->getLastError() === null);
 		}
 		catch(Throwable $throwable)
 		{
@@ -1128,8 +1134,9 @@ class Redis extends MemoLock
 		
 		try
 		{
+			// repeatable: it extends the lock only while it still holds this process's token
 			return (bool)$this->functions
-				->call('memolock_renew_lock',
+				->callRepeatable('memolock_renew_lock',
 					[$lockKey],
 					[$lockValue, $ttlMs],
 			);

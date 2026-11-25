@@ -101,6 +101,21 @@ class RedisVersioned extends Store
 	public const string KEY_MARK = 'mark';
 	
 	/**
+	 * The Lua functions safe to run twice with the same arguments (see KeyValue\Redis::REPEATABLE). A guarded
+	 * write run again finds the token it compared, or a newer one that refuses it; a stale item's drop takes
+	 * only an item that still carries the mark its read saw: run again, it may take an item rewritten since
+	 * with the same mark, a miss and never a stale value; a second rule of the same invalidation makes the
+	 * items written between the two runs a miss once, and nothing fresh (see Rules). Not the stamped write:
+	 * run again after a delete it would put the value back over the tombstone
+	 */
+	public const array REPEATABLE = [
+		'cache_tombstone',
+		'cache_versioned_set_guarded',
+		'cache_versioned_drop_stale',
+		'cache_versioned_invalidate',
+	];
+	
+	/**
 	 * Recorded as a miss's rule id when no copy of the invalidation rules was at hand, either for its read
 	 * or when its rule id was taken. Then nothing can tell whether the value computed after it is already
 	 * outdated. That value goes back to the caller and is never stored (see KeyValue\Redis::refuseUnjudged()).
@@ -1158,11 +1173,10 @@ class RedisVersioned extends Store
 			$index++;
 			if($reply === false)
 			{
-				$reply = $this->functions
-					->call('cache_versioned_drop_stale', [$id], [
-						$mark,
-						(string)$this->invalidationWindowMs,
-					]);
+				$reply = $this->callFunction('cache_versioned_drop_stale', [$id], [
+					$mark,
+					(string)$this->invalidationWindowMs,
+				]);
 			}
 			if($reply === false)
 			{
@@ -1247,13 +1261,12 @@ class RedisVersioned extends Store
 		{
 			// One FCALL on the rules key, so it works on a cluster. The stream gives the new rule its id,
 			// always higher than the ids before it.
-			$result = $this->functions
-				->call('cache_versioned_invalidate', [$this->getRulesKey()], [
-					$mode,
-					implode(',', $tags),
-					$this->rulesRetentionS * 1000, // ms
-					$hard ? '1' : '0',
-				]);
+			$result = $this->callFunction('cache_versioned_invalidate', [$this->getRulesKey()], [
+				$mode,
+				implode(',', $tags),
+				$this->rulesRetentionS * 1000, // ms
+				$hard ? '1' : '0',
+			]);
 		}
 		// Redis did not answer: logged, and the invalidation reports failure
 		catch(RedisException|RedisClusterException $exception)
@@ -1928,11 +1941,10 @@ class RedisVersioned extends Store
 	{
 		try
 		{
-			$this->functions
-				->call('cache_versioned_drop_stale', [$id], [
-					$mark,
-					(string)$this->invalidationWindowMs,
-				]);
+			$this->callFunction('cache_versioned_drop_stale', [$id], [
+				$mark,
+				(string)$this->invalidationWindowMs,
+			]);
 		}
 		catch(RedisException|RedisClusterException $exception)
 		{

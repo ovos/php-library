@@ -41,6 +41,13 @@ production: &production
   cli:
     executable: php
   
+  # tests that need more than a connection
+  tests_options:
+    # the rules that move cluster slots, hold a server's writes or fill its
+    # memory: only for servers nobody else uses (CI's own); off unless ci/.env
+    # says yes
+    exclusive_servers: !ENV TESTS[EXCLUSIVE_SERVERS]|no
+  
   # connections
   connections: &connections
     mysql:

@@ -14,12 +14,14 @@ use Ovos\Cache\Store\RedisVersioned;
 use Ovos\Test\Exception\SkipException;
 use Closure;
 use Exception;
+use RedisException;
 use ReflectionProperty;
 use RuntimeException;
 
 use function array_fill_keys;
 use function array_keys;
 use function bin2hex;
+use function ceil;
 use function count;
 use function microtime;
 use function random_bytes;
@@ -257,10 +259,13 @@ trait TraitInvalidationGuard
 		// the connection fails at the write
 		$client->failingCalls = 1;
 		$first[] = $reader->set($failing, 'computed', 60);
+		$unspent = $client->failingCalls;
+		// a failed call closes the client, and the connection makes a new one (see Functions::sendOrClose())
+		$client = $reader->getConnection()->counter();
 		// a batch that threw answers without its keys
 		$client->failingCalls = 1;
 		$first[] = $reader->setMany([$failingBatch => 'computed'], 60)[$failingBatch] ?? false;
-		$unspent = $client->erringCalls + $client->failingCalls;
+		$unspent+= $client->erringCalls + $client->failingCalls;
 		foreach($keys as $key)
 		{
 			$writer->delete($key);
@@ -996,6 +1001,204 @@ trait TraitInvalidationGuard
 		
 		return $value === 'computed'
 			&& $read === null;
+	}
+	
+	/**
+	 * RULE (probe): on one server, a delete whose tombstone call throws (a connection that failed) answers
+	 * false and sends nothing more: the item stays as it was. The typed tombstone is for a cluster's
+	 * migrating slot only (see KeyValue\Redis::tombstone())
+	 */
+	public function aDeleteWhoseCallThrowsOnOneServerSendsNothingMore(): bool
+	{
+		$probe = $this->unreadProbe();
+		$writer = $this->guardStore();
+		$client = $probe->getConnection()->counter();
+		$key = $this->guardKey('delete-throws');
+		$writer->set($key, 'kept', 60);
+		
+		$client->failingCalls = 1;
+		$deleted = $probe->delete($key);
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $client->failingCalls === 0
+			&& $deleted === false
+			&& $read === 'kept';
+	}
+	
+	/**
+	 * RULE (probe): the typed tombstone writes its token, and its expiry, before it removes the item's fields
+	 * (see KeyValue\Redis::typedTombstone()). A guarded write whose read came before the delete, and which
+	 * lands just before the token, is removed with the fields; one sent just before the fields go is refused.
+	 * The key ends holding the token alone, and the value is never served
+	 */
+	public function aTypedTombstoneTakesAWriteThatLandsBetweenItsSteps(): bool
+	{
+		$probe = $this->unreadProbe();
+		$client = $probe->getConnection()->counter();
+		$early = $this->guardStore();
+		$late = $this->guardStore();
+		$key = $this->guardKey('typed-tombstone-between');
+		$id = $probe->itemId($key);
+		// both read before the delete: their writes are guarded
+		$early->get($key, queue: false);
+		$late->get($key, queue: false);
+		$landed = null;
+		$refused = null;
+		$client->beforeCommand = [
+			'hSet' => function() use ($early, $key, &$landed): void
+			{
+				$landed = $early->set($key, 'early', 60);
+			},
+			'hDel' => function() use ($late, $key, &$refused): void
+			{
+				$refused = $late->set($key, 'late', 60);
+			},
+		];
+		
+		$existed = (fn(): int => $this->typedTombstone($id, bin2hex(random_bytes(8))))->call($probe);
+		$fields = array_keys((array)$client->hGetAll($id));
+		$read = $this->guardStore()->get($key, queue: false);
+		$client->beforeCommand = [];
+		$client->del($id);
+		
+		return $landed === true
+			&& $refused === false
+			&& $existed === 0
+			&& $fields === [KeyValueRedis::KEY_EPOCH]
+			&& $read === null;
+	}
+	
+	/**
+	 * RULE (probe): the typed tombstone leaves a tombstone of the window for an item, a tombstone or no key,
+	 * and removes a raw value as the Lua call does; it answers whether an item (or a raw value) was there.
+	 * The tombstone expires within the window, rounded up to whole seconds
+	 */
+	public function aTypedTombstoneHoldsTheTokenForTheWindow(): bool
+	{
+		$probe = $this->unreadProbe();
+		$client = $probe->getConnection()->counter();
+		$writer = $this->guardStore();
+		$item = $this->guardKey('typed-tombstone-item');
+		$raw = $this->guardKey('typed-tombstone-raw');
+		$none = $this->guardKey('typed-tombstone-none');
+		$writer->set($item, 'value', 60);
+		$client->set($probe->itemId($raw), 'raw value');
+		$windowS = (int)ceil($probe->getInvalidationWindowMs() / 1000);
+		$typed = fn(string $key): int => (fn(): int => $this->typedTombstone(
+			$this->itemId($key),
+			bin2hex(random_bytes(8)),
+		))->call($probe);
+		
+		// the item twice: the second finds its tombstone
+		$existed = [$typed($item), $typed($raw), $typed($none), $typed($item)];
+		$fields = [];
+		$expiries = [];
+		foreach([$item, $raw, $none] as $key)
+		{
+			$id = $probe->itemId($key);
+			$fields[] = array_keys((array)$client->hGetAll($id));
+			$ttl = (int)$client->ttl($id);
+			$expiries[] = $ttl > 0 && $ttl <= $windowS;
+			$client->del($id);
+		}
+		
+		$tombstone = [KeyValueRedis::KEY_EPOCH];
+		
+		return $windowS > 0
+			&& $existed === [1, 1, 0, 0]
+			&& $fields === [$tombstone, [], $tombstone]
+			&& $expiries === [true, false, true];
+	}
+	
+	/**
+	 * RULE (probe): a typed tombstone never leaves a key without expiry for longer than one step. The
+	 * connection fails once the token and its expiry are written: the key expires within the window, and an
+	 * item whose own expiry is sooner keeps it. The key expires between the token and its expiry (an item at
+	 * the end of its TTL): the token is written once more, with its expiry
+	 */
+	public function aTypedTombstoneThatBreaksOffLeavesAKeyThatExpires(): bool
+	{
+		$probe = $this->unreadProbe();
+		$writer = $this->guardStore();
+		$broken = $this->guardKey('typed-tombstone-broken');
+		$expired = $this->guardKey('typed-tombstone-expired');
+		$sooner = $this->guardKey('typed-tombstone-sooner');
+		$writer->set($broken, 'value', 60);
+		$writer->set($expired, 'value', 60);
+		$writer->set($sooner, 'value', 60);
+		// a window longer than the sooner item's own second
+		$probe->setInvalidationWindowMs(5000);
+		$windowS = 5;
+		$typed = fn(string $key): int => (fn(): int => $this->typedTombstone(
+			$this->itemId($key),
+			bin2hex(random_bytes(8)),
+		))->call($probe);
+		$admin = $writer->getClient();
+		$admin->expire($probe->itemId($sooner), 1);
+		
+		$threw = 0;
+		foreach([$broken, $sooner] as $key)
+		{
+			// a failed call may close the client, and the connection makes a new one (see Functions::sendOrClose())
+			$probe->getConnection()->counter()->beforeCommand = [
+				'hDel' => static fn(): never => throw new RedisException('read error on connection'),
+			];
+			try
+			{
+				$typed($key);
+			}
+			catch(RedisException)
+			{
+				$threw++;
+			}
+		}
+		$probe->getConnection()->counter()->beforeCommand = [
+			'expire' => static fn(): int => (int)$admin->del($probe->itemId($expired)),
+		];
+		$typed($expired);
+		$ttls = [];
+		$fields = [];
+		foreach([$broken, $expired, $sooner] as $key)
+		{
+			$id = $probe->itemId($key);
+			$ttl = (int)$admin->ttl($id);
+			$ttls[] = $ttl > 0 && $ttl <= ($key === $sooner ? 1 : $windowS);
+			$fields[] = array_keys((array)$admin->hGetAll($id));
+			$admin->del($id);
+		}
+		
+		return $threw === 2
+			&& $ttls === [true, true, true]
+			&& $fields[1] === [KeyValueRedis::KEY_EPOCH];
+	}
+	
+	/**
+	 * RULE (probe): a typed tombstone whose token is answered with an error (OOM) throws before anything else
+	 * is sent: the item stays whole, rather than losing its data under its old epoch
+	 */
+	public function aTypedTombstoneWhoseTokenIsRefusedKeepsTheItem(): bool
+	{
+		$probe = $this->unreadProbe();
+		$writer = $this->guardStore();
+		$key = $this->guardKey('typed-tombstone-refused');
+		$writer->set($key, 'value', 60);
+		$probe->getConnection()->counter()->erringHashWrites = 1;
+		
+		try
+		{
+			(fn(): int => $this->typedTombstone($this->itemId($key), bin2hex(random_bytes(8))))->call($probe);
+			$threw = false;
+		}
+		catch(RedisException)
+		{
+			$threw = true;
+		}
+		$read = $this->guardStore()->get($key, queue: false);
+		$writer->delete($key);
+		
+		return $threw
+			&& $read === 'value';
 	}
 	
 	/**
