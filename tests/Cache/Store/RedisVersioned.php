@@ -15,6 +15,7 @@ use Ovos\Cache\Store\KeyValue\TagIndex;
 use Ovos\Cache\Store\KeyValue\Tags;
 use Ovos\Cache\Store\Redis as RedisStore;
 use Ovos\Cache\Store\Redisearch;
+use Ovos\Exception\Priority;
 use Ovos\Test;
 use Ovos\Test\Internal;
 use Ovos\Test\Cache\Store\RedisVersionedProbe;
@@ -415,9 +416,12 @@ class RedisVersioned extends Test
 			$from = count($probe->logged);
 			$probe->get($key, queue: false);
 			$afterLoss = $this->lostRulesLogged($probe, $from);
+			$priorities = $this->lostRulesPriorities($probe, $from);
 			$probe->get($key, queue: false);
 			
+			// a warning: the stream kept some rules and lost others
 			return $afterLoss === 1
+				&& $priorities === [Priority::WARNING]
 				&& $this->lostRulesLogged($probe, $from) === 1;
 		}
 		finally
@@ -427,7 +431,8 @@ class RedisVersioned extends Test
 	}
 	
 	/**
-	 * A stream lost whole (an eviction, a flush, a restart without persistence) is logged too
+	 * A stream lost whole (an eviction, a flush, a restart without persistence) is logged too, as a note: the
+	 * items went with it, and the cache starts over by itself
 	 */
 	public function aLostStreamIsLogged(): bool
 	{
@@ -445,7 +450,8 @@ class RedisVersioned extends Test
 			$from = count($probe->logged);
 			$probe->get($key, queue: false);
 			
-			return $this->lostRulesLogged($probe, $from) === 1;
+			return $this->lostRulesLogged($probe, $from) === 1
+				&& $this->lostRulesPriorities($probe, $from) === [Priority::INFO];
 		}
 		finally
 		{
@@ -4741,6 +4747,29 @@ class RedisVersioned extends Test
 		}
 		
 		return $count;
+	}
+	
+	/**
+	 * The priorities those events were logged with
+	 *
+	 * @return list<int|null>
+	 */
+	protected function lostRulesPriorities(
+		RedisVersionedProbe $probe,
+		int $from,
+	): array
+	{
+		$priorities = [];
+		foreach(array_slice($probe->logged, $from) as $event)
+		{
+			if(is_string($event[0] ?? null)
+				&& str_contains($event[0], 'lost rules this server had read'))
+			{
+				$priorities[] = $event['priority'] ?? null;
+			}
+		}
+		
+		return $priorities;
 	}
 	
 	protected function requireSharedRules(): void

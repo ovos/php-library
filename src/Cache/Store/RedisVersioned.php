@@ -10,6 +10,7 @@ use Ovos\Cache\Stale;
 use Ovos\Cache\Store\KeyValue\Redis as Store;
 use Ovos\Cache\Versioned\Rules;
 use Ovos\Cache\Versioned\SharedRules;
+use Ovos\Exception\Priority;
 use Override;
 use Redis as RedisClient;
 use RedisCluster as RedisClusterClient;
@@ -1680,11 +1681,15 @@ class RedisVersioned extends Store
 		if($held !== null
 			&& $rules->lost($held))
 		{
+			$empty = $rules->isEmpty();
+			
+			// an empty stream is what a restart without persistence leaves, the items gone with it: a note.
+			// A stream that kept some rules and lost others is a warning
 			$this->log(sprintf(
 				static::LOST_RULES,
 				$held,
-				$rules->isEmpty() ? 'is empty' : 'now ends at ' . $rules->last(),
-			));
+				$empty ? 'is empty' : 'now ends at ' . $rules->last(),
+			), priority: $empty ? Priority::INFO : Priority::WARNING);
 		}
 		
 		return true;
